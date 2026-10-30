@@ -191,7 +191,7 @@ type Package struct {
 	Kit       *Kit       `json:"-"`
 }
 
-// Name, Version and Ref of either type.
+// Name is the package's name, whichever type it is.
 func (p Package) Name() string {
 	if p.Kit != nil {
 		return p.Kit.Name

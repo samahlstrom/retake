@@ -238,21 +238,23 @@ func (c *Catalog) componentPreviews(ctx context.Context, d *db, id, dir, hash st
 		return pv, []string{err.Error()}
 	}
 	defer func() { _ = os.RemoveAll(tmp) }()
-	if err := c.runPreview(ctx, dir, tmp); err == nil {
+	err = c.runPreview(ctx, dir, tmp)
+	if err == nil {
 		put(PreviewStorybook, filepath.Join(tmp, "sheet.png"), ".png")
 		if _, err := os.Stat(filepath.Join(tmp, "preview.webp")); err == nil {
 			put(PreviewAnimation, filepath.Join(tmp, "preview.webp"), ".webp")
 		}
 		return pv, warns
-	} else if committed := filepath.Join(dir, "previews", "sheet.png"); fileExistsAt(committed) {
-		put(PreviewStorybook, committed, ".png")
-		if webp := filepath.Join(dir, "previews", "preview.webp"); fileExistsAt(webp) {
-			put(PreviewAnimation, webp, ".webp")
-		}
-		return pv, append(warns, "previews from the package's previews/ ("+err.Error()+")")
-	} else {
+	}
+	committed := filepath.Join(dir, "previews", "sheet.png")
+	if !fileExistsAt(committed) {
 		return pv, append(warns, "no previews: "+err.Error())
 	}
+	put(PreviewStorybook, committed, ".png")
+	if webp := filepath.Join(dir, "previews", "preview.webp"); fileExistsAt(webp) {
+		put(PreviewAnimation, webp, ".webp")
+	}
+	return pv, append(warns, "previews from the package's previews/ ("+err.Error()+")")
 }
 
 func fileExistsAt(p string) bool {

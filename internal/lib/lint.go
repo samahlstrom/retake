@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -79,8 +78,7 @@ func Lint(ctx context.Context, ed bridge.Editor, timeline string) (LintResult, e
 		Errors json.RawMessage `json:"errors"`
 	}
 	if err := json.Unmarshal(stdout.Bytes(), &fail); err != nil {
-		var ee *exec.ExitError
-		if errors.As(runErr, &ee) || runErr != nil {
+		if runErr != nil {
 			return LintResult{}, errorf(CodeFailed, "retake-edit lint: %v: %s", runErr, strings.TrimSpace(stderr.String()))
 		}
 		return LintResult{}, errorf(CodeFailed, "retake-edit lint printed no JSON")

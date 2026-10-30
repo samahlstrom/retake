@@ -156,10 +156,10 @@ func libCmd(ctx context.Context, args []string, env Env) int {
 		}
 		return ""
 	}
-	if max := map[string]int{"search": 1, "add": 1, "list": 1, "describe": 1, "pack": 1, "recipe export": 1,
-		"lint": 1}[sub]; max == 0 {
+	if most := map[string]int{"search": 1, "add": 1, "list": 1, "describe": 1, "pack": 1, "recipe export": 1,
+		"lint": 1}[sub]; most == 0 {
 		return l.usageErr(sub, fmt.Errorf("unknown command %q", sub))
-	} else if len(pos) > max {
+	} else if len(pos) > most {
 		return l.usageErr(sub, fmt.Errorf("too many arguments: %s", strings.Join(pos, " ")))
 	}
 	switch sub {
