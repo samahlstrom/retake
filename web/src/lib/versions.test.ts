@@ -1,0 +1,79 @@
+import { describe, expect, it } from 'vitest';
+import {
+  byLabel,
+  coverMessage,
+  covers,
+  flipTarget,
+  flipToast,
+  neighbor,
+  partner,
+  stepTarget,
+  versionTitle,
+} from './versions';
+
+const fam = [
+  { label: 'v5', n: 5, duration: 40 },
+  { label: 'v6', n: 6, duration: 40 },
+  { label: 'v7', n: 7, duration: 10 },
+];
+
+describe('family navigation', () => {
+  it('finds neighbors in family order', () => {
+    expect(neighbor(fam, 'v6', 1)?.label).toBe('v7');
+    expect(neighbor(fam, 'v6', -1)?.label).toBe('v5');
+    expect(neighbor(fam, 'v7', 1)).toBeNull();
+    expect(neighbor(fam, 'v5', -1)).toBeNull();
+    expect(neighbor(fam, 'v9', 1)).toBeNull();
+    expect(byLabel(fam, 'v5')?.n).toBe(5);
+  });
+
+  it('pairs C with the next newer version, else the previous one', () => {
+    expect(partner(fam, 'v6')?.label).toBe('v7');
+    expect(partner(fam, 'v5')?.label).toBe('v6');
+    expect(partner(fam, 'v7')?.label).toBe('v6');
+    expect(partner([fam[0]], 'v5')).toBeNull();
+  });
+
+  it('flips to the partner, and back to the base when flipped', () => {
+    expect(flipTarget(fam, 'v6', false)?.label).toBe('v7');
+    expect(flipTarget(fam, 'v6', true)?.label).toBe('v6');
+    expect(flipTarget([fam[1]], 'v6', false)).toBeNull(); // "Only one version"
+  });
+
+  it('steps [ and ], refusing past either end', () => {
+    expect(stepTarget(fam, 'v6', -1)).toMatchObject({ label: 'v5' });
+    expect(stepTarget(fam, 'v6', 1)).toMatchObject({ label: 'v7' });
+    expect(stepTarget(fam, 'v5', -1)).toBe('No earlier version');
+    expect(stepTarget(fam, 'v7', 1)).toBe('No later version');
+  });
+});
+
+describe('past-the-end checks (C and ] onto a short preview)', () => {
+  it('covers a time up to 50 ms before the end', () => {
+    expect(covers(fam[2], 9.9)).toBe(true);
+    expect(covers(fam[2], 9.95)).toBe(true);
+    expect(covers(fam[2], 9.96)).toBe(false);
+    expect(covers(fam[2], 10.3)).toBe(false);
+  });
+  it('covers everything when the duration is unknown', () => {
+    expect(covers({ duration: null }, 1e6)).toBe(true);
+    expect(covers({ duration: 0 }, 5)).toBe(true);
+  });
+  it('says what the version covers', () => {
+    expect(coverMessage(fam[2])).toBe('v7 only covers 0:00–0:10');
+    expect(coverMessage({ label: 'v3', duration: 190.5 })).toBe('v3 only covers 0:00–3:10');
+  });
+});
+
+describe('labels', () => {
+  it('toasts newer/previous while flipped, the label when back', () => {
+    expect(flipToast(fam, 'v6', fam[2], true)).toBe('v7 (newer)');
+    expect(flipToast(fam, 'v7', fam[1], true)).toBe('v6 (previous)');
+    expect(flipToast(fam, 'v6', fam[1], false)).toBe('v6');
+  });
+  it('titles the version button', () => {
+    expect(versionTitle(fam, 'v6', 'v6', false)).toBe('Version v6. [ and ] step, C flips to v7');
+    expect(versionTitle(fam, 'v6', 'v7', true)).toBe('Comparing: showing v7. C goes back to v6.');
+    expect(versionTitle([fam[0]], 'v5', 'v5', false)).toBe('Version v5. [ and ] step');
+  });
+});

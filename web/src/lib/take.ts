@@ -1,8 +1,9 @@
 // The take model: one folder per take. Recording happens only in segments (R on -> R off), each its own audio file.
 // session_t = seconds since the take started (first R); a segment's audio starts at its t_start. video_t = playhead.
 import { BIN, SHOW } from './constants';
-import type { Take, TakeData, TakeEvent, HistoryStroke } from './types';
-import { isoLocal, r3, r4 } from './util';
+import { extFor } from './mic';
+import type { HistoryStroke, Segment, Take, TakeData, TakeEvent } from './types';
+import { isoLocal, pad2, r3, r4 } from './util';
 
 export const CLOCK_NOTE =
   'session_t = seconds since this take started (first R); segment audio files start at their t_start; video_t = the playhead';
@@ -36,6 +37,52 @@ export function newTake(version: string | null, bins: number): Take {
     closed: false,
     bins: new Float32Array(bins),
   };
+}
+
+/** The next segment of take `t`: S1, S2, … with its own audio file seg_01.<ext>, seg_02.<ext>, … */
+export function newSegment(
+  t: Take,
+  rec: MediaRecorder,
+  mime: string,
+  at: { version: string | null; flip: boolean; videoTime: number },
+): Segment {
+  const n = t.segments.length + 1;
+  return {
+    n,
+    id: `S${n}`,
+    rec,
+    mime,
+    version: at.version,
+    flip: at.flip,
+    file: `seg_${pad2(n)}.${extFor(mime)}`,
+    chunks: [],
+    uploaded: 0,
+    p0: 0,
+    p1: null,
+    v0: at.videoTime,
+    v1: null,
+    vmin: at.videoTime,
+    vmax: at.videoTime,
+    size: 0,
+    stored: 0,
+    persisted: Promise.resolve(),
+  };
+}
+
+/**
+ * A recorded chunk: kept in memory for the upload, and queued for the local buffer at its byte offset. `stored`
+ * advances only once the buffer has it, and only stored bytes are uploaded.
+ */
+export function addChunk(s: Segment, data: Blob, write: (offset: number) => Promise<void>): void {
+  s.chunks.push(data);
+  const offset = s.size,
+    size = data.size;
+  s.size += size;
+  s.persisted = s.persisted
+    .then(() => write(offset))
+    .then(() => {
+      s.stored = offset + size;
+    });
 }
 
 /** Insert an event in page-clock order (later events usually go last). Anything but a tick marks the take dirty. */

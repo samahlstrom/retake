@@ -13,11 +13,11 @@ import {
   COLOR_KEYS,
 } from './constants';
 import { keyAction, type Action } from './keys';
-import { closeMic, extFor, MIC_BLOCKED, openMic, pickMime, type Mic } from './mic';
+import { closeMic, MIC_BLOCKED, openMic, pickMime, type Mic } from './mic';
 import { addPoint, fitFrame, isClick, renderInk } from './pen';
 import { Saver } from './saver';
 import { VideoSource } from './source';
-import { archive, binCount, grow, insertEv, newTake, serialize as serializeTake } from './take';
+import { addChunk, archive, binCount, grow, insertEv, newSegment, newTake, serialize as serializeTake } from './take';
 import { drawTimeline, tlT } from './timeline';
 import { Toast } from './toast.svelte';
 import type {
@@ -34,7 +34,7 @@ import type {
 } from './types';
 import { byLabel, coverMessage, covers, flipTarget, flipToast, stepTarget } from './versions';
 import { addVoice, drawWave, levelDb, newAcc, newVad, pushBars, vadStep, type WaveBar } from './voice';
-import { clamp, fmt, isoLocal, now, pad2, r3, stamp } from './util';
+import { clamp, fmt, isoLocal, now, r3, stamp } from './util';
 
 export interface Elements {
   stage: HTMLElement;
@@ -231,27 +231,23 @@ export class Review {
 
   /** A recorded chunk goes into the local buffer first; the next save uploads it. */
   #onChunk(t: Take, s: Segment, data: Blob): void {
-    s.chunks.push(data);
-    const offset = s.size,
-      size = data.size;
-    s.size += size;
-    const rec = {
-      take: t.id ?? '',
-      version: String(t.version),
-      file: s.file,
-      offset,
-      data,
-      size,
-      mime: s.mime,
-      path: byLabel(this.versions, t.version)?.path ?? '',
-      saved: Date.now(),
-    };
-    s.persisted = s.persisted
-      .then(() => this.#storeReady)
-      .then((store) => store.put(rec))
-      .then(() => {
-        s.stored = offset + size;
+    const take = t.id ?? '',
+      version = String(t.version),
+      path = byLabel(this.versions, t.version)?.path ?? '';
+    addChunk(s, data, async (offset) => {
+      const store = await this.#storeReady;
+      await store.put({
+        take,
+        version,
+        file: s.file,
+        offset,
+        data,
+        size: data.size,
+        mime: s.mime,
+        path,
+        saved: Date.now(),
       });
+    });
   }
 
   /** Resend audio that earlier takes left in the buffer (the page closed or crashed before the server had it). */
@@ -292,31 +288,14 @@ export class Review {
       if (!this.mic && !(await this.openMic())) return;
       this.ensureTake();
       const t = this.take,
-        n = t.segments.length + 1,
         mic = this.mic as Mic;
       const mime = pickMime((m) => MediaRecorder.isTypeSupported(m));
       const rec = new MediaRecorder(mic.stream, mime ? { mimeType: mime, audioBitsPerSecond: 64000 } : {});
-      const m = rec.mimeType || mime || 'audio/webm';
-      const s: Segment = {
-        n,
-        id: `S${n}`,
-        rec,
-        mime: m,
+      const s = newSegment(t, rec, rec.mimeType || mime || 'audio/webm', {
         version: this.shown,
         flip: this.flipped,
-        file: `seg_${pad2(n)}.${extFor(m)}`,
-        chunks: [],
-        uploaded: 0,
-        p0: 0,
-        p1: null,
-        v0: video.currentTime,
-        v1: null,
-        vmin: video.currentTime,
-        vmax: video.currentTime,
-        size: 0,
-        stored: 0,
-        persisted: Promise.resolve(),
-      };
+        videoTime: video.currentTime,
+      });
       rec.ondataavailable = (e) => {
         if (e.data && e.data.size) this.#onChunk(t, s, e.data);
       };
