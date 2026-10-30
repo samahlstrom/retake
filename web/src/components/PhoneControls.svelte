@@ -5,6 +5,7 @@
   //    row (phone.css).
   //  - landscape, around the video (which fills the height): the pen colors and undo at the left edge, Done and a big
   //    round Record at the right edge, and a slim bar at the bottom with play, time, the timeline, version and flip.
+  // A viewer's share link has no pen, undo, Record or Done; the hint says "View only".
   import type { Review } from '../lib/review.svelte';
   import PlayButton from './PlayButton.svelte';
   import Timeline from './Timeline.svelte';
@@ -37,28 +38,36 @@
       <VersionPicker {review} />
       <FlipButton {review} />
     </div>
-    <div class="prow">
-      <PenColors color={review.penColor} onpick={review.setColor} />
-      <span class="grow"></span>
-      <UndoButton onclick={review.undo} />
-    </div>
+    {#if review.canRecord}
+      <div class="prow">
+        <PenColors color={review.penColor} onpick={review.setColor} />
+        <span class="grow"></span>
+        <UndoButton onclick={review.undo} />
+      </div>
+    {/if}
   </div>
   <div id="precord">
-    <Hint gone={review.hintGone} touch inline compare={review.versions.length > 1} />
-    <div class="prow">
-      <PhoneRecord {review} />
-      {@render done()}
-    </div>
+    <Hint gone={review.hintGone} touch inline compare={review.versions.length > 1} viewOnly={!review.canRecord} />
+    {#if review.canRecord}
+      <div class="prow">
+        <PhoneRecord {review} />
+        {@render done()}
+      </div>
+    {/if}
   </div>
 {:else}
   <div id="pleft">
-    <PenColors color={review.penColor} onpick={review.setColor} />
-    <UndoButton onclick={review.undo} compact />
+    {#if review.canRecord}
+      <PenColors color={review.penColor} onpick={review.setColor} />
+      <UndoButton onclick={review.undo} compact />
+    {/if}
   </div>
   <div id="pright" class:recording={!!review.seg}>
-    {@render done()}
-    <span class="grow"></span>
-    <PhoneRecord {review} round />
+    {#if review.canRecord}
+      {@render done()}
+      <span class="grow"></span>
+      <PhoneRecord {review} round />
+    {/if}
   </div>
   <div id="pbar" class="landscape" class:recording={!!review.seg}>
     <PlayButton paused={review.paused} onclick={review.togglePlay} />

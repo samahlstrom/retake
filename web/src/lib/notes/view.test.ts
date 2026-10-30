@@ -123,6 +123,23 @@ describe('sidebar rows', () => {
     expect(rows.find((r) => r.id === 6)).toMatchObject({ mark: 'answered', reopen: false, see: 'v8' });
   });
 
+  it('roles (spec/team.md): no Answer without recording, no Reopen without approving', () => {
+    const q = (ctx: { record?: boolean; approve?: boolean }) =>
+      sidebarRows(newest, { versions, shown: 'v8', ...ctx }).find((r) => r.id === 21)!;
+    expect(q({}).answer).toBe(21);
+    expect(q({ record: true, approve: false }).answer).toBe(21);
+    expect(q({ record: false }).answer).toBeNull();
+    const reopen = (ctx: { record?: boolean; approve?: boolean }) =>
+      sidebarRows(older, { versions, shown: 'v7', ...ctx })
+        .filter((r) => r.reopen)
+        .map((r) => r.id);
+    expect(reopen({ approve: true })).toEqual([3, 10]);
+    expect(reopen({ record: true, approve: false })).toEqual([]);
+    // The rest of a row doesn't change with the role.
+    const viewer = sidebarRows(older, { versions, shown: 'v7', record: false, approve: false });
+    expect(viewer.find((r) => r.id === 3)).toMatchObject({ mark: 'answered', see: 'v8', reopen: false });
+  });
+
   it('"see it in" needs the answering version in the family and not on screen', () => {
     expect(sidebarRows(older, { versions, shown: 'v7' }).find((r) => r.id === 10)).toMatchObject({
       answeredIn: 'v11',

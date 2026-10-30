@@ -30,3 +30,5 @@ export const HINT_DRAW_TOUCH = 'Tap ● to record before drawing';
 export const MSG_SAVED = 'Saved. Press R to start a new take.';
 export const MSG_SAVED_TOUCH = 'Saved. Tap ● to start a new take.';
 export const MSG_SAVE_FAILED = 'Could not save. Is the review server still running?';
+/** A viewer's share link (spec/team.md): watching only. */
+export const VIEW_ONLY = 'View only';

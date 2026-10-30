@@ -1,6 +1,6 @@
 <script lang="ts">
   // The bar under the video, left to right: play, time, timeline, version, pen colors, then the voice box (live
-  // waveform, REC, Done). A red top edge while recording.
+  // waveform, REC, Done). A red top edge while recording. A viewer's share link has no pen and no voice box.
   import type { Review } from '../lib/review.svelte';
   import PlayButton from './PlayButton.svelte';
   import Timeline from './Timeline.svelte';
@@ -18,6 +18,8 @@
   </div>
   <Timeline {review} />
   <VersionPicker {review} />
-  <PenColors color={review.penColor} onpick={review.setColor} />
-  <VoiceBox {review} />
+  {#if review.canRecord}
+    <PenColors color={review.penColor} onpick={review.setColor} />
+    <VoiceBox {review} />
+  {/if}
 </div>

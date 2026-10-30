@@ -12,6 +12,7 @@ import {
   PING_MS,
   SEEK,
   TICK_MS,
+  VIEW_ONLY,
   type PenColor,
   COLOR_KEYS,
 } from './constants';
@@ -59,6 +60,7 @@ import type {
   HistoryStroke,
   Info,
   Point,
+  Role,
   Segment,
   Stroke,
   Take,
@@ -147,9 +149,26 @@ export class Review {
   frame = $state({ left: 0, top: 0, width: 0, height: 0 });
   /** Image cards on the video this frame. */
   cards = $state.raw<ImageCard[]>([]);
+  /** Who the page acts as (spec/team.md), from /api/info; null until it answers, or from a server without roles. */
+  role = $state<Role | null>(null);
+  /** A viewer's share link only watches: no Record, no pen, no Answer. */
+  get canRecord(): boolean {
+    return this.role !== 'viewer' && this.role !== 'agent';
+  }
+  /** Approve and Reopen: an approver's link, or the owner. */
+  get canApprove(): boolean {
+    return this.role === null || this.role === 'owner' || this.role === 'approver';
+  }
   /** The notes sidebar: agent questions on the newest version, resolved notes on older ones. */
   readonly notes = new Notes({ onVersion: () => void this.refreshFamily() });
-  readonly rows = $derived(sidebarRows(this.notes.res, { versions: this.versions, shown: this.shown }));
+  readonly rows = $derived(
+    sidebarRows(this.notes.res, {
+      versions: this.versions,
+      shown: this.shown,
+      record: this.canRecord,
+      approve: this.canApprove,
+    }),
+  );
   /** The sidebar row under the playhead. */
   activeRow = $state<string | null>(null);
   /**
@@ -408,6 +427,10 @@ export class Review {
   /** R on. `answerTo`: the question thread this segment answers (Answer in the sidebar). */
   startRec = async (answerTo: number | null = null): Promise<void> => {
     if (this.seg || this.starting) return;
+    if (!this.canRecord) {
+      this.toast.say(VIEW_ONLY, 2600);
+      return;
+    }
     this.starting = true;
     this.hintGone = true;
     const video = this.video;
@@ -609,7 +632,7 @@ export class Review {
       if (e.button !== 0 || this.drawing) return;
       if (!s) {
         if (!this.drawHintShown) {
-          this.toast.say(this.touch ? HINT_DRAW_TOUCH : HINT_DRAW, 2600);
+          this.toast.say(!this.canRecord ? VIEW_ONLY : this.touch ? HINT_DRAW_TOUCH : HINT_DRAW, 2600);
           this.drawHintShown = true;
         }
         return;
@@ -701,7 +724,7 @@ export class Review {
   addImage = async (file: Blob, at: Point | null): Promise<TakeImage | null> => {
     const s = this.seg,
       t = this.take;
-    const refusal = refuseImage(file, !!s);
+    const refusal = this.canRecord ? refuseImage(file, !!s) : VIEW_ONLY;
     if (refusal || !s) {
       this.toast.say(refusal ?? HINT_IMAGE, 2600);
       return null;
@@ -786,7 +809,7 @@ export class Review {
       return;
     }
     if (!this.seg) {
-      this.toast.say(HINT_IMAGE, 2600);
+      this.toast.say(this.canRecord ? HINT_IMAGE : VIEW_ONLY, 2600);
       return;
     }
     // An image dragged from another tab without a file: fetch it if its site allows that.
@@ -1323,6 +1346,7 @@ export class Review {
       this.toast.say('Review server not reachable', 8000);
     }
     document.title = `Review · ${this.info.name}`;
+    this.role = this.info.role ?? null;
     this.versions = this.info.versions || [];
     this.base = this.shown = this.info.label || null;
     this.take.version = this.base;
@@ -1331,8 +1355,11 @@ export class Review {
     this.#source.load(cur).catch(() => {}); // a failure shows the fatal message (video error event)
     this.layout();
     requestAnimationFrame(this.loop);
-    void this.recover().catch(() => {});
-    void this.recoverImages().catch(() => {});
+    if (this.canRecord) {
+      // A viewer's link can't upload: whatever an earlier page left in the buffers waits for one that can.
+      void this.recover().catch(() => {});
+      void this.recoverImages().catch(() => {});
+    }
     void this.notes.load(this.shown); // no sidebar at all if the server has no notes routes
   }
 

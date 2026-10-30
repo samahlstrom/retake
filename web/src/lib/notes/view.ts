@@ -50,6 +50,10 @@ export interface ViewContext {
   versions: readonly { label: string }[];
   /** The version on screen. */
   shown: string | null;
+  /** The page may record (spec/team.md: not a viewer). Without it there is no Answer. Default true. */
+  record?: boolean;
+  /** The page may approve and reopen (an approver or the owner). Without it there is no Reopen. Default true. */
+  approve?: boolean;
 }
 
 const ANSWERED = new Set(['answered', 'accepted']);
@@ -85,8 +89,8 @@ export function toRow(item: NoteItem, newest: boolean, ctx: ViewContext): Row {
     answeredIn,
     see: answeredIn && known(answeredIn) && answeredIn !== ctx.shown ? answeredIn : null,
     question: item.kind === 'note' && mark === 'question' ? item.question || null : null,
-    answer: item.kind === 'question' && mark === 'question' ? item.id : null,
-    reopen: !newest && item.status === 'answered',
+    answer: item.kind === 'question' && mark === 'question' && ctx.record !== false ? item.id : null,
+    reopen: !newest && item.status === 'answered' && ctx.approve !== false,
     options: (item.options ?? []).map((label) => ({ label, known: known(label), on: label === ctx.shown })),
     images: item.images ?? [],
   };

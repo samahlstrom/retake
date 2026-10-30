@@ -26,7 +26,12 @@
   <ImageLayer {review} />
   <canvas id="ink" class:pen={!!review.seg} {@attach review.attachInk}></canvas>
   {#if review.layoutMode !== 'portrait'}
-    <Hint gone={review.hintGone} touch={review.touch} compare={review.versions.length > 1} />
+    <Hint
+      gone={review.hintGone}
+      touch={review.touch}
+      compare={review.versions.length > 1}
+      viewOnly={!review.canRecord}
+    />
   {/if}
   <div id="toast" class="float" class:show={review.toast.show}>{review.toast.msg}</div>
   <div id="fatal" style:display={review.fatal ? 'flex' : null}>{review.fatal}</div>
