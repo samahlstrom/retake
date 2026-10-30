@@ -24,6 +24,9 @@ pub struct Timeline {
     pub audio: Vec<AudioElement>,
     #[serde(default)]
     pub end: Option<String>,
+    /// JavaScript helpers for every expression (spec/timeline.md, "Expressions").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expr_lib: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -147,6 +150,8 @@ pub struct Overlay {
     /// The component this overlay uses, `<name>@<version>` (spec/components.md).
     #[serde(rename = "use", default, skip_serializing_if = "Option::is_none")]
     pub use_: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expr_lib: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

@@ -924,6 +924,80 @@ fn scale_field(m: &mut Map<String, Value>, k: &str, f: f64) {
     }
 }
 
+/// Maps a prop of `[x0, y0, x1, y1, …]` points (corners) like positions.
+fn map_points(p: &mut Value, f: &Fit) {
+    let map = |v: &mut Value| {
+        if let Value::Array(a) = v {
+            for (i, x) in a.iter_mut().enumerate() {
+                if let Some(n) = x.as_f64() {
+                    *x = json!(n * f.k + if i % 2 == 0 { f.ox } else { f.oy });
+                }
+            }
+        }
+    };
+    match p {
+        Value::Object(m) => {
+            if let Some(Value::String(e)) = m.get("expr").cloned() {
+                m.insert(
+                    "expr".into(),
+                    json!(format!(
+                        "((p) => p.map((x, i) => x * {k} + (i % 2 ? {oy} : {ox})))(({e}\n))",
+                        k = num(f.k),
+                        ox = num(f.ox),
+                        oy = num(f.oy)
+                    )),
+                );
+            } else if let Some(Value::Array(keys)) = m.get_mut("keys") {
+                for key in keys {
+                    if let Some(v) = key.get_mut("v") {
+                        map(v);
+                    }
+                }
+            }
+        }
+        other => map(other),
+    }
+}
+
+/// Scales a mask's sizes by `k`; a group's mask is in frame pixels, so its rect is mapped like a position.
+fn fit_mask(m: &mut Map<String, Value>, f: &Fit, frame: bool) {
+    let Some(Value::Object(mask)) = m.get_mut("mask") else { return };
+    if let Some(r) = mask.get_mut("rect") {
+        if frame {
+            let map = |v: &mut Value| {
+                if let Value::Array(a) = v
+                    && a.len() == 4
+                {
+                    let n: Vec<f64> = a.iter().map(|x| x.as_f64().unwrap_or(0.0)).collect();
+                    *v = json!([n[0] * f.k + f.ox, n[1] * f.k + f.oy, n[2] * f.k, n[3] * f.k]);
+                }
+            };
+            match r {
+                Value::Object(o) => {
+                    if let Some(Value::Array(keys)) = o.get_mut("keys") {
+                        for key in keys {
+                            if let Some(v) = key.get_mut("v") {
+                                map(v);
+                            }
+                        }
+                    }
+                }
+                other => map(other),
+            }
+        } else {
+            scale_prop(r, f.k);
+        }
+    }
+    for key in ["radius", "feather"] {
+        if let Some(p) = mask.get_mut(key) {
+            scale_prop(p, f.k);
+        }
+    }
+    if let Some(Value::Object(s)) = mask.get_mut("stroke") {
+        scale_field(s, "width", f.k);
+    }
+}
+
 /// Fits one expanded layer into the timeline's canvas (spec/components.md, "Fitting the canvas").
 pub fn fit_layer(l: &mut Value, f: &Fit) {
     let Some(m) = l.as_object_mut() else { return };
@@ -937,12 +1011,39 @@ pub fn fit_layer(l: &mut Value, f: &Fit) {
             }
             None => {}
         }
+        if let Some(c) = t.get_mut("corners") {
+            map_points(c, f);
+        }
+        if let Some(p) = t.get_mut("perspective") {
+            scale_prop(p, f.k);
+        }
+    }
+    let path_shape = ty == "shape" && m.get("shape").and_then(Value::as_str) == Some("path");
+    let image_scaled = ty == "image" && !m.contains_key("size");
+    let video_unscaled = ty == "video" && m.get("fit").and_then(Value::as_str) == Some("none");
+    if !(path_shape || image_scaled || video_unscaled) {
+        fit_mask(m, f, ty == "group");
+    }
+    if ty == "group"
+        && let Some(Value::Array(children)) = m.get_mut("layers")
+    {
+        for c in children {
+            fit_layer(c, f);
+        }
     }
     if ty == "video" {
         return;
     }
     let k = f.k;
+    if path_shape {
+        // A path is in the layer's own pixels: scale the whole layer instead.
+        if let Some(Value::Object(t)) = m.get_mut("transform") {
+            let s = t.entry("scale").or_insert_with(|| json!(1.0));
+            scale_prop(s, k);
+        }
+    }
     match ty.as_str() {
+        "shape" if path_shape => {}
         "text" => {
             if !m.contains_key("size") {
                 m.insert("size".into(), json!(crate::layer::Text::DEFAULT_SIZE));
