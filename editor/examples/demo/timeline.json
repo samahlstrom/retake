@@ -1,0 +1,149 @@
+{
+  "schema": "timeline/0.1",
+  "id": "demo",
+  "rev": 0,
+  "format": { "size": [1920, 1080], "fps": 30, "sample_rate": 48000, "background": "#000000" },
+  "kits": [],
+  "assets": {
+    "proj:vo": { "path": "media/vo.wav", "words": "vo.words.json" },
+    "proj:footage": { "path": "media/footage.mp4" },
+    "proj:clip": { "path": "media/clip.mp4" },
+    "proj:loop": { "path": "media/loop.mp4" },
+    "proj:music": { "path": "media/music.wav" },
+    "proj:logo": { "path": "media/logo.png" }
+  },
+  "spine": [
+    { "id": "a", "asset": "proj:vo", "in": 0.2, "out": 4.1 },
+    { "id": "meme", "kind": "insert", "asset": "proj:clip", "in": 2.0, "frames": 45, "hold_from": 3.2,
+      "audio": { "gain_db": -12, "fade_out": 0.1 } },
+    { "id": "b", "asset": "proj:vo", "in": 4.3, "out": 9.4, "gap_before": 0.3 },
+    { "id": "c", "asset": "proj:vo", "in": 9.6, "out": 14.5 }
+  ],
+  "scenes": [
+    {
+      "id": "open",
+      "title": "Cold open",
+      "shots": [
+        {
+          "id": "open/title",
+          "at": "start:a",
+          "picture": {
+            "background": "#14141a",
+            "layers": [
+              { "id": "open/title/logo", "type": "image", "asset": "proj:logo", "size": [160, 160],
+                "transform": { "position": [960, 330], "rotation": { "keys": [
+                  { "t": 0, "v": -90, "ease": "out-cubic" }, { "t": 0.6, "v": 0 } ] } },
+                "shadow": { "dx": 0, "dy": 10, "blur": 24, "color": "#00000099" } },
+              { "id": "open/title/text", "type": "text", "text": "RETAKE DEMO", "size": 150, "fill": "#ffffff",
+                "transform": { "position": [960, 560], "scale": { "keys": [
+                  { "t": 0, "v": 0.6, "ease": "out-back" }, { "t": 0.35, "v": 1.0 } ] } } },
+              { "id": "open/title/rule", "type": "shape", "shape": "rect", "size": [720, 10], "radius": 5,
+                "fill": "#ffd400",
+                "transform": { "position": [960, 660], "scale": { "keys": [
+                  { "t": 0.2, "v": [0, 1], "ease": [0.2, 0.8, 0.2, 1] }, { "t": 0.8, "v": [1, 1] } ] } } },
+              { "id": "open/title/sub", "type": "text", "text": "every frame here is generated", "size": 56,
+                "fill": "#c8c8d0", "from": "word:a/demo",
+                "transform": { "position": [960, 740], "opacity": { "expr": "Math.min(1, (t - 1.38) / 0.4)" } } }
+            ]
+          }
+        },
+        {
+          "id": "open/footage",
+          "at": "word:a/Every-0.10",
+          "picture": {
+            "layers": [
+              { "id": "open/footage/v", "type": "video", "asset": "proj:footage", "in": 2.0, "fit": "cover",
+                "transform": { "scale": { "keys": [ { "t": 0, "v": 1.0, "ease": "in-out-sine" }, { "t": 2.5, "v": 1.12 } ] } } },
+              { "id": "open/footage/badge", "type": "text", "text": "SOURCE: testsrc2", "size": 40, "fill": "#ffffff",
+                "stroke": { "color": "#000000", "width": 4 },
+                "transform": { "anchor": [0, 0], "position": [60, 50] } }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "body",
+      "title": "Pop, picture-in-picture, music",
+      "shots": [
+        {
+          "id": "body/footage",
+          "at": "start:b",
+          "picture": {
+            "layers": [
+              { "id": "body/footage/v", "type": "video", "asset": "proj:footage", "in": 10.0, "fit": "cover" }
+            ]
+          }
+        },
+        {
+          "id": "body/bg",
+          "at": "word:c/music-0.10",
+          "picture": {
+            "layers": [
+              { "id": "body/bg/loop", "type": "video", "asset": "proj:loop", "loop": true, "clock": "timeline",
+                "fit": "cover" },
+              { "id": "body/bg/card", "type": "shape", "shape": "rect", "size": [1100, 420], "radius": 36,
+                "fill": "#101018d0", "transform": { "position": [960, 470] },
+                "shadow": { "dx": 0, "dy": 18, "blur": 40, "color": "#00000080" } },
+              { "id": "body/bg/title", "type": "text", "text": "MUSIC BED", "size": 120, "fill": "#ffd400",
+                "transform": { "position": [960, 420] } },
+              { "id": "body/bg/clock", "type": "text", "text": { "expr": "'t = ' + t.toFixed(1) + ' s'" }, "size": 48,
+                "fill": "#ffffff", "transform": { "position": [960, 560] } }
+            ]
+          }
+        }
+      ],
+      "overlays": [
+        {
+          "id": "pop/faster",
+          "from": "word:b/faster#2",
+          "to": "word:b/Watch-0.10",
+          "z": 2,
+          "layers": [
+            { "id": "pop/faster/text", "type": "text", "text": "FASTER", "size": 170, "fill": "#ffd400",
+              "stroke": { "color": "#000000", "width": 12 },
+              "shadow": { "dx": 6, "dy": 10, "blur": 14, "color": "#000000aa" },
+              "transform": { "position": [960, 880], "scale": { "keys": [
+                { "t": 0, "v": 1.25, "ease": "out-cubic" }, { "t": 0.09, "v": 1.0 } ] } } }
+          ]
+        },
+        {
+          "id": "pip",
+          "from": "word:b/Watch",
+          "to": "end:b",
+          "z": 1,
+          "props": { "slide": 700 },
+          "layers": [
+            { "id": "pip/frame", "type": "shape", "shape": "rect", "size": [596, 340], "radius": 18, "fill": "#ffffff",
+              "shadow": { "dx": 0, "dy": 14, "blur": 30, "color": "#00000099" },
+              "transform": { "position": { "keys": [
+                { "t": 0, "v": [2200, 800], "ease": "out-cubic" }, { "t": 0.45, "v": [1500, 800] } ] } } },
+            { "id": "pip/v", "type": "video", "asset": "proj:clip", "in": 5.0, "fit": "contain",
+              "crop": [40, 0, 1200, 720],
+              "transform": { "scale": 0.3, "position": { "keys": [
+                { "t": 0, "v": [2200, 800], "ease": "out-cubic" }, { "t": 0.45, "v": [1500, 800] } ] } } }
+          ]
+        },
+        {
+          "id": "lower",
+          "from": "word:c/music",
+          "to": "word:c/That's-0.10",
+          "z": 1,
+          "layers": [
+            { "id": "lower/bar", "type": "shape", "shape": "rect", "size": [760, 110], "radius": 14, "fill": "#000000c0",
+              "transform": { "anchor": [0, 0.5], "position": [80, 960],
+                "opacity": { "expr": "Math.min(1, t / 0.3)" } } },
+            { "id": "lower/text", "type": "text", "text": "a generated tone, ducked -8 dB", "size": 52, "align": "left",
+              "transform": { "anchor": [0, 0.5], "position": [110, 960],
+                "opacity": { "expr": "Math.min(1, t / 0.3)" } } }
+          ]
+        }
+      ]
+    }
+  ],
+  "audio": [
+    { "id": "bed", "asset": "proj:music", "from": "start:a", "loop": true, "gain_db": -14, "fade_in": 1.0,
+      "fade_out": 1.5, "duck": { "db": -8 } }
+  ],
+  "end": "end:c+0.40"
+}
