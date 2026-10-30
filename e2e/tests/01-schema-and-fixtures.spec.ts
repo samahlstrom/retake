@@ -105,6 +105,44 @@ test.describe('take.schema.json', () => {
       expect(schemaErrors('take', t)).not.toEqual([]);
     });
   }
+
+  /** Take format v1.1 (spec/notes.md): images.json, a segment's answer_to, session.closed. */
+  const withImages = () => {
+    const t = clone();
+    Object.assign(t.session, { closed: true });
+    Object.assign(t.segments[0]!, { answer_to: 12 });
+    const images = [{ id: 2, seg: 'S1', version: 'v6', flip: false, file: 'img_01.png', mime: 'image/png',
+      session_t: 3.5, video_t: 10, box: [0.4, 0.3, 0.25, 0.1406] }];
+    return { ...t, images };
+  };
+
+  test('accepts the v1.1 additions (images, answer_to, closed), and older takes without them', () => {
+    const t = withImages();
+    expect(schemaErrors('take', t)).toEqual([]);
+    expect(schemaErrors('images', t.images)).toEqual([]);
+    expect(schemaErrors('images', [])).toEqual([]);
+    const { versions: _v, ...pageSession } = t.session;
+    expect(schemaErrors('dataBody', { ...t, session: { ...pageSession, video: { duration: 40, width: 1280,
+      height: 720 } } })).toEqual([]);
+    expect(schemaErrors('take', clone()), 'a take without images.json, answer_to or closed').toEqual([]);
+  });
+
+  const brokenV11: [string, (t: ReturnType<typeof withImages>) => void][] = [
+    ['an image with a bad file name', (t) => { t.images[0]!.file = '../img_01.png'; }],
+    ['an image of an unknown type', (t) => { t.images[0]!.file = 'img_01.svg'; t.images[0]!.mime = 'image/svg+xml'; }],
+    ['an image box outside the frame', (t) => { t.images[0]!.box = [0.9, 0.3, 1.2, 0.1]; }],
+    ['an image box with three numbers', (t) => { t.images[0]!.box = [0.1, 0.2, 0.3]; }],
+    ['an image without seg', (t) => { delete (t.images[0] as Record<string, unknown>).seg; }],
+    ['answer_to that is not a thread id', (t) => { Object.assign(t.segments[0]!, { answer_to: 'q1' }); }],
+    ['closed as a string', (t) => { Object.assign(t.session, { closed: 'yes' }); }],
+  ];
+  for (const [name, breakIt] of brokenV11) {
+    test(`rejects ${name}`, () => {
+      const t = withImages();
+      breakIt(t);
+      expect(schemaErrors('take', t)).not.toEqual([]);
+    });
+  }
 });
 
 test.describe('fixtures', () => {

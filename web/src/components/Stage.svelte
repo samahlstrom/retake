@@ -1,8 +1,9 @@
 <script lang="ts">
-  // The video, the frozen last frame while another version loads, the pen layer, the hint, the toast and the fatal
-  // message.
+  // The video, the frozen last frame while another version loads, the image cards, the pen layer, the hint, the toast
+  // and the fatal message.
   import type { Review } from '../lib/review.svelte';
   import Hint from './Hint.svelte';
+  import ImageLayer from './ImageLayer.svelte';
 
   let { review }: { review: Review } = $props();
 </script>
@@ -21,6 +22,7 @@
     onerror={review.onVideoError}
   ></video>
   <canvas id="freeze" bind:this={review.el.freeze} style:display={review.freezeShown ? 'block' : null}></canvas>
+  <ImageLayer {review} />
   <canvas id="ink" class:pen={!!review.seg} {@attach review.attachInk}></canvas>
   <Hint gone={review.hintGone} />
   <div id="toast" class="float" class:show={review.toast.show}>{review.toast.msg}</div>

@@ -126,6 +126,8 @@ window.__review = {
   serialize,     // (take) => {session, segments, events, strokes, voice}   (the /data body)
   save,          // (take) => Promise
   vad, bars, mic // getters, as in the legacy page
+  notes,         // getter, new in milestone 2: {available, version, newest, items, jobs, job} from /api/notes and SSE
+  sidebar,       // getter, new in milestone 2: {panel, toggle, phone, rows, active}, what the sidebar shows
 }
 ```
 

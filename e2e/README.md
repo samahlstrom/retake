@@ -24,8 +24,10 @@ Run it through mise (`mise exec -- npm test`) to use the pinned node. Needs `ffm
 | `CHROMIUM_PATH` | `/usr/lib/chromium/chromium` if it exists, else Playwright's Chromium | The browser. CI points it at Playwright's Chromium. |
 | `RETAKE_E2E_WORK` | `<repo>/.retake-work/e2e` | Scratch root: media, version families, takes, server logs. It is wiped at the start of a run and deleted after a passing run. A failing run keeps it. The suite only deletes a folder that has its `.retake-e2e` marker. |
 | `RETAKE_E2E_KEEP` | unset | Set it to keep the scratch data after a passing run too. |
+| `RETAKE_E2E_PORT_BASE` | `8831` | The first of the five ports below; move it to run two checkouts side by side. |
+| `RETAKE_E2E_SHOTS` | unset | A folder: `05-sidebar` writes its screenshots there (1920×1080 and phone size). |
 
-Ports: the servers use 8831–8834 (scenario 8831, crash safety 8832 behind a proxy on 8834, HLS 8833). The browser
+Ports: the servers use 8831–8835 (scenario 8831, crash safety 8832 behind a proxy on 8834, HLS 8833, sidebar 8835). The browser
 talks to Playwright over a pipe, so it opens no devtools port. Each server is started for its spec file, waited on
 through `/api/ping`, and always stopped. Its log is in `<work>/logs/`.
 
@@ -95,3 +97,24 @@ checks. It runs against both servers.
 - v8 is detected from its own folder.
 - C flips mp4 → m3u8 at the same time, and the playlist plays (currentTime advances, readyState ≥ 2).
 - C flips back, `]` steps to the m3u8 keeping the time and play state, and `[` steps back.
+
+**`05-sidebar`** (new only; milestone 2, `spec/notes.md`)
+- The family is v5 and v6 (the newest, opened). The sidebar's content needs an agent, so `GET /api/notes`,
+  `POST /api/notes/<id>/reopen` and the SSE stream `GET /api/events` are mocked with `page.route`. `POST /image` and
+  `GET /api/takes/...` go to the server when it has them (probed first, without side effects), else they are mocked
+  and the test checks the requests instead of the disk. `POST /done` always goes to the server.
+- **Newest version:** only the open questions, at their times, with version chips; answered and retracted items are
+  hidden. The column sits right of the video, and the bar stays full width.
+- Clicking an item seeks to it. A chip flips to that version at the same time, and the sidebar then shows that
+  version's notes as resolved (✓ with the change and "answered in v6", ? with the question). Reopen posts. "see it in
+  v6" goes back to the note's moment on v6.
+- N hides the sidebar (the page is then exactly as before), and that is remembered across a reload.
+- Not recording, an image drop or paste is refused with "Press R to record before adding images".
+- Answer seeks to the question and records with `answer_to` on the segment.
+- While recording, a drop lands at its point and time, its corner resizes it, and a paste lands where the pointer
+  was. Z undoes the last stroke or image, whichever came last.
+- Done saves `answer_to`, `closed` and the image (`images.json` and `img_01.png` when the server stores images), the
+  take validates against the schema, and the page posts `/done`.
+- Job events show progress, then a failure with the server's hint. A `notes` event brings in the new note.
+- An earlier take's image shows near its time, dimmed and not resizable. On a phone, the list sits under the controls
+  behind a toggle.

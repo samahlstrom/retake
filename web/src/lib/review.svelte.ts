@@ -12,16 +12,36 @@ import {
   type PenColor,
   COLOR_KEYS,
 } from './constants';
+import { memoryImageStore, openImageStore, recoverImages, type ImageStore } from './image-buffer';
+import {
+  dragMayHoldImage,
+  droppedImageUrl,
+  firstImageFile,
+  HINT_IMAGE,
+  imageExt,
+  imageName,
+  lastUndoable,
+  MSG_IMAGE_BAD,
+  MSG_IMAGE_NOFILE,
+  placeBox,
+  refuseImage,
+  resizeBox,
+} from './images';
 import { keyAction, type Action } from './keys';
 import { closeMic, MIC_BLOCKED, openMic, pickMime, type Mic } from './mic';
-import { addPoint, fitFrame, isClick, renderInk } from './pen';
+import { Notes } from './notes/notes.svelte';
+import type { NoteItem } from './notes/types';
+import { activeKey, PHONE_QUERY, presence, sidebarRows, type Row } from './notes/view';
+import { addPoint, alphaAt, fitFrame, isClick, renderInk } from './pen';
 import { Saver } from './saver';
 import { VideoSource } from './source';
 import { addChunk, archive, binCount, grow, insertEv, newSegment, newTake, serialize as serializeTake } from './take';
 import { drawTimeline, tlT } from './timeline';
 import { Toast } from './toast.svelte';
 import type {
+  Box,
   HistoryEntry,
+  HistoryImage,
   HistoryStroke,
   Info,
   Point,
@@ -30,6 +50,7 @@ import type {
   Take,
   TakeData,
   TakeEvent,
+  TakeImage,
   Version,
 } from './types';
 import { byLabel, coverMessage, covers, flipTarget, flipToast, stepTarget } from './versions';
@@ -45,16 +66,41 @@ export interface Elements {
   wave: HTMLCanvasElement;
 }
 
-/** The test hook (`window.__review`): the same shape as the legacy page's, see spec/api.md. */
+/** An image card on the video this frame: a take's own image (resizable while recording) or an earlier take's. */
+export interface ImageCard {
+  key: string;
+  url: string;
+  box: Box;
+  alpha: number;
+  /** The image's id when its corner can be dragged (this take's, while recording), else null. */
+  id: number | null;
+}
+
+/** What the sidebar shows (the test hook's `sidebar`). */
+export interface SidebarView {
+  /** The column (desktop) or the list under the controls (phone) is on screen. */
+  panel: boolean;
+  /** The open/close toggle is on screen. */
+  toggle: boolean;
+  phone: boolean;
+  rows: Row[];
+  /** The row under the playhead. */
+  active: string | null;
+}
+
+/** The test hook (`window.__review`): the same shape as the legacy page's, see spec/api.md, plus `notes` and
+ * `sidebar` (milestone 2). */
 export interface ReviewHook {
   readonly take: Take;
   readonly seg: Segment | null;
   readonly view: { base: string | null; shown: string | null; flipped: boolean; switching: boolean };
   readonly info: Info;
-  readonly hist: { strokes: HistoryStroke[]; bins: Float32Array };
+  readonly hist: { strokes: HistoryStroke[]; bins: Float32Array; images: HistoryImage[] };
   readonly vad: { floor: number; hang: number; active: boolean };
   readonly bars: WaveBar[];
   readonly mic: Mic | null;
+  readonly notes: Notes['snapshot'];
+  readonly sidebar: SidebarView;
   serialize(t: Take): TakeData;
   save(t?: Take): Promise<void> | undefined;
 }
@@ -83,6 +129,17 @@ export class Review {
   freezeShown = $state(false);
   tip = $state<{ show: boolean; left: number | null; text: string }>({ show: false, left: null, text: '' });
   readonly toast = new Toast();
+  /** The shown video frame inside the stage (the pen canvas's box), for the image layer. */
+  frame = $state({ left: 0, top: 0, width: 0, height: 0 });
+  /** Image cards on the video this frame. */
+  cards = $state.raw<ImageCard[]>([]);
+  /** The notes sidebar: agent questions on the newest version, resolved notes on older ones. */
+  readonly notes = new Notes({ onVersion: () => void this.refreshFamily() });
+  readonly rows = $derived(sidebarRows(this.notes.res, { versions: this.versions, shown: this.shown }));
+  /** The sidebar row under the playhead. */
+  activeRow = $state<string | null>(null);
+  /** Phone layout (the sidebar is a list under the controls). */
+  phone = $state(false);
 
   // ---------------------------------------------------------------- hot state (plain, read by the frame loop)
   info: Info = { name: '', path: '', duration: 0, fps: 30, history: [] };
@@ -99,10 +156,17 @@ export class Review {
   bars: WaveBar[] = [];
   acc = newAcc();
   /** Earlier takes on this version stay on the timeline. */
-  hist: { strokes: HistoryStroke[]; bins: Float32Array } = { strokes: [], bins: new Float32Array(1) };
+  hist: { strokes: HistoryStroke[]; bins: Float32Array; images: HistoryImage[] } = {
+    strokes: [],
+    bins: new Float32Array(1),
+    images: [],
+  };
   inkW = 1;
   inkH = 1;
   scrubbing = false;
+  /** Where the pointer last was over the video (normalized): a pasted image lands there. */
+  lastPointer: Point | null = null;
+  #cardSig = '';
 
   el = {} as Elements;
   #ictx!: CanvasRenderingContext2D;
@@ -112,16 +176,23 @@ export class Review {
   /** The audio buffer. Memory until IndexedDB has opened (every chunk waits for `#storeReady`). */
   #store: ChunkStore = memoryChunkStore();
   #storeReady: Promise<ChunkStore> = Promise.resolve(this.#store);
+  /** The image buffer, the audio buffer's twin. */
+  #imgStore: ImageStore = memoryImageStore();
+  #imgReady: Promise<ImageStore> = Promise.resolve(this.#imgStore);
   /** Takes started on this page: the saver owns their uploads, so recovery leaves them alone. */
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- bookkeeping, nothing renders it
   readonly #ownTakes = new Set<string>();
   /** Closed takes (Done, or a version step) whose last save failed: autosave keeps trying them. */
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- bookkeeping, nothing renders it
   readonly #unsaved = new Set<Take>();
+  /** Closed takes whose POST /done waits for their save to go through. */
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- bookkeeping, nothing renders it
+  readonly #donePending = new Set<Take>();
   readonly #saver = new Saver({
     serialize: (t) => this.serialize(t),
     toast: (m, ms) => this.toast.say(m, ms),
     store: () => this.#store,
+    images: () => this.#imgStore,
   });
 
   get video(): HTMLVideoElement {
@@ -155,6 +226,12 @@ export class Review {
       },
       get mic() {
         return r.mic;
+      },
+      get notes() {
+        return r.notes.snapshot;
+      },
+      get sidebar() {
+        return r.sidebar;
       },
       serialize: (t: Take) => r.serialize(t),
       save: (t?: Take) => r.save(t),
@@ -294,7 +371,8 @@ export class Review {
     this.mic = null;
   }
 
-  startRec = async (): Promise<void> => {
+  /** R on. `answerTo`: the question thread this segment answers (Answer in the sidebar). */
+  startRec = async (answerTo: number | null = null): Promise<void> => {
     if (this.seg || this.starting) return;
     this.starting = true;
     this.hintGone = true;
@@ -311,6 +389,7 @@ export class Review {
         version: this.shown,
         flip: this.flipped,
         videoTime: video.currentTime,
+        answerTo,
       });
       rec.ondataavailable = (e) => {
         if (e.data && e.data.size) this.#onChunk(t, s, e.data);
@@ -455,6 +534,7 @@ export class Review {
     ink.height = this.#layer.height = Math.max(1, Math.round(f.height * dpr));
     this.inkW = f.width;
     this.inkH = f.height;
+    this.frame = f;
   };
 
   #norm(e: { clientX: number; clientY: number }): Point {
@@ -527,14 +607,271 @@ export class Review {
     };
   };
 
+  /** Z: undo the last stroke or image, whichever came last (they share one id counter). */
   undo = (): void => {
     const t = this.take;
     if (t.closed) return;
-    const st = [...t.strokes].reverse().find((x) => !x.undone);
-    if (!st) return;
-    st.undone = true;
-    this.logEv('undo', { id: st.id });
+    const last = lastUndoable(t);
+    if (!last) return;
+    last.item.undone = true;
+    this.logEv('undo', { id: last.item.id });
   };
+
+  // ---------------------------------------------------------------- images (only while recording, like the pen)
+  /** A pointer position as a point normalized to the video frame (clamped to it). */
+  normPoint(e: { clientX: number; clientY: number }): Point {
+    return this.#norm(e);
+  }
+
+  /** Whether a pointer position is over the stage (the video area). */
+  #overStage(e: { clientX: number; clientY: number }): boolean {
+    const r = this.el.stage?.getBoundingClientRect();
+    return !!r && e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+  }
+
+  /** Remember where the pointer is over the video, so a paste lands there. */
+  onPointerMove = (e: PointerEvent): void => {
+    const r = this.el.ink?.getBoundingClientRect();
+    if (!r || !r.width || !r.height) return;
+    const x = (e.clientX - r.left) / r.width,
+      y = (e.clientY - r.top) / r.height;
+    if (x >= 0 && x <= 1 && y >= 0 && y <= 1) this.lastPointer = [x, y];
+  };
+
+  /** An image file was dropped or pasted at `at` (normalized; null = where the pointer was, else the center). */
+  addImage = async (file: Blob, at: Point | null): Promise<TakeImage | null> => {
+    const s = this.seg,
+      t = this.take;
+    const refusal = refuseImage(file, !!s);
+    if (refusal || !s) {
+      this.toast.say(refusal ?? HINT_IMAGE, 2600);
+      return null;
+    }
+    const mime = file.type.toLowerCase().split(';')[0],
+      ext = imageExt(mime) as string;
+    const video_t = this.video.currentTime,
+      p0 = now(),
+      version = this.shown,
+      flip = this.flipped;
+    const url = URL.createObjectURL(file);
+    const pic = new Image();
+    try {
+      pic.src = url;
+      await pic.decode();
+    } catch {
+      URL.revokeObjectURL(url);
+      this.toast.say(MSG_IMAGE_BAD, 2600);
+      return null;
+    }
+    if (t.closed) {
+      URL.revokeObjectURL(url);
+      return null; // Done while it decoded
+    }
+    const img: TakeImage = {
+      id: t.nextId++,
+      seg: s.id,
+      version,
+      flip,
+      file: imageName(t.images.length + 1, ext),
+      mime,
+      p0,
+      video_t,
+      box: placeBox(at ?? this.lastPointer ?? [0.5, 0.5], pic.naturalWidth, pic.naturalHeight, this.inkW, this.inkH),
+      blob: file,
+      url,
+      upload: 'pending',
+      stored: Promise.resolve(),
+    };
+    const rec = {
+      take: t.id ?? '',
+      version: String(t.version),
+      file: img.file,
+      mime,
+      data: file,
+      size: file.size,
+      path: byLabel(this.versions, t.version)?.path ?? '',
+      saved: Date.now(),
+    };
+    img.stored = this.#imgReady.then((store) => store.put(rec));
+    t.images.push(img);
+    t.dirty = true; // the next save sends it (within AUTOSAVE_MS): a wrong paste undone by then never leaves the page
+    return img;
+  };
+
+  /** Resize one of this take's images by its corner, dragged to `p` (normalized). */
+  resizeImage = (id: number, p: Point): void => {
+    const t = this.take,
+      img = t.images.find((x) => x.id === id);
+    if (!img || img.undone || t.closed || !this.seg) return;
+    img.box = resizeBox(img.box, p);
+    t.dirty = true;
+  };
+
+  /** Files dragged over the page: never let the browser open them (the take would be lost); copy onto the video. */
+  onDragOver = (e: DragEvent): void => {
+    const dt = e.dataTransfer;
+    if (!dt || !dragMayHoldImage(dt.types)) return;
+    e.preventDefault();
+    dt.dropEffect = this.#overStage(e) ? 'copy' : 'none';
+  };
+
+  onDrop = (e: DragEvent): void => {
+    const dt = e.dataTransfer;
+    if (!dt || !dragMayHoldImage(dt.types)) return;
+    e.preventDefault();
+    if (!this.#overStage(e)) return;
+    const at = this.#norm(e),
+      file = firstImageFile(dt);
+    if (file) {
+      void this.addImage(file, at);
+      return;
+    }
+    if (!this.seg) {
+      this.toast.say(HINT_IMAGE, 2600);
+      return;
+    }
+    // An image dragged from another tab without a file: fetch it if its site allows that.
+    const url = droppedImageUrl((type) => dt.getData(type));
+    if (!url) {
+      this.toast.say(MSG_IMAGE_NOFILE, 3000);
+      return;
+    }
+    void fetch(url)
+      .then((r) => (r.ok ? r.blob() : null))
+      .catch(() => null)
+      .then((b) => {
+        if (b && b.type.startsWith('image/')) void this.addImage(b, at);
+        else this.toast.say(MSG_IMAGE_NOFILE, 3000);
+      });
+  };
+
+  /** Ctrl/Cmd+V with an image on the clipboard. */
+  onPaste = (e: ClipboardEvent): void => {
+    const file = firstImageFile(e.clipboardData);
+    if (!file) return;
+    e.preventDefault();
+    void this.addImage(file, this.lastPointer);
+  };
+
+  /** The image cards to show at playhead `vt`: like strokes, within ±SHOW s of their time, dimmer when not recording.
+   * Only assigned when something changed, so the layer re-renders only then. */
+  #updateCards(vt: number): void {
+    const dim = this.seg ? 1 : 0.55,
+      out: ImageCard[] = [],
+      t = this.take;
+    const add = (im: HistoryImage, key: string, id: number | null) => {
+      if (im.undone) return;
+      const a = Math.round(alphaAt(im, vt) * dim * 100) / 100;
+      if (a > 0.02) out.push({ key, url: im.url, box: im.box, alpha: a, id: a > 0.3 ? id : null });
+    };
+    this.hist.images.forEach((im, i) => add(im, `h${i}`, null));
+    for (const im of t.images) add(im, `t${t.id}:${im.id}`, this.seg ? im.id : null);
+    const sig = out.map((c) => `${c.key} ${c.alpha} ${c.box.join(',')} ${c.id}`).join('|');
+    if (sig === this.#cardSig) return;
+    this.#cardSig = sig;
+    this.cards = out;
+  }
+
+  // ---------------------------------------------------------------- notes sidebar
+  get sidebar(): SidebarView {
+    const n = this.notes,
+      rows = this.rows;
+    return {
+      ...presence({
+        available: n.available,
+        content: rows.length > 0 || !!n.job,
+        everShown: n.everShown,
+        open: n.open,
+        phoneOpen: n.phoneOpen,
+        phone: this.phone,
+      }),
+      phone: this.phone,
+      rows,
+      active: this.activeRow,
+    };
+  }
+
+  /** N, the pill, or the column's ›. Nothing without the notes routes (so the remembered state isn't flipped blind). */
+  toggleSidebar = (): void => {
+    if (this.notes.available) this.notes.toggle(this.phone);
+  };
+
+  /** Seek and wait until the frame is there (or a short while). */
+  async #seekSettled(t: number): Promise<void> {
+    const video = this.video;
+    this.seekTo(t);
+    if (!video.seeking) return;
+    await new Promise((res) => {
+      const done = () => {
+        clearTimeout(timer);
+        res(null);
+      };
+      const timer = setTimeout(done, 2000);
+      video.addEventListener('seeked', done, { once: true });
+    });
+  }
+
+  /** Click a sidebar item: jump to its moment. */
+  jumpTo = (t: number): void => {
+    this.seekTo(t);
+  };
+
+  /** Show version `label` at the same time, as a comparison (C goes back to the base); the base itself flips back.
+   * The take stays open, so the reviewer can answer right after comparing. */
+  peek = async (label: string): Promise<void> => {
+    if (this.switching || label === this.shown) return;
+    if (label === this.base) {
+      if (this.flipped) await this.flip();
+      return;
+    }
+    const target = byLabel(this.versions, label);
+    if (!target || !(await this.showVersion(label))) return;
+    this.flipped = true;
+    this.logEv('version', { shown: this.shown, base: this.base, flip: this.flipped });
+    this.toast.say(flipToast(this.versions, this.base, target, true), 1200);
+  };
+
+  /** "see it in vN": that note's moment, in the version that answered it. */
+  seeIn = async (label: string, t: number): Promise<void> => {
+    if (this.switching) return;
+    await this.#seekSettled(t);
+    await this.peek(label);
+  };
+
+  /** Answer a question: jump to it and record, exactly like R, with the segment pointing at the thread. Pressed again
+   * while that answer is recording, it stops (like R). */
+  answer = async (thread: number, t: number): Promise<void> => {
+    if (this.switching || this.starting) return;
+    if (this.seg) {
+      const same = this.seg.answer_to === thread;
+      await this.stopRec();
+      if (same) return;
+    }
+    await this.#seekSettled(t);
+    await this.startRec(thread);
+  };
+
+  reopen = async (item: Pick<NoteItem, 'id'>): Promise<void> => {
+    if (!(await this.notes.reopen(item.id))) this.toast.say("Couldn't reopen that note", 3000);
+  };
+
+  /** A `version` event: the family changed (a new version was pushed). */
+  async refreshFamily(): Promise<void> {
+    try {
+      const info = (await (await fetch('/api/info')).json()) as Info;
+      if (info.versions?.length) {
+        this.info.versions = info.versions;
+        this.versions = info.versions;
+      }
+    } catch {
+      /* server gone */
+    }
+    void this.notes.refresh();
+  }
+
+  async #postDone(t: Take): Promise<void> {
+    if (t.id) await this.notes.postDone(t.id, t.version);
+  }
 
   // ---------------------------------------------------------------- timeline: playhead, where you talked and drew
   #tlT(clientX: number): number {
@@ -601,6 +938,7 @@ export class Review {
       video.currentTime = Math.min(t, (video.duration || t) - 0.001);
       await seeked;
       this.shown = label;
+      void this.notes.load(label); // the sidebar follows the version on screen
       if (wasPlaying) await video.play().catch(() => {});
     } catch {
       this.toast.say(`Could not load ${label}`, 3000);
@@ -642,6 +980,7 @@ export class Review {
       t.closed = true;
       void this.save(t);
       this.#unsaved.add(t);
+      this.#donePending.add(t); // a finished take, like Done: transcribe it once it is saved
     }
     this.base = label;
     this.flipped = false;
@@ -663,6 +1002,7 @@ export class Review {
 
   async loadHistory(label: string): Promise<void> {
     this.hist.strokes = [];
+    this.hist.images = [];
     this.hist.bins = new Float32Array(this.nBins());
     try {
       const d = (await (await fetch(`/api/history?v=${encodeURIComponent(label)}`)).json()) as {
@@ -678,6 +1018,7 @@ export class Review {
     const hist = this.hist;
     for (const h of list || []) {
       for (const st of h.strokes || []) hist.strokes.push(st);
+      for (const im of h.images || []) if (im && im.url && Array.isArray(im.box)) hist.images.push(im);
       for (const [i, v] of (h.voice && h.voice.bins) || []) {
         if (i >= hist.bins.length) {
           const a = new Float32Array(i + 64);
@@ -702,9 +1043,13 @@ export class Review {
     }
     this.video.pause();
     if (this.seg) await this.stopRec();
+    t.closed = true; // before the final save, so session.json says so (take format v1.1)
     await this.save(t);
-    t.closed = true;
-    if (t.saveErr) this.#unsaved.add(t);
+    while (t.saving) await t.saving; // a save that was already running queued one more: wait for the last
+    if (t.saveErr) {
+      this.#unsaved.add(t);
+      this.#donePending.add(t);
+    } else void this.#postDone(t); // the server transcribes it and writes up the notes
     this.closeMic();
     this.doneSaved = true;
     this.toast.say(t.saveErr ? MSG_SAVE_FAILED : 'Saved. Press R to start a new take.', 4000);
@@ -759,6 +1104,9 @@ export class Review {
       case 'fullscreen':
         if (document.fullscreenElement) void document.exitFullscreen();
         else document.documentElement.requestFullscreen().catch(() => {});
+        break;
+      case 'notes':
+        this.toggleSidebar();
         break;
     }
   }
@@ -839,6 +1187,11 @@ export class Review {
     );
     this.#drawTimeline(vt);
     this.#drawWave();
+    this.#updateCards(vt);
+    const rows = this.rows,
+      act = activeKey(rows, vt);
+    if (act !== this.activeRow) this.activeRow = act;
+    if (!this.notes.everShown && this.notes.available && (rows.length || this.notes.job)) this.notes.everShown = true;
     this.curText = fmt(vt);
     if (this.seg) this.recElapsed = fmt(t - this.seg.p0, false);
     requestAnimationFrame(this.loop);
@@ -849,6 +1202,11 @@ export class Review {
     const video = this.video;
     this.#source = new VideoSource(video, { onFatal: () => this.onVideoError() });
     this.#storeReady = openChunkStore().then((s) => (this.#store = s));
+    this.#imgReady = openImageStore().then((s) => (this.#imgStore = s));
+    this.notes.restore();
+    const phone = matchMedia(PHONE_QUERY);
+    this.phone = phone.matches;
+    phone.addEventListener('change', () => (this.phone = phone.matches));
     this.newTake();
     this.paused = video.paused;
     setInterval(() => {
@@ -861,7 +1219,10 @@ export class Review {
       for (const c of this.#unsaved) {
         if (c.saving) continue;
         if (c.saveErr) void this.save(c);
-        else this.#unsaved.delete(c);
+        else {
+          this.#unsaved.delete(c);
+          if (this.#donePending.delete(c)) void this.#postDone(c);
+        }
       }
     }, AUTOSAVE_MS);
     setInterval(() => {
@@ -884,5 +1245,24 @@ export class Review {
     this.layout();
     requestAnimationFrame(this.loop);
     void this.recover().catch(() => {});
+    void this.recoverImages().catch(() => {});
+    void this.notes.load(this.shown); // no sidebar at all if the server has no notes routes
+  }
+
+  /** Resend images that earlier takes left in the image buffer, like recover() does for audio. */
+  async recoverImages(): Promise<void> {
+    const res = await recoverImages(
+      await this.#imgReady,
+      this.versions,
+      async (url, body, mime) => {
+        const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': mime }, body });
+        await r.body?.cancel().catch(() => {});
+        return r.status;
+      },
+      (take) => this.#ownTakes.has(take),
+    );
+    if (res.recovered || res.kept || res.dropped)
+      console.info(`retake: image buffer: ${res.recovered} recovered, ${res.dropped} refused, ${res.kept} kept`);
+    if (res.retry) setTimeout(() => void this.recoverImages().catch(() => {}), AUTOSAVE_MS);
   }
 }

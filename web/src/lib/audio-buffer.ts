@@ -49,7 +49,8 @@ const order = (a: ChunkKey, b: ChunkKey): number =>
               ? 1
               : a.offset - b.offset;
 
-const done = (req: IDBRequest | IDBTransaction): Promise<void> =>
+/** Settles when an IndexedDB request succeeds or a transaction completes; rejects on error or abort. */
+export const done = (req: IDBRequest | IDBTransaction): Promise<void> =>
   new Promise((res, rej) => {
     if ('oncomplete' in req) {
       req.oncomplete = () => res();

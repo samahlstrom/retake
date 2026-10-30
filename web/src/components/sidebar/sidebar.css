@@ -1,0 +1,365 @@
+/* The notes sidebar. Same palette, fonts and restraint as the bar: hairlines, no boxes, times in tabular mono. Placed
+   in #app's grid (app.css): column 2 next to the stage on desktop, row 3 under the bar on phones. */
+#side {
+  grid-row: 1;
+  grid-column: 2;
+  width: 320px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bar);
+  border-left: 1px solid var(--hair);
+}
+#side header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 46px;
+  padding: 0 8px 0 18px;
+  color: var(--dim);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+#side .hide {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dim);
+}
+#side .hide:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+}
+#side .hide svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Job progress: one quiet line; a failure is warmer and says how to fix it. */
+#side .job {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  margin: 0 18px 10px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--dim);
+  font-size: 12px;
+  text-align: left;
+  cursor: default;
+}
+#side .job.err {
+  color: #ff9f8f;
+  cursor: pointer;
+}
+#side .job .pulse {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--voice);
+  transform: translateY(-1px);
+  animation: side-pulse 1.4s ease-in-out infinite;
+}
+#side .job.err .pulse {
+  background: var(--live);
+  animation: none;
+}
+#side .job .hint {
+  display: block;
+  margin-top: 2px;
+  color: var(--dim);
+}
+@keyframes side-pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+#side .scroll {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+#side .vp {
+  width: 100%;
+  height: 100%;
+}
+#side .bar {
+  display: flex;
+  width: 8px;
+  padding: 2px;
+  touch-action: none;
+  user-select: none;
+}
+#side .thumb {
+  flex: 1;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.16);
+}
+#side ol {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 14px;
+}
+#side .empty {
+  margin: 4px 18px;
+  color: var(--dim);
+  font-size: 12px;
+}
+
+/* A row: time · mark · text, then what it became and its actions, aligned under the text. */
+#side .item {
+  position: relative;
+  padding: 11px 16px 12px 18px;
+  border-top: 1px solid var(--hair);
+}
+#side .item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 2px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.6);
+}
+#side .jump {
+  display: flex;
+  align-items: baseline;
+  gap: 0;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  line-height: 1.45;
+}
+#side .time {
+  flex: none;
+  width: 44px;
+  color: var(--dim);
+  font:
+    12px/1.45 ui-monospace,
+    'SF Mono',
+    'JetBrains Mono',
+    'DejaVu Sans Mono',
+    Menlo,
+    Consolas,
+    monospace;
+  font-variant-numeric: tabular-nums;
+}
+#side .mark {
+  flex: none;
+  width: 18px;
+  font-weight: 600;
+  color: var(--dim);
+}
+#side .mark.answered {
+  color: #30d158;
+}
+#side .mark.question {
+  color: #ffcf6e;
+}
+#side .text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+#side .jump:hover .text {
+  color: #fff;
+}
+#side .more {
+  margin-left: 62px;
+}
+#side .more:empty {
+  display: none;
+}
+#side .change,
+#side .asked {
+  margin: 5px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+#side .change {
+  color: #c4c4ca;
+}
+#side .asked {
+  color: #ffcf6e;
+}
+#side .thumbs {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+#side .thumbs img {
+  height: 38px;
+  max-width: 96px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid var(--hair);
+}
+#side .chips,
+#side .acts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin-top: 8px;
+}
+#side .chips {
+  gap: 6px;
+}
+#side .chip {
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+#side .chip:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.32);
+}
+#side .chip.on {
+  color: #ffcf6e;
+  border-color: rgba(255, 207, 110, 0.5);
+}
+#side .chip:disabled {
+  color: var(--dim);
+  cursor: default;
+  opacity: 0.6;
+}
+#side .meta {
+  color: var(--dim);
+  font-size: 12px;
+}
+#side .act {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--dim);
+  font-size: 12px;
+}
+#side .act:hover {
+  color: var(--text);
+}
+#side .see {
+  color: #c4c4ca;
+}
+#side .answer {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 11px;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: transparent;
+  font-size: 12px;
+}
+#side .answer:hover {
+  border-color: rgba(255, 255, 255, 0.32);
+}
+#side .answer .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #55555c;
+}
+#side .answer.on {
+  color: #ff7a70;
+  font-weight: 600;
+  border-color: rgba(255, 69, 58, 0.55);
+  background: rgba(255, 69, 58, 0.12);
+}
+#side .answer.on .dot {
+  background: var(--live);
+}
+
+/* The toggle: a quiet pill over the video's top-right corner, in the hint's style. */
+#sideToggle {
+  grid-area: 1 / 1;
+  justify-self: end;
+  align-self: start;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 18px 20px;
+  padding: 6px 13px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(9, 9, 10, 0.72);
+  color: #dcdce1;
+  font-size: 12.5px;
+  letter-spacing: 0.01em;
+  backdrop-filter: blur(10px);
+}
+#sideToggle:hover {
+  color: #fff;
+}
+#sideToggle .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--dim);
+}
+#sideToggle .dot.q {
+  background: #ffcf6e;
+}
+#sideToggle .dot.busy {
+  background: var(--voice);
+  animation: side-pulse 1.4s ease-in-out infinite;
+}
+#sideToggle .dot.err {
+  background: var(--live);
+}
+.sideTip {
+  z-index: 6;
+  padding: 4px 9px;
+  border-radius: 6px;
+  background: #1b1b1f;
+  color: var(--text);
+  font-size: 12px;
+}
+.sideTip b {
+  margin-left: 4px;
+  font-weight: 600;
+}
+
+@media (min-width: 2200px) {
+  #side {
+    width: 380px;
+  }
+  #side .time {
+    font-size: 13px;
+  }
+}
+
+/* Phones: the list sits under the controls; the pill opens and closes it. */
+@media (max-width: 760px) {
+  #side {
+    grid-row: 3;
+    grid-column: 1 / -1;
+    width: auto;
+    max-height: 45vh;
+    border-left: 0;
+    border-top: 1px solid var(--hair);
+  }
+  #side header {
+    height: 38px;
+  }
+  #sideToggle {
+    margin: 12px;
+  }
+}

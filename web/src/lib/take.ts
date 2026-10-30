@@ -2,7 +2,7 @@
 // session_t = seconds since the take started (first R); a segment's audio starts at its t_start. video_t = playhead.
 import { BIN, SHOW } from './constants';
 import { extFor } from './mic';
-import type { HistoryStroke, Segment, Take, TakeData, TakeEvent } from './types';
+import type { HistoryImage, HistoryStroke, Segment, Take, TakeData, TakeEvent } from './types';
 import { isoLocal, pad2, r3, r4 } from './util';
 
 export const CLOCK_NOTE =
@@ -27,6 +27,7 @@ export function newTake(version: string | null, bins: number): Take {
     t0: null,
     events: [],
     strokes: [],
+    images: [],
     segments: [],
     nextId: 1,
     dirty: false,
@@ -39,17 +40,21 @@ export function newTake(version: string | null, bins: number): Take {
   };
 }
 
-/** The next segment of take `t`: S1, S2, … with its own audio file seg_01.<ext>, seg_02.<ext>, … */
+/**
+ * The next segment of take `t`: S1, S2, … with its own audio file seg_01.<ext>, seg_02.<ext>, … `answerTo` is the
+ * question thread it answers (Answer in the sidebar), if any.
+ */
 export function newSegment(
   t: Take,
   rec: MediaRecorder,
   mime: string,
-  at: { version: string | null; flip: boolean; videoTime: number },
+  at: { version: string | null; flip: boolean; videoTime: number; answerTo?: number | null },
 ): Segment {
   const n = t.segments.length + 1;
   return {
     n,
     id: `S${n}`,
+    ...(at.answerTo != null ? { answer_to: at.answerTo } : {}),
     rec,
     mime,
     version: at.version,
@@ -94,9 +99,14 @@ export function insertEv(t: Take, e: TakeEvent): TakeEvent {
   return e;
 }
 
-/** Earlier marks stay on the timeline: a closed take's strokes and voice join the history. */
-export function archive(t: Take, hist: { strokes: HistoryStroke[]; bins: Float32Array }, bins: number): void {
+/** Earlier marks stay on the timeline: a closed take's strokes, images and voice join the history. */
+export function archive(
+  t: Take,
+  hist: { strokes: HistoryStroke[]; bins: Float32Array; images?: HistoryImage[] },
+  bins: number,
+): void {
   for (const st of t.strokes) if (!st.undone) hist.strokes.push(st);
+  for (const im of t.images) if (!im.undone) hist.images?.push({ url: im.url, video_t: im.video_t, box: im.box });
   hist.bins = grow(hist.bins, bins);
   t.bins.forEach((v, i) => {
     if (v && i < hist.bins.length) hist.bins[i] += v;
@@ -117,7 +127,11 @@ export interface SaveClock {
   date: Date;
 }
 
-/** The POST /data body. Same keys, order and rounding as the legacy player's serialize() (format 3). */
+/**
+ * The POST /data body. Same keys, order and rounding as the legacy player's serialize() (format 3). The v1.1 additions
+ * only appear when used, so a take without them is byte-for-byte the legacy one: a segment's `answer_to`, the
+ * session's `closed`, and `images` (once the take has had one; undone ones are left out, like strokes).
+ */
 export function serialize(t: Take, c: SaveClock): TakeData {
   const t0 = t.t0 ?? 0;
   const st = (p: number) => r3(p - t0);
@@ -153,12 +167,13 @@ export function serialize(t: Take, c: SaveClock): TakeData {
     video_end: r3(s.v1 ?? c.videoTime),
     video_min: r3(s.vmin),
     video_max: r3(s.vmax),
+    ...(s.answer_to != null ? { answer_to: s.answer_to } : {}),
   }));
   const bins: [number, number][] = [];
   t.bins.forEach((v, i) => {
     if (v > 0.001) bins.push([i, r3(v)]);
   });
-  return {
+  const data: TakeData = {
     session: {
       format: 3,
       version: t.version,
@@ -169,10 +184,26 @@ export function serialize(t: Take, c: SaveClock): TakeData {
       recorded: r3(t.segments.reduce((a, s) => a + ((s.p1 ?? c.now) - s.p0), 0)),
       video: { duration: c.duration, width: c.width, height: c.height },
       display: { show_within: SHOW },
+      ...(t.closed ? { closed: true as const } : {}),
     },
     segments,
     events,
     strokes,
     voice: { bin: BIN, bins },
   };
+  if (t.images.length)
+    data.images = t.images
+      .filter((x) => !x.undone)
+      .map((x) => ({
+        id: x.id,
+        seg: x.seg,
+        version: x.version,
+        flip: x.flip,
+        file: x.file,
+        mime: x.mime,
+        session_t: st(x.p0),
+        video_t: r3(x.video_t),
+        box: [r4(x.box[0]), r4(x.box[1]), r4(x.box[2]), r4(x.box[3])],
+      }));
+  return data;
 }

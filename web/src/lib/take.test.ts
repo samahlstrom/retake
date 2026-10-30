@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { addChunk, archive, binCount, CLOCK_NOTE, grow, insertEv, newSegment, newTake, serialize } from './take';
-import type { Stroke, Take } from './types';
+import type { Stroke, Take, TakeImage } from './types';
 
 const rec = {} as MediaRecorder;
 
@@ -259,5 +259,87 @@ describe('segments', () => {
     await s.persisted;
     expect(writes).toEqual([0, 10]); // in order, even when the first write is slower
     expect(s.stored).toBe(15);
+  });
+});
+
+describe('take format v1.1: images, answers, closed', () => {
+  const image = (t: Take, id: number, over: Partial<TakeImage> = {}): TakeImage => ({
+    id,
+    seg: 'S1',
+    version: 'v6',
+    flip: false,
+    file: `img_0${t.images.length + 1}.png`,
+    mime: 'image/png',
+    p0: 103.33333,
+    video_t: 9.123456,
+    box: [0.123456, 0.2, 0.3, 0.16875],
+    url: 'blob:x',
+    blob: new Blob([]),
+    upload: 'pending',
+    stored: Promise.resolve(),
+    ...over,
+  });
+
+  it('leaves the legacy body untouched when nothing new is used', () => {
+    const d = serialize(sampleTake(), clock);
+    expect('images' in d).toBe(false);
+    expect('closed' in d.session).toBe(false);
+    expect(d.segments.every((s) => !('answer_to' in s))).toBe(true);
+  });
+
+  it('serializes images after voice: standing ones only, on both clocks, box rounded to 4 decimals', () => {
+    const t = sampleTake();
+    t.images.push(image(t, 3));
+    t.images.push(image(t, 4, { undone: true, file: 'img_02.jpg', mime: 'image/jpeg' }));
+    const d = serialize(t, clock);
+    expect(Object.keys(d)).toEqual(['session', 'segments', 'events', 'strokes', 'voice', 'images']);
+    expect(d.images).toEqual([
+      {
+        id: 3,
+        seg: 'S1',
+        version: 'v6',
+        flip: false,
+        file: 'img_01.png',
+        mime: 'image/png',
+        session_t: 3.333,
+        video_t: 9.123,
+        box: [0.1235, 0.2, 0.3, 0.1688],
+      },
+    ]);
+    t.images[0].undone = true;
+    expect(serialize(t, clock).images).toEqual([]); // an undone image must clear images.json
+  });
+
+  it('a segment recorded to answer a question carries answer_to (Answer in the sidebar)', () => {
+    const t = sampleTake();
+    const s3 = newSegment(t, rec, 'audio/webm', { version: 'v6', flip: false, videoTime: 4, answerTo: 21 });
+    s3.p0 = 113;
+    s3.p1 = 115;
+    t.segments.push(s3);
+    const plain = newSegment(t, rec, 'audio/webm', { version: 'v6', flip: false, videoTime: 4, answerTo: null });
+    expect('answer_to' in plain).toBe(false);
+    const d = serialize(t, clock);
+    expect(d.segments.map((s) => [s.id, s.answer_to])).toEqual([
+      ['S1', undefined],
+      ['S2', undefined],
+      ['S3', 21],
+    ]);
+    expect(Object.keys(d.segments[2]).at(-1)).toBe('answer_to');
+  });
+
+  it('a closed take says so in its session', () => {
+    const t = sampleTake();
+    t.closed = true;
+    const d = serialize(t, clock);
+    expect(d.session.closed).toBe(true);
+    expect(Object.keys(d.session).at(-1)).toBe('closed');
+  });
+
+  it("archives a closed take's standing images into the history", () => {
+    const t = sampleTake();
+    t.images.push(image(t, 3), image(t, 4, { undone: true }));
+    const hist = { strokes: [], bins: new Float32Array(41), images: [] };
+    archive(t, hist, binCount(40));
+    expect(hist.images).toEqual([{ url: 'blob:x', video_t: 9.123456, box: [0.123456, 0.2, 0.3, 0.16875] }]);
   });
 });

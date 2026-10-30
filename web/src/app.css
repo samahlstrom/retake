@@ -31,14 +31,16 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
 }
+/* The stage over the bar; column 2 is the notes sidebar (components/sidebar), 0 wide while it isn't there. */
 #app {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr) auto;
   height: 100vh;
 }
 #stage {
+  grid-area: 1 / 1;
   position: relative;
-  flex: 1;
   min-height: 0;
   background: var(--bg);
 }
@@ -111,7 +113,8 @@ body {
 }
 
 #bar {
-  flex: none;
+  grid-row: 2;
+  grid-column: 1 / -1;
   display: flex;
   align-items: center;
   gap: 22px;
