@@ -155,6 +155,8 @@ func TestParseOpen(t *testing.T) {
 		{args: []string{"a.mp4", "--no-open", "--port", "8811", "--idle-exit", "0", "--verbose", "--ui-dir", "ui"},
 			want: openArgs{video: "a.mp4", noOpen: true, port: p(8811), idleExit: f(0), verbose: true, uiDir: "ui"}},
 		{args: []string{"--port=8812", "--idle-exit=2.5", "a.mp4"}, want: openArgs{video: "a.mp4", port: p(8812), idleExit: f(2.5)}},
+		{args: []string{"--no-open", "a.mp4", "--port", "8813", "--idle-exit", "0"}, // flags on both sides
+			want: openArgs{video: "a.mp4", noOpen: true, port: p(8813), idleExit: f(0)}},
 		{args: []string{"a.mp4", "--versions", "b.mp4", "c.mp4", "--no-open"},
 			want: openArgs{video: "a.mp4", versions: []string{"b.mp4", "c.mp4"}, noOpen: true}},
 		{args: []string{"--versions=b.mp4", "c.mp4", "--", "a.mp4"}, want: openArgs{video: "a.mp4", versions: []string{"b.mp4", "c.mp4"}}},
@@ -271,6 +273,37 @@ func TestOpenServesUntilStopped(t *testing.T) {
 	}
 	if len(w.opened) != 1 || w.opened[0] != url {
 		t.Errorf("opener calls = %v", w.opened)
+	}
+}
+
+// The e2e suite (and the legacy argparse CLI) put the flags after the video; flags before it work too.
+func TestOpenFlagsAfterOrBeforeTheVideo(t *testing.T) {
+	for _, args := range [][]string{
+		{"open", "VIDEO", "--no-open", "--port", "0", "--idle-exit", "0"},
+		{"open", "--no-open", "--port", "0", "--idle-exit", "0", "VIDEO"},
+		{"open", "--no-open", "VIDEO", "--port=0", "--idle-exit=0", "--verbose"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			w := newWorld(t)
+			for i, a := range args {
+				if a == "VIDEO" {
+					args[i] = w.video
+				}
+			}
+			url, stop, done := w.serve(t, w.environment(nil), args...)
+			res, err := http.Get(url + "api/ping")
+			if err != nil {
+				t.Fatal(err)
+			}
+			_ = res.Body.Close()
+			stop()
+			if code := wait(t, done); code != 0 {
+				t.Errorf("exit %d", code)
+			}
+			if len(w.opened) != 0 || !strings.Contains(w.stdout.String(), "  Ctrl+C stops the server\n") {
+				t.Errorf("--no-open/--idle-exit 0 not applied: opened %v\n%s", w.opened, w.stdout)
+			}
+		})
 	}
 }
 
