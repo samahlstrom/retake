@@ -9,12 +9,12 @@ use std::path::PathBuf;
 fn scratch(name: &str) -> PathBuf {
     let d = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("resolve").join(name);
     std::fs::create_dir_all(&d).unwrap();
-    // "Welcome to the item shop. Everyone at your rank, up to Eternus, buys the same stuff. The same stuff."
+    // "Welcome to the tool shop. Everyone at your rank, up to Everest, buys the same stuff. The same stuff."
     let words = [
         (" Welcome", 0.50, 0.90),
         (" to", 0.95, 1.05),
         (" the", 1.10, 1.20),
-        (" item", 1.25, 1.50),
+        (" tool", 1.25, 1.50),
         (" shop.", 1.55, 1.90),
         (" Everyone", 3.00, 3.40),
         (" at", 3.45, 3.55),
@@ -22,7 +22,7 @@ fn scratch(name: &str) -> PathBuf {
         (" rank,", 3.80, 4.10),
         (" up", 4.30, 4.40),
         (" to", 4.45, 4.55),
-        (" Eternus,", 4.60, 5.10),
+        (" Everest,", 4.60, 5.10),
         (" buys", 5.20, 5.45),
         (" the", 5.50, 5.60),
         (" same", 5.65, 5.90),
@@ -62,11 +62,11 @@ fn timeline() -> Value {
                     {"id": "intro/2/title", "type": "text", "text": "RANKS",
                      "transform": {"scale": {"keys": [
                         {"t": 0, "v": 1.2, "ease": "out-back"},
-                        {"t": "word:b/Eternus", "v": 1.0}]}}}]}}
+                        {"t": "word:b/Everest", "v": 1.0}]}}}]}}
             ],
             "overlays": [
-                {"id": "pop", "from": "word:b/Eternus", "to": "word:b/same@end+0.20", "layers": [
-                    {"id": "pop/t", "type": "text", "text": "UP TO ETERNUS",
+                {"id": "pop", "from": "word:b/Everest", "to": "word:b/same@end+0.20", "layers": [
+                    {"id": "pop/t", "type": "text", "text": "UP TO EVEREST",
                      "transform": {"opacity": {"keys": [{"t": 0, "v": 0}, {"t": "word:b/buys", "v": 1}]}}}]}
             ]},
             {"id": "outro", "shots": [
@@ -100,18 +100,18 @@ fn spine_layout_and_anchors() {
     let s2 = r.shot("intro/2").unwrap();
     assert!(near(s2.start, 2.1));
     assert!(near(r.shot("intro/1").unwrap().end, 2.1), "a shot ends where the next starts");
-    // pop: Eternus at 4.6 → 2.1 + 1.7 = 3.8; to = first "same" end (5.9 → 5.1) + 0.2 = 5.3
+    // pop: Everest at 4.6 → 2.1 + 1.7 = 3.8; to = first "same" end (5.9 → 5.1) + 0.2 = 5.3
     let pop = &r.overlays[0];
     assert!(near(pop.from, 3.8) && near(pop.to, 5.3), "{} {}", pop.from, pop.to);
     // Keyframe anchors become composition seconds: buys (5.2 → 4.4) - 3.8 = 0.6.
     assert_eq!(pop.comp.layers_json[0]["transform"]["opacity"]["keys"][1]["t"], json!(0.6));
-    // Title keyframe: Eternus 3.8 - shot start 2.1 = 1.7.
+    // Title keyframe: Everest 3.8 - shot start 2.1 = 1.7.
     assert_eq!(s2.comp.layers_json[0]["transform"]["scale"]["keys"][1]["t"], json!(1.7));
     // sync: source 50.0 plays at word c/same (7.15 → 5.6 + 0.25 = 5.85), 0.25 s into the shot: in = 49.75.
     assert_eq!(r.shot("outro/1").unwrap().comp.layers_json[0]["in"], json!(49.75));
     assert!(near(r.audio[0].to, 6.1));
     // Words land on the output clock.
-    let w = r.words.iter().find(|w| w.text == "Eternus,").unwrap();
+    let w = r.words.iter().find(|w| w.text == "Everest,").unwrap();
     assert!(near(w.t0, 3.8) && w.spine == "b");
 }
 
@@ -147,14 +147,14 @@ fn occurrence_and_end_and_prefix() {
 #[test]
 fn word_not_found_suggests() {
     let mut d = timeline();
-    d["scenes"][0]["overlays"][0]["from"] = json!("word:b/Eternis");
+    d["scenes"][0]["overlays"][0]["from"] = json!("word:b/Everist");
     let e = resolve(&project("sugg", d)).unwrap_err();
     assert_eq!(e[0].code, "anchor_word_not_found");
-    assert_eq!(e[0].hint.as_deref(), Some("did you mean 'Eternus,'?"));
-    assert!(e[0].message.contains("word:b/Eternis"));
+    assert_eq!(e[0].hint.as_deref(), Some("did you mean 'Everest,'?"));
+    assert!(e[0].message.contains("word:b/Everist"));
     // A word that's only in another spine item says where it is.
     let mut d = timeline();
-    d["scenes"][0]["overlays"][0]["from"] = json!("word:a/Eternus");
+    d["scenes"][0]["overlays"][0]["from"] = json!("word:a/Everest");
     let e = resolve(&project("sugg2", d)).unwrap_err();
     assert_eq!(e[0].hint.as_deref(), Some("it is in spine item b"));
 }
@@ -244,7 +244,7 @@ fn inserts_cut_shots_and_pause_their_clocks() {
     d["scenes"][0]["overlays"][0]["from"] = json!("word:b/rank");
     d["scenes"][0]["overlays"][0]["to"] = json!("word:b2/same@end");
     d["scenes"][0]["overlays"][0]["layers"][0]["transform"]["opacity"]["keys"][1]["t"] = json!("word:b2/buys");
-    d["scenes"][0]["shots"][1]["picture"]["layers"][0]["transform"]["scale"]["keys"][1]["t"] = json!("word:b2/Eternus");
+    d["scenes"][0]["shots"][1]["picture"]["layers"][0]["transform"]["scale"]["keys"][1]["t"] = json!("word:b2/Everest");
     let r = resolve(&project("inserts", d)).unwrap();
     let meme = r.spine_item("meme").unwrap();
     assert!(near(meme.start, 3.7) && near(meme.end, 4.7));
@@ -264,7 +264,7 @@ fn inserts_cut_shots_and_pause_their_clocks() {
     let c0 = r.frame(r.shot("intro/2").unwrap().start);
     assert_eq!(r.local_frame(c0, 110), 47);
     assert_eq!(r.local_frame(c0, 141), 48);
-    // Keyframe anchors after the insert subtract it: Eternus (4.6 in asset, in b2 at 4.5 → 4.7 + 0.1 = 4.8 out)
+    // Keyframe anchors after the insert subtract it: Everest (4.6 in asset, in b2 at 4.5 → 4.7 + 0.1 = 4.8 out)
     // minus shot start 2.1 minus the 1.0 s insert = 1.7, the same as without the insert.
     assert_eq!(r.shot("intro/2").unwrap().comp.layers_json[0]["transform"]["scale"]["keys"][1]["t"], json!(1.7));
     // The insert's default picture: its asset full frame, holding at hold_from.

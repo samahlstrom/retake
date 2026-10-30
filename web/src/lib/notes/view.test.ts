@@ -21,7 +21,7 @@ const item = (over: Partial<NoteItem>): NoteItem => ({
   t0: 10,
   t1: 12,
   text: 'The title comes in too late',
-  by: 'Sam',
+  by: 'Ana',
   ...over,
 });
 
@@ -36,7 +36,7 @@ const newest: NotesResponse = {
       status: 'question',
       t0: 36.7,
       t1: 36.7,
-      text: 'Obscurus or Initiate?',
+      text: 'Blue or green?',
       by: 'agent',
       options: ['v8', 'v7', 'v9'],
       note: 4,
@@ -60,7 +60,7 @@ const older: NotesResponse = {
       status: 'question',
       t0: 36.7,
       text: 'Start the ladder lower',
-      question: 'Obscurus or Initiate?',
+      question: 'Blue or green?',
       options: ['v8'],
     }),
     item({ id: 6, status: 'accepted', t0: 5, answered_in: 'v8', change: 'Cut the pause' }),
@@ -86,7 +86,7 @@ describe('sidebar rows', () => {
   it('a question has Answer (its thread id) and its options as chips; unknown versions are disabled', () => {
     const q = sidebarRows(newest, { versions, shown: 'v8' }).find((r) => r.id === 21)!;
     expect(q.answer).toBe(21);
-    expect(q.text).toBe('Obscurus or Initiate?');
+    expect(q.text).toBe('Blue or green?');
     expect(q.options).toEqual([
       { label: 'v8', known: true, on: true },
       { label: 'v7', known: true, on: false },
@@ -112,7 +112,7 @@ describe('sidebar rows', () => {
       answer: null,
       question: null,
     });
-    expect(by[4]).toMatchObject({ mark: 'question', question: 'Obscurus or Initiate?', answer: null, change: null });
+    expect(by[4]).toMatchObject({ mark: 'question', question: 'Blue or green?', answer: null, change: null });
     expect(by[4].options).toEqual([{ label: 'v8', known: true, on: false }]);
     expect(by[8]).toMatchObject({ mark: 'open', reopen: false, answeredIn: null });
   });

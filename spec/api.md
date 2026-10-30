@@ -156,7 +156,7 @@ retake version
 `$XDG_CONFIG_HOME/retake/config.toml` (default `~/.config/retake/config.toml`), all keys optional:
 
 ```toml
-name = "Sam"          # author name written into session.json
+name = "Ana"          # author name written into session.json
 port = 8777           # tried first; if busy, the next free one of the next 19 (a --port flag is strict)
 idle_exit_minutes = 15
 open_browser = true

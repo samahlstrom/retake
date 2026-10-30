@@ -329,13 +329,15 @@ func run(ctx context.Context, in input, opts Options) (*Result, error) {
 		res.Untranscribed = append(res.Untranscribed, t.missing...)
 	}
 	fam := familyLabels(takes, in.fam)
+	who := reviewer(takes)
+	nameReviewer(comments, flags, who)
 	res.Markdown = renderMD(moments, comments, flags, video, takes, version, fam)
 	now := time.Now
 	if opts.Now != nil {
 		now = opts.Now
 	}
 	res.Doc = &Doc{Video: video, Version: version, Family: fam, Window: jsonFloat(window), MaxSpan: jsonFloat(maxSpan),
-		Generated: now().Format("2006-01-02T15:04:05-0700"), Rules: docRules, Clock: docClock,
+		Generated: now().Format("2006-01-02T15:04:05-0700"), Rules: docRules(who), Clock: docClock,
 		Takes: []TakeInfo{}, Segments: []*jsonx.Object{}, Flags: flags, Moments: moments, Chronological: []int{}}
 	for _, t := range takes {
 		models := make([]string, 0, len(t.models))

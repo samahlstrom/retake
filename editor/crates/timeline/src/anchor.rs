@@ -108,9 +108,9 @@ mod tests {
     #[test]
     fn words() {
         assert_eq!(
-            p("word:why_b/Eternus"),
+            p("word:why_b/Everest"),
             Anchor {
-                kind: AnchorKind::Word { spine: "why_b".into(), word: "Eternus".into(), n: 1, end: false },
+                kind: AnchorKind::Word { spine: "why_b".into(), word: "Everest".into(), n: 1, end: false },
                 offset: 0.0
             }
         );

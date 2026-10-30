@@ -340,9 +340,9 @@ func seed(t *testing.T, f *fixture) *project.Store {
 		t.Fatal(err)
 	}
 	if _, err := st.Sync(project.Run{Version: "v6", Comments: []project.Comment{
-		{Take: take, Seg: "S1", N: 0, T0: 1, T1: 2, Text: "bigger title", Author: "Sam"},
-		{Take: take, Seg: "S1", N: 1, T0: 3, T1: 4, Text: "cut the pause", Author: "Sam"},
-		{Take: take, Seg: "S2", N: 0, T0: 5, T1: 6, Text: "music", Author: "Sam"},
+		{Take: take, Seg: "S1", N: 0, T0: 1, T1: 2, Text: "bigger title", Author: "Ana"},
+		{Take: take, Seg: "S1", N: 1, T0: 3, T1: 4, Text: "cut the pause", Author: "Ana"},
+		{Take: take, Seg: "S2", N: 0, T0: 5, T1: 6, Text: "music", Author: "Ana"},
 	}}); err != nil {
 		t.Fatal(err)
 	}
@@ -379,7 +379,7 @@ func TestSidebarRoute(t *testing.T) {
 	}
 	it := older.Items[0]
 	if it.Kind != "note" || it.Status != project.StatusAnswered || it.Change != "title at 120%" || it.AnsweredIn != "v7" ||
-		it.By != "Sam" || len(it.Images) != 1 || it.Images[0].Box != [4]float64{0.1, 0.2, 0.3, 0.4} {
+		it.By != "Ana" || len(it.Images) != 1 || it.Images[0].Box != [4]float64{0.1, 0.2, 0.3, 0.4} {
 		t.Fatalf("answered item = %+v", it)
 	}
 	if img := h.get(it.Images[0].URL, nil); img.code != 200 || !bytes.Equal(img.body, pngBody) {

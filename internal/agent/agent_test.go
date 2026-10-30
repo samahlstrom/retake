@@ -67,7 +67,7 @@ func newProject(t *testing.T) *Project {
 		t.Fatalf("root = %s, want %s", p.Root, root)
 	}
 	c := func(take, seg string, n int, t0 float64, text, version string) project.Comment {
-		return project.Comment{Take: take, Seg: seg, N: n, T0: t0, T1: t0 + 1, Text: text, Author: "Sam", Version: version}
+		return project.Comment{Take: take, Seg: seg, N: n, T0: t0, T1: t0 + 1, Text: text, Author: "Ana", Version: version}
 	}
 	first := c(take7, "S1", 0, 1, "make the title bigger", "")
 	first.Detail = project.Detail{Strokes: []project.Stroke{{Shape: "circle", Color: "red", Box: [4]float64{0.1, 0.1, 0.2, 0.2}}},
@@ -108,7 +108,7 @@ func TestNotesList(t *testing.T) {
 		t.Fatalf("all = %v cursor %d", ids(res.Notes), res.Cursor)
 	}
 	n := res.Notes[0]
-	if n.Text != "make the title bigger" || n.Author != "Sam" || n.T0 != 1 || n.Status != project.StatusOpen ||
+	if n.Text != "make the title bigger" || n.Author != "Ana" || n.T0 != 1 || n.Status != project.StatusOpen ||
 		len(n.Strokes) != 1 || n.Strokes[0].Shape != "circle" || n.Snapshot != "/snap/1.png" || len(n.Images) != 1 ||
 		n.Images[0].Path != filepath.Join(p.Root, "v7", "clip_v7.review", take7, "img_01.png") ||
 		n.Images[0].Box != [4]float64{0.1, 0.2, 0.3, 0.4} {
@@ -192,9 +192,9 @@ func TestNotesWait(t *testing.T) {
 		t.Fatal(err)
 	}
 	ans := project.Comment{Take: "2026-10-30_08-00-00", Seg: "S1", N: 0, T0: 6, T1: 7, Text: "the calm one",
-		Author: "Sam", AnswerTo: q.ID}
+		Author: "Ana", AnswerTo: q.ID}
 	keep := func(seg string, n int) project.Comment {
-		return project.Comment{Take: take7, Seg: seg, N: n, T0: 1, T1: 2, Text: "same", Author: "Sam"}
+		return project.Comment{Take: take7, Seg: seg, N: n, T0: 1, T1: 2, Text: "same", Author: "Ana"}
 	}
 	res2, err := p.Store.Sync(project.Run{Version: "v7", Comments: []project.Comment{keep("S1", 0), keep("S2", 0), ans}})
 	if err != nil || !slices.Equal(res2.Retracted, []int64{2}) || !slices.Equal(res2.Reopened, []int64{3}) {

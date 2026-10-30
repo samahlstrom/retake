@@ -7,7 +7,7 @@ API all build against it. Change it here first.
 
 - **Project root.** If the opened file's folder looks like a version folder (`v<N>`, or any folder that has sibling
   folders holding the same family), the root is that folder's parent. Otherwise it's the file's own folder.
-  Example: `item-shop/v7/x.mp4` has the root `item-shop/`.
+  Example: `tutorial/v7/x.mp4` has the root `tutorial/`.
 - **Store.** `<root>/.retake/project.db`, SQLite (pure-Go driver `modernc.org/sqlite`, WAL). It is created on demand.
   Takes stay where they are (`<version>.review/<take>/`). The DB indexes them and holds everything that changes over
   time.
@@ -73,6 +73,10 @@ that aren't done (`{id, kind, state, attempts, error?, hint?, take?}`), so a pag
   (`[{id, seg, file, path, mime, version, flip, video_t, box, n, session_t}]`), `answer_to` (from its segment),
   `retracted: true` (a flagged retraction voids it and no later reinstatement restores it) and `author`. notes.md
   tags them `image N` and `answer to question N`.
+- **The reviewer's name.** Where notes.md and notes.json refer to the reviewer ("ask Ana rather than guess", a flag's
+  "possibly wider than this clip: ask Ana"), they use the `author.name` of the takes when they all name the same
+  person, else "the reviewer". Legacy wrote its owner's name there; this is the one intended difference from the
+  legacy output, and the golden tests map it explicitly (`internal/notes/golden_test.go`).
 
 ## HTTP additions
 

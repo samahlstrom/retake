@@ -156,17 +156,24 @@ func Main(ctx context.Context, args []string, env Env) int {
 	return ExitUsage
 }
 
-// Version returns the build's version: the -X value, else the module version or VCS revision, else "dev".
+// Version returns the build's version, semver without a leading "v": the -X value (`make build` and the release
+// builds set it from scripts/version.sh), else the module version (`go install <module>/cmd/retake@v0.1.0` gives
+// 0.1.0), else "dev-" and the VCS revision, else "dev".
 func Version() string {
-	if version != "" {
-		return version
+	bi, _ := debug.ReadBuildInfo() // nil when the binary has none
+	return versionOf(version, bi)
+}
+
+// versionOf picks the version from the -X value and the build info (nil when there is none).
+func versionOf(ldflag string, bi *debug.BuildInfo) string {
+	if ldflag != "" {
+		return strings.TrimPrefix(ldflag, "v")
 	}
-	bi, ok := debug.ReadBuildInfo()
-	if !ok {
+	if bi == nil {
 		return "dev"
 	}
 	if v := bi.Main.Version; v != "" && v != "(devel)" {
-		return v
+		return strings.TrimPrefix(v, "v")
 	}
 	rev, dirty := "", false
 	for _, s := range bi.Settings {

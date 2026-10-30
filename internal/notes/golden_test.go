@@ -26,6 +26,10 @@ import (
 // Legacy doesn't know images.json, answer_to or the comment keys. The golden runs leave images.json out (legacy
 // never reads it), and drop the additions (comment keys, answer_to, ...) from our output before comparing; the
 // additions have their own tests below.
+//
+// One deliberate deviation: legacy hard-codes its owner's name ("ask Sam rather than guess"), where we name the takes'
+// author, or "the reviewer" (see reviewer in flags.go). The goldens stay legacy's untouched output; legacyReviewer
+// rewrites exactly those legacy phrases in them to the reviewer this case's takes name before comparing.
 
 type goldenCase struct {
 	Target string   `json:"target"`
@@ -152,6 +156,62 @@ func legacyMD(md string) string {
 	return addedRules.ReplaceAllString(answerPart.ReplaceAllString(md, ""), "")
 }
 
+// legacyOwnerPhrases are the only places legacy output names its owner, and what we write there instead (%s is the
+// reviewer). The phrases are whole, so a "Sam" said in a fixture's transcript is never rewritten.
+var legacyOwnerPhrases = [][2]string{
+	{"unless Sam names a wider scope", "unless %s names a wider scope"},
+	{"ask Sam rather than guess", "ask %s rather than guess"},
+	{"said while Sam had flipped (C)", "said while %s had flipped (C)"},
+	{"possibly wider than this clip: ask Sam", "possibly wider than this clip: ask %s"},
+}
+
+// legacyReviewer is the golden normalization for the one intended difference from legacy: it names who instead of
+// legacy's owner in a golden notes.md or notes.json.
+func legacyReviewer(golden, who string) string {
+	for _, p := range legacyOwnerPhrases {
+		golden = strings.ReplaceAll(golden, p[0], fmt.Sprintf(p[1], who))
+	}
+	return golden
+}
+
+// caseReviewer is who a case's notes should name: the author.name of its takes' session.json files when they all
+// agree, else NoReviewer. It reads the fixtures directly, independent of the engine.
+func caseReviewer(t *testing.T, name string) string {
+	t.Helper()
+	names := map[string]bool{}
+	err := filepath.WalkDir(filepath.Join("testdata", name), func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || d.Name() != "session.json" {
+			return err
+		}
+		b, err := os.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		var sess struct {
+			Author struct {
+				Name string `json:"name"`
+			} `json:"author"`
+		}
+		if err := json.Unmarshal(b, &sess); err != nil {
+			return fmt.Errorf("%s: %w", p, err)
+		}
+		if n := strings.TrimSpace(sess.Author.Name); n != "" {
+			names[n] = true
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(names) != 1 {
+		return NoReviewer
+	}
+	for n := range names {
+		return n
+	}
+	return NoReviewer
+}
+
 func TestGolden(t *testing.T) {
 	for _, name := range goldenCases(t) {
 		t.Run(name, func(t *testing.T) {
@@ -170,8 +230,9 @@ func TestGolden(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			who := caseReviewer(t, name)
 			gotMD := legacyMD(strings.ReplaceAll(string(md), root, "@ROOT@"))
-			wantMD := readGolden(t, name, "notes.md")
+			wantMD := legacyReviewer(readGolden(t, name, "notes.md"), who)
 			if gotMD != wantMD {
 				t.Errorf("notes.md differs from legacy:\n%s", lineDiff(wantMD, gotMD))
 			}
@@ -179,7 +240,7 @@ func TestGolden(t *testing.T) {
 			if err := json.Unmarshal(bytes.ReplaceAll(raw, []byte(root), []byte("@ROOT@")), &got); err != nil {
 				t.Fatalf("notes.json: %v", err)
 			}
-			if err := json.Unmarshal([]byte(readGolden(t, name, "notes.json")), &want); err != nil {
+			if err := json.Unmarshal([]byte(legacyReviewer(readGolden(t, name, "notes.json"), who)), &want); err != nil {
 				t.Fatalf("golden notes.json: %v", err)
 			}
 			stripAdditions(got)

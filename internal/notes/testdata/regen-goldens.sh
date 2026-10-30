@@ -10,19 +10,21 @@
 # segment file's size), so legacy never transcribes: the seg_*.webm files are placeholders, not audio.
 #
 # usage: internal/notes/testdata/regen-goldens.sh [case ...]
-# env:   LEGACY_REVIEW_DIR  the legacy review/ folder (default: ~/deadlock-editing-style/skill/scripts/review)
-#        REVIEW_PY          the legacy venv's python (default: ~/.local/share/deadlock-edit/venv/bin/python)
+# env:   LEGACY_REVIEW_DIR  the legacy review/ folder (required: there is no default)
+#        REVIEW_PY          the legacy venv's python (required)
 #        REGEN_WORK         scratch folder (default: <repo>/.retake-work/notes-goldens), deleted afterwards
 # Skips (exit 0) when the legacy engine isn't installed. Needs ffmpeg for cases with a video.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 REPO="$(cd "$HERE/../../.." && pwd -P)"
-LEGACY="${LEGACY_REVIEW_DIR:-$HOME/deadlock-editing-style/skill/scripts/review}"
-PY="${REVIEW_PY:-$HOME/.local/share/deadlock-edit/venv/bin/python}"
+LEGACY="${LEGACY_REVIEW_DIR:-}"
+PY="${REVIEW_PY:-}"
 WORK="${REGEN_WORK:-$REPO/.retake-work/notes-goldens}"
 
 skip() { echo "regen-goldens: SKIP: $*"; exit 0; }
+[ -n "$LEGACY" ] || skip "LEGACY_REVIEW_DIR is not set (the legacy review/ folder)"
+[ -n "$PY" ] || skip "REVIEW_PY is not set (the legacy venv's python)"
 [ -x "$LEGACY/review" ] && [ -f "$LEGACY/notes.py" ] || skip "legacy engine not found at $LEGACY; set LEGACY_REVIEW_DIR"
 [ -x "$PY" ] || skip "legacy venv python not found at $PY; set REVIEW_PY"
 

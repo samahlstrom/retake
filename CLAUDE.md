@@ -9,8 +9,10 @@ agent turns the notes into the next version and asks when it's unsure. See `docs
 - `internal/`: the server, version-family detection, probing, take storage and config (Go).
 - `web/`: the review page (Svelte 5, Vite, TypeScript, Bits UI). Its build is embedded into the Go binary.
 - `e2e/`: Playwright end-to-end tests and fixture generators.
+- `editor/`: `retake-edit`, the Rust timeline renderer (`editor/README.md`).
 - `spec/`: the HTTP API, the take format and JSON Schemas. Change the spec first, then the code.
-- `docs/`: roadmap and user docs.
+- `examples/sample/`: the CC0 sample project behind `docs/quickstart.md` (`scripts/make-sample.sh`).
+- `docs/`: roadmap and user docs. `docs/private/` is gitignored: the owner's notes, never committed.
 
 ## Commands
 Toolchain versions are pinned in `mise.toml`, so run Go and node through mise: `mise exec -- go test ./...`.
@@ -18,7 +20,10 @@ Toolchain versions are pinned in `mise.toml`, so run Go and node through mise: `
   `make server` builds without the page (serves a "page not built" stub; use `--ui-dir`).
 - `make test`: Go tests (race) and web unit tests. `make lint`: golangci-lint, svelte-check, eslint, prettier.
 - `make e2e`: Playwright suite (see `e2e/README.md`; `RETAKE_SERVER=legacy` runs it against the legacy player).
-- `make parity`: the legacy player's own e2e driver against this server (local only; skips without legacy files).
+- `make parity`: the legacy player's own e2e driver against this server (local only; needs `LEGACY_REVIEW_DIR`).
+- `make snapshot`: release archives in `dist/` (goreleaser; publishes nothing). See `docs/releasing.md`.
+- `node scripts/notices.mjs`: regenerate `THIRD_PARTY_NOTICES.md` after any dependency change (CI checks it).
+- `examples/sample/run-quickstart.sh`: `docs/quickstart.md` end to end, without a person.
 
 ## Non-negotiables
 - **The review UX is sacred.** Pen only, minimal, R to record, and the pen does nothing unless recording. Milestone 1

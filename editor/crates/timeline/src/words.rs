@@ -20,7 +20,7 @@ impl Word {
     }
 }
 
-/// Lowercase, letters, digits and `%` only: "Eternus," and "eternus" match.
+/// Lowercase, letters, digits and `%` only: "Everest," and "everest" match.
 pub fn norm(s: &str) -> String {
     s.chars().filter(|c| c.is_alphanumeric() || *c == '%').flat_map(|c| c.to_lowercase()).collect()
 }
@@ -90,9 +90,9 @@ mod tests {
 
     #[test]
     fn normalizes() {
-        assert_eq!(norm(" Eternus,"), "eternus");
+        assert_eq!(norm(" Everest,"), "everest");
         assert_eq!(norm("100%!"), "100%");
-        assert!(matches("Eternus", " eternus,"));
+        assert!(matches("Everest", " everest,"));
         assert!(matches("explain*", "explained."));
         assert!(!matches("explain", "explained"));
         assert!(!matches("*", "anything"));

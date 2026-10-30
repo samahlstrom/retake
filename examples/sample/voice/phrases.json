@@ -1,0 +1,32 @@
+[
+ {
+  "id": "a",
+  "text": "How to brew pour-over coffee, in a few simple steps.",
+  "start": 0.5,
+  "end": 4.707
+ },
+ {
+  "id": "b",
+  "text": "Step one. Rinse the paper filter with hot water.",
+  "start": 5.306,
+  "end": 9.513
+ },
+ {
+  "id": "c",
+  "text": "Step two. Add twenty grams of ground coffee.",
+  "start": 10.113,
+  "end": 14.113
+ },
+ {
+  "id": "d",
+  "text": "Step three. Pour the water slowly, in small circles.",
+  "start": 14.713,
+  "end": 19.2
+ },
+ {
+  "id": "e",
+  "text": "Wait a few minutes, and enjoy your coffee.",
+  "start": 19.8,
+  "end": 23.29
+ }
+]

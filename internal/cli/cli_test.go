@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -540,6 +541,46 @@ func TestSessionsCmd(t *testing.T) {
 	w.stdout.b.Reset()
 	if code := w.run("sessions", w.video); code != 0 || !strings.Contains(w.stdout.String(), "notes.md") {
 		t.Errorf("after the video was deleted: %d %q", code, w.stdout)
+	}
+}
+
+func TestVersionOf(t *testing.T) {
+	vcs := func(rev, modified string) []debug.BuildSetting {
+		return []debug.BuildSetting{{Key: "vcs.revision", Value: rev}, {Key: "vcs.modified", Value: modified}}
+	}
+	for _, tc := range []struct {
+		name   string
+		ldflag string
+		bi     *debug.BuildInfo
+		want   string
+	}{
+		{"ldflags (make build, release builds)", "0.1.1-dev.3+gabc1234", nil, "0.1.1-dev.3+gabc1234"},
+		{"ldflags win over the module version", "0.2.0", &debug.BuildInfo{Main: debug.Module{Version: "v0.1.0"}}, "0.2.0"},
+		{"a leading v is dropped", "v0.2.0", nil, "0.2.0"},
+		{"go install module@v0.1.0", "", &debug.BuildInfo{Main: debug.Module{Version: "v0.1.0"}}, "0.1.0"},
+		{"go install module@pseudo-version", "",
+			&debug.BuildInfo{Main: debug.Module{Version: "v0.0.0-20261030010203-abcdef123456"}},
+			"0.0.0-20261030010203-abcdef123456"},
+		{"go build in a checkout", "", &debug.BuildInfo{Main: debug.Module{Version: "(devel)"},
+			Settings: vcs("0123456789abcdef0123", "false")}, "dev-0123456789ab"},
+		{"go build in a dirty checkout", "", &debug.BuildInfo{Main: debug.Module{Version: "(devel)"},
+			Settings: vcs("0123456789abcdef0123", "true")}, "dev-0123456789ab-dirty"},
+		{"no VCS information", "", &debug.BuildInfo{Main: debug.Module{Version: "(devel)"}}, "dev"},
+		{"no build info", "", nil, "dev"},
+	} {
+		if got := versionOf(tc.ldflag, tc.bi); got != tc.want {
+			t.Errorf("%s: versionOf = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestVersionCommandPrintsTheLinkedVersion(t *testing.T) {
+	old := version
+	version = "1.2.3"
+	t.Cleanup(func() { version = old })
+	var out bytes.Buffer
+	if code := Main(context.Background(), []string{"version"}, Env{Stdout: &out}); code != 0 || out.String() != "retake 1.2.3\n" {
+		t.Errorf("retake version: exit %d, %q", code, out.String())
 	}
 }
 

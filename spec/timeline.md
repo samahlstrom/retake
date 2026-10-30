@@ -35,7 +35,7 @@ down. Colors are `#rgb`, `#rrggbb` or `#rrggbbaa`.
 | `format.fps` | Integer frames per second. Every unit boundary falls on a frame. |
 | `format.sample_rate` | Audio sample rate. Default 48000. It must be a whole number of samples per frame (48000 works for 24, 25, 30, 50, 60 and 120 fps). |
 | `format.background` | What shows where no layer draws. Default `#000000`. |
-| `kits` | Brand kits and plug-ins the timeline uses, e.g. `"brand:samson@3"`. Recorded in 0.1, not loaded yet. |
+| `kits` | Brand kits and plug-ins the timeline uses, e.g. `"brand:acme@3"`. Recorded in 0.1, not loaded yet. |
 | `assets` | The media the timeline uses, by asset id (below). |
 | `fonts` | Font names for text layers. `display` is built in (the vendored Baloo 2, weight 800) unless redefined. |
 | `spine` | The master clock (below). At least one item. |
@@ -50,7 +50,7 @@ under any object's `meta` field, which the engine never reads.
 
 Every element has an `id`: spine items, scenes, shots, overlays, layers and audio elements. Ids are unique across the
 whole timeline, so a patch or an anchor can name any of them directly. An id matches
-`^[A-Za-z0-9][A-Za-z0-9_./-]*$`: letters, digits, `_`, `.`, `/` and `-`, so `why/losses` is fine.
+`^[A-Za-z0-9][A-Za-z0-9_./-]*$`: letters, digits, `_`, `.`, `/` and `-`, so `why/steps` is fine.
 
 ## Assets
 
@@ -115,7 +115,7 @@ Any anchor can end with an offset in seconds, `+0.30` or `-0.12`. The offset mus
 stays an id. Examples: `word:why_b/same-0.30`, `start:why_a-0.25`, `end:open_c+0.30`, `word:open_b/deck#2@end`.
 
 Resolution is deterministic and errors are typed, with a JSON pointer and a hint the agent can act on:
-`anchor word:why_b/Eternis not found in spine item why_b (did you mean 'Eternus,'?)`. A cycle (`start:a` → `end:b` →
+`anchor word:why_b/Everist not found in spine item why_b (did you mean 'Everest,'?)`. A cycle (`start:a` → `end:b` →
 `start:a`) is an error. Resolved times go into the render manifest, never back into the timeline.
 
 ## Scenes and shots
@@ -130,8 +130,8 @@ Resolution is deterministic and errors are typed, with a JSON pointer and a hint
         "picture": { "background": "#14141a", "layers": [ … ] } }
     ],
     "overlays": [
-      { "id": "open/flea", "from": "word:open_b/flea", "to": "word:open_b/No-0.05", "z": 1,
-        "props": { "label": "NOT A FLEA MARKET" }, "layers": [ … ] }
+      { "id": "open/tip", "from": "word:open_b/glue", "to": "word:open_b/No-0.05", "z": 1,
+        "props": { "label": "NO GLUE NEEDED" }, "layers": [ … ] }
     ] }
 ]
 ```
@@ -224,8 +224,8 @@ isn't RFC 6902), names the revision it was written against, the notes it answers
 ```json
 { "base": 3, "answers": ["v2#5"], "summary": "Pop says FASTER on 'faster', not 'quick'",
   "ops": [
-    { "op": "set", "id": "open/flea/text", "path": "text", "value": "FASTER" },
-    { "op": "set", "id": "open/flea", "path": "from", "value": "word:open_b/faster" }
+    { "op": "set", "id": "open/tip/text", "path": "text", "value": "FASTER" },
+    { "op": "set", "id": "open/tip", "path": "from", "value": "word:open_b/faster" }
   ] }
 ```
 
