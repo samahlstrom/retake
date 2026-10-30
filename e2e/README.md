@@ -24,11 +24,11 @@ Run it through mise (`mise exec -- npm test`) to use the pinned node. Needs `ffm
 | `CHROMIUM_PATH` | `/usr/lib/chromium/chromium` if it exists, else Playwright's Chromium | The browser. CI points it at Playwright's Chromium. |
 | `RETAKE_E2E_WORK` | `<repo>/.retake-work/e2e` | Scratch root: media, version families, takes, server logs. It is wiped at the start of a run and deleted after a passing run. A failing run keeps it. The suite only deletes a folder that has its `.retake-e2e` marker. |
 | `RETAKE_E2E_KEEP` | unset | Set it to keep the scratch data after a passing run too. |
-| `RETAKE_E2E_PORT_BASE` | `8831` | The first of the eight ports below; move it to run two checkouts side by side. |
+| `RETAKE_E2E_PORT_BASE` | `8831` | The first of the nine ports below; move it to run two checkouts side by side. |
 | `RETAKE_E2E_SHOTS` | unset | A folder: `05-sidebar` writes its screenshots there (1920×1080 and phone size). |
 
-Ports: the servers use 8831–8838 (scenario 8831, crash safety 8832 behind a proxy on 8834, HLS 8833, sidebar 8835,
-phone layout 8836, sharing 8837 behind a proxy on 8838). The browser talks to Playwright over a pipe, so it opens no
+Ports: the servers use 8831–8839 (scenario 8831, crash safety 8832 behind a proxy on 8834, HLS 8833, sidebar 8835,
+phone layout 8836, sharing 8837 behind a proxy on 8838, the team server 8839). The browser talks to Playwright over a pipe, so it opens no
 devtools port. Each server is started
 for its spec file, waited on
 through `/api/ping`, and always stopped. Its log is in `<work>/logs/`.
@@ -153,3 +153,15 @@ reaches a real tunnel.
   only", a drag draws nothing, the video plays, and the server refuses a viewer's POST (403). No take is written.
 - A reviewer's link records a take (R, a stroke, R, Done). It is saved with the link's label as `author.name`, and
   validates.
+
+**`08-server`** (new only; milestone 3b, `spec/server.md`): `retake serve` with the default drivers (SQLite and local
+files) in a scratch data folder. The admin, the project (with v6 as its first version) and the members come from the
+CLI.
+- Opening a sign-in link shows a "Sign in as" button and sets nothing: a mail scanner can't use the link. The button
+  signs in with an HttpOnly, Secure, SameSite=Lax session cookie for `/`, and the projects page lists the project. The
+  link then works no more.
+- A reviewer opens the project from the projects page (`/p/demo/`, the same page under a base path), records a take
+  (R, a stroke, R, Done), and Done queues the transcribe and notes jobs. The take is in the project's workspace, with
+  the account's name as `author.name`, and validates.
+- A viewer watches without Record, and the server refuses their POST (403). Signing out ends the session: the API
+  answers 401.

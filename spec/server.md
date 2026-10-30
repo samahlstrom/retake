@@ -95,7 +95,8 @@ There are no passwords. An admin creates users, and each user signs in with a on
   within its lifetime (default 24 h, at most 7 days).
 - `GET /signin/<code>` shows a page with one button, "Sign in as <email>", which posts the code
   (`POST /signin/<code>`). Mail scanners that open links therefore don't use them up. The page has
-  `Referrer-Policy: no-referrer` and `Cache-Control: no-store`.
+  `Referrer-Policy: same-origin` (not `no-referrer`, with which browsers send `Origin: null` on the post) and
+  `Cache-Control: no-store`.
 - `POST /signin/<code>` (origin-checked like every post, below) uses the code, starts a session, sets the cookie and
   answers 303 to `/`.
 - A malformed, unknown, used or expired code gives 401 with "This sign-in link has expired or was used. Ask for a new

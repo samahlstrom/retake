@@ -233,7 +233,7 @@ func TestSignInLink(t *testing.T) {
 	}
 	page := x.do(http.MethodGet, "/signin/"+code, "")
 	if page.code != 200 || !strings.Contains(page.body, "Sign in as ana@example.com") ||
-		!strings.Contains(page.body, `method="post"`) || page.hdr.Get("Referrer-Policy") != "no-referrer" {
+		!strings.Contains(page.body, `method="post"`) || page.hdr.Get("Referrer-Policy") != "same-origin" {
 		t.Fatalf("link page: %d %s", page.code, page.body)
 	}
 	// Opening the link (a mail scanner) doesn't use it; another site can't post it.

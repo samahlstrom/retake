@@ -104,7 +104,9 @@ const badLinkText = "This sign-in link has expired or was used. Ask for a new on
 // linkPage is GET /signin/<code>: a page with one button that signs in. The code is used only by the button's
 // POST, so a mail scanner that opens links doesn't use it up.
 func (h *Hub) linkPage(w http.ResponseWriter, r *http.Request, ri reqInfo, code string) {
-	w.Header().Set("Referrer-Policy", "no-referrer")
+	// same-origin, not no-referrer: with no-referrer the browser sends "Origin: null" on the button's POST,
+	// which the CSRF check refuses. The code still never reaches another site.
+	w.Header().Set("Referrer-Policy", "same-origin")
 	if h.limited(w, r, ri, h.tokenFails, true) {
 		return
 	}
@@ -124,7 +126,7 @@ func (h *Hub) linkPage(w http.ResponseWriter, r *http.Request, ri reqInfo, code 
 
 // useLink is POST /signin/<code>: it uses the code, starts a session and goes to the projects page.
 func (h *Hub) useLink(w http.ResponseWriter, r *http.Request, ri reqInfo, code string) {
-	w.Header().Set("Referrer-Policy", "no-referrer")
+	w.Header().Set("Referrer-Policy", "same-origin")
 	if h.limited(w, r, ri, h.tokenFails, true) {
 		return
 	}
