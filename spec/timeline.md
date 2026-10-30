@@ -22,6 +22,7 @@ down. Colors are `#rgb`, `#rrggbb` or `#rrggbbaa`.
   "spine": [ … ],
   "scenes": [ … ],
   "audio": [ … ],
+  "master": { "loudness": -18, "true_peak": -2, "lowpass": 16500 },
   "end": "end:outro+0.50"
 }
 ```
@@ -41,6 +42,7 @@ down. Colors are `#rgb`, `#rrggbb` or `#rrggbbaa`.
 | `spine` | The master clock (below). At least one item. |
 | `scenes` | Shots and overlays (below). |
 | `audio` | Music beds and other audio (below). |
+| `master` | The master bus: a loudness target, a true-peak ceiling and a low-pass for the whole mix ("Audio", below). |
 | `end` | An anchor for the end of the output. Default: the end of the last spine item. |
 | `expr_lib` | JavaScript helpers every expression can use ("Expressions", below). |
 
@@ -96,7 +98,7 @@ arithmetic.
 | `out` / `dur` / `frames` | Exactly one: the source end, the length in seconds, or the length in frames. |
 | `gap_before` | Silence before the item, in seconds. |
 | `hold_from` | Inserts: the picture freezes on the frame at this source time while the sound runs on. |
-| `audio` | `{gain_db, fade_in, fade_out, mute}` for the item's sound. |
+| `audio` | The item's sound: `{gain_db, fade_in, fade_out, fade_curve, mute, stream, loudness}` ("Sound options", below). |
 | `picture` | Inserts: a composition (below) to show instead of the asset full frame. |
 
 Item *i* starts where item *i − 1* ends, plus its `gap_before`. **Shot clocks pause during inserts:** a shot cut by an
@@ -187,7 +189,8 @@ Content by type:
   plays at anchor `to`); `fit` (`contain` (default), `cover`, `stretch` or `none`: how the cropped source fits the
   frame before the transform); `loop`; `hold_from` (freeze at that source time); `clock` (`local` (default) or
   `timeline`: the source runs on the output clock, so a looping background keeps its phase across cuts); `audio`
-  (`{gain_db, fade_in, fade_out}`: mix the source's sound; muted when absent); `resample` (below); `delogo`
+  (mix the source's sound, muted when absent: the sound options under "Audio", plus `duck`; `gain_db` keys are in
+  composition seconds); `resample` (below); `delogo`
   (`[x, y, w, h]` in source pixels, or a list of them: ffmpeg's `delogo` interpolates over the box, e.g. a recorded
   FPS meter, before anything else sees the frame).
 - **group**: `layers`, drawn together as one picture, then transformed, masked, faded and blended as one layer (an
@@ -315,13 +318,56 @@ values. A composition prop `"$words:<spine-id>"` becomes that spine item's words
 ```json
 "audio": [
   { "id": "bed", "asset": "proj:music", "from": "start:open_a", "to": "end:outro", "in": 0, "loop": true,
-    "gain_db": -18, "fade_in": 1.0, "fade_out": 2.0, "duck": { "db": -7 } }
-]
+    "loudness": -33, "fade_in": 3.0, "fade_out": 3.0, "fade_curve": "s-curve",
+    "duck": [ { "db": -7 }, { "db": -96, "under": "inserts", "attack": 0.35, "release": 0.35 } ] },
+  { "id": "game", "asset": "proj:obs", "from": "start:why_a", "to": "end:why_a", "in": 3605.2, "stream": 2,
+    "gain_db": { "keys": [ { "t": 0, "v": -12 }, { "t": "word:why_a/losses", "v": -6 } ] } }
+],
+"master": { "loudness": -18, "true_peak": -2, "lowpass": 16500 }
 ```
 
-`from` / `to` are anchors (`to` defaults to the end). `duck` lowers the element by `db` while the spine's VO is
-speaking (fast attack, 0.35 s release). The whole timeline is mixed in one pass: spine VO and inserts, video layers
-with `audio`, and audio elements, each with gain and fades.
+`from` / `to` are anchors (`to` defaults to the end); `in` is the source time at `from`, and `loop` repeats the source.
+The whole timeline is mixed in one pass: spine VO and inserts, video layers with `audio`, and audio elements.
+
+### Sound options
+
+Spine items (`audio`), video layers (`audio`) and audio elements (directly on the element) share these:
+
+| Field | Meaning |
+|---|---|
+| `gain_db` | Gain in dB, −96 to 24. A prop: a number, keys or an expression. Its clock is the element's own: seconds from an audio element's `from`, from a spine item's start, or a video layer's composition seconds; a key's anchor resolves relative to that start. Evaluated once per output frame and interpolated per sample. |
+| `fade_in`, `fade_out` | Fade lengths in seconds at the element's edges. Every edge also gets a 5 ms ramp, so cuts don't click. |
+| `fade_curve` | The fades' shape: `linear` (default), `equal-power` (sin/cos of amplitude: a crossfade keeps the power), `s-curve` (sin²/cos²: a crossfade keeps the amplitude), or `log` (linear in dB, from −60 dB). |
+| `mute` | Silence it. |
+| `stream` | Which audio stream of the file, counted from 0 among its audio streams (ffmpeg's `0:a:N`). Default 0, the first. An OBS recording with the mic on track 1 and the game on track 3 takes `"stream": 2` for the game. A stream the file doesn't have is an `audio_stream` error that lists the streams it has. |
+| `loudness` | A target integrated loudness in LUFS: the element's source over its whole span (all of its units, before gain and fades) is measured (ITU-R BS.1770-4: K-weighted, gated) and brought to the target; `gain_db` then applies on top. |
+
+Channels: a mono stream plays at unity in both channels (no −3 dB pan law); stereo plays as is; more channels are
+downmixed to stereo.
+
+### Ducking
+
+`duck` (audio elements and video layers' `audio`) lowers an element under something else: one rule, or a list of rules
+whose gains multiply.
+
+| Field | Meaning |
+|---|---|
+| `db` | The depth, −96 to 0. −96 takes the element out completely. |
+| `under` | `"vo"` (default): while the spine's VO speaks (50 ms RMS over −42 dBFS). `"inserts"`: while any insert plays. A list of spine item ids: while those items play. |
+| `attack`, `release` | Seconds. Under spans (`inserts`, ids) the gain ramps down over `attack` before the span starts and back up over `release` after it ends, linearly in amplitude (defaults 0.35 and 0.35): the element is fully ducked for the whole span. Under the VO, `release` (default 0.35) is the window the speech activity is smoothed over, which also starts the duck a little before the speech; `attack` doesn't apply. |
+
+Under spans, the gain is `1 + e · (10^(db/20) − 1)` with `e` the ramped envelope (0 to 1). Under the VO it is
+`10^(db · e / 20)`.
+
+### The master bus
+
+`master` processes the whole mix, in this order:
+
+| Field | Meaning |
+|---|---|
+| `loudness` | Target integrated loudness of the whole output, in LUFS (BS.1770-4). Two passes: the mix is measured, then brought to the target. A `--range` render uses the gain measured on the whole timeline's mix, so a range sounds as it will in the full render. |
+| `lowpass` | A 2-pole Butterworth low-pass at this frequency in Hz. |
+| `true_peak` | A ceiling in dBTP: a look-ahead limiter (peaks found 4× oversampled, 3 ms attack, 60 ms release) keeps the true peak at or below it. Without it the mix is only clipped at 0 dBFS. |
 
 ## Patches
 

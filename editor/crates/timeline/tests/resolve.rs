@@ -230,6 +230,62 @@ fn units_are_contiguous_and_cover_the_output() {
 }
 
 #[test]
+fn gain_keys_resolve_on_each_elements_clock_and_duck_targets_are_checked() {
+    let mut d = timeline();
+    let keys = json!({"keys": [{"t": 0, "v": -20}, {"t": "word:b/Everest", "v": 0}]});
+    // Everest is at 3.8 s on the output clock; b starts at 2.1.
+    d["audio"][0]["gain_db"] = keys.clone();
+    d["audio"][0]["duck"] = json!([{"db": -7}, {"db": -96, "under": ["a", "b"], "attack": 0.2}]);
+    d["spine"][1]["audio"] = json!({"gain_db": keys.clone(), "fade_curve": "s-curve", "stream": 1, "loudness": -23});
+    d["scenes"][0]["shots"][0]["picture"]["layers"][0]["audio"] =
+        json!({"gain_db": keys.clone(), "duck": {"db": -6, "under": "inserts"}});
+    d["master"] = json!({"loudness": -18, "true_peak": -2, "lowpass": 16500});
+    let p = project("gain-keys", d.clone());
+    let r = resolve(&p).unwrap();
+    let t1 = |p: &retake_timeline::keyframe::Prop| match p {
+        retake_timeline::keyframe::Prop::Keys { keys, .. } => keys[1].t,
+        _ => panic!("keys"),
+    };
+    assert!(near(t1(r.audio[0].gain.as_ref().unwrap()), 3.8), "from the bed's `from` (0)");
+    assert!(near(t1(r.spine_item("b").unwrap().gain.as_ref().unwrap()), 1.7), "from b's start");
+    assert!(r.spine_item("a").unwrap().gain.is_none());
+    let layer = &r.shot("intro/1").unwrap().comp.layers_json[0];
+    assert_eq!(layer["audio"]["gain_db"]["keys"][1]["t"], json!(3.8), "composition seconds");
+    assert_eq!(p.tl.master.as_ref().unwrap().true_peak, Some(-2.0));
+    // A constant gain stays a number.
+    let mut c = d.clone();
+    c["audio"][0]["gain_db"] = json!(-6);
+    let r = resolve(&project("gain-const", c)).unwrap();
+    assert!(matches!(r.audio[0].gain, Some(retake_timeline::keyframe::Prop::Const(_))));
+    // Ducking under something that isn't a spine item, or a key anchor that doesn't resolve.
+    let mut bad = d.clone();
+    bad["audio"][0]["duck"] = json!({"db": -6, "under": ["pop"]});
+    bad["scenes"][0]["shots"][0]["picture"]["layers"][0]["audio"]["duck"] = json!({"db": -6, "under": ["zz"]});
+    bad["spine"][1]["audio"]["gain_db"]["keys"][1]["t"] = json!("word:b/Everist");
+    let e = resolve(&project("gain-bad", bad)).unwrap_err();
+    let codes: Vec<(&str, &str)> = e.iter().map(|e| (e.code.as_str(), e.path.as_deref().unwrap_or(""))).collect();
+    assert!(codes.contains(&("duck_under", "/audio/0/duck/under")), "{codes:?}");
+    assert!(codes.contains(&("duck_under", "/scenes/0/shots/0/picture/layers/0/audio/duck/under")), "{codes:?}");
+    assert!(codes.contains(&("anchor_word_not_found", "/spine/1/audio/gain_db/keys/1/t")), "{codes:?}");
+    // The schema: a gain out of range, an unknown curve, a duck on a spine item.
+    for (path, v) in [
+        ("/audio/0/gain_db", json!(30)),
+        ("/audio/0/fade_curve", json!("cosine")),
+        ("/spine/1/audio/duck", json!({"db": -6})),
+        ("/audio/0/stream", json!(-1)),
+    ] {
+        let mut s = d.clone();
+        *s.pointer_mut(path.rsplit_once('/').unwrap().0)
+            .unwrap()
+            .as_object_mut()
+            .unwrap()
+            .entry(path.rsplit_once('/').unwrap().1)
+            .or_insert(json!(null)) = v;
+        assert!(!retake_timeline::schema::check_timeline(&s).is_empty(), "{path} should fail the schema");
+    }
+}
+
+#[test]
 fn inserts_cut_shots_and_pause_their_clocks() {
     let mut d = timeline();
     // A 1 s insert after spine item a, in the middle of nothing; and one in the middle of shot intro/2's span.

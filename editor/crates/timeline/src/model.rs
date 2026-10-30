@@ -22,11 +22,33 @@ pub struct Timeline {
     pub scenes: Vec<Scene>,
     #[serde(default)]
     pub audio: Vec<AudioElement>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub master: Option<Master>,
     #[serde(default)]
     pub end: Option<String>,
     /// JavaScript helpers for every expression (spec/timeline.md, "Expressions").
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expr_lib: Option<String>,
+}
+
+/// The master bus (spec/timeline.md, "The master bus").
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct Master {
+    /// Target integrated loudness of the whole mix, LUFS.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub loudness: Option<f64>,
+    /// Ceiling, dBTP.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub true_peak: Option<f64>,
+    /// 2-pole Butterworth low-pass, Hz.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lowpass: Option<f64>,
+}
+
+impl Master {
+    pub fn is_active(&self) -> bool {
+        self.loudness.is_some() || self.true_peak.is_some() || self.lowpass.is_some()
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -65,16 +87,111 @@ pub enum SpineKind {
     Insert,
 }
 
+/// The shape of fades (spec/timeline.md, "Sound options").
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum FadeCurve {
+    #[default]
+    Linear,
+    EqualPower,
+    SCurve,
+    Log,
+}
+
+impl FadeCurve {
+    fn is_linear(&self) -> bool {
+        *self == FadeCurve::Linear
+    }
+
+    /// The fade-in gain at `x` in [0, 1] (a fade-out reads it backwards).
+    pub fn gain(&self, x: f64) -> f64 {
+        let x = x.clamp(0.0, 1.0);
+        match self {
+            FadeCurve::Linear => x,
+            FadeCurve::EqualPower => (x * std::f64::consts::FRAC_PI_2).sin(),
+            FadeCurve::SCurve => (x * std::f64::consts::FRAC_PI_2).sin().powi(2),
+            FadeCurve::Log => {
+                if x <= 0.0 {
+                    0.0
+                } else {
+                    10f64.powf(-3.0 * (1.0 - x))
+                }
+            }
+        }
+    }
+}
+
+/// What a ducking rule ducks under: `"vo"`, `"inserts"`, or spine item ids.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum Under {
+    Named(String),
+    Ids(Vec<String>),
+}
+
+impl Default for Under {
+    fn default() -> Self {
+        Under::Named("vo".into())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct DuckRule {
+    pub db: f64,
+    #[serde(default)]
+    pub under: Under,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attack: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub release: Option<f64>,
+}
+
+/// `duck`: one rule or a list.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(untagged)]
+pub enum Ducks {
+    One(DuckRule),
+    Many(Vec<DuckRule>),
+}
+
+impl Ducks {
+    pub fn rules(&self) -> Vec<DuckRule> {
+        match self {
+            Ducks::One(r) => vec![r.clone()],
+            Ducks::Many(rs) => rs.clone(),
+        }
+    }
+}
+
+/// Sound options of a spine item or a video layer (spec/timeline.md, "Sound options"). `gain_db` stays JSON until
+/// the resolver has turned anchors in its keys into seconds; [`AudioOpts::gain`] parses it then.
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct AudioOpts {
-    #[serde(default)]
-    pub gain_db: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gain_db: Option<Value>,
     #[serde(default)]
     pub fade_in: f64,
     #[serde(default)]
     pub fade_out: f64,
+    #[serde(default, skip_serializing_if = "FadeCurve::is_linear")]
+    pub fade_curve: FadeCurve,
     #[serde(default)]
     pub mute: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stream: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub loudness: Option<f64>,
+    /// Video layers only (the schema doesn't allow it on spine items).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duck: Option<Ducks>,
+}
+
+/// A resolved `gain_db` (numbers for key times) as a prop; `None` for no gain.
+pub fn gain_prop(v: Option<&Value>) -> Result<Option<crate::keyframe::Prop>, String> {
+    match v {
+        None => Ok(None),
+        Some(v) => serde_json::from_value(v.clone()).map(Some).map_err(|e| format!("gain_db: {e}")),
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -154,11 +271,6 @@ pub struct Overlay {
     pub expr_lib: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct Duck {
-    pub db: f64,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AudioElement {
     pub id: String,
@@ -170,14 +282,21 @@ pub struct AudioElement {
     pub in_: f64,
     #[serde(rename = "loop", default)]
     pub loop_: bool,
+    /// A number or a prop; anchors in its keys are resolved relative to `from` (see [`AudioOpts`]).
     #[serde(default)]
-    pub gain_db: f64,
+    pub gain_db: Option<Value>,
     #[serde(default)]
     pub fade_in: f64,
     #[serde(default)]
     pub fade_out: f64,
     #[serde(default)]
-    pub duck: Option<Duck>,
+    pub fade_curve: FadeCurve,
+    #[serde(default)]
+    pub stream: Option<u32>,
+    #[serde(default)]
+    pub loudness: Option<f64>,
+    #[serde(default)]
+    pub duck: Option<Ducks>,
 }
 
 /// An RGBA color parsed from `#rgb`, `#rrggbb` or `#rrggbbaa`.

@@ -3,6 +3,7 @@
 
 pub mod audio;
 pub mod composite;
+pub mod dsp;
 pub mod engine;
 pub mod expr;
 pub mod ffmpeg;
