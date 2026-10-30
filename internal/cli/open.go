@@ -30,6 +30,7 @@ type openArgs struct {
 	noOpen   bool
 	idleExit *float64
 	uiDir    string
+	allow    []string
 	verbose  bool
 	help     bool
 }
@@ -107,6 +108,16 @@ func parseOpen(args []string) (openArgs, error) {
 				return a, err
 			}
 			a.uiDir = v
+		case "--allow-host":
+			v, err := value()
+			if err != nil {
+				return a, err
+			}
+			h := strings.ToLower(strings.TrimSpace(v))
+			if h == "" || strings.ContainsAny(h, "/:@ ") {
+				return a, fmt.Errorf("--allow-host %q: give a bare hostname like abc.trycloudflare.com", v)
+			}
+			a.allow = append(a.allow, h)
 		case "--no-open", "--verbose":
 			if hasVal {
 				return a, fmt.Errorf("%s takes no value", name)
@@ -259,7 +270,7 @@ func openCmd(ctx context.Context, args []string, env Env) int {
 	srv := server.New(server.Options{
 		Video: video, Explicit: explicit, Port: port, UI: page, Author: author, Prober: prober,
 		IdleExit: idleDuration(st.IdleExit), CheckEvery: env.CheckEvery, Clock: env.Clock,
-		Log: env.Stderr, Verbose: a.verbose,
+		Log: env.Stderr, Verbose: a.verbose, AllowHosts: a.allow,
 	})
 
 	url := fmt.Sprintf("http://127.0.0.1:%d/", port)

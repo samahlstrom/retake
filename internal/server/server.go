@@ -47,7 +47,10 @@ type Options struct {
 	MaxBody  int64    // 0 = DefaultMaxBody
 	UI       fs.FS    // the page's files; nil serves ui.NotBuiltHTML
 	Author   string   // written to session.json "author"; "" leaves it out
-	Prober   family.Prober
+	// AllowHosts are extra hostnames the page may be reached at over HTTPS, e.g. a tunnel's (abc.trycloudflare.com):
+	// their Host header is accepted and https://<host> counts as our origin for writes.
+	AllowHosts []string
+	Prober     family.Prober
 
 	IdleExit   time.Duration // exit this long after the last request, once there was one; 0 = never
 	CheckEvery time.Duration // 0 = DefaultCheckEvery
@@ -90,6 +93,11 @@ func New(opts Options) *Server {
 		fmt.Sprintf("127.0.0.1:%d", opts.Port): true,
 		fmt.Sprintf("localhost:%d", opts.Port): true,
 	}}
+	for _, h := range opts.AllowHosts {
+		h = strings.ToLower(h)
+		s.hosts[h] = true
+		s.origins["https://"+h] = true
+	}
 	s.Rescan()
 	return s
 }

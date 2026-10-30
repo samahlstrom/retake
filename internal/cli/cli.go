@@ -56,7 +56,7 @@ func (e Env) withDefaults() Env {
 const usage = `retake: review a video by talking over it. Press R, talk and draw, press R again.
 
 usage:
-  retake open <video> [--versions a.mp4 b.mp4 ...] [--port N] [--no-open] [--idle-exit MIN] [--ui-dir DIR] [--verbose]
+  retake open <video> [--versions a.mp4 b.mp4 ...] [--port N] [--no-open] [--idle-exit MIN] [--ui-dir DIR] [--allow-host H]... [--verbose]
       serve the review page for <video> and its version family (clip_v5, v6/clip_v6, ...)
   retake sessions <video> [--json]
       list the takes saved for <video>
@@ -69,6 +69,8 @@ open:
   --no-open         don't open the page in the browser
   --idle-exit MIN   exit MIN minutes after the page is gone; 0 = never (default 15)
   --ui-dir DIR      serve the page from DIR instead of the one built into the binary
+  --allow-host H    also answer at https://H, e.g. a tunnel's hostname (repeatable). Anyone with that URL can
+                    watch the versions and record takes, so only use it with a link you trust
   --verbose         log every request
 
 config: $XDG_CONFIG_HOME/retake/config.toml (default ~/.config/retake/config.toml), keys name, port,

@@ -797,3 +797,38 @@ func TestHostHeaderRebinding(t *testing.T) {
 		}
 	}
 }
+
+// --allow-host: a tunnel's hostname is answered on every route, and https://<host> may write; other hosts still can't.
+func TestAllowHostForTunnels(t *testing.T) {
+	f := newFixture(t)
+	h := start(t, Options{Video: f.video, AllowHosts: []string{"Abc.TryCloudflare.com"}})
+	do := func(method, path, host, origin string) int {
+		req, err := http.NewRequest(method, h.url+path, strings.NewReader("{}"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Host = host
+		if origin != "" {
+			req.Header.Set("Origin", origin)
+		}
+		res, err := h.ts.Client().Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = res.Body.Close()
+		return res.StatusCode
+	}
+	if got := do(http.MethodGet, "/api/info", "abc.trycloudflare.com", ""); got != http.StatusOK {
+		t.Errorf("tunnel host GET: %d", got)
+	}
+	// 404 (bad take id) means the origin check passed without creating anything.
+	if got := do(http.MethodPost, "/api/session/nope/data", "abc.trycloudflare.com", "https://abc.trycloudflare.com"); got != http.StatusNotFound {
+		t.Errorf("tunnel origin POST: %d, want 404", got)
+	}
+	if got := do(http.MethodPost, "/api/session/nope/data", "abc.trycloudflare.com", "http://abc.trycloudflare.com"); got != http.StatusForbidden {
+		t.Errorf("plain-http tunnel origin POST: %d, want 403", got)
+	}
+	if got := do(http.MethodGet, "/api/info", "evil.trycloudflare.com", ""); got != http.StatusForbidden {
+		t.Errorf("other host: %d, want 403", got)
+	}
+}

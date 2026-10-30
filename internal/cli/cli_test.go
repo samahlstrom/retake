@@ -171,6 +171,10 @@ func TestParseOpen(t *testing.T) {
 		{args: []string{"a.mp4", "--idle-exit", "soon"}, wantErr: "minutes"},
 		{args: []string{"a.mp4", "--no-open=yes"}, wantErr: "no value"},
 		{args: []string{"a.mp4", "--bogus"}, wantErr: "unknown option"},
+		{args: []string{"a.mp4", "--allow-host", "Abc.TryCloudflare.com", "--allow-host=b.example"},
+			want: openArgs{video: "a.mp4", allow: []string{"abc.trycloudflare.com", "b.example"}}},
+		{args: []string{"a.mp4", "--allow-host", "https://abc.example"}, wantErr: "bare hostname"},
+		{args: []string{"a.mp4", "--allow-host", "abc.example:443"}, wantErr: "bare hostname"},
 	} {
 		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
 			got, err := parseOpen(tc.args)
