@@ -46,7 +46,7 @@ A version object:
 | GET/HEAD | `/video/<label>/<file>` | New, for `.m3u8` versions: the playlist itself (by its file name) or any file beside it, such as segments and init files. Only plain names inside that folder, never `..` or subfolders. The page loads `/video/<label>/<playlist name>`, so relative segment URLs resolve inside that folder. |
 | GET | `/api/ping` | `{"ok": true}` |
 | GET | `/api/info` | The current version object, plus `versions` (the re-scanned family), `stem`, `review_dir`, `sessions` and `history` (both for the current version). |
-| GET | `/api/history?v=<label>` | `{"label": "...", "history": [...]}`. 404 if the label is unknown. |
+| GET | `/api/history?v=<label>` | `{"label": "...", "history": [...]}`. 404 if the label is unknown; no `v` means the current version. |
 | POST | `/api/session/<take>/data?v=<label>` | Saves a take's JSON files. See below. |
 | POST | `/api/session/<take>/audio?v=<label>&name=<file>&offset=<n>` | Appends audio bytes to one segment file. See below. |
 | GET | `/favicon.ico` | 204 |
@@ -67,7 +67,8 @@ M minutes after the last request, counting only once the page has made its first
   `http://127.0.0.1:<port>` or `http://localhost:<port>`.
 - **Body limit.** A body over 1 GiB gets 413.
 - **Take id.** `<take>` must match `^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}$`, else 404.
-- **Version.** `?v=` must name a version in the family, else 400 `{"error":"bad version"}`.
+- **Version.** `?v=` must name a version in the family, else 400 `{"error":"bad version"}`. A missing or empty `v`
+  means the current version, as in the legacy server.
 - **Location.** The take folder is `<dir of that version's file>/<stem of that version's file>.review/<take>/`,
   created on demand.
 - **Writes are serialized** by one lock.
@@ -105,7 +106,7 @@ The response is `{"ok": true, "dir": "<take folder>"}`.
   - Carried-over takes keep only the strokes whose `video_t` is inside their `ranges`, and only the voice bins whose
     `i * bin` is inside them.
   - `inherit.json` sits in the version's `.review/` folder: `{"takes": [{dir, version, ranges, ...}]}`. Entries whose
-    `dir` no longer exists are ignored.
+    `dir` no longer exists are ignored. A relative `dir` is relative to that `.review/` folder; no `ranges` means all.
 
 ## The page's test hook
 
@@ -146,7 +147,7 @@ retake version
 
 ```toml
 name = "Sam"          # author name written into session.json
-port = 8777
+port = 8777           # tried first; if busy, the next free one of the next 19 (a --port flag is strict)
 idle_exit_minutes = 15
 open_browser = true
 ```
