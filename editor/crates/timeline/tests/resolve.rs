@@ -330,3 +330,28 @@ fn missing_media_is_reported() {
     let errs = check_refs(&project("rates", d));
     assert_eq!(errs[0].code, "format_rates");
 }
+
+/// Regression (slice 3 broke it): a slice-2 timeline listed plug-ins and other references in `kits`, which 0.1
+/// recorded without loading. They still open, validate and resolve; only kit packages are loaded.
+#[test]
+fn slice2_kits_are_recorded_not_rejected() {
+    let mut d = timeline();
+    d["kits"] = json!(["plugin:deadlock", "deadlock", "plugin:captions@2.1.0", "brand:acme@3"]);
+    let p = project("slice2-kits", d.clone());
+    assert!(validate(&p).is_empty(), "{:?}", validate(&p));
+    assert!(p.kits.is_empty());
+    assert_eq!(p.kits_recorded, vec!["plugin:deadlock", "deadlock", "plugin:captions@2.1.0", "brand:acme@3"]);
+    // Recorded, not dropped: the document keeps them, and the expansion is otherwise unchanged.
+    assert_eq!(p.doc["kits"], d["kits"]);
+    let mut plain = d.clone();
+    plain.as_object_mut().unwrap().remove("kits");
+    let q = project("slice2-nokits", plain);
+    let (a, b) = (resolve(&p).unwrap(), resolve(&q).unwrap());
+    assert_eq!(a.units.len(), b.units.len());
+    assert_eq!(serde_json::to_value(&a.shots).unwrap(), serde_json::to_value(&b.shots).unwrap());
+    // A kit package that isn't installed is still an error (a typo shouldn't pass silently).
+    let mut d = timeline();
+    d["kits"] = json!(["clen@1.0.0"]);
+    let e = Project::from_doc(&scratch("kit-typo").join("timeline.json"), d).unwrap_err();
+    assert_eq!(e.0[0].code, "kit_not_found");
+}

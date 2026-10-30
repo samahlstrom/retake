@@ -1007,6 +1007,9 @@ pub struct Expansion {
     pub doc: Value,
     pub uses: Vec<UseInfo>,
     pub kits: Vec<KitInfo>,
+    /// `kits` entries that aren't kit packages (`plugin:deadlock`, a bare name, a `brand:` kit not installed here):
+    /// recorded as written and ignored by expansion.
+    pub recorded: Vec<String>,
     /// The lock after pinning (equal to the one given unless the mode pins).
     pub lock: Lock,
 }
@@ -1322,6 +1325,27 @@ impl Expander<'_> {
     }
 }
 
+/// A `kits` entry that names a kit package: `<name>@<version>` (found in the component folders, else an error) or
+/// `brand:<name>@<version>` (a catalog kit, loaded when its folder is found). Anything else, another scheme such as
+/// `plugin:` or an entry without a version, isn't a kit package.
+struct KitRef {
+    catalog: bool,
+    name: String,
+    version: String,
+}
+
+fn kit_ref(entry: &str) -> Option<KitRef> {
+    let (catalog, bare) = match entry.strip_prefix("brand:") {
+        Some(b) => (true, b),
+        None => (false, entry),
+    };
+    let (name, version) = bare.split_once('@')?;
+    if name.is_empty() || version.is_empty() || name.contains(':') {
+        return None;
+    }
+    Some(KitRef { catalog, name: name.to_string(), version: version.to_string() })
+}
+
 /// Expands a timeline document: kits loaded and locked, `kit:` tokens replaced, component uses turned into layers.
 /// Errors are collected; on any error the expansion is unusable.
 pub fn expand(src: &Value, tl_dir: &Path, lock: Lock, mode: LockMode) -> Result<Expansion, Vec<EditError>> {
@@ -1366,23 +1390,25 @@ pub fn expand_with_roots(
         .and_then(Value::as_array)
         .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
         .unwrap_or_default();
+    let mut recorded = vec![];
     for (i, entry) in entries.iter().enumerate() {
         let ptr = format!("/kits/{i}");
-        let catalog = entry.starts_with("brand:");
-        let bare = entry.strip_prefix("brand:").unwrap_or(entry);
-        let Some((name, version)) = bare.split_once('@').map(|(a, b)| (a.to_string(), b.to_string())) else {
-            if !catalog {
-                x.errs.push(EditError::new("kit_ref", format!("kit `{entry}` isn't <name>@<version>")).at(ptr));
-            }
+        let Some(KitRef { catalog, name, version }) = kit_ref(entry) else {
+            // A plug-in or another reference that isn't a kit package: kept in the document and ignored here
+            // (timeline/0.1 recorded every entry before kits were loaded, so those timelines still open).
+            recorded.push(entry.clone());
             continue;
         };
         let Some(dir) = find_package(&x.roots, &name, &version, "kit.json") else {
-            if !catalog {
+            if catalog {
+                recorded.push(entry.clone());
+            } else {
+                let bare = format!("{name}@{version}");
                 let all = available(&x.roots, "kit.json");
                 x.errs.push(
                     EditError::new("kit_not_found", format!("kit {bare} isn't in the component folders"))
                         .at(ptr)
-                        .suggest(close_matches(bare, all.iter().map(|(r, _)| r.as_str()), 3))
+                        .suggest(close_matches(&bare, all.iter().map(|(r, _)| r.as_str()), 3))
                         .hint("add it with `retake lib add <kit>`"),
                 );
             }
@@ -1459,7 +1485,7 @@ pub fn expand_with_roots(
         e.dedup();
         return Err(e);
     }
-    Ok(Expansion { doc, uses: x.uses, kits, lock: x.lock })
+    Ok(Expansion { doc, uses: x.uses, kits, recorded, lock: x.lock })
 }
 
 #[cfg(test)]

@@ -35,7 +35,7 @@ down. Colors are `#rgb`, `#rrggbb` or `#rrggbbaa`.
 | `format.fps` | Integer frames per second. Every unit boundary falls on a frame. |
 | `format.sample_rate` | Audio sample rate. Default 48000. It must be a whole number of samples per frame (48000 works for 24, 25, 30, 50, 60 and 120 fps). |
 | `format.background` | What shows where no layer draws. Default `#000000`. |
-| `kits` | Brand kits the timeline uses, e.g. `"clean@1.0.0"`: their tokens (`kit:color.accent`) and house rules (`spec/components.md`). A `"brand:acme@3"` kit is loaded when its folder is found, else only recorded. |
+| `kits` | Brand kits the timeline uses, e.g. `"clean@1.0.0"`: their tokens (`kit:color.accent`) and house rules (`spec/components.md`). A `"brand:acme@3"` kit is loaded when its folder is found, else only recorded. Other entries (plug-ins such as `"plugin:deadlock"`, names without a version) are recorded and ignored. |
 | `assets` | The media the timeline uses, by asset id (below). |
 | `fonts` | Font names for text layers. `display` is built in (the vendored Baloo 2, weight 800) unless redefined. |
 | `spine` | The master clock (below). At least one item. |

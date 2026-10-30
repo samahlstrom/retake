@@ -28,6 +28,9 @@ pub struct Project {
     pub uses: Vec<UseInfo>,
     /// The kits the timeline lists that were found.
     pub kits: Vec<KitInfo>,
+    /// `kits` entries that aren't kit packages (plug-ins, unversioned names, catalog kits not installed here):
+    /// recorded, not loaded.
+    pub kits_recorded: Vec<String>,
 }
 
 impl Project {
@@ -85,7 +88,18 @@ impl Project {
         let tl: Timeline = serde_json::from_value(x.doc.clone())
             .map_err(|e| EditError::new("timeline_model", format!("timeline doesn't fit the model: {e}")))?;
         let lock_changed = x.lock != on_disk;
-        Ok(Project { path: abs, dir, src, doc: x.doc, tl, lock: x.lock, lock_changed, uses: x.uses, kits: x.kits })
+        Ok(Project {
+            path: abs,
+            dir,
+            src,
+            doc: x.doc,
+            tl,
+            lock: x.lock,
+            lock_changed,
+            uses: x.uses,
+            kits: x.kits,
+            kits_recorded: x.recorded,
+        })
     }
 
     /// The lockfile's path.

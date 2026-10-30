@@ -207,7 +207,10 @@ A kit is a folder with a `kit.json` (the catalog's kit format, `spec/assets.md`,
   `spdx` (a plain SPDX string is read too). `version` is semver for a kit in a registry.
 - A timeline uses a kit by listing it: `"kits": ["clean@1.0.0"]`. A `brand:<name>@<version>` entry is a kit
   installed in the catalog (`spec/assets.md`); the editor reads its tokens and rules when it finds the kit's folder
-  as above, and otherwise only records it.
+  as above, and otherwise only records it. Any other entry isn't a kit package: a plug-in or another scheme
+  (`plugin:deadlock`), or a name without a version. It is recorded (it stays in the document, and `retake-edit
+  expand --json` lists it under `kits_recorded`) and ignored by expansion, as timeline/0.1 always did. Only a
+  `<name>@<version>` entry that isn't installed is an error (`kit_not_found`).
 - **Tokens.** Any string that is exactly `kit:<group>.<name>[.<path>]`, anywhere in the timeline (but `meta` and
   `expr` strings), in props, in component templates and defaults, and in rules, is replaced by the token's value of
   any JSON type: `"fill": "kit:color.accent"`, `"size": "kit:size.title"`. Lookup goes through the timeline's kits
