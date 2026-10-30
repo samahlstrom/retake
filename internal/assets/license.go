@@ -473,6 +473,9 @@ func timelineUses(doc map[string]any, dir string, rs *resolvedSpans) []use {
 			m, _ := o.(map[string]any)
 			walkLayers(m["layers"], fmt.Sprintf("/scenes/%d/overlays/%d/layers", i, j), str(m["id"]),
 				anchorsOf(m, "from", "to"))
+			// A component use passes its assets in props (spec/components.md).
+			walkLayers(m["props"], fmt.Sprintf("/scenes/%d/overlays/%d/props", i, j), str(m["id"]),
+				anchorsOf(m, "from", "to"))
 		}
 	}
 	audio, _ := doc["audio"].([]any)

@@ -353,9 +353,10 @@ and the credits for the video description.
 
 - **Manifest** (`spec/manifest.md`): each element's `sources` give the asset; the element's `t` (or its unit's)
   gives output seconds. Exact.
-- **Timeline** (`spec/timeline.md`): every `asset` reference (spine items, layers, audio) and every font text layers
-  use. Output times come from `retake-edit resolve --json` (given with `--resolved`, or run when `retake-edit` is on
-  `PATH` or in `$RETAKE_EDIT`); without it each use lists its anchors as written.
+- **Timeline** (`spec/timeline.md`): every `asset` reference (spine items, layers, audio, and a component use's
+  props, `spec/components.md`) and every font text layers use. Output times come from `retake-edit resolve --json`
+  (given with `--resolved`, or run when `retake-edit` is on `PATH` or in `$RETAKE_EDIT`); without it each use lists
+  its anchors as written.
 - A timeline asset id that isn't in the catalog is matched by its file (the timeline's `path`, by catalog path, then
   by hash). The built-in `display` font is cleared (OFL).
 

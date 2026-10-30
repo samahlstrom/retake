@@ -138,3 +138,28 @@ func TestMigrationToTheComponentKindKeepsEverything(t *testing.T) {
 		t.Fatalf("%d spans after the cascade", spans)
 	}
 }
+
+func TestLicenseReportSeesAssetsInAComponentsProps(t *testing.T) {
+	e := newEnv(t)
+	e.c.o.EditBin = filepath.Join(t.TempDir(), "no-such-retake-edit")
+	tl := filepath.Join(e.root, "edit", "timeline.json")
+	if err := os.MkdirAll(filepath.Dir(tl), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(tl, []byte(`{"schema": "timeline/0.1", "id": "t", "rev": 0,
+		"format": {"size": [640, 360], "fps": 30}, "assets": {"proj:inset": {"path": "inset.mp4"}}, "spine": [],
+		"scenes": [{"id": "s", "shots": [], "overlays": [{"id": "pip", "use": "pip-frame@1.0.0", "from": "t:1",
+		"to": "t:3", "props": {"asset": "proj:inset"}}]}]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rep, err := e.c.LicenseReport(context.Background(), LicenseReportArgs{Path: tl})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range rep.Assets {
+		if a.TimelineID == "proj:inset" && len(a.Uses) == 1 && a.Uses[0].Element == "pip" {
+			return
+		}
+	}
+	t.Fatalf("the inset isn't reported: %+v", rep.Assets)
+}
