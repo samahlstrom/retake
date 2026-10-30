@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:retake:spec:timeline:0.1",
   "title": "Retake timeline/0.1",
-  "description": "A timeline file (spec/timeline.md). #/$defs/patch is one patch; #/$defs/patchLogEntry is one line of the patch log. Semantic rules (unique ids, resolvable anchors, shot order) are checked by `retake-edit validate` on top of this schema. Unknown fields are rejected; put extra data under `meta`.",
+  "description": "A timeline file (spec/timeline.md). #/$defs/patch is one patch; #/$defs/patchLogEntry is one line of the patch log. Semantic rules (unique ids, resolvable anchors, shot order) are checked by `retake-edit validate` on top of this schema. Unknown fields are rejected; put extra data under `meta`. Kit tokens (`kit:…`) are replaced before this schema applies (spec/components.md).",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -394,9 +394,6 @@
     "composition": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "layers"
-      ],
       "properties": {
         "background": {
           "$ref": "#/$defs/color"
@@ -412,8 +409,23 @@
         },
         "meta": {
           "$ref": "#/$defs/meta"
+        },
+        "use": {
+          "$ref": "#/$defs/componentRef"
         }
-      }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "layers"
+          ]
+        },
+        {
+          "required": [
+            "use"
+          ]
+        }
+      ]
     },
     "overlay": {
       "type": "object",
@@ -421,8 +433,7 @@
       "required": [
         "id",
         "from",
-        "to",
-        "layers"
+        "to"
       ],
       "properties": {
         "id": {
@@ -451,8 +462,23 @@
         },
         "meta": {
           "$ref": "#/$defs/meta"
+        },
+        "use": {
+          "$ref": "#/$defs/componentRef"
         }
-      }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "layers"
+          ]
+        },
+        {
+          "required": [
+            "use"
+          ]
+        }
+      ]
     },
     "audioElement": {
       "type": "object",
@@ -869,6 +895,21 @@
         },
         "uppercase": {
           "type": "boolean"
+        },
+        "highlight": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "words"
+          ],
+          "properties": {
+            "words": {
+              "$ref": "#/$defs/prop"
+            },
+            "fill": {
+              "$ref": "#/$defs/color"
+            }
+          }
         }
       },
       "unevaluatedProperties": false,
@@ -1310,6 +1351,11 @@
           "type": "string"
         }
       }
+    },
+    "componentRef": {
+      "description": "A component and its exact version, <name>@<semver> (spec/components.md).",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*@[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?$"
     }
   }
 }

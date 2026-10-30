@@ -108,7 +108,8 @@
         "box": { "type": "array", "items": { "$ref": "#/$defs/box" } },
         "sources": { "type": "array", "items": { "$ref": "#/$defs/source" } },
         "anchors": { "type": "object", "additionalProperties": { "type": "string" } },
-        "parent": { "type": "string" }
+        "parent": { "type": "string" },
+        "use": { "type": "string", "description": "The component (<name>@<version>) the element was expanded from (spec/components.md)." }
       }
     },
     "noteResolution": {
