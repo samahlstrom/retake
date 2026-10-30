@@ -71,6 +71,16 @@ func (h *Hub) project(name string) (*proj, error) {
 	return p, nil
 }
 
+// SyncProject uploads what changed in a project's workspace to object storage now (it happens on its own after
+// writes and every SyncEvery). Without object storage it does nothing.
+func (h *Hub) SyncProject(ctx context.Context, name string) error {
+	p, err := h.project(name)
+	if err != nil || p.pub == nil {
+		return err
+	}
+	return p.pub.sync(ctx)
+}
+
 // server returns the project's mounted Server, making it once the project has a version. nil: no version yet.
 func (p *proj) server() *server.Server {
 	p.mu.Lock()
