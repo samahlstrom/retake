@@ -381,7 +381,7 @@ func (s *Server) get(w http.ResponseWriter, r *http.Request, parts []string) {
 			s.fail(w, r, http.StatusNotFound, "no such version")
 			return
 		}
-		s.json(w, r, http.StatusOK, historyResponse{Label: v.Label, History: store.History(v.Path)})
+		s.json(w, r, http.StatusOK, historyResponse{Label: v.Label, History: s.history(v)})
 	case is(parts, "favicon.ico"):
 		w.Header().Set("Cache-Control", "no-store")
 		w.WriteHeader(http.StatusNoContent)
@@ -400,16 +400,16 @@ func (s *Server) get(w http.ResponseWriter, r *http.Request, parts []string) {
 
 type infoResponse struct {
 	family.Version
-	Versions  []family.Version     `json:"versions"`
-	Stem      string               `json:"stem"`
-	ReviewDir string               `json:"review_dir"`
-	Sessions  []store.Summary      `json:"sessions"`
-	History   []store.HistoryEntry `json:"history"`
+	Versions  []family.Version `json:"versions"`
+	Stem      string           `json:"stem"`
+	ReviewDir string           `json:"review_dir"`
+	Sessions  []store.Summary  `json:"sessions"`
+	History   []historyEntry   `json:"history"`
 }
 
 type historyResponse struct {
-	Label   string               `json:"label"`
-	History []store.HistoryEntry `json:"history"`
+	Label   string         `json:"label"`
+	History []historyEntry `json:"history"`
 }
 
 func (s *Server) info(w http.ResponseWriter, r *http.Request) {
@@ -421,7 +421,7 @@ func (s *Server) info(w http.ResponseWriter, r *http.Request) {
 		Stem:      family.Stem(filepath.Base(cur.Path)),
 		ReviewDir: store.ReviewDir(cur.Path),
 		Sessions:  store.Sessions(cur.Path),
-		History:   store.History(cur.Path),
+		History:   s.history(cur),
 	})
 }
 

@@ -702,7 +702,7 @@ func TestJobsQueueClaimFinish(t *testing.T) {
 	if !ok || err != nil || j.ID != jobs[0].ID || j.State != JobRunning || j.Attempts != 1 {
 		t.Fatalf("claim = %+v %v %v", j, ok, err)
 	}
-	if j, err = s.Finish(j.ID, Failed, "boom", 3); err != nil || j.State != JobQueued || j.Error != "boom" {
+	if j, err = s.Finish(j.ID, Failed, "boom", "", 3); err != nil || j.State != JobQueued || j.Error != "boom" {
 		t.Fatalf("first failure = %+v %v", j, err)
 	}
 	// Backing off: the other take's job goes first, then nothing until a minute has passed.
@@ -710,7 +710,7 @@ func TestJobsQueueClaimFinish(t *testing.T) {
 	if !ok || j2.ID != other[0].ID {
 		t.Fatalf("claim during backoff = %+v %v", j2, ok)
 	}
-	if _, err := s.Finish(j2.ID, Succeeded, "", 3); err != nil {
+	if _, err := s.Finish(j2.ID, Succeeded, "", "", 3); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok, _ := s.Claim(JobTranscribe, backoff); ok {
@@ -722,7 +722,7 @@ func TestJobsQueueClaimFinish(t *testing.T) {
 		t.Fatalf("retry = %+v %v", j, ok)
 	}
 	// Interrupted (shutdown): back in the queue, the attempt doesn't count.
-	if j, err = s.Finish(j.ID, Interrupted, "stopping", 3); err != nil || j.State != JobQueued || j.Attempts != 1 {
+	if j, err = s.Finish(j.ID, Interrupted, "stopping", "", 3); err != nil || j.State != JobQueued || j.Attempts != 1 {
 		t.Fatalf("interrupted = %+v %v", j, err)
 	}
 	c.add(time.Hour)
@@ -730,7 +730,7 @@ func TestJobsQueueClaimFinish(t *testing.T) {
 	if j.Attempts != 2 {
 		t.Fatalf("attempts after interrupt = %d", j.Attempts)
 	}
-	if j, err = s.Finish(j.ID, Fatal, "no transcriber installed", 3); err != nil || j.State != JobFailed {
+	if j, err = s.Finish(j.ID, Fatal, "no transcriber installed", "install it", 3); err != nil || j.State != JobFailed || j.Hint != "install it" {
 		t.Fatalf("fatal = %+v %v", j, err)
 	}
 
@@ -739,7 +739,7 @@ func TestJobsQueueClaimFinish(t *testing.T) {
 		t.Fatal("ran notes after a failed transcription")
 	}
 	nj, _ = s.Job(jobs[1].ID)
-	if nj.State != JobFailed || !strings.Contains(nj.Error, "transcribing take "+take1+" failed: no transcriber installed") {
+	if nj.State != JobFailed || nj.Hint != "install it" || !strings.Contains(nj.Error, "transcribing take "+take1+" failed: no transcriber installed") {
 		t.Fatalf("notes after failed dep = %+v", nj)
 	}
 
@@ -933,7 +933,7 @@ func TestSidebar(t *testing.T) {
 		t.Fatalf("v8 newest = %v", got)
 	}
 	qi := items[1]
-	if qi.Text != "which track?" || qi.Note == nil || qi.Note.ID != 3 || qi.Note.Text != "three" ||
+	if qi.Text != "which track?" || qi.Note == nil || *qi.Note != 3 || *qi.T0 != 3 ||
 		qi.Status != StatusQuestion || qi.By != "agent" {
 		t.Errorf("question item = %+v", qi)
 	}

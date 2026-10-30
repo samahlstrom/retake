@@ -39,16 +39,17 @@ type Job struct {
 	State    string  `json:"state"`
 	Attempts int     `json:"attempts"`
 	Error    string  `json:"error,omitempty"`
+	Hint     string  `json:"hint,omitempty"` // a failed job's one-line fix
 	Created  string  `json:"created"`
 	Updated  string  `json:"updated"`
 }
 
-const jobCols = `id, kind, args, state, attempts, error, created, updated`
+const jobCols = `id, kind, args, state, attempts, error, hint, created, updated`
 
 func scanJob(r scanner) (Job, error) {
 	var j Job
 	var args string
-	if err := r.Scan(&j.ID, &j.Kind, &args, &j.State, &j.Attempts, &j.Error, &j.Created, &j.Updated); err != nil {
+	if err := r.Scan(&j.ID, &j.Kind, &args, &j.State, &j.Attempts, &j.Error, &j.Hint, &j.Created, &j.Updated); err != nil {
 		return j, err
 	}
 	_ = json.Unmarshal([]byte(args), &j.Args) // malformed args fail the job when it runs
@@ -92,7 +93,7 @@ func (s *Store) Jobs(limit int) ([]Job, error) {
 }
 
 func (j Job) event() JobEvent {
-	return JobEvent{ID: j.ID, Kind: j.Kind, State: j.State, Attempts: j.Attempts, Error: j.Error, Take: j.Args.Take,
+	return JobEvent{ID: j.ID, Kind: j.Kind, State: j.State, Attempts: j.Attempts, Error: j.Error, Hint: j.Hint, Take: j.Args.Take,
 		Version: j.Args.Version}
 }
 
@@ -238,7 +239,7 @@ func (s *Store) Claim(kind string, backoff func(attempts int) time.Duration) (jo
 					if d.Args.Take != "" {
 						msg = fmt.Sprintf("transcribing take %s failed: %s", d.Args.Take, d.Error)
 					}
-					if err := t.finish(j.ID, JobFailed, j.Attempts, msg); err != nil {
+					if err := t.finish(j.ID, JobFailed, j.Attempts, msg, d.Hint); err != nil {
 						return err
 					}
 					continue next
@@ -263,9 +264,9 @@ func (s *Store) Claim(kind string, backoff func(attempts int) time.Duration) (jo
 	return job, ok, err
 }
 
-func (t *tx) finish(id int64, state string, attempts int, msg string) error {
-	if _, err := t.Exec(`UPDATE jobs SET state = ?, attempts = ?, error = ?, updated = ? WHERE id = ?`, state, attempts,
-		msg, t.s.stamp(), id); err != nil {
+func (t *tx) finish(id int64, state string, attempts int, msg, hint string) error {
+	if _, err := t.Exec(`UPDATE jobs SET state = ?, attempts = ?, error = ?, hint = ?, updated = ? WHERE id = ?`, state,
+		attempts, msg, hint, t.s.stamp(), id); err != nil {
 		return err
 	}
 	j, err := jobByID(t, id)
@@ -287,8 +288,9 @@ const (
 	Interrupted                // the server stopped: queued again, and the attempt doesn't count
 )
 
-// Finish records the end of a running job's attempt. maxAttempts bounds retries of a Failed attempt.
-func (s *Store) Finish(id int64, outcome Outcome, msg string, maxAttempts int) (Job, error) {
+// Finish records the end of a running job's attempt. maxAttempts bounds retries of a Failed attempt; hint is a
+// one-line fix for a failure (kept only while the job isn't done).
+func (s *Store) Finish(id int64, outcome Outcome, msg, hint string, maxAttempts int) (Job, error) {
 	var out Job
 	err := s.write(func(t *tx) error {
 		j, err := jobByID(t, id)
@@ -298,7 +300,7 @@ func (s *Store) Finish(id int64, outcome Outcome, msg string, maxAttempts int) (
 		state, attempts := JobDone, j.Attempts
 		switch outcome {
 		case Succeeded:
-			msg = ""
+			msg, hint = "", ""
 		case Failed:
 			state = JobFailed
 			if j.Attempts < maxAttempts {
@@ -309,7 +311,7 @@ func (s *Store) Finish(id int64, outcome Outcome, msg string, maxAttempts int) (
 		case Interrupted:
 			state, attempts = JobQueued, max(0, j.Attempts-1)
 		}
-		if err := t.finish(id, state, attempts, msg); err != nil {
+		if err := t.finish(id, state, attempts, msg, hint); err != nil {
 			return err
 		}
 		out, err = jobByID(t, id)
@@ -334,7 +336,7 @@ func (s *Store) RequeueRunning(maxAttempts int) ([]Job, error) {
 				state = JobFailed
 				msg = fmt.Sprintf("interrupted on its last attempt (%d of %d)", j.Attempts, maxAttempts)
 			}
-			if err := t.finish(j.ID, state, j.Attempts, msg); err != nil {
+			if err := t.finish(j.ID, state, j.Attempts, msg, ""); err != nil {
 				return err
 			}
 			j, err := jobByID(t, j.ID)

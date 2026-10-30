@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/samahlstrom/retake/internal/family"
+	"github.com/samahlstrom/retake/internal/jobs"
 	"github.com/samahlstrom/retake/internal/jsonx"
 	"github.com/samahlstrom/retake/internal/project"
 	"github.com/samahlstrom/retake/internal/store"
@@ -141,6 +142,59 @@ func (s *Server) saveImage(w http.ResponseWriter, r *http.Request, dir string, b
 	}{true, name, len(body)})
 }
 
+// historyImage is an image of an earlier take, for the page to show near its time like a stroke.
+type historyImage struct {
+	URL    string     `json:"url"`
+	VideoT float64    `json:"video_t"`
+	Box    [4]float64 `json:"box"`
+}
+
+// historyEntry is a store.HistoryEntry plus the take's images (take format v1.1). Takes without images look exactly
+// as in milestone 1.
+type historyEntry struct {
+	store.HistoryEntry
+	Images []historyImage `json:"images,omitempty"`
+}
+
+// history is store.History with each take's images. Carried-over takes keep the images inside their ranges, like
+// their strokes; their URLs name the version the take was recorded on.
+func (s *Server) history(v family.Version) []historyEntry {
+	entries := store.History(v.Path)
+	inherited := store.InheritedTakes(v.Path)
+	own := len(entries) - len(inherited) // History lists the version's own takes, then the carried-over ones
+	out := make([]historyEntry, len(entries))
+	for i, e := range entries {
+		out[i] = historyEntry{HistoryEntry: e}
+		dir, label, ranges := store.TakeDir(v.Path, e.ID), v.Label, [][2]float64(nil)
+		if i >= own && own >= 0 {
+			x := inherited[i-own]
+			dir, label, ranges = x.Dir, jobs.VersionOfTake(s.Family(), x.Dir), x.Ranges
+		}
+		if label == "" || !store.ValidTakeID(e.ID) {
+			continue // not a take the /api/takes route can serve
+		}
+		for _, img := range project.ReadImages(dir) {
+			if ranges != nil && !inAny(img.VideoT, ranges) {
+				continue
+			}
+			out[i].Images = append(out[i].Images, historyImage{
+				URL:    "/api/takes/" + e.ID + "/" + img.File + "?v=" + url.QueryEscape(label),
+				VideoT: img.VideoT, Box: img.Box,
+			})
+		}
+	}
+	return out
+}
+
+func inAny(t float64, ranges [][2]float64) bool {
+	for _, r := range ranges {
+		if r[0] <= t && t <= r[1] {
+			return true
+		}
+	}
+	return false
+}
+
 // takeFile is GET /api/takes/<take>/<file>?v=: one image of a take, for the sidebar's thumbnails.
 func (s *Server) takeFile(w http.ResponseWriter, r *http.Request, take, name string) {
 	if !store.ValidTakeID(take) || !project.ValidImageName(name) {
@@ -161,6 +215,7 @@ type jobView struct {
 	State    string `json:"state"`
 	Attempts int    `json:"attempts"`
 	Error    string `json:"error,omitempty"`
+	Hint     string `json:"hint,omitempty"`
 	Take     string `json:"take,omitempty"`
 }
 
@@ -244,7 +299,7 @@ func pendingJobs(st *project.Store, version string) ([]jobView, error) {
 		}
 		seen[key] = true
 		if j.State != project.JobDone {
-			out = append(out, jobView{j.ID, j.Kind, j.State, j.Attempts, j.Error, j.Args.Take})
+			out = append(out, jobView{j.ID, j.Kind, j.State, j.Attempts, j.Error, j.Hint, j.Args.Take})
 		}
 	}
 	return out, nil

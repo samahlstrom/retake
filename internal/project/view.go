@@ -19,19 +19,10 @@ type Item struct {
 	AnsweredIn string      `json:"answered_in,omitempty"` // answered and accepted notes
 	Question   string      `json:"question,omitempty"`    // asked notes: the latest question about it
 	Options    []string    `json:"options,omitempty"`     // questions: version labels to pick from
-	Note       *ItemNote   `json:"note,omitempty"`        // questions about a note: that note
+	Note       *int64      `json:"note,omitempty"`        // questions about a note: its id
 	Images     []ItemImage `json:"images,omitempty"`
 
 	imagesOf *Note // the note whose images this item shows
-}
-
-// ItemNote is the note a question is about.
-type ItemNote struct {
-	ID   int64   `json:"id"`
-	Text string  `json:"text"`
-	T0   float64 `json:"t0"`
-	T1   float64 `json:"t1"`
-	By   string  `json:"by"`
 }
 
 // ItemImage is an image pinned to a note, for the sidebar's thumbnails.
@@ -159,15 +150,19 @@ func deref(f *float64) float64 {
 	return *f
 }
 
+// questionItem makes a question's sidebar item. A question about the version as a whole sits at 0 s.
 func (s *Store) questionItem(th Thread) (Item, error) {
-	it := Item{ID: th.ID, Kind: "question", Status: StatusQuestion, T0: th.T, T1: th.T, Text: th.Text, By: th.By,
-		Options: th.Options}
+	t := 0.0
+	if th.T != nil {
+		t = *th.T
+	}
+	it := Item{ID: th.ID, Kind: "question", Status: StatusQuestion, T0: &t, T1: &t, Text: th.Text, By: th.By,
+		Options: th.Options, Note: th.Note}
 	if th.Note != nil {
 		n, err := s.Note(*th.Note)
 		if err != nil {
 			return it, err
 		}
-		it.Note = &ItemNote{ID: n.ID, Text: n.Text, T0: n.T0, T1: n.T1, By: n.Author}
 		it.imagesOf = &n
 	}
 	return it, nil

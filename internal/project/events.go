@@ -39,6 +39,7 @@ type JobEvent struct {
 	State    string `json:"state"`
 	Attempts int    `json:"attempts"`
 	Error    string `json:"error,omitempty"`
+	Hint     string `json:"hint,omitempty"` // a failed job's one-line fix, such as how to set up transcription
 	Take     string `json:"take,omitempty"`
 	Version  string `json:"version,omitempty"`
 }

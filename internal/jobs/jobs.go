@@ -60,6 +60,35 @@ func IsFatal(err error) bool {
 	return errors.As(err, &f)
 }
 
+// TranscribeHint is the fix shown with a transcription that can't start, unless the error carries its own.
+const TranscribeHint = "Install whisper.cpp, or set [transcribe] command in config.toml."
+
+type hinted struct {
+	err  error
+	hint string
+}
+
+func (h hinted) Error() string { return h.err.Error() }
+func (h hinted) Unwrap() error { return h.err }
+func (h hinted) Hint() string  { return h.hint }
+
+// Hinted attaches a one-line fix to an error. A failed job shows it with its error (the job event's "hint").
+func Hinted(err error, hint string) error {
+	if err == nil {
+		return nil
+	}
+	return hinted{err, hint}
+}
+
+// HintOf returns the fix attached to err (by Hinted, or by any error in its chain with a Hint() string method).
+func HintOf(err error) string {
+	var h interface{ Hint() string }
+	if errors.As(err, &h) {
+		return h.Hint()
+	}
+	return ""
+}
+
 // Handler runs one job.
 type Handler func(ctx context.Context, job project.Job) error
 
@@ -102,11 +131,15 @@ func transcribe(ctx context.Context, e Engines, dir string) error {
 		return Fatal(fmt.Errorf("the take folder %s is gone", dir))
 	}
 	if e.Transcriber == nil {
-		return Fatal(errors.New("no transcriber is set up"))
+		return Fatal(Hinted(errors.New("no transcriber is set up"), TranscribeHint))
 	}
 	t, err := e.Transcriber()
 	if err != nil {
-		return Fatal(fmt.Errorf("can't transcribe: %w", err))
+		hint := HintOf(err)
+		if hint == "" {
+			hint = TranscribeHint
+		}
+		return Fatal(Hinted(fmt.Errorf("can't transcribe: %w", err), hint))
 	}
 	return t.Take(ctx, dir)
 }
@@ -291,7 +324,7 @@ func (r *Runner) run(ctx context.Context, job project.Job, h Handler) {
 	default:
 		outcome, msg = project.Failed, err.Error()
 	}
-	j, ferr := r.Store.Finish(job.ID, outcome, msg, r.MaxAttempts)
+	j, ferr := r.Store.Finish(job.ID, outcome, msg, HintOf(err), r.MaxAttempts)
 	if ferr != nil {
 		_, _ = fmt.Fprintf(r.Log, "retake: recording job %d: %v\n", job.ID, ferr)
 		return

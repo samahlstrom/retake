@@ -129,7 +129,8 @@ func TestDoneQueuesJobsEvenWithoutATranscriber(t *testing.T) {
 	for _, j := range side.Jobs {
 		byKind[j.Kind] = j
 	}
-	if e := byKind["transcribe"].Error; e != "can't transcribe: whisper.cpp isn't installed" || byKind["transcribe"].Take != take {
+	if e := byKind["transcribe"].Error; e != "can't transcribe: whisper.cpp isn't installed" || byKind["transcribe"].Take != take ||
+		byKind["transcribe"].Hint != jobs.TranscribeHint || byKind["notes"].Hint != jobs.TranscribeHint {
 		t.Errorf("transcribe job = %+v", byKind["transcribe"])
 	}
 	if e := byKind["notes"].Error; !strings.Contains(e, "transcribing take "+take+" failed") {
@@ -276,6 +277,49 @@ func TestImages(t *testing.T) {
 	}
 }
 
+func TestHistoryImages(t *testing.T) {
+	h, f := startM2(t, Options{})
+	own := filepath.Join(f.root, "v6", "clip_v6.review", take)
+	plain := filepath.Join(f.root, "v6", "clip_v6.review", "2026-10-29_21-00-00")
+	carried := filepath.Join(f.root, "v5", "clip_v5.review", "2026-10-01_10-00-00")
+	for dir, images := range map[string]string{
+		own:     `[{"seg": "S1", "file": "img_01.png", "video_t": 2.5, "box": [0.1, 0.2, 0.3, 0.4]}]`,
+		carried: `[{"seg": "S1", "file": "img_01.png", "video_t": 3, "box": [0, 0, 1, 1]}, {"seg": "S1", "file": "img_02.png", "video_t": 50, "box": [0, 0, 1, 1]}]`,
+		plain:   ``,
+	} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if images != "" {
+			if err := os.WriteFile(filepath.Join(dir, "images.json"), []byte(images), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	inherit := fmt.Sprintf(`{"takes": [{"dir": %q, "version": "v5", "ranges": [[0, 10]]}]}`, carried)
+	if err := os.WriteFile(filepath.Join(f.root, "v6", "clip_v6.review", "inherit.json"), []byte(inherit), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var hist historyResponse
+	r := h.get("/api/history?v=v6", nil)
+	if err := json.Unmarshal(r.body, &hist); err != nil || len(hist.History) != 3 {
+		t.Fatalf("history = %s", r.body)
+	}
+	if imgs := hist.History[0].Images; len(imgs) != 1 || imgs[0].URL != "/api/takes/"+take+"/img_01.png?v=v6" ||
+		imgs[0].VideoT != 2.5 || imgs[0].Box != [4]float64{0.1, 0.2, 0.3, 0.4} {
+		t.Errorf("own take's images = %+v", imgs)
+	}
+	if strings.Contains(string(r.body), `"id":"2026-10-29_21-00-00","inherited_from":null,"voice":{},"strokes":[]}`) == false {
+		t.Errorf("a take without images changed shape: %s", r.body)
+	}
+	if imgs := hist.History[2].Images; len(imgs) != 1 || imgs[0].URL != "/api/takes/2026-10-01_10-00-00/img_01.png?v=v5" {
+		t.Errorf("carried take's images (only inside its ranges) = %+v", imgs)
+	}
+	if info := h.get("/api/info", nil); !strings.Contains(string(info.body), `"/api/takes/`+take+`/img_01.png?v=v6"`) {
+		t.Errorf("/api/info history has no images: %s", info.body)
+	}
+}
+
 // seed fills the project store: notes on v6 (one with an image) and on v7, the newest.
 func seed(t *testing.T, f *fixture) *project.Store {
 	t.Helper()
@@ -351,7 +395,7 @@ func TestSidebarRoute(t *testing.T) {
 		t.Fatalf("v7: %s", r.body)
 	}
 	if len(newest.Items) != 1 || newest.Items[0].Kind != "question" || newest.Items[0].Note == nil ||
-		newest.Items[0].Note.Text != "music" || newest.Items[0].By != "agent" {
+		*newest.Items[0].Note != 3 || *newest.Items[0].T0 != 5 || newest.Items[0].By != "agent" {
 		t.Fatalf("v7 sidebar (only open questions) = %s", r.body)
 	}
 }

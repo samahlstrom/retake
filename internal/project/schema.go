@@ -65,6 +65,7 @@ CREATE TABLE jobs (
 	state    TEXT NOT NULL DEFAULT 'queued' CHECK (state IN ('queued', 'running', 'done', 'failed')),
 	attempts INTEGER NOT NULL DEFAULT 0,
 	error    TEXT NOT NULL DEFAULT '',
+	hint     TEXT NOT NULL DEFAULT '',          -- a failed job's one-line fix (how to set up transcription, say)
 	created  TEXT NOT NULL,
 	updated  TEXT NOT NULL
 );

@@ -219,15 +219,46 @@ func TestNoTranscriberFailsClearly(t *testing.T) {
 	defer stop()
 	jobs, _ := w.st.QueueTake("v7", take, w.dir)
 	j := waitState(t, w.st, jobs[0].ID, project.JobFailed)
-	if j.Attempts != 1 || j.Error != "can't transcribe: whisper.cpp isn't installed" {
+	if j.Attempts != 1 || j.Error != "can't transcribe: whisper.cpp isn't installed" || j.Hint != TranscribeHint {
 		t.Fatalf("job = %+v", j)
 	}
 	nj := waitState(t, w.st, jobs[1].ID, project.JobFailed)
-	if !strings.Contains(nj.Error, "whisper.cpp isn't installed") {
+	if !strings.Contains(nj.Error, "whisper.cpp isn't installed") || nj.Hint != TranscribeHint {
 		t.Fatalf("notes job = %+v", nj)
 	}
 	if got := w.ran(); len(got) != 0 {
 		t.Errorf("ran %v", got)
+	}
+}
+
+// A transcriber's own hint wins over the default one, and a later success clears it.
+func TestHintsComeFromTheError(t *testing.T) {
+	w := newWorld(t)
+	fail := true
+	var mu sync.Mutex
+	tr := &fakeTranscriber{w: w}
+	stop := start(t, w.runner(Engines{Notes: fakeNotes{w}, Transcriber: func() (TakeTranscriber, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		if fail {
+			return nil, Hinted(errors.New("no model"), "run retake setup")
+		}
+		return tr, nil
+	}}))
+	defer stop()
+	jobs, _ := w.st.QueueTake("v7", take, w.dir)
+	if j := waitState(t, w.st, jobs[0].ID, project.JobFailed); j.Hint != "run retake setup" {
+		t.Fatalf("hint = %q", j.Hint)
+	}
+	mu.Lock()
+	fail = false
+	mu.Unlock()
+	retry, _ := w.st.QueueTake("v7", take, w.dir)
+	if j := waitState(t, w.st, retry[0].ID, project.JobDone); j.Hint != "" || j.Error != "" {
+		t.Fatalf("done job = %+v", j)
+	}
+	if HintOf(errors.New("plain")) != "" || HintOf(fmt.Errorf("wrapped: %w", Hinted(errors.New("x"), "h"))) != "h" {
+		t.Error("HintOf")
 	}
 }
 
