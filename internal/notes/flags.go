@@ -3,9 +3,10 @@ package notes
 import (
 	"regexp"
 	"sort"
+	"strings"
 )
 
-// The reviewer is allowed to change his mind. These only FLAG; the agent applying the notes decides (and asks when
+// The reviewer is allowed to change their mind. These only FLAG; the agent applying the notes decides (and asks when
 // unclear). The patterns are the legacy engine's, in its order: reinstatements are tried first.
 var (
 	reinstatePats = compileAll(
@@ -53,10 +54,51 @@ const (
 
 	ScopeReinstate  = "what an earlier retraction threw out"
 	ScopeClipWide   = "everything earlier on this clip"
-	ScopeWider      = "possibly wider than this clip: ask Sam"
+	ScopeWider      = "possibly wider than this clip: ask " + NoReviewer // Build names the reviewer instead
 	ScopeClip       = "this clip"
 	ScopeJustBefore = "the comment just before"
 )
+
+// NoReviewer stands for the reviewer in notes.md and notes.json when the takes don't name exactly one author.
+const NoReviewer = "the reviewer"
+
+// reviewer is who the notes refer to: the author name of the takes when they all name the same one, else NoReviewer.
+// (Legacy notes said "Sam" here; the golden tests map that back, see golden_test.go.)
+func reviewer(takes []*take) string {
+	name := ""
+	for _, t := range takes {
+		a := strings.TrimSpace(t.author)
+		switch {
+		case a == "":
+		case name == "":
+			name = a
+		case a != name:
+			return NoReviewer
+		}
+	}
+	if name == "" {
+		return NoReviewer
+	}
+	return name
+}
+
+// nameReviewer puts who into the "ask the reviewer" flag scopes, in the comments and in the flag list.
+func nameReviewer(comments []*Comment, flags []FlagEntry, who string) {
+	if who == NoReviewer {
+		return
+	}
+	wider := "possibly wider than this clip: ask " + who
+	for _, c := range comments {
+		if c.Flag != nil && c.Flag.Scope == ScopeWider {
+			c.Flag.Scope = wider
+		}
+	}
+	for i := range flags {
+		if flags[i].Scope == ScopeWider {
+			flags[i].Scope = wider
+		}
+	}
+}
 
 // Flag is a likely retraction or reinstatement found in a comment, and what it probably refers to (by spoken order).
 type Flag struct {

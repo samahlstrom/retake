@@ -27,11 +27,14 @@ type Doc struct {
 	Chronological []int           `json:"chronological"` // comment orders, in spoken order
 }
 
-var docRules = []string{
-	"later statements override earlier ones (higher order = later)",
-	"a retraction voids the comments it refers to: same clip/moment unless Sam names a wider scope",
-	"a reinstatement restores what that retraction voided",
-	"when scope is unclear, ask Sam rather than guess; flags are heuristics, nothing was deleted",
+// docRules are notes.json's rules. who is the reviewer (see reviewer).
+func docRules(who string) []string {
+	return []string{
+		"later statements override earlier ones (higher order = later)",
+		"a retraction voids the comments it refers to: same clip/moment unless " + who + " names a wider scope",
+		"a reinstatement restores what that retraction voided",
+		"when scope is unclear, ask " + who + " rather than guess; flags are heuristics, nothing was deleted",
+	}
 }
 
 const docClock = "video_t = seconds in the video; session_t = seconds since the take started (segment audio starts " +

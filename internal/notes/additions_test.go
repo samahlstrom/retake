@@ -66,7 +66,7 @@ func TestImages(t *testing.T) {
 	}
 	for _, s := range []string{
 		"· 1 stroke · 3 images · 0 flags",
-		"- `image N` = a picture Sam dropped onto the frame",
+		"- `image N` = a picture Tester dropped onto the frame",
 		"· stroke 1: yellow line (0.20,0.60)→(0.45,0.60) heading right · image 1: img_01.png at (0.55,0.10)–(0.85,0.40)",
 		`"And this logo in the corner." · image 2 @00:16.9: img_02.jpg at (0.05,0.05)–(0.20,0.15)`,
 		"- #3 S2 [v6] · playing 00:24.5 · (no words) · image 3: img_03.webp at (0.40,0.40)–(0.60,0.60)",
@@ -136,7 +136,7 @@ func TestAnswers(t *testing.T) {
 		t.Fatalf("answers: %v, want %v", got, want)
 	}
 	for _, s := range []string{
-		"- `answer to question N` = Sam's answer to your question N",
+		"- `answer to question N` = Tester's answer to your question N",
 		`- #2 S2 [v7] · paused 00:22.0 · "Go with the shorter version. And keep the sound effect." (audio) · ` +
 			"answer to question 12 · stroke 1: green line",
 		`- #3 S3 [v7] · paused 00:22.0 · "Yes, cut it." · answer to question 13 · M2`,
@@ -230,8 +230,9 @@ func TestInheritRelativeDirs(t *testing.T) {
 	if len(res.Doc.Takes) != 3 || res.Doc.Takes[0].Take != "2026-01-05_09-00-00 (v3)" {
 		t.Errorf("takes %+v", res.Doc.Takes)
 	}
-	if got := legacyMD(strings.ReplaceAll(res.Markdown, root, "@ROOT@")); got != readGolden(t, "inherit", "notes.md") {
-		t.Errorf("relative inherit dirs changed the notes:\n%s", lineDiff(readGolden(t, "inherit", "notes.md"), got))
+	want := legacyReviewer(readGolden(t, "inherit", "notes.md"), caseReviewer(t, "inherit"))
+	if got := legacyMD(strings.ReplaceAll(res.Markdown, root, "@ROOT@")); got != want {
+		t.Errorf("relative inherit dirs changed the notes:\n%s", lineDiff(want, got))
 	}
 }
 
@@ -354,5 +355,37 @@ func TestVideoWords(t *testing.T) {
 	}
 	if _, err := loadVideoWords(filepath.Join(dir, "missing.json")); err == nil {
 		t.Error("a missing file is an error")
+	}
+}
+
+// The notes name the reviewer: the takes' one author, else "the reviewer" (none, or several different ones).
+func TestReviewer(t *testing.T) {
+	for _, tc := range []struct {
+		authors []string
+		want    string
+	}{
+		{nil, NoReviewer},
+		{[]string{""}, NoReviewer},
+		{[]string{"Ana"}, "Ana"},
+		{[]string{"Ana", " Ana ", ""}, "Ana"},
+		{[]string{"Ana", "Ben"}, NoReviewer},
+	} {
+		var takes []*take
+		for _, a := range tc.authors {
+			takes = append(takes, &take{author: a})
+		}
+		if got := reviewer(takes); got != tc.want {
+			t.Errorf("reviewer(%q) = %q, want %q", tc.authors, got, tc.want)
+		}
+	}
+	comments := []*Comment{{Flag: &Flag{Kind: FlagRetract, Scope: ScopeWider}}, {Flag: &Flag{Kind: FlagRetract, Scope: ScopeClip}}}
+	flags := []FlagEntry{{Scope: ScopeWider}, {Scope: ScopeClip}}
+	nameReviewer(comments, flags, "Ana")
+	if comments[0].Flag.Scope != "possibly wider than this clip: ask Ana" || comments[1].Flag.Scope != ScopeClip ||
+		flags[0].Scope != "possibly wider than this clip: ask Ana" || flags[1].Scope != ScopeClip {
+		t.Errorf("nameReviewer: %+v %+v %+v", comments[0].Flag, comments[1].Flag, flags)
+	}
+	if legacyReviewer("ask Sam rather than guess; Sam said", "Ana") != "ask Ana rather than guess; Sam said" {
+		t.Error("legacyReviewer must rewrite only legacy's own phrases")
 	}
 }

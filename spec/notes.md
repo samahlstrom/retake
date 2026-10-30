@@ -73,6 +73,10 @@ that aren't done (`{id, kind, state, attempts, error?, hint?, take?}`), so a pag
   (`[{id, seg, file, path, mime, version, flip, video_t, box, n, session_t}]`), `answer_to` (from its segment),
   `retracted: true` (a flagged retraction voids it and no later reinstatement restores it) and `author`. notes.md
   tags them `image N` and `answer to question N`.
+- **The reviewer's name.** Where notes.md and notes.json refer to the reviewer ("ask Ana rather than guess", a flag's
+  "possibly wider than this clip: ask Ana"), they use the `author.name` of the takes when they all name the same
+  person, else "the reviewer". Legacy wrote its owner's name there; this is the one intended difference from the
+  legacy output, and the golden tests map it explicitly (`internal/notes/golden_test.go`).
 
 ## HTTP additions
 
