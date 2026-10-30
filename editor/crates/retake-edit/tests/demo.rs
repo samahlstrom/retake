@@ -193,6 +193,17 @@ fn demo_end_to_end() {
     assert_eq!(n["targets"][1]["id"], "pip");
     assert_eq!(n["word"][2], "for");
 
+    // A range render covers whole units: 7-9 s lies inside u5, which comes from the cache.
+    let outr = dir.join("range.mp4");
+    let mut args = vec!["render", t, "--range", "7-9", "-o", outr.to_str().unwrap()];
+    args.extend(low);
+    let rr = edit(&args);
+    assert_eq!((rr["units"].as_u64(), rr["reused"].as_u64()), (Some(1), Some(1)));
+    let frames =
+        ["-count_frames", "-select_streams", "v:0", "-show_entries", "stream=nb_read_frames", "-of", "csv=p=0"];
+    assert_eq!(probe(&outr, &frames), "161");
+    assert_eq!(manifest(&dir.join("range.manifest.json"))["units"][0]["unit"], "u5");
+
     // Stills.
     let st = edit(&["frames", t, "1.0", "9.0", "-o", dir.join("stills").to_str().unwrap(), "--scale", "0.25"]);
     assert_eq!(st["frames"].as_array().unwrap().len(), 2);

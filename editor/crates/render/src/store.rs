@@ -23,6 +23,8 @@ pub fn hex_of(bytes: &[u8]) -> String {
 
 impl Store {
     pub fn open(root: &Path) -> Result<Store> {
+        // Absolute, because ffmpeg resolves concat list entries relative to the list file.
+        let root = &std::path::absolute(root).with_context(|| format!("cache path {}", root.display()))?;
         for d in ["blobs", "index", "tmp"] {
             std::fs::create_dir_all(root.join(d)).with_context(|| format!("creating {}", root.join(d).display()))?;
         }
@@ -186,6 +188,9 @@ mod tests {
         assert!(!f.exists());
         s.set_index("unit", "k1", &serde_json::json!({"blob": a})).unwrap();
         assert_eq!(s.get_index("unit", "k1").unwrap()["blob"], a.as_str());
+        // Tests run in the crate folder: a relative cache path still gives absolute blob paths (ffmpeg concat lists).
+        let rel = Store::open(Path::new("../../target/tmp/store/relative")).unwrap();
+        assert!(rel.root().is_absolute() && rel.blob_path(&a).is_absolute());
         assert!(s.get_index("unit", "k2").is_none());
     }
 
