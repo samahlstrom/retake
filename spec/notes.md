@@ -21,6 +21,8 @@ API all build against it. Change it here first.
   | `jobs` | `id`, `kind`, `args`, `state` (`queued`, `running`, `done`, `failed`), `attempts`, `error`, `hint` (a failure's one-line fix), `created`, `updated` |
   | `events` | `seq` (monotonic), `kind`, `data`, `created`. This feeds SSE and `notes_wait` cursors. |
 
+  Milestone 3a adds `tokens` and `hosts`, for sharing (spec/team.md).
+
 - **Note keys.** A note key is `<take>/<seg>/<n>`, where n is the comment's index within that segment from the notes
   engine. `take` is the take's folder name, `seg` the segment's own id in that take (`S2`, not the S-number notes.md
   renumbers across takes; `no-audio` for marks outside every segment), and n counts from 1, before inherited ranges
