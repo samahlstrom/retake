@@ -21,6 +21,8 @@ type Item struct {
 	Options    []string    `json:"options,omitempty"`     // questions: version labels to pick from
 	Note       *ItemNote   `json:"note,omitempty"`        // questions about a note: that note
 	Images     []ItemImage `json:"images,omitempty"`
+
+	imagesOf *Note // the note whose images this item shows
 }
 
 // ItemNote is the note a question is about.
@@ -44,8 +46,10 @@ type SidebarQuery struct {
 	Newest  bool
 	// PushedAt is when the newest version was pushed; only notes of takes recorded after it show. Zero = all.
 	PushedAt time.Time
-	// Images returns the images of a note; nil = none.
-	Images func(Note) []ItemImage
+	// TakeDir returns a note's take folder, for its images ("" or nil: no images).
+	TakeDir func(Note) string
+	// ImageURL returns the URL the page loads one of a note's images from.
+	ImageURL func(n Note, img TakeImage) string
 }
 
 // takeTime parses a take id (local time, YYYY-MM-DD_HH-MM-SS).
@@ -58,24 +62,12 @@ func takeTime(take string) (time.Time, bool) {
 // yet and the open notes recorded on it since its push: nothing that's answered. On an older version it shows that
 // version's notes in their final state (retracted ones left out), and the questions asked about it as a whole.
 func (s *Store) Sidebar(q SidebarQuery) ([]Item, error) {
-	images := q.Images
-	if images == nil {
-		images = func(Note) []ItemImage { return nil }
-	}
-	var items []Item
+	var questions []Thread
 	var notes []Note
 	var err error
 	if q.Newest {
-		qs, err := s.Unanswered()
-		if err != nil {
+		if questions, err = s.Unanswered(); err != nil {
 			return nil, err
-		}
-		for _, th := range qs {
-			it, err := s.questionItem(th, images)
-			if err != nil {
-				return nil, err
-			}
-			items = append(items, it)
 		}
 		all, err := s.Notes(NoteFilter{Statuses: []Status{StatusOpen}, Scope: &Scope{Version: q.Version}})
 		if err != nil {
@@ -89,22 +81,23 @@ func (s *Store) Sidebar(q SidebarQuery) ([]Item, error) {
 		}
 	} else {
 		notes, err = s.Notes(NoteFilter{
-			Statuses: []Status{StatusOpen, StatusQuestion, StatusAnswered, StatusAccepted}, Scope: &Scope{Version: q.Version},
+			Statuses: []Status{StatusOpen, StatusQuestion, StatusAnswered, StatusAccepted},
+			Scope:    &Scope{Version: q.Version},
 		})
 		if err != nil {
 			return nil, err
 		}
-		qs, err := s.QuestionsOn(q.Version)
+		if questions, err = s.QuestionsOn(q.Version); err != nil {
+			return nil, err
+		}
+	}
+	items := make([]Item, 0, len(questions)+len(notes))
+	for _, th := range questions {
+		it, err := s.questionItem(th)
 		if err != nil {
 			return nil, err
 		}
-		for _, th := range qs {
-			it, err := s.questionItem(th, images)
-			if err != nil {
-				return nil, err
-			}
-			items = append(items, it)
-		}
+		items = append(items, it)
 	}
 	asked, err := s.latestQuestions(notes)
 	if err != nil {
@@ -113,7 +106,7 @@ func (s *Store) Sidebar(q SidebarQuery) ([]Item, error) {
 	for _, n := range notes {
 		t0, t1 := n.T0, n.T1
 		it := Item{ID: n.ID, Kind: "note", Status: n.Status, T0: &t0, T1: &t1, Text: n.Text, By: n.Author,
-			Images: images(n)}
+			imagesOf: &n}
 		switch n.Status {
 		case StatusAnswered, StatusAccepted:
 			it.Change, it.AnsweredIn = n.Change, n.AnsweredIn
@@ -124,13 +117,39 @@ func (s *Store) Sidebar(q SidebarQuery) ([]Item, error) {
 		}
 		items = append(items, it)
 	}
+	if err := s.addImages(items, q); err != nil {
+		return nil, err
+	}
 	slices.SortStableFunc(items, func(a, b Item) int {
 		return cmp.Or(cmp.Compare(deref(a.T0), deref(b.T0)), cmp.Compare(a.Kind, b.Kind), cmp.Compare(a.ID, b.ID))
 	})
-	if items == nil {
-		items = []Item{}
-	}
 	return items, nil
+}
+
+func (s *Store) addImages(items []Item, q SidebarQuery) error {
+	if q.TakeDir == nil || q.ImageURL == nil {
+		return nil
+	}
+	var notes []Note
+	for _, it := range items {
+		if it.imagesOf != nil {
+			notes = append(notes, *it.imagesOf)
+		}
+	}
+	byNote, err := s.ImagesOf(notes, q.TakeDir)
+	if err != nil {
+		return err
+	}
+	for i := range items {
+		n := items[i].imagesOf
+		if n == nil {
+			continue
+		}
+		for _, img := range byNote[n.ID] {
+			items[i].Images = append(items[i].Images, ItemImage{URL: q.ImageURL(*n, img), Box: img.Box})
+		}
+	}
+	return nil
 }
 
 func deref(f *float64) float64 {
@@ -140,7 +159,7 @@ func deref(f *float64) float64 {
 	return *f
 }
 
-func (s *Store) questionItem(th Thread, images func(Note) []ItemImage) (Item, error) {
+func (s *Store) questionItem(th Thread) (Item, error) {
 	it := Item{ID: th.ID, Kind: "question", Status: StatusQuestion, T0: th.T, T1: th.T, Text: th.Text, By: th.By,
 		Options: th.Options}
 	if th.Note != nil {
@@ -149,7 +168,7 @@ func (s *Store) questionItem(th Thread, images func(Note) []ItemImage) (Item, er
 			return it, err
 		}
 		it.Note = &ItemNote{ID: n.ID, Text: n.Text, T0: n.T0, T1: n.T1, By: n.Author}
-		it.Images = images(n)
+		it.imagesOf = &n
 	}
 	return it, nil
 }

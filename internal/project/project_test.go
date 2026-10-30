@@ -860,23 +860,37 @@ func TestConcurrentWritersTakeTurns(t *testing.T) {
 func TestSidebar(t *testing.T) {
 	s, _ := newStore(t)
 	seedNotes(t, s) // v7: 1 2 3; v6: 4 5
-	img := func(n Note) []ItemImage {
-		if n.ID == 1 {
-			return []ItemImage{{URL: "/api/takes/x/img_01.png?v=v7", Box: [4]float64{0, 0, 1, 1}}}
-		}
-		return nil
+	// Take 1 has two images in segment S1: one at 1.5 s (note 1's span) and one at 2.9 s (nearest to note 2).
+	dir := t.TempDir()
+	images := `[{"seg": "S1", "file": "img_01.png", "video_t": 1.5, "box": [0, 0, 1, 1]},
+		{"seg": "S1", "file": "img_02.jpg", "video_t": 2.9, "box": [0.5, 0.5, 0.1, 0.1]}]`
+	if err := os.WriteFile(filepath.Join(dir, "images.json"), []byte(images), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	q := SidebarQuery{Version: "v7", Newest: true,
+		TakeDir: func(n Note) string {
+			if n.Take == take1 {
+				return dir
+			}
+			return ""
+		},
+		ImageURL: func(n Note, img TakeImage) string { return n.Version + "/" + img.File },
 	}
 	// v7 newest, never pushed: every open note on it.
-	items, err := s.Sidebar(SidebarQuery{Version: "v7", Newest: true, Images: img})
+	items, err := s.Sidebar(q)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got := itemIDs(items); !slices.Equal(got, []string{"note 1", "note 2", "note 3"}) {
 		t.Fatalf("v7 newest = %v", got)
 	}
-	if len(items[0].Images) != 1 || items[0].By != "Sam" || *items[0].T0 != 1 {
+	if len(items[0].Images) != 1 || items[0].Images[0].URL != "v7/img_01.png" || items[0].By != "Sam" || *items[0].T0 != 1 {
 		t.Errorf("item 1 = %+v", items[0])
 	}
+	if len(items[1].Images) != 1 || items[1].Images[0].Box != [4]float64{0.5, 0.5, 0.1, 0.1} {
+		t.Errorf("item 2 = %+v", items[1])
+	}
+	img := q
 
 	if _, err := s.RecordPush(Push{Label: "v8", Parent: "v7", Scope: Scope{Version: "v7"},
 		Changelog: []ChangeEntry{{1, "title bigger"}, {2, "pause cut"}}, Asks: []PushAsk{{3, "which track?"}}}); err != nil {
@@ -884,16 +898,18 @@ func TestSidebar(t *testing.T) {
 	}
 	general, _ := s.Ask(Ask{Version: "v7", Text: "too long overall?"})
 	// v8 newest: only the unanswered questions; nothing answered.
-	items, err = s.Sidebar(SidebarQuery{Version: "v8", Newest: true, Images: img})
+	img.Version = "v8"
+	items, err = s.Sidebar(img)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got := itemIDs(items); !slices.Equal(got, []string{fmt.Sprintf("question %d", general.ID), "question 1"}) {
 		t.Fatalf("v8 newest = %v", got)
 	}
-	q := items[1]
-	if q.Text != "which track?" || q.Note == nil || q.Note.ID != 3 || q.Note.Text != "three" || q.Status != StatusQuestion {
-		t.Errorf("question item = %+v", q)
+	qi := items[1]
+	if qi.Text != "which track?" || qi.Note == nil || qi.Note.ID != 3 || qi.Note.Text != "three" ||
+		qi.Status != StatusQuestion || qi.By != "agent" {
+		t.Errorf("question item = %+v", qi)
 	}
 	// Notes recorded on v8 show only from takes after its push.
 	s.Now = func() time.Time { return time.Now() }
@@ -993,4 +1009,3 @@ func TestAttachImages(t *testing.T) {
 		}
 	}
 }
-

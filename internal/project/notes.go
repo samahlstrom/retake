@@ -160,6 +160,7 @@ type NoteFilter struct {
 	Statuses []Status
 	Scope    *Scope // only the notes on this version
 	IDs      []int64
+	Takes    []string
 }
 
 // Notes returns the notes that match f, by id.
@@ -178,6 +179,12 @@ func filterNotes(q querier, f NoteFilter) ([]Note, error) {
 		conds = append(conds, "id IN ("+placeholders(len(f.IDs))+")")
 		for _, id := range f.IDs {
 			args = append(args, id)
+		}
+	}
+	if len(f.Takes) > 0 {
+		conds = append(conds, "take IN ("+placeholders(len(f.Takes))+")")
+		for _, take := range f.Takes {
+			args = append(args, take)
 		}
 	}
 	if f.Scope != nil {

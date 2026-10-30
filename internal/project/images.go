@@ -71,6 +71,27 @@ func rawString(raw json.RawMessage) string {
 	return ""
 }
 
+// ImagesOf returns the images of the given notes, by note id. Each image goes to one note among all the notes of its
+// take (AttachImages), so a note's images don't depend on which other notes are asked for.
+func (s *Store) ImagesOf(notes []Note, takeDir func(Note) string) (map[int64][]TakeImage, error) {
+	var takes []string
+	seen := map[string]bool{}
+	for _, n := range notes {
+		if !seen[n.Take] {
+			seen[n.Take] = true
+			takes = append(takes, n.Take)
+		}
+	}
+	if len(takes) == 0 {
+		return map[int64][]TakeImage{}, nil
+	}
+	all, err := s.Notes(NoteFilter{Takes: takes})
+	if err != nil {
+		return nil, err
+	}
+	return AttachImages(all, takeDir), nil
+}
+
 // AttachImages gives each image of the notes' takes to the note it belongs to: of the notes of the same take and
 // segment, the one whose time span holds the image's video time, else the nearest. takeDir says where a note's
 // take folder is ("" = unknown). It returns the images by note id.
