@@ -232,7 +232,8 @@ The editor works on its own machine, so versions are uploaded. Uploads speak tus
 - An unknown id, one of another project, or an expired one is 404. An upload expires 24 hours after its last `PATCH`;
   expired uploads are deleted every hour.
 - Uploads live in `DIR/uploads/`: the data in `<id><ext>`, with the file name's extension, and the state in
-  `<id>.json` (`{id, project, filename, size, sha256, created, expires}`; the offset is the data file's size).
+  `<id>.json` (`{id, project, filename, size, sha256, created, expires, complete}`; the offset is the data file's size,
+  and `complete` is set once the SHA-256 checked out).
 
 ### Pushing an upload: `POST /p/<name>/api/push`
 
