@@ -197,7 +197,7 @@ func TestPushRenderFailures(t *testing.T) {
 func TestNotesListTargets(t *testing.T) {
 	p := newProject(t)
 	box := [4]float64{1200, 600, 576, 324}
-	c := project.Comment{Take: take7, Seg: "S9", N: 1, T0: 9, T1: 10, Text: "pip bigger", Author: "Sam",
+	c := project.Comment{Take: take7, Seg: "S9", N: 1, T0: 9, T1: 10, Text: "pip bigger", Author: "Ana",
 		Detail: project.Detail{Audio: true, Unit: "u5", Word: &project.Word{T0: 8.9, T1: 9.2, Text: "corner"},
 			Targets: []project.Target{{ID: "pip/v", Kind: "layer", Ptr: "/scenes/1/overlays/1/layers/1", Score: 1, Z: 2,
 				Box: &box, Parent: "pip"}}}}

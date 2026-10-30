@@ -7,11 +7,13 @@ import {
   flipRefusal,
   flipTarget,
   flipToast,
+  landing,
   neighbor,
   partner,
   stepTarget,
   versionTitle,
 } from './versions';
+import { mapTime, type Segment } from './timemap';
 
 const fam = [
   { label: 'v5', n: 5, duration: 40 },
@@ -97,5 +99,41 @@ describe('the flip button', () => {
     expect(flipRefusal(fam, 'v6', true, 9)).toBeNull(); // back to the base always works inside it
     expect(flipRefusal(fam, 'v7', false, 30)).toBeNull(); // v7's partner v6 covers 0:30
     expect(flipRefusal([fam[1]], 'v6', false, 5)).toBe('Only one version');
+  });
+});
+
+// The demo's v1 (16.1 s) and v2 (15.8 s): 0.3 s of VO trimmed at 3.6 s, so v2 runs 0.3 s earlier after it.
+const demo = [
+  { label: 'v1', n: 1, duration: 16.1 },
+  { label: 'v2', n: 2, duration: 15.8 },
+];
+const v1ToV2: Segment[] = [
+  { a: [0, 3.6], b: [0, 3.6] },
+  { a: [3.6, 3.9], b: [3.599, 3.599] },
+  { a: [3.9, 16.1], b: [3.6, 15.8] },
+];
+
+describe('the time-mapped flip', () => {
+  it('lands on the matching moment, not the same clock time', () => {
+    expect(landing(demo[1], 9, v1ToV2)).toEqual({ t: 8.7 });
+    expect(landing(demo[1], 2, v1ToV2)).toEqual({ t: 2 }); // before the trim, nothing moved
+    expect(landing(demo[1], 3.8, v1ToV2)).toEqual({ t: 3.599 }); // trimmed air: the cut
+  });
+
+  it('keeps the time without a map', () => {
+    expect(landing(demo[1], 9, null)).toEqual({ t: 9 });
+    expect(landing(demo[1], 9, [])).toEqual({ t: 9 });
+  });
+
+  it('is refused only when the matching moment is past the other version', () => {
+    // 15.9 s on v1 is past v2's end as a clock time, but its matching moment, 15.6 s, is inside v2.
+    expect(landing(demo[1], 15.9, null)).toEqual({ refuse: 'v2 only covers 0:00–0:15' });
+    expect(landing(demo[1], 15.9, v1ToV2)).toEqual({ t: 15.6 });
+    const mapT = (label: string, t: number) => (label === 'v2' ? mapTime(v1ToV2, t) : t);
+    expect(flipRefusal(demo, 'v1', false, 15.9)).toBe('v2 only covers 0:00–0:15');
+    expect(flipRefusal(demo, 'v1', false, 15.9, mapT)).toBeNull();
+    // A preview that ends early still refuses a moment it doesn't have.
+    const preview = { label: 'v2', n: 2, duration: 5 };
+    expect(landing(preview, 9, v1ToV2)).toEqual({ refuse: 'v2 only covers 0:00–0:05' });
   });
 });

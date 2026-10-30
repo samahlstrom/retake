@@ -56,7 +56,7 @@ func TestPushRenderWithRetakeEdit(t *testing.T) {
 	defer func() { _ = p.Close() }()
 	p.Editor = bridge.Editor{Configured: bin}
 	if _, err := p.Store.Sync(project.Run{Version: "v1", Comments: []project.Comment{
-		{Take: "2026-10-30_12-00-00", Seg: "S1", N: 1, T0: 7.8, T1: 8.2, Text: "make the pop red", Author: "Sam"},
+		{Take: "2026-10-30_12-00-00", Seg: "S1", N: 1, T0: 7.8, T1: 8.2, Text: "make the pop red", Author: "Ana"},
 	}}); err != nil {
 		t.Fatal(err)
 	}

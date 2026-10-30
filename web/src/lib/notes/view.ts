@@ -43,7 +43,24 @@ export interface Row {
   reopen: boolean;
   options: Chip[];
   images: { url: string; box: Box }[];
+  /** Carried over from the parent version: what became of its moment ("unchanged", "answered, check it", "context
+   * changed"), with the version it came from. */
+  carried: string | null;
 }
+
+/** What a carried note's tag says. */
+export const CARRIED: Record<string, string> = {
+  unchanged: 'unchanged',
+  check: 'answered, check it',
+  changed: 'context changed',
+};
+
+/** The tag of a carried item: "answered, check it · from v7". */
+export const carriedText = (item: Pick<NoteItem, 'carried'>): string | null => {
+  const c = item.carried;
+  if (!c) return null;
+  return `${CARRIED[c.as] ?? c.as} · from ${c.from}`;
+};
 
 export interface ViewContext {
   /** Labels of the family. */
@@ -54,10 +71,11 @@ export interface ViewContext {
 
 const ANSWERED = new Set(['answered', 'accepted']);
 
-/** Whether the sidebar shows this item at all. */
+/** Whether the sidebar shows this item at all. The newest version hides answered notes, except the parent's notes
+ * carried onto it (an answered one there is what to check). */
 export function visible(item: NoteItem, newest: boolean): boolean {
   if (item.status === 'retracted') return false;
-  if (newest && ANSWERED.has(item.status)) return false;
+  if (newest && ANSWERED.has(item.status) && !item.carried) return false;
   return true;
 }
 
@@ -89,6 +107,7 @@ export function toRow(item: NoteItem, newest: boolean, ctx: ViewContext): Row {
     reopen: !newest && item.status === 'answered',
     options: (item.options ?? []).map((label) => ({ label, known: known(label), on: label === ctx.shown })),
     images: item.images ?? [],
+    carried: carriedText(item),
   };
 }
 

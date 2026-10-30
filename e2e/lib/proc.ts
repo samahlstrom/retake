@@ -7,13 +7,16 @@ export interface RunOptions {
   nice?: boolean;
   /** Bytes written to the child's stdin. */
   input?: Buffer;
+  /** Extra environment variables. */
+  env?: Record<string, string>;
 }
 
 /** Runs a command and resolves with its stdout. Rejects with stderr on a non-zero exit. */
 export function run(cmd: string, args: string[], opts: RunOptions = {}): Promise<Buffer> {
   const [bin, argv] = opts.nice ? ['nice', ['-n', '19', cmd, ...args]] : [cmd, args];
   return new Promise((resolve, reject) => {
-    const child = spawn(bin, argv, { cwd: opts.cwd, stdio: ['pipe', 'pipe', 'pipe'] });
+    const env = opts.env ? { ...process.env, ...opts.env } : undefined;
+    const child = spawn(bin, argv, { cwd: opts.cwd, env, stdio: ['pipe', 'pipe', 'pipe'] });
     const out: Buffer[] = [];
     let err = '';
     child.stdout.on('data', (d: Buffer) => out.push(d));

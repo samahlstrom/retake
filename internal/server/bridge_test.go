@@ -39,7 +39,7 @@ func bridgeFixture(t *testing.T) (root string, st *project.Store) {
 	}
 	t.Cleanup(func() { _ = st.Close() })
 	c := func(seg string, t0 float64, text string) project.Comment {
-		return project.Comment{Take: "2026-10-30_12-00-00", Seg: seg, N: 1, T0: t0, T1: t0 + 0.5, Text: text, Author: "Sam"}
+		return project.Comment{Take: "2026-10-30_12-00-00", Seg: seg, N: 1, T0: t0, T1: t0 + 0.5, Text: text, Author: "Ana"}
 	}
 	if _, err := st.Sync(project.Run{Version: "v1", Comments: []project.Comment{
 		c("S1", 9, "bigger pip"), c("S2", 1, "keep the title"), c("S3", 13, "card too dark"),

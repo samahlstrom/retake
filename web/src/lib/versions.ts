@@ -1,4 +1,5 @@
 // Version family logic: [ ] step the base version, C flips to its comparison partner. Pure, so it is unit-tested.
+import { mapTime, type Segment } from './timemap';
 import type { Version } from './types';
 import { fmt } from './util';
 
@@ -30,12 +31,32 @@ export const flipTarget = <T extends V>(vs: readonly T[], base: string | null, f
 
 /**
  * Why C would be refused with the playhead at `t`: the toast it shows then ('Only one version', or the partner only
- * covers part of the video). null when C would flip.
+ * covers part of the video). null when C would flip. `mapT` maps `t` onto the target version (the time map); without
+ * it the time stays.
  */
-export function flipRefusal(vs: readonly V[], base: string | null, flipped: boolean, t: number): string | null {
+export function flipRefusal(
+  vs: readonly V[],
+  base: string | null,
+  flipped: boolean,
+  t: number,
+  mapT?: (label: string, t: number) => number,
+): string | null {
   const target = flipTarget(vs, base, flipped);
   if (!target) return 'Only one version';
-  return covers(target, t) ? null : coverMessage(target);
+  return covers(target, mapT ? mapT(target.label, t) : t) ? null : coverMessage(target);
+}
+
+/**
+ * Where showing version `v` lands from time `t` of the version on screen: the matching moment through the time map
+ * (the same time without one), or the toast that refuses it when `v` doesn't reach that moment.
+ */
+export function landing(
+  v: Pick<Version, 'label' | 'duration'>,
+  t: number,
+  segs: readonly Segment[] | null | undefined,
+): { t: number } | { refuse: string } {
+  const at = mapTime(segs, t);
+  return covers(v, at) ? { t: at } : { refuse: coverMessage(v) };
 }
 
 /** The two versions C toggles between, for the flip button: [base, partner], or null with a single version. */
