@@ -369,11 +369,28 @@ func TestPackValidatesAndGatesLicenses(t *testing.T) {
 		{"example misses a required prop", CodeInvalid, func(m map[string]any) {
 			m["examples"] = []any{map[string]any{"name": "e", "props": map[string]any{"size": 80}}}
 		}},
+		{"layers and a backend", CodeInvalid, func(m map[string]any) {
+			m["backend"] = map[string]any{"command": []any{"python3", "draw.py"}}
+		}},
+		{"a backend without a command", CodeInvalid, func(m map[string]any) {
+			delete(m, "layers")
+			m["backend"] = map[string]any{"command": []any{}}
+		}},
 	}
 	for _, c := range cases {
 		if _, err := Pack(ctx, PackArgs{Dir: component(t, c.change)}); code(err) != c.code {
 			t.Errorf("%s: %v", c.name, err)
 		}
+	}
+	// A backend component (a program draws it, spec/components.md) packs, with a warning that it runs code.
+	backend := component(t, func(m map[string]any) {
+		delete(m, "layers")
+		m["backend"] = map[string]any{"command": []any{"python3", "draw.py"}}
+	})
+	write(t, filepath.Join(backend, "draw.py"), "import sys\n")
+	if res, err := Pack(ctx, PackArgs{Dir: backend}); err != nil || len(res.Warnings) == 0 ||
+		!strings.Contains(strings.Join(res.Warnings, " "), "python3 draw.py") {
+		t.Fatalf("backend: %+v %v", res, err)
 	}
 	// A font travels with its license file.
 	withFont := component(t, func(map[string]any) {})

@@ -96,13 +96,26 @@ func Validate(ctx context.Context, dir string, catalog *assets.Catalog) (Package
 			}
 		}
 		var raw struct {
-			Layers []json.RawMessage `json:"layers"`
+			Layers  []json.RawMessage `json:"layers"`
+			Backend *struct {
+				Command []string `json:"command"`
+			} `json:"backend"`
 		}
 		if b, err := os.ReadFile(filepath.Join(dir, "component.json")); err == nil { //nolint:gosec // the package
 			_ = json.Unmarshal(b, &raw)
 		}
-		if len(raw.Layers) == 0 {
+		// A component draws with layers, or with a program (a backend, spec/components.md).
+		switch {
+		case raw.Backend != nil && len(raw.Layers) > 0:
+			bad("layers or a backend, not both")
+		case raw.Backend != nil && len(raw.Backend.Command) == 0:
+			bad("backend.command is the argv to run, e.g. [\"python3\", \"draw.py\"]")
+		case raw.Backend == nil && len(raw.Layers) == 0:
 			bad("no layers")
+		}
+		if raw.Backend != nil {
+			warns = append(warns, fmt.Sprintf("it draws by running a program (%s): whoever adds it runs that code",
+				strings.Join(raw.Backend.Command, " ")))
 		}
 		props, _ := c.Props["properties"].(map[string]any)
 		required := map[string]bool{}
