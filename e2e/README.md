@@ -24,11 +24,12 @@ Run it through mise (`mise exec -- npm test`) to use the pinned node. Needs `ffm
 | `CHROMIUM_PATH` | `/usr/lib/chromium/chromium` if it exists, else Playwright's Chromium | The browser. CI points it at Playwright's Chromium. |
 | `RETAKE_E2E_WORK` | `<repo>/.retake-work/e2e` | Scratch root: media, version families, takes, server logs. It is wiped at the start of a run and deleted after a passing run. A failing run keeps it. The suite only deletes a folder that has its `.retake-e2e` marker. |
 | `RETAKE_E2E_KEEP` | unset | Set it to keep the scratch data after a passing run too. |
-| `RETAKE_E2E_PORT_BASE` | `8831` | The first of the six ports below; move it to run two checkouts side by side. |
+| `RETAKE_E2E_PORT_BASE` | `8831` | The first of the eight ports below; move it to run two checkouts side by side. |
 | `RETAKE_E2E_SHOTS` | unset | A folder: `05-sidebar` writes its screenshots there (1920×1080 and phone size). |
 
-Ports: the servers use 8831–8836 (scenario 8831, crash safety 8832 behind a proxy on 8834, HLS 8833, sidebar 8835,
-phone layout 8836). The browser talks to Playwright over a pipe, so it opens no devtools port. Each server is started
+Ports: the servers use 8831–8838 (scenario 8831, crash safety 8832 behind a proxy on 8834, HLS 8833, sidebar 8835,
+phone layout 8836, sharing 8837 behind a proxy on 8838). The browser talks to Playwright over a pipe, so it opens no
+devtools port. Each server is started
 for its spec file, waited on
 through `/api/ping`, and always stopped. Its log is in `<work>/logs/`.
 
@@ -140,3 +141,15 @@ WebKit build needs Ubuntu's libicu74, libxml2 and libflite1, and doesn't launch 
   - The version list opens by tap, its items are 44 px tall and on screen, and a tap switches the version.
 - iOS Safari's recorder (simulated: only `audio/mp4` is supported, and the recorder reports its type only once
   started): the segment is mp4 audio saved as `seg_01.m4a`, it decodes, and the take validates.
+
+**`07-share`** (new only; milestone 3a, `spec/team.md`): the server allows a made-up share host
+(`--allow-host share.test`), and the proxy (`lib/proxy.ts`) stands in for the tunnel: it sends every request on with
+`Host: share.test` and the page's origin as `https://share.test`. Tokens come from `retake token create`. Nothing
+reaches a real tunnel.
+- Without a token the share host answers 401: the page says it needs a share link, and the API, the video and a POST
+  are refused. A made-up link is refused too. Straight to 127.0.0.1 the page is the owner's, as before.
+- A viewer's link (`/s/<token>`) sets an HttpOnly, Secure, SameSite=Strict cookie for `/` and leaves the address bar
+  without the token. The page has no Record, Done or pen colors, and the hint says "View only". R only shows "View
+  only", a drag draws nothing, the video plays, and the server refuses a viewer's POST (403). No take is written.
+- A reviewer's link records a take (R, a stroke, R, Done). It is saved with the link's label as `author.name`, and
+  validates.
