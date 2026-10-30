@@ -473,7 +473,7 @@ func TestNewRoutesCheckTheHost(t *testing.T) {
 type sseEvent struct{ id, event, data string }
 
 // stream opens an event stream and returns its events as they come.
-func (h *harness) stream(path string, hdr map[string]string) (*http.Response, <-chan sseEvent, context.CancelFunc) {
+func (h *harness) stream(path string, hdr map[string]string) (http.Header, <-chan sseEvent, context.CancelFunc) {
 	h.t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, h.url+path, nil)
@@ -483,35 +483,38 @@ func (h *harness) stream(path string, hdr map[string]string) (*http.Response, <-
 	for k, v := range hdr {
 		req.Header.Set(k, v)
 	}
-	res, err := h.ts.Client().Do(req)
+	res, err := h.ts.Client().Do(req) //nolint:bodyclose // readEvents closes it when the stream ends
 	if err != nil {
 		h.t.Fatal(err)
 	}
 	ch := make(chan sseEvent, 64)
-	go func() {
-		defer close(ch)
-		defer func() { _ = res.Body.Close() }()
-		sc := bufio.NewScanner(res.Body)
-		var ev sseEvent
-		for sc.Scan() {
-			line := sc.Text()
-			switch {
-			case line == "":
-				if ev.event != "" {
-					ch <- ev
-				}
-				ev = sseEvent{}
-			case strings.HasPrefix(line, "id: "):
-				ev.id = line[4:]
-			case strings.HasPrefix(line, "event: "):
-				ev.event = line[7:]
-			case strings.HasPrefix(line, "data: "):
-				ev.data = line[6:]
-			}
-		}
-	}()
+	go readEvents(res, ch)
 	h.t.Cleanup(cancel)
-	return res, ch, cancel
+	return res.Header, ch, cancel
+}
+
+// readEvents parses an event stream into ch until it ends, then closes the body and ch.
+func readEvents(res *http.Response, ch chan<- sseEvent) {
+	defer close(ch)
+	defer func() { _ = res.Body.Close() }()
+	sc := bufio.NewScanner(res.Body)
+	var ev sseEvent
+	for sc.Scan() {
+		line := sc.Text()
+		switch {
+		case line == "":
+			if ev.event != "" {
+				ch <- ev
+			}
+			ev = sseEvent{}
+		case strings.HasPrefix(line, "id: "):
+			ev.id = line[4:]
+		case strings.HasPrefix(line, "event: "):
+			ev.event = line[7:]
+		case strings.HasPrefix(line, "data: "):
+			ev.data = line[6:]
+		}
+	}
 }
 
 func next(t *testing.T, ch <-chan sseEvent) sseEvent {
@@ -538,9 +541,9 @@ func TestEventStream(t *testing.T) {
 	}
 
 	// A stream opened before the store exists picks it up once Done creates it.
-	res, live, _ := h.stream("/api/events", nil)
-	if res.Header.Get("Content-Type") != "text/event-stream" || res.Header.Get("Cache-Control") != "no-store" {
-		t.Fatalf("headers = %v", res.Header)
+	hdr, live, _ := h.stream("/api/events", nil)
+	if hdr.Get("Content-Type") != "text/event-stream" || hdr.Get("Cache-Control") != "no-store" {
+		t.Fatalf("headers = %v", hdr)
 	}
 	h.saveTake(take, "v6")
 	if r := h.post("/api/session/"+take+"/done", "", nil); r.code != 200 {

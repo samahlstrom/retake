@@ -109,7 +109,7 @@ func (p *Project) VersionPush(_ context.Context, a PushArgs) (PushResult, error)
 		return PushResult{}, wrap(err)
 	}
 	if a.Move && !placed.renamed {
-		_ = os.Remove(src) //nolint:gosec // the caller asked to move this file
+		_ = os.Remove(src) // the caller asked to move it
 	}
 	return PushResult{Version: res.Version, Answered: nonNil(res.Answered), Questions: nonNil(res.Questions)}, nil
 }

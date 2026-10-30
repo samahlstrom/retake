@@ -19,7 +19,7 @@ func LockJobs(root string) (unlock func(), ok bool, err error) {
 	if err != nil {
 		return nil, false, err
 	}
-	fd := int(f.Fd()) //nolint:gosec // a file descriptor fits an int
+	fd := int(f.Fd())
 	if err := syscall.Flock(fd, syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
 		_ = f.Close()
 		if errors.Is(err, syscall.EWOULDBLOCK) {
