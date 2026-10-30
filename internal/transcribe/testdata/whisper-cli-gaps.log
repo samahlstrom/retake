@@ -1,0 +1,2 @@
+whisper_vad: vad_segment_info: orig_start: 0.89, orig_end: 4.04, vad_start: 0.00, vad_end: 3.15
+whisper_vad: vad_segment_info: orig_start: 7.03, orig_end: 9.51, vad_start: 3.35, vad_end: 5.83
