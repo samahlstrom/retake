@@ -23,12 +23,9 @@ version.
   that probes with a duration is used.
 - **Still rendering = skipped.** A non-current file whose probe has no duration is left out until it probes. The
   family is re-scanned on every `GET /api/info`.
-- **Except a streamed render** (spec/bridge.md, "Streaming"): an `.m3u8` whose playlist has no `#EXT-X-ENDLIST`, has
-  at least one segment, and has a push record `<stem>.push.json` with `rendering` while the push holds its lock
-  (`.<stem>.lock` beside it) is in the family without being probed. It gets `rendering: true` and
-  `progress: {done, total, seconds}` (units published of all, playable seconds so far), and its `duration`, `fps`,
-  `width` and `height` are the expected ones from the record. A playlist without `#EXT-X-ENDLIST` and no live push
-  is probed as before.
+- **Except a streamed version** (spec/bridge.md, "Streaming"): an `.m3u8` whose push record `<stem>.push.json` has
+  `stream` is in the family in every state, and isn't probed until it's complete: its `duration`, `fps`, `width` and
+  `height` are the expected ones from the record.
 - **Labels** are `v<N>`, sorted by N. A file without a version number gets the label `current`.
 - **Explicit** (`--versions a.mp4 b.mp4`): the opened file plus the listed ones. The label is `v<N>` when the name has
   a version number, else the stem. A duplicate label gets `-<index>` appended. Files without a number sort after the
@@ -42,8 +39,9 @@ A version object:
 ```
 
 `duration` is null if ffprobe can't read one. `fps` defaults to 30.0. Probe results are cached per (path, mtime, size).
-A rendering version also has `"rendering": true, "progress": {"done": 12, "total": 50, "seconds": 41.3}`; other
-versions have neither field.
+A streamed version also has `"stream": {"state": "rendering", "done": 12, "total": 50, "seconds": 41.3}` (`state` is
+`pending`, `rendering` or `complete`; `done` counts published units of `total`, `seconds` is what's playable) and
+`"poster": "video/v7/clip_v7.poster.jpg"`, the URL of its first frame; other versions have neither field.
 
 ## Routes
 
@@ -60,6 +58,8 @@ versions have neither field.
 | POST | `/api/session/<take>/data?v=<label>` | Saves a take's JSON files. See below. |
 | POST | `/api/session/<take>/audio?v=<label>&name=<file>&offset=<n>` | Appends audio bytes to one segment file. See below. |
 | POST | `/api/erase?v=<label>` | The eraser on a line of an earlier take: `{"take", "id", "erased": true\|false}` adds it to (or removes it from) the version's `erased.json` (spec/take-format.md, "Erased lines"). 400 for a bad take id or stroke id, 404 for a take not shown on that version. Same origin and lock rules as `/data`. |
+| POST | `/api/versions/<label>/watch?viewer=<id>` | New with streaming (spec/bridge.md, "Streaming"): a page shows that streamed version; it renders while one does. Every 10 s while shown; a viewer counts for 25 s. Answers `{"label", "stream"}`. Any role that can view; 404 for an unknown label, 400 for a version that isn't streamed. |
+| POST | `/api/versions/<label>/unwatch?viewer=<id>` | The page stopped showing it (`navigator.sendBeacon`). The render stops when the last viewer is gone. Same rules as `watch`. |
 | GET | `/favicon.ico` | 204 |
 | GET | `/s/<token>` | New in milestone 3a: a share link. Sets the share cookie and bounces to `/` (spec/team.md). |
 | any | `/mcp` | New in milestone 3a: the agent tools over MCP's streamable HTTP transport, for a Bearer `agent` token (spec/team.md). |
