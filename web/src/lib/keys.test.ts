@@ -33,6 +33,14 @@ describe('keys', () => {
     for (const [key, act] of Object.entries(map)) expect(keyAction(k(key))).toEqual({ act, stop: true });
   });
 
+  it('N shows or hides the notes sidebar (once per press); Ctrl/Cmd+V is left to the paste event', () => {
+    expect(keyAction(k('n'))).toEqual({ act: 'notes', stop: true });
+    expect(keyAction(k('N'))).toEqual({ act: 'notes', stop: true });
+    expect(keyAction(k('n', { repeat: true }))).toEqual({ act: null, stop: true });
+    expect(keyAction(k('v', { ctrlKey: true }))).toBeNull();
+    expect(keyAction(k('v', { metaKey: true }))).toBeNull();
+  });
+
   it('saves on Ctrl/Cmd+S and undoes on Ctrl/Cmd+Z without stopping the event', () => {
     expect(keyAction(k('s', { ctrlKey: true }))).toEqual({ act: 'save', stop: false });
     expect(keyAction(k('S', { metaKey: true }))).toEqual({ act: 'save', stop: false });

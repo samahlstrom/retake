@@ -1,6 +1,7 @@
 <script lang="ts">
   import Stage from './components/Stage.svelte';
   import Bar from './components/Bar.svelte';
+  import Sidebar from './components/sidebar/Sidebar.svelte';
   import type { Review } from './lib/review.svelte';
 
   let { review }: { review: Review } = $props();
@@ -11,3 +12,4 @@
 
 <Stage {review} />
 <Bar {review} />
+<Sidebar {review} />
