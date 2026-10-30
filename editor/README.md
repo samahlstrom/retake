@@ -91,9 +91,10 @@ recording isn't re-read on every plan.
   where every seek otherwise decodes seconds of frames.
 
 Demo, 1920x1080, 483 frames, cold cache, `--jobs 3` (one machine, so only the ratios mean much): a full render went
-from 8.6 s (graphics 2.3 s) to 7.5 s (graphics 0.7 s; 120 of 610 graphics frames drawn); a draft from 3.1 s to 2.6 s,
-and 2.1 s with proxies (2.9 s to 2.1 s when the footage has one keyframe in 30 s). Re-rendering after the VO-trim
-patch draws no graphics at all (it drew two runs before).
+from 8.6 s (graphics 2.3 s) to 6.9 s (graphics 0.7 s; 120 of 610 graphics frames drawn); a draft from 3.2 s to 2.6 s,
+and 2.1 s with proxies (2.9 s to 2.1 s when the footage has one keyframe in 30 s). Re-rendering after the pop patch
+went from 2.8 s to 2.3 s; after the VO-trim patch it draws no graphics at all (it drew two runs before), and the time
+left is encoding the three units that changed.
 - **Unit key**: the hash of the fully resolved unit description, the only input the compositor gets: canvas, frame
   count, encoder settings (including the ffmpeg build), each layer with its source's content hash and source times
   (including absolute-time inputs such as a `clock: timeline` background), and the layer keys on it.
