@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { addChunk, archive, binCount, CLOCK_NOTE, grow, insertEv, newSegment, newTake, serialize } from './take';
+import {
+  addChunk,
+  archive,
+  binCount,
+  CLOCK_NOTE,
+  grow,
+  insertEv,
+  newSegment,
+  newTake,
+  segFile,
+  serialize,
+  settleMime,
+} from './take';
 import type { Stroke, Take } from './types';
 
 const rec = {} as MediaRecorder;
@@ -237,6 +249,32 @@ describe('segments', () => {
     const b = newSegment(t, rec, 'audio/mp4', { version: 'v7', flip: true, videoTime: 4 });
     expect([a.id, a.file, b.id, b.file]).toEqual(['S1', 'seg_01.webm', 'S2', 'seg_02.m4a']);
     expect(b).toMatchObject({ v0: 4, vmin: 4, vmax: 4, p1: null, v1: null, uploaded: 0, size: 0, stored: 0 });
+  });
+
+  it('names segment files for their type: seg_NN.webm, .ogg, .m4a (three digits past 99)', () => {
+    expect(segFile(1, 'audio/webm;codecs=opus')).toBe('seg_01.webm');
+    expect(segFile(2, 'audio/ogg;codecs=opus')).toBe('seg_02.ogg');
+    expect(segFile(3, 'audio/mp4')).toBe('seg_03.m4a');
+    expect(segFile(100, 'audio/mp4;codecs=mp4a.40.2')).toBe('seg_100.m4a');
+  });
+
+  it("settles the segment's type once the recorder runs (Safari reports audio/mp4 only then)", () => {
+    const t = newTake('v6', 6);
+    const s = newSegment(t, rec, 'audio/webm', { version: 'v6', flip: false, videoTime: 0 });
+    settleMime(s, ''); // still unknown: nothing changes
+    expect([s.mime, s.file]).toEqual(['audio/webm', 'seg_01.webm']);
+    settleMime(s, 'audio/mp4');
+    expect([s.mime, s.file]).toEqual(['audio/mp4', 'seg_01.m4a']);
+    settleMime(s, 'audio/mp4;codecs=mp4a.40.2'); // a fuller name for the same type
+    expect([s.mime, s.file]).toEqual(['audio/mp4;codecs=mp4a.40.2', 'seg_01.m4a']);
+  });
+
+  it('never renames a segment once it has audio (every byte stays in one file)', () => {
+    const t = newTake('v6', 6);
+    const s = newSegment(t, rec, 'audio/webm;codecs=opus', { version: 'v6', flip: false, videoTime: 0 });
+    addChunk(s, new Blob([new Uint8Array(4)]), async () => {});
+    settleMime(s, 'audio/mp4');
+    expect([s.mime, s.file]).toEqual(['audio/webm;codecs=opus', 'seg_01.webm']);
   });
 
   it('tracks chunk offsets, and counts bytes as stored only once the buffer has them', async () => {

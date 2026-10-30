@@ -39,6 +39,9 @@ export function newTake(version: string | null, bins: number): Take {
   };
 }
 
+/** A segment's audio file: seg_01.webm, seg_02.m4a, … (the extension follows the recorder's mime type). */
+export const segFile = (n: number, mime: string): string => `seg_${pad2(n)}.${extFor(mime)}`;
+
 /** The next segment of take `t`: S1, S2, … with its own audio file seg_01.<ext>, seg_02.<ext>, … */
 export function newSegment(
   t: Take,
@@ -54,7 +57,7 @@ export function newSegment(
     mime,
     version: at.version,
     flip: at.flip,
-    file: `seg_${pad2(n)}.${extFor(mime)}`,
+    file: segFile(n, mime),
     chunks: [],
     uploaded: 0,
     p0: 0,
@@ -67,6 +70,16 @@ export function newSegment(
     stored: 0,
     persisted: Promise.resolve(),
   };
+}
+
+/**
+ * The recorder has started and reports its real mime type (Safari picks audio/mp4 only then): the segment and its file
+ * name follow it. Only before the first chunk, so every byte lands in one file.
+ */
+export function settleMime(s: Segment, mime: string): void {
+  if (!mime || mime === s.mime || s.size) return;
+  s.mime = mime;
+  s.file = segFile(s.n, mime);
 }
 
 /**

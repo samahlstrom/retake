@@ -13,11 +13,21 @@ import {
   COLOR_KEYS,
 } from './constants';
 import { keyAction, type Action } from './keys';
-import { closeMic, MIC_BLOCKED, openMic, pickMime, type Mic } from './mic';
+import { closeMic, MIC_BLOCKED, openMic, pickMime, recorderMime, type Mic } from './mic';
 import { addPoint, fitFrame, isClick, renderInk } from './pen';
 import { Saver } from './saver';
 import { VideoSource } from './source';
-import { addChunk, archive, binCount, grow, insertEv, newSegment, newTake, serialize as serializeTake } from './take';
+import {
+  addChunk,
+  archive,
+  binCount,
+  grow,
+  insertEv,
+  newSegment,
+  newTake,
+  serialize as serializeTake,
+  settleMime,
+} from './take';
 import { drawTimeline, tlT } from './timeline';
 import { Toast } from './toast.svelte';
 import type {
@@ -307,7 +317,7 @@ export class Review {
         mic = this.mic as Mic;
       const mime = pickMime((m) => MediaRecorder.isTypeSupported(m));
       const rec = new MediaRecorder(mic.stream, mime ? { mimeType: mime, audioBitsPerSecond: 64000 } : {});
-      const s = newSegment(t, rec, rec.mimeType || mime || 'audio/webm', {
+      const s = newSegment(t, rec, recorderMime(rec.mimeType, mime), {
         version: this.shown,
         flip: this.flipped,
         videoTime: video.currentTime,
@@ -320,6 +330,7 @@ export class Review {
         rec.onerror = (ev) => rej((ev as Event & { error?: unknown }).error);
         rec.start(1000);
       });
+      settleMime(s, rec.mimeType); // Safari only says audio/mp4 once it runs: the file is then seg_NN.m4a
       s.p0 = now();
       t.segments.push(s);
       this.seg = s;
