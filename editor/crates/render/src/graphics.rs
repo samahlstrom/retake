@@ -640,13 +640,7 @@ impl Painter {
     }
 
     /// Lays out a text layer: the paragraphs to paint (stroke first), their vertical offset, and the content box.
-    fn text(
-        &mut self,
-        l: &Layer,
-        t: &Text,
-        time: f64,
-        props: &Value,
-    ) -> Result<LaidOut, EditError> {
+    fn text(&mut self, l: &Layer, t: &Text, time: f64, props: &Value) -> Result<LaidOut, EditError> {
         let mut s = match &t.text {
             TextValue::Str(s) => s.clone(),
             TextValue::Expr { expr } => {
