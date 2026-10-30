@@ -86,6 +86,10 @@ type Version struct {
 	FPS      jsonx.Float  `json:"fps"`
 	Width    *int         `json:"width"`
 	Height   *int         `json:"height"`
+	// Rendering marks a streamed render still filling in (spec/bridge.md, "Streaming"): its duration, fps and size
+	// are the expected ones, and Progress says how far it is.
+	Rendering bool      `json:"rendering,omitempty"`
+	Progress  *Progress `json:"progress,omitempty"`
 }
 
 // Prober is what Detect needs from probe.Prober.
@@ -172,8 +176,18 @@ func Detect(video string, explicit []string, pr Prober) []Version {
 	sort.SliceStable(list, func(i, j int) bool { return list[i].n < list[j].n })
 	out := make([]Version, 0, len(list))
 	for _, p := range list {
-		info := pr.Probe(p.path)
 		cur := SamePath(p.path, video)
+		if st, ok := streaming(p.path); ok {
+			// A streamed render in progress: listed with what its plan expects, never probed (it's still growing).
+			d, pg := st.duration, st.progress
+			out = append(out, Version{
+				Label: p.label, N: p.n, Path: p.path, Name: filepath.Base(p.path), Current: cur,
+				Duration: jsonx.FloatPtr(&d), FPS: jsonx.Float(st.fps), Width: st.width, Height: st.height,
+				Rendering: true, Progress: &pg,
+			})
+			continue
+		}
+		info := pr.Probe(p.path)
 		if !info.HasDuration() && !cur {
 			continue // still rendering or broken: skipped until it probes
 		}
@@ -254,7 +268,7 @@ func detect(ps *picks, video string, name0 Name, pr Prober) {
 				return fs[i].mtime > fs[j].mtime
 			})
 			for _, c := range fs {
-				if pr.Probe(c.path).HasDuration() {
+				if _, live := streaming(c.path); live || pr.Probe(c.path).HasDuration() {
 					best = c.path
 					break
 				}
