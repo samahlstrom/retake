@@ -39,7 +39,7 @@ case "$req" in
   echo '{"type":"result","result":{"rows":[{"span_key":"k1","label":"a kill"}]}}' ;;
 *)
   echo '{"type":"asset","key":"rec","kind":"video","path":"rec.mp4","title":"Long recording","license":{"status":"owned"},"media":{"duration":300}}'
-  echo '{"type":"span","key":"k1","asset":"rec","t0":10,"t1":20,"span_type":"kill","label":"Sam kills Mina","data":{"match_id":7}}'
+  echo '{"type":"span","key":"k1","asset":"rec","t0":10,"t1":20,"span_type":"kill","label":"Blue scores","data":{"match_id":7}}'
   echo '{"type":"clock","asset":"rec","domain":"game:match/7","epochs":[{"asset_t":[0,300],"domain_t0":-30,"rate":1}]}'
   echo '{"type":"done"}' ;;
 esac

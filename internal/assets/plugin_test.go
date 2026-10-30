@@ -19,17 +19,17 @@ case "$req" in
   *'"tool":"find"'*)
     echo '{"type":"log","message":"finding kills"}'
     echo '{"type":"result","result":{"rows":[{"span_key":"m1:kill:100","clock":"0:50"},{"span_key":"nope","clock":"9:99"}]}}' ;;
-  *'"tool":"boom"'*) echo '{"type":"error","code":"bad_request","message":"unknown hero paigee"}' ;;
+  *'"tool":"boom"'*) echo '{"type":"error","code":"bad_request","message":"unknown player blu"}' ;;
   *'"tool":"crash"'*) echo "it broke badly" >&2; exit 3 ;;
   *'"tool":"chatty"'*) echo 'not json at all' ;;
   *'"tool":"silent"'*) echo '{"type":"log","message":"thinking"}' ;;
   esac ;;
 *'"method":"index"'*)
-  label="Sam kills Mina"
-  case "$req" in *'"v":2'*) label="Sam kills Mina (again)" ;; esac
+  label="Ada tags Bo"
+  case "$req" in *'"v":2'*) label="Ada tags Bo (again)" ;; esac
   echo '{"type":"asset","key":"rec1","kind":"video","path":"rec1.mp4","title":"Recording one","tags":["obs"],"license":{"status":"owned"},"media":{"duration":600,"size":[1920,1080],"fps":60}}'
-  echo '{"type":"span","key":"m1:kill:100","asset":"rec1","t0":100,"t1":110,"span_type":"kill","label":"'"$label"'","data":{"match_id":1,"hero":"Paige"},"source_of_label":"match_data","confidence":"high"}'
-  echo '{"type":"span","key":"m1:death:340","asset":"rec1","t0":335,"t1":345,"span_type":"death","label":"Sam dies to Celeste","data":{"match_id":1},"source_of_label":"match_data","confidence":"high"}'
+  echo '{"type":"span","key":"m1:kill:100","asset":"rec1","t0":100,"t1":110,"span_type":"kill","label":"'"$label"'","data":{"match_id":1,"player":"Ada"},"source_of_label":"match_data","confidence":"high"}'
+  echo '{"type":"span","key":"m1:death:340","asset":"rec1","t0":335,"t1":345,"span_type":"death","label":"Ada is tagged by Cy","data":{"match_id":1},"source_of_label":"match_data","confidence":"high"}'
   echo '{"type":"span","key":"m1:dance:1","asset":"rec1","t0":1,"t1":2,"span_type":"dance","label":"undeclared"}'
   echo '{"type":"span","key":"m1:kill:bad","asset":"rec1","t0":5,"t1":6,"span_type":"kill","label":"bad data","data":{"match_id":"one"}}'
   echo '{"type":"span","key":"m1:kill:orphan","asset":"rec9","t0":5,"t1":6,"span_type":"kill","data":{"match_id":1}}'
@@ -52,7 +52,7 @@ const fakeManifest = `{
   ],
   "clock_domains": [{"domain": "game:match", "description": "game clock"}],
   "indexers": [{"name": "matches", "description": "every match"}],
-  "views": [{"name": "game_kills", "sql": "SELECT id AS span, asset, t0, t1, json_extract(data, '$.match_id') AS match_id, json_extract(data, '$.hero') AS hero FROM spans WHERE plugin = 'game' AND type = 'kill'"}],
+  "views": [{"name": "game_kills", "sql": "SELECT id AS span, asset, t0, t1, json_extract(data, '$.match_id') AS match_id, json_extract(data, '$.player') AS player FROM spans WHERE plugin = 'game' AND type = 'kill'"}],
   "tools": [{"name": "find", "description": "find kills", "input_schema": {"type": "object", "properties": {"hero": {"type": "string"}}}},
             {"name": "boom"}, {"name": "crash"}, {"name": "chatty"}, {"name": "silent"}]
 }`
@@ -125,7 +125,7 @@ func TestPluginProtocol(t *testing.T) {
 		t.Fatalf("span find = %+v, %v", found, err)
 	}
 	kill := found.Spans[0]
-	if kill.Span != "sp:1" || kill.Asset != "proj:game/rec1" || kill.Data["hero"] != "Paige" || kill.Plugin != "game" ||
+	if kill.Span != "sp:1" || kill.Asset != "proj:game/rec1" || kill.Data["player"] != "Ada" || kill.Plugin != "game" ||
 		kill.Key != "m1:kill:100" || len(kill.Clocks) != 1 || kill.Clocks[0] != (SpanClock{"game:match/1", 50, 60}) {
 		t.Fatalf("kill = %+v", kill)
 	}
@@ -143,11 +143,11 @@ func TestPluginProtocol(t *testing.T) {
 	}
 
 	// The plug-in's view is in the catalog, usable from SQL and from --where.
-	rows, err := e.c.SQL(ctx, "proj", "SELECT span, match_id, hero FROM game_kills", 0)
-	if err != nil || len(rows.Rows) != 1 || rows.Rows[0][2] != "Paige" {
+	rows, err := e.c.SQL(ctx, "proj", "SELECT span, match_id, player FROM game_kills", 0)
+	if err != nil || len(rows.Rows) != 1 || rows.Rows[0][2] != "Ada" {
 		t.Fatalf("view = %+v, %v", rows, err)
 	}
-	hits, err := e.c.Search(ctx, SearchArgs{Where: "id IN (SELECT span FROM game_kills WHERE hero = 'Paige')"})
+	hits, err := e.c.Search(ctx, SearchArgs{Where: "id IN (SELECT span FROM game_kills WHERE player = 'Ada')"})
 	if err != nil || len(hits.Results) != 1 || len(hits.Results[0].Spans) != 1 || hits.Results[0].Spans[0].Span != "sp:1" {
 		t.Fatalf("where search = %+v, %v", hits, err)
 	}
@@ -167,7 +167,7 @@ func TestPluginProtocol(t *testing.T) {
 		t.Fatalf("re-index = %+v, %v", res, err)
 	}
 	sp, err := e.c.GetSpan(ctx, "sp:1")
-	if err != nil || sp.Label != "Sam kills Mina (again)" {
+	if err != nil || sp.Label != "Ada tags Bo (again)" {
 		t.Fatalf("re-indexed span = %+v, %v", sp, err)
 	}
 	if got, _ := e.c.Get(ctx, "proj:game/rec1"); got.Spans != 2 {
@@ -178,7 +178,7 @@ func TestPluginProtocol(t *testing.T) {
 	}
 
 	// Tools: the answer, with span ids linked in.
-	q, err := e.c.PluginQuery(ctx, PluginQueryArgs{Plugin: "game", Tool: "find", Args: map[string]any{"hero": "Paige"}})
+	q, err := e.c.PluginQuery(ctx, PluginQueryArgs{Plugin: "game", Tool: "find", Args: map[string]any{"player": "Ada"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -191,7 +191,7 @@ func TestPluginProtocol(t *testing.T) {
 		t.Errorf("log lines aren't passed on: %q", log.String())
 	}
 	for tool, want := range map[string]struct{ code, text string }{
-		"boom":   {CodeBadRequest, "unknown hero paigee"},
+		"boom":   {CodeBadRequest, "unknown player blu"},
 		"crash":  {CodePlugin, "it broke badly"},
 		"chatty": {CodePlugin, "isn't a JSON object"},
 		"silent": {CodePlugin, "without a result or error line"},

@@ -61,7 +61,7 @@ CREATE INDEX spans_type ON spans (type);
 
 CREATE TABLE clocks (
 	asset      TEXT NOT NULL REFERENCES assets (id) ON DELETE CASCADE ON UPDATE CASCADE,
-	domain     TEXT NOT NULL,                           -- <plugin>:<thing>, e.g. deadlock:match/123
+	domain     TEXT NOT NULL,                           -- <plugin>:<thing>, e.g. slate:take/7
 	plugin     TEXT NOT NULL DEFAULT '',
 	epochs     TEXT NOT NULL DEFAULT '[]',              -- JSON [{asset_t: [a, b], domain_t0, rate}]
 	confidence TEXT NOT NULL DEFAULT '',

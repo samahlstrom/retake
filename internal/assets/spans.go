@@ -316,7 +316,7 @@ func (c *Catalog) SpanFind(ctx context.Context, a SpanFindArgs) (SpanFindResult,
 		t, err := ParseTime(ts)
 		if !ok || err != nil {
 			return SpanFindResult{}, errorf(CodeBadRequest, "near is <asset id>@<time> or <clock domain>@<time>, e.g. "+
-				"proj:rec/x@1:02:03 or deadlock:match/123@9:30")
+				"proj:rec/x@1:02:03 or game:match/42@9:30")
 		}
 		if _, _, isID := ParseID(target); isID {
 			_, r, err := c.find(ctx, target)

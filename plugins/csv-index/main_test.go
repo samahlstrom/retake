@@ -48,7 +48,7 @@ const sample = "\xef\xbb\xbffilename,type,tags_when_to_use,duration_s,source_url
 	`music/calm-loop__bed.mp3,music,"bed; calm, loop",60,https://example.org/calm,"CC-BY 4.0 (Example Artist) - credit required"` + "\n" +
 	`memes/big-reaction__meme.png,meme-image,reaction|meme,,https://example.org/meme,"Unknown/copyrighted meme template; fair-use risk, not CC"` + "\n" +
 	`,sfx,orphan,,,CC0` + "\n" +
-	`clips/my-take.mp4,meme-video,take,3,,Sam own recording (owned)` + "\n"
+	`clips/my-take.mp4,meme-video,take,3,,my own recording (owned)` + "\n"
 
 func TestIndexCSV(t *testing.T) {
 	csvPath := writeCSV(t, sample)
@@ -209,7 +209,7 @@ func TestLicenseMapping(t *testing.T) {
 		{"Unknown - user-uploaded meme audio (no license stated); copyrighted-meme risk, not CC", "review-only", "high"},
 		{"Studio art (c) Someone; Copyright Someone", "review-only", "high"},
 		{"do not use", "blocked", ""},
-		{"Sam's own mascot", "owned", ""},
+		{"our own mascot", "owned", ""},
 		{"no idea", "review-only", ""},
 	} {
 		l := mapLicense(c.text, "", "", "T", "review-only")

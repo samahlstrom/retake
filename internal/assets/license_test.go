@@ -19,9 +19,9 @@ func licenseFixture(t *testing.T) (*env, string) {
 		importOne(t, e.c, ImportArgs{Paths: []string{filepath.Join(dir, name+".bin")}, Scope: scope, License: lic})
 	}
 	add("vo", "proj", LicenseArgs{Status: LicenseOwned})
-	add("music", "proj", LicenseArgs{Status: LicenseAttribution, Credit: `Music: "Covert Affair" Kevin MacLeod (incompetech.com), CC BY 4.0`})
+	add("music", "proj", LicenseArgs{Status: LicenseAttribution, Credit: `Music: "Example Tune" by A. Composer, CC BY 4.0`})
 	add("meme", "proj", LicenseArgs{Status: LicenseReviewOnly, ContentIDRisk: "high"})
-	add("whoosh", "lib", LicenseArgs{Status: LicenseCleared, Credit: "SFX: Kenney (CC0)"})
+	add("whoosh", "lib", LicenseArgs{Status: LicenseCleared, Credit: "SFX: Example Pack (CC0)"})
 	add("clip", "proj", LicenseArgs{Status: LicenseOwned})
 	write(t, filepath.Join(dir, "unknown.ttf"), "not cataloged")
 	tl := `{
@@ -96,7 +96,7 @@ func TestLicenseReportTimeline(t *testing.T) {
 		!strings.Contains(w, "anchors as written") {
 		t.Errorf("warnings = %v", rep.Warnings)
 	}
-	if !strings.Contains(rep.Credits, "Covert Affair") || !strings.Contains(rep.Credits, "Kenney (CC0)") {
+	if !strings.Contains(rep.Credits, "Example Tune") || !strings.Contains(rep.Credits, "Example Pack (CC0)") {
 		t.Errorf("credits = %q", rep.Credits)
 	}
 

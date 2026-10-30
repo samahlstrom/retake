@@ -62,7 +62,7 @@ const (
 		`data, where the label came from and how sure it is). Filter by type (exact, or LIKE patterns with %), by ` +
 		`asset, by plug-in, by where (a SQL condition on spans; plug-in views such as <plugin>_… can be used in ` +
 		`subqueries), or near a moment: near is <asset id>@<time> or <clock domain>@<time> (e.g. ` +
-		`deadlock:match/123@9:30), within window seconds (default 15). Each span carries its times on the asset's ` +
+		`game:match/42@9:30), within window seconds (default 15). Each span carries its times on the asset's ` +
 		`clocks and its strip preview path once made. A span is a timeline source: cut [t0, t1] of its asset.`
 	spanAddDesc = `Add a span: label a moment of an asset you found (t0, t1 in seconds into the asset). type ` +
 		`defaults to tag (a free label); a plug-in's type must fit its data schema. The span is marked ` +

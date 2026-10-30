@@ -20,7 +20,7 @@ database.
   that has a `.retake/` folder, else the current folder. `retake mcp <video>` uses the video's project root
   (`spec/notes.md`).
 - Both databases are SQLite (WAL) with the same schema, created on first write. Reads never create them.
-- **Ids carry their scope**: `proj:memes/thanos-rem`, `lib:sfx/whoosh-1`, `brand:samson/logo`. After the prefix an
+- **Ids carry their scope**: `proj:stills/plated-dish`, `lib:sfx/whoosh-1`, `brand:acme/logo`. After the prefix an
   id matches `^[A-Za-z0-9][A-Za-z0-9_.@/-]*$`, so it is also a valid timeline asset id (`spec/timeline.md`). An
   import names an asset after its path: the file name without its extension for one file, the path relative to the
   folder for a folder import, lowercased, with runs of other characters turned into `-`; `-2`, `-3`, … make it
@@ -51,26 +51,26 @@ database.
 
 ```json
 {
-  "id": "proj:rec/2026-10-23_22-05-54",
+  "id": "proj:rec/kitchen-cam-a",
   "kind": "video",
   "scope": "project",
-  "blob": { "hash": "b3:5e0c…", "size": 41203339264, "locator": "file:///…/2026-10-23 22-05-54.mp4",
-            "in_store": false, "path": "/…/2026-10-23 22-05-54.mp4", "exists": true },
+  "blob": { "hash": "b3:5e0c…", "size": 41203339264, "locator": "file:///…/kitchen-cam-a.mp4",
+            "in_store": false, "path": "/…/kitchen-cam-a.mp4", "exists": true },
   "media": { "duration": 7311.4, "size": [1920, 1080], "fps": 60, "vfr": false, "codec": "h264",
              "audio": [ { "stream": 1, "codec": "aac", "channels": 2, "sample_rate": 48000, "role": "mic" } ] },
   "proxy": { "hash": "b3:91aa….mp4", "size": [960, 540], "gop": 15 },
-  "title": "OBS recording, Oct 23 evening",
-  "tags": ["ranked", "defeat"],
+  "title": "Kitchen camera A, Oct 23 evening",
+  "tags": ["kitchen", "cam-a"],
   "caption": "",
   "transcript": { "model": "whisper.cpp large-v3 (cuda)", "track": 1, "words": 18211 },
   "previews": { "contact_sheet": "b3:0d2f….jpg", "every_s": 60, "waveform": "b3:a913….png",
                 "paths": { "contact_sheet": "/…/.retake/blobs/b3/0d/0d2f….jpg" } },
   "spans": 412,
-  "clocks": [ { "domain": "deadlock:match/123469477", "plugin": "deadlock",
-                "epochs": [ { "asset_t": [1820.0, 5920.0], "domain_t0": -42.3, "rate": 1.0 } ],
-                "confidence": "high", "method": "hud_clock_ocr x7" } ],
+  "clocks": [ { "domain": "slate:take/7", "plugin": "slate",
+                "epochs": [ { "asset_t": [1820.0, 5920.0], "domain_t0": -4.3, "rate": 1.0 } ],
+                "confidence": "high", "method": "clapper audio x2" } ],
   "license": { "status": "owned", "publish": true },
-  "provenance": { "importer": "cli", "source": "/…/2026-10-23 22-05-54.mp4", "seen": "2026-10-24T03:12:00.000Z" },
+  "provenance": { "importer": "cli", "source": "/…/kitchen-cam-a.mp4", "seen": "2026-10-24T03:12:00.000Z" },
   "near": [],
   "meta": {}
 }
@@ -134,10 +134,10 @@ A span is a labeled moment inside an asset: `(asset, t0, t1, type, label, data, 
 It is both a search result and a timeline source.
 
 ```json
-{ "span": "sp:88412", "asset": "proj:rec/2026-10-23_22-05-54", "t0": 1913.0, "t1": 1925.5,
-  "type": "team_wipe", "label": "Sam's team wipes the enemy at 15:02", "data": { "match_id": 123469477 },
-  "source_of_label": "match_data", "confidence": "high", "plugin": "deadlock",
-  "clocks": [ { "domain": "deadlock:match/123469477", "t0": 902.0, "t1": 914.5 } ],
+{ "span": "sp:88412", "asset": "proj:rec/kitchen-cam-a", "t0": 1913.0, "t1": 1925.5,
+  "type": "step", "label": "Fold the butter into the dough", "data": { "recipe": "croissants", "step": 4 },
+  "source_of_label": "transcript", "confidence": "high", "plugin": "recipe-steps",
+  "clocks": [ { "domain": "slate:take/7", "t0": 89.0, "t1": 101.5 } ],
   "strip": "/…/.retake/blobs/b3/1c/1c0e….jpg" }
 ```
 
@@ -146,7 +146,7 @@ It is both a search result and a timeline source.
   their own, each with a JSON Schema for `data`; `span_add` checks `data` against it. A type declared by two plug-ins
   is refused for the second.
 - `source_of_label`: where the label came from: `manual` (a person, by CLI), `agent` (an agent, over MCP), or a
-  plug-in's word (`match_data`, `transcript`, …). `confidence` is free text (`high`, `derived`, `keyword`, or a
+  plug-in's word (`transcript`, `match_data`, …). `confidence` is free text (`high`, `derived`, `keyword`, or a
   number).
 - `key`: a plug-in's stable key for the span. Re-indexing updates spans in place by key, so ids survive.
 
@@ -154,7 +154,7 @@ It is both a search result and a timeline source.
 
 A clock maps an asset's time to a domain's time: a game clock, a match, a take's slate. `epochs` are pieces with
 `domain_t = domain_t0 + (asset_t - asset_t[0]) * rate` for `asset_t` in `[asset_t[0], asset_t[1]]` (a paused game
-splits into several). A domain is `<plugin>:<thing>` (`deadlock:match/123469477`). Span results carry their times
+splits into several). A domain is `<plugin>:<thing>` (`slate:take/7`, `game:match/4812`). Span results carry their times
 on every clock of the asset, and `span_find --near <domain>@<t>` finds spans near a domain time.
 
 ## Import
@@ -220,9 +220,9 @@ A kit is a folder with a `kit.json`:
 ```json
 {
   "schema": "retake-kit/0.1",
-  "name": "samson",
+  "name": "acme",
   "version": "3",
-  "title": "Samson Knight",
+  "title": "Acme Kitchen",
   "license": { "status": "owned" },
   "tokens": { "colors": { "accent": "#ffcc00" }, "fonts": { "display": "fonts/Display.ttf" },
               "sizes": { "title": 96 }, "safe_areas": { "shorts": [0, 220, 1080, 1500] } },
@@ -233,7 +233,7 @@ A kit is a folder with a `kit.json`:
 
 `retake assets kit install <dir>` copies each listed file into the library's store as `brand:<name>@<version>/<key>`
 (with previews) and records the kit and its tokens. `brand:<name>/<key>` means the newest installed version;
-`brand:<name>@<version>/<key>` pins one. A timeline lists its kits as `"kits": ["brand:samson@3"]`. Kit assets take
+`brand:<name>@<version>/<key>` pins one. A timeline lists its kits as `"kits": ["brand:acme@3"]`. Kit assets take
 the kit's `license` unless they set their own.
 
 ## Plug-ins
@@ -255,18 +255,18 @@ Plug-ins are folders holding a `plugin.json`, found in this order (the first of 
 ```json
 {
   "schema": "retake-plugin/0.1",
-  "name": "deadlock",
+  "name": "game",
   "version": "0.1.0",
-  "description": "Matches and labeled moments from a footage database",
+  "description": "Matches and labeled moments from a match log",
   "exec": ["python3", "plugin.py"],
-  "span_types": [ { "type": "team_wipe", "description": "4+ deaths on one team within 15 s",
+  "span_types": [ { "type": "goal", "description": "a goal, from the match log",
                     "data_schema": { "type": "object", "required": ["match_id"] } } ],
-  "clock_domains": [ { "domain": "deadlock:match", "description": "game clock seconds of one match" } ],
-  "indexers": [ { "name": "footage", "description": "games and segments", "accepts": [],
+  "clock_domains": [ { "domain": "game:match", "description": "game clock seconds of one match" } ],
+  "indexers": [ { "name": "matches", "description": "matches and moments", "accepts": [],
                   "args_schema": { "type": "object" } } ],
-  "views": [ { "name": "deadlock_segments", "description": "spans with match columns",
-               "sql": "SELECT id AS span, asset, t0, t1, type, label, json_extract(data, '$.match_id') AS match_id FROM spans WHERE plugin = 'deadlock'" } ],
-  "tools": [ { "name": "find", "description": "Segments by type, hero, outcome", "input_schema": { "type": "object" } } ]
+  "views": [ { "name": "game_moments", "description": "spans with match columns",
+               "sql": "SELECT id AS span, asset, t0, t1, type, label, json_extract(data, '$.match_id') AS match_id FROM spans WHERE plugin = 'game'" } ],
+  "tools": [ { "name": "find", "description": "Moments by type, player, outcome", "input_schema": { "type": "object" } } ]
 }
 ```
 
@@ -278,7 +278,7 @@ Plug-ins are folders holding a `plugin.json`, found in this order (the first of 
 | `clock_domains` | Clock domain prefixes it maps asset times to. |
 | `indexers` | Ways to bring assets in. `accepts`: file extensions it reads (`[".csv"]`), or empty for one that finds its own data. `args_schema` describes `--arg`s. |
 | `views` | Read-only SQL views over the catalog's tables (`assets`, `spans`, `clocks`). The name must start with `<name>_`; the SQL is one `SELECT` or `WITH`. Views are (re)created in a catalog when the plug-in indexes into it, and are usable from `--where` and `retake assets sql`. |
-| `tools` | Extra tools, each with an `input_schema`. They run through `plugin_query`, and are also MCP tools named `<plugin>_<tool>` (`deadlock_find`). |
+| `tools` | Extra tools, each with an `input_schema`. They run through `plugin_query`, and are also MCP tools named `<plugin>_<tool>` (`game_find`). |
 
 ### Protocol, `retake-plugin/0.1`
 
@@ -290,7 +290,7 @@ tools after 2).
 Request:
 
 ```json
-{ "protocol": "retake-plugin/0.1", "method": "index", "indexer": "footage", "tool": "",
+{ "protocol": "retake-plugin/0.1", "method": "index", "indexer": "matches", "tool": "",
   "args": { "limit": 5 }, "path": "/abs/path/given/to/import/or/empty",
   "context": { "project_root": "/…", "scope": "project", "catalog": "/…/.retake/assets.db", "plugin_dir": "/…" } }
 ```
@@ -300,15 +300,15 @@ Request:
 **index** answers with any number of these lines, then `done`:
 
 ```json
-{"type": "asset", "key": "obs_20261003005537", "name": "deadlock/obs_20261003005537", "kind": "video",
+{"type": "asset", "key": "rec_0412", "name": "game/rec_0412", "kind": "video",
  "path": "/…/rec.mp4", "import": "metadata", "title": "…", "tags": ["obs"], "caption": "",
  "license": {"status": "owned"}, "media": {"duration": 7311.4, "size": [1920, 1080], "fps": 60}, "meta": {}}
-{"type": "span", "key": "110184868:death:547.0", "asset": "obs_20261003005537", "t0": 619.5, "t1": 631.5,
- "span_type": "death", "label": "Sam killed by Celeste", "data": {"match_id": 110184868},
+{"type": "span", "key": "4812:goal:547.0", "asset": "rec_0412", "t0": 619.5, "t1": 631.5,
+ "span_type": "goal", "label": "Blue scores from the corner", "data": {"match_id": 4812},
  "source_of_label": "match_data", "confidence": "high"}
-{"type": "clock", "asset": "obs_20261003005537", "domain": "deadlock:match/110184868",
- "epochs": [{"asset_t": [0, 2435], "domain_t0": -14.5, "rate": 1}], "confidence": "high", "method": "hud ocr x3"}
-{"type": "log", "message": "3 games, 41 segments"}
+{"type": "clock", "asset": "rec_0412", "domain": "game:match/4812",
+ "epochs": [{"asset_t": [0, 2435], "domain_t0": -14.5, "rate": 1}], "confidence": "high", "method": "scoreboard ocr x3"}
+{"type": "log", "message": "3 matches, 41 moments"}
 {"type": "done", "stats": {"assets": 1, "spans": 41}}
 ```
 
@@ -325,8 +325,8 @@ Request:
 **tool** answers with one `result` line (any JSON) or an `error` line:
 
 ```json
-{"type": "result", "result": {"rows": [{"span_key": "110184868:death:547.0", "clock": "9:07", "label": "…"}]}}
-{"type": "error", "code": "bad_request", "message": "unknown hero 'paigee' (did you mean Paige?)"}
+{"type": "result", "result": {"rows": [{"span_key": "4812:goal:547.0", "clock": "9:07", "label": "…"}]}}
+{"type": "error", "code": "bad_request", "message": "unknown player 'blu' (did you mean Blue?)"}
 ```
 
 In a tool result, every object with a `span_key` this plug-in indexed gets `span` (the catalog span id) and
@@ -351,13 +351,13 @@ and the credits for the video description.
 
 ```json
 { "source": "/…/timeline.json", "kind": "timeline", "publishable": false,
-  "assets": [ { "asset": "proj:music/covert-affair", "timeline_id": "proj:music", "title": "Covert Affair",
+  "assets": [ { "asset": "proj:music/example-tune", "timeline_id": "proj:music", "title": "Example Tune",
                 "kind": "audio", "license": { "status": "attribution", "credit": "…", "publish": true },
                 "ranges": [[0.0, 61.2]], "uses": [ { "element": "bed", "ptr": "/audio/0" } ] } ],
   "blockers": [ { "asset": "proj:memes/gojo", "reason": "review-only: fine in drafts, blocked at publish",
                   "ranges": [[34.1, 35.6]] } ],
   "warnings": [ "proj:memes/gojo: content_id_risk high" ],
-  "credits": "Music: \"Covert Affair\" Kevin MacLeod (incompetech.com), CC BY 4.0" }
+  "credits": "Music: \"Example Tune\" by A. Composer, CC BY 4.0" }
 ```
 
 ## CLI
