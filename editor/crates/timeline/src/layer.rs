@@ -31,6 +31,9 @@ impl Layer {
     pub fn is_video(&self) -> bool {
         matches!(self.content, Content::Video(_))
     }
+    pub fn is_raster(&self) -> bool {
+        matches!(self.content, Content::Raster(_))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -40,6 +43,30 @@ pub enum Content {
     Shape(Shape),
     Image(Image),
     Video(Video),
+    Raster(Raster),
+}
+
+/// Frames drawn by a component's program (spec/components.md, "Backends"). Only expansion makes one.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Raster {
+    /// The component, `<name>@<version>`.
+    pub component: String,
+    /// The component's design canvas.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub canvas: Option<[u32; 2]>,
+    pub backend: RasterBackend,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RasterBackend {
+    pub command: Vec<String>,
+    /// The package folder: the program's working directory, and where a relative program path resolves.
+    pub dir: String,
+    /// The package hash (it covers the program's bytes).
+    pub hash: String,
+    /// Seconds one request may take (default 60).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout: Option<f64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]

@@ -693,7 +693,7 @@ impl<'a> Resolver<'a> {
                     );
                 }
             }
-            Content::Shape(_) => {}
+            Content::Shape(_) | Content::Raster(_) => {}
         }
     }
 
