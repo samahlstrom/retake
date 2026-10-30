@@ -39,7 +39,9 @@ func (notesEngine) Build(ctx context.Context, v family.Version, fam []family.Ver
 	if err != nil {
 		return project.Run{}, err
 	}
-	return runFromResult(v.Label, res), nil
+	run := runFromResult(v.Label, res)
+	attachTargets(&run, res, manifests(v, fam))
+	return run, nil
 }
 
 // runFromResult converts a notes engine result into the store's run: one project.Comment per comment, with its

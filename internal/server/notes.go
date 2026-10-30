@@ -258,6 +258,12 @@ func (s *Server) sidebar(w http.ResponseWriter, r *http.Request) {
 		s.storeFailed(w, r, err)
 		return
 	}
+	if resp.Newest {
+		if resp.Items, err = s.carry(st, v, fam, resp.Items); err != nil {
+			s.storeFailed(w, r, err)
+			return
+		}
+	}
 	if resp.Jobs, err = pendingJobs(st, v.Label); err != nil {
 		s.storeFailed(w, r, err)
 		return
