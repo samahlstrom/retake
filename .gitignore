@@ -1,0 +1,11 @@
+/bin/
+/dist/
+/coverage/
+web/node_modules/
+web/dist/
+e2e/node_modules/
+e2e/test-results/
+e2e/playwright-report/
+.retake-work/
+*.tmp
+.DS_Store
