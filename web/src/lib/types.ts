@@ -2,6 +2,8 @@
 import type { PenColor } from './constants';
 
 export type Point = [number, number];
+/** [x, y, w, h], normalized 0-1 to the video frame. */
+export type Box = [number, number, number, number];
 
 /** One version of the family, as /api/info lists it. */
 export interface Version {
@@ -24,11 +26,20 @@ export interface HistoryStroke {
   undone?: boolean;
 }
 
+/** An image of an earlier take, as /api/history lists it (take format v1.1): shown like a stroke near its time. */
+export interface HistoryImage {
+  url: string;
+  video_t: number;
+  box: Box;
+  undone?: boolean;
+}
+
 export interface HistoryEntry {
   id: string;
   inherited_from: string | null;
   voice: { bin?: number; bins?: [number, number][] };
   strokes: HistoryStroke[];
+  images?: HistoryImage[];
 }
 
 /** GET /api/info: the current version plus the family, sessions and history. Fields are optional because the page
@@ -71,10 +82,32 @@ export interface Stroke extends HistoryStroke {
   paused: boolean;
 }
 
+/** An image dropped or pasted onto the video while recording (take format v1.1). */
+export interface TakeImage extends HistoryImage {
+  /** From the take's stroke counter, so Z undoes whichever came last. */
+  id: number;
+  seg: string;
+  version: string | null;
+  flip: boolean;
+  /** img_NN.<ext> in the take folder. */
+  file: string;
+  mime: string;
+  /** Page clock when it was added. */
+  p0: number;
+  blob: Blob;
+  /** pending: not on the server yet; done: the server has it; dropped: undone before it was sent; refused: the
+   * server has no image route (an older server). */
+  upload: 'pending' | 'done' | 'dropped' | 'refused';
+  /** Settles once the image is in the local buffer (IndexedDB). */
+  stored: Promise<void>;
+}
+
 /** One R-on/R-off recording segment and its audio file. */
 export interface Segment {
   n: number;
   id: string;
+  /** The question thread this segment answers (Answer in the sidebar). */
+  answer_to?: number;
   rec: MediaRecorder;
   mime: string;
   version: string | null;
@@ -107,6 +140,7 @@ export interface Take {
   t0: number | null;
   events: TakeEvent[];
   strokes: Stroke[];
+  images: TakeImage[];
   segments: Segment[];
   nextId: number;
   dirty: boolean;
@@ -130,6 +164,7 @@ export interface TakeData {
     recorded: number;
     video: { duration: number; width: number; height: number };
     display: { show_within: number };
+    closed?: true;
   };
   segments: {
     id: string;
@@ -144,6 +179,7 @@ export interface TakeData {
     video_end: number;
     video_min: number;
     video_max: number;
+    answer_to?: number;
   }[];
   events: ({ session_t: number; video_t: number; event: string } & Record<string, unknown>)[];
   strokes: {
@@ -160,4 +196,16 @@ export interface TakeData {
     points: Point[];
   }[];
   voice: { bin: number; bins: [number, number][] };
+  /** Take format v1.1: sent once the take has had an image (so [] clears an undone one). */
+  images?: {
+    id: number;
+    seg: string;
+    version: string | null;
+    flip: boolean;
+    file: string;
+    mime: string;
+    session_t: number;
+    video_t: number;
+    box: Box;
+  }[];
 }
