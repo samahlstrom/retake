@@ -37,6 +37,7 @@ retake-edit render     <timeline.json> [--range a-b] [--draft] [-o out.mp4]
 retake-edit frames     <timeline.json> 3.5 12.0 [-o dir]   # PNG stills
 retake-edit manifest   <timeline.json>                     # renders what's missing, prints the manifest
 retake-edit resolve-note <manifest.json> 9.0 0.7 0.65 0.1 0.1     # t and a normalized stroke box
+retake-edit proxy      <timeline.json> [proj:footage ...]  # short-GOP draft-size proxies (drafts use them)
 ```
 
 Every command takes `--json` and prints `{"ok": true, …}` or `{"ok": false, "errors": [{code, message, path, hint,
@@ -68,6 +69,22 @@ recording isn't re-read on every plan.
 - **Layer key**: a run of consecutive graphics layers, resolved to composition time, plus canvas, fps, the frame range
   in composition time, and font, image and expression inputs. Position-independent: a pop is reused wherever it lands.
   Stored as cropped, LZ4-compressed alpha frames; identical frames are stored once.
+- **Static and animated runs.** Consecutive layers split into static stretches (constant props, no text expression, no
+  edge inside the range) and animated ones. A static run is drawn once, stored as one image, and keyed without its
+  range, so a card with a big shadow under a ticking clock is drawn once and survives ripples that change the shot's
+  length. An animated run skips drawing a frame whose layers evaluate to the same state as the frame before (a pop
+  that has settled). Layers that show on no frame of the range are left out.
+- **Video is decoded at its displayed size**: the source times the largest scale it's shown at in the unit (never
+  above the render scale), scaled in the ffmpeg pipe. A picture-in-picture at 30% decodes at 30%.
+- **Proxies.** `retake-edit proxy` makes a short-GOP (a keyframe every 0.5 s), 540-line H.264 copy of each video
+  asset into the cache, keyed by the source's content hash. Draft renders decode the proxy when there is one (it's
+  part of their unit keys); full renders always read the source. Worth it for long recordings with sparse keyframes,
+  where every seek otherwise decodes seconds of frames.
+
+Demo, 1920x1080, 483 frames, cold cache, `--jobs 3` (one machine, so only the ratios mean much): a full render went
+from 8.6 s (graphics 2.3 s) to 7.5 s (graphics 0.7 s; 120 of 610 graphics frames drawn); a draft from 3.1 s to 2.6 s,
+and 2.1 s with proxies (2.9 s to 2.1 s when the footage has one keyframe in 30 s). Re-rendering after the VO-trim
+patch draws no graphics at all (it drew two runs before).
 - **Unit key**: the hash of the fully resolved unit description, the only input the compositor gets: canvas, frame
   count, encoder settings (including the ffmpeg build), each layer with its source's content hash and source times
   (including absolute-time inputs such as a `clock: timeline` background), and the layer keys on it.

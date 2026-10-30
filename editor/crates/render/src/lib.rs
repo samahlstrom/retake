@@ -8,6 +8,7 @@ pub mod expr;
 pub mod ffmpeg;
 pub mod graphics;
 pub mod pipeline;
+pub mod proxy;
 pub mod store;
 pub mod transform;
 pub mod unit;

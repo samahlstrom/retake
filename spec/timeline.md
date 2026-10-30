@@ -258,7 +258,9 @@ one closed-GOP H.264 segment, and segments concatenate with `-c copy`. Two keys 
 
 - **Layer key** (position-independent): a hash of a run of graphics layers as resolved (keyframe times in
   composition time), the canvas, fps, the frame range in composition time, and the font, image and expression
-  inputs. A pop is reused wherever it lands.
+  inputs. A pop is reused wherever it lands. Consecutive layers split into static runs (nothing changes over the
+  range) and animated runs; a static run is one image, and its key leaves out the range, so it's reused by a unit of
+  any length.
 - **Unit key**: a hash of the fully resolved unit description, the only input the compositor gets: canvas, frame
   count, encoder settings, every layer with its source hashes and source times (including absolute-time inputs such
   as a `clock: timeline` background's phase), and the layer keys of the graphics on it.
