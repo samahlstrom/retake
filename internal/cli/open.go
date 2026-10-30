@@ -227,6 +227,9 @@ func openCmd(ctx context.Context, args []string, env Env) int {
 			_, _ = fmt.Fprintf(env.Stderr, "retake: --ui-dir: no such folder: %s\n", dir)
 			return ExitUsage
 		}
+		if _, err := fs.Stat(page, "index.html"); err != nil {
+			_, _ = fmt.Fprintf(env.Stderr, "retake: --ui-dir %s has no index.html; / will say the page isn't built\n", dir)
+		}
 	} else {
 		page = ui.Embedded()
 	}

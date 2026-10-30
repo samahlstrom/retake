@@ -346,6 +346,20 @@ func TestOpenFlagsOverrideConfig(t *testing.T) {
 	}
 }
 
+func TestUIDirWithoutIndexWarns(t *testing.T) {
+	w := newWorld(t)
+	empty := filepath.Join(w.root, "empty-ui")
+	if err := os.Mkdir(empty, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_, stop, done := w.serve(t, w.environment(nil), "open", w.video, "--port", "0", "--no-open", "--ui-dir", empty)
+	stop()
+	wait(t, done)
+	if !strings.Contains(w.stderr.String(), "has no index.html") {
+		t.Errorf("stderr = %q", w.stderr)
+	}
+}
+
 func TestBadConfigIsIgnored(t *testing.T) {
 	w := newWorld(t)
 	w.config(t, "port = \"high\"\n")
