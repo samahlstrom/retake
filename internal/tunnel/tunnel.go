@@ -121,7 +121,8 @@ func Start(ctx context.Context, o Options) (*Tunnel, error) {
 	_ = pw.Close() // the child has its own copy
 	t := &Tunnel{cmd: cmd, done: make(chan struct{})}
 	found := make(chan string, 1)
-	go func() { // read everything it prints: the hostname once, then just drain it into the log
+	drained := make(chan struct{}) // closed once everything it printed has been read
+	go func() {                    // read everything it prints: the hostname once, then just drain it into the log
 		sc := bufio.NewScanner(pr)
 		sc.Buffer(make([]byte, 64<<10), 1<<20)
 		sent := false
@@ -137,9 +138,16 @@ func Start(ctx context.Context, o Options) (*Tunnel, error) {
 			}
 		}
 		_ = pr.Close()
+		close(drained)
 	}()
 	go func() {
 		err := cmd.Wait()
+		// Its last lines (often the reason it stopped) may still be in the pipe: read them before reporting. A
+		// grandchild that kept the pipe open can't hold this up for long.
+		select {
+		case <-drained:
+		case <-time.After(2 * time.Second):
+		}
 		t.mu.Lock()
 		if !t.stops {
 			t.err = err

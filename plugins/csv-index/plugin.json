@@ -1,0 +1,47 @@
+{
+  "schema": "retake-plugin/0.1",
+  "name": "csv-index",
+  "version": "0.1.0",
+  "description": "Imports any CSV with path, title, tags and license columns: one asset per row, the license text mapped to a catalog status",
+  "exec": ["./csv-index"],
+  "span_types": [],
+  "clock_domains": [],
+  "indexers": [
+    {
+      "name": "csv",
+      "description": "One asset per CSV row. Columns (case-insensitive): path|file|filename|file_name (required), title|name, tags|tags_when_to_use|keywords (split on / ; , |), license|licence|license_status, credit|attribution, source_url|source|url, type (a tag, and a kind hint).",
+      "accepts": [".csv"],
+      "args_schema": {
+        "type": "object",
+        "properties": {
+          "root": { "type": "string", "description": "the folder relative paths are relative to (default: the CSV's folder)" },
+          "import": { "type": "string", "enum": ["full", "metadata"], "description": "full (default): hash, store and preview each file; metadata: record the paths only" },
+          "limit": { "type": "integer", "minimum": 0, "description": "import at most this many rows (0: all)" },
+          "license_default": { "type": "string", "enum": ["owned", "cleared", "attribution", "review-only", "blocked"], "description": "the status for an empty or unknown license (default review-only)" },
+          "path_column": { "type": "string", "description": "the header of the path column, when it isn't detected" },
+          "title_column": { "type": "string", "description": "the header of the title column" },
+          "tags_column": { "type": "string", "description": "the header of the tags column" },
+          "license_column": { "type": "string", "description": "the header of the license column" }
+        }
+      }
+    }
+  ],
+  "views": [],
+  "tools": [
+    {
+      "name": "columns",
+      "description": "Check a CSV before importing it: its header, row count, and which column each catalog field (path, title, tags, license, credit, source, type) would come from. A problem field says what's missing.",
+      "input_schema": {
+        "type": "object",
+        "required": ["path"],
+        "properties": {
+          "path": { "type": "string", "description": "the CSV file" },
+          "path_column": { "type": "string" },
+          "title_column": { "type": "string" },
+          "tags_column": { "type": "string" },
+          "license_column": { "type": "string" }
+        }
+      }
+    }
+  ]
+}

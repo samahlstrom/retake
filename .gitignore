@@ -15,7 +15,7 @@ e2e/playwright-report/
 /.claude/
 
 # editor (Rust)
-/editor/target/
+/editor/target*/
 /editor/examples/*/media/
 .retake/
 

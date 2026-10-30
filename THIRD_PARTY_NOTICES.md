@@ -18,6 +18,7 @@ the Go standard library and these modules:
 | `github.com/dustin/go-humanize` | v1.1.0 | MIT |
 | `github.com/google/jsonschema-go` | v0.4.3 | MIT |
 | `github.com/google/uuid` | v1.6.0 | BSD-3-Clause |
+| `github.com/klauspost/cpuid/v2` | v2.0.9 | MIT |
 | `github.com/mattn/go-isatty` | v0.0.24 | MIT |
 | `github.com/modelcontextprotocol/go-sdk` | v1.8.0 | Apache-2.0 AND MIT |
 | `github.com/ncruces/go-strftime` | v1.1.0 | MIT |
@@ -31,6 +32,7 @@ the Go standard library and these modules:
 | `golang.org/x/sys` | v0.49.0 | BSD-3-Clause |
 | `golang.org/x/text` | v0.43.0 | BSD-3-Clause |
 | `golang.org/x/time` | v0.15.0 | BSD-3-Clause |
+| `lukechampine.com/blake3` | v1.4.1 | MIT |
 | `modernc.org/libc` | v1.79.0 | BSD-3-Clause |
 | `modernc.org/mathutil` | v1.7.1 | BSD-3-Clause |
 | `modernc.org/memory` | v1.12.1 | BSD-3-Clause |
@@ -2239,10 +2241,12 @@ assumed by the product vendor.
 - Expat (bundled with Skia): Copyright (c) 1998-2000 Thai Open Source Software Center Ltd and Clark Cooper; Copyright (c) 2001-2025 Expat maintainers
 - Go module `github.com/BurntSushi/toml` v1.6.0: Copyright (c) 2013 TOML authors
 - Go module `github.com/google/jsonschema-go` v0.4.3: Copyright (c) 2025 JSON Schema Go Project Authors
+- Go module `github.com/klauspost/cpuid/v2` v2.0.9: Copyright (c) 2015 Klaus Post
 - Go module `github.com/mattn/go-isatty` v0.0.24: Copyright (c) Yasuhiro MATSUMOTO <mattn.jp@gmail.com>
 - Go module `github.com/ncruces/go-strftime` v1.1.0: Copyright (c) 2022 Nuno Cruces
 - Go module `github.com/segmentio/asm` v1.1.3: Copyright (c) 2021 Segment
 - Go module `github.com/segmentio/encoding` v0.5.4: Copyright (c) 2019 Segment.io, Inc.
+- Go module `lukechampine.com/blake3` v1.4.1: Copyright (c) 2020 Luke Champine
 - Go module `modernc.org/sqlite` v1.61.0: Copyright (c) 2024 Alex Garcia
 - QuickJS-ng (vendored in rquickjs-sys 0.14.0): Copyright (c) 2017-2026 Fabrice Bellard; Copyright (c) 2017-2024 Charlie Gordon; Copyright (c) 2023-2026 Ben Noordhuis; Copyright (c) 2023-2026 Saúl Ibarra Corretgé
 - Rust crate `ahash` 0.8.12: Copyright (c) 2018 Tom Kaitchuck

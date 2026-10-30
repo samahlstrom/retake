@@ -591,7 +591,9 @@ func TestRemoteMCP(t *testing.T) {
 		for _, tl := range tools.Tools {
 			names = append(names, tl.Name)
 		}
-		if strings.Join(names, ",") != "note_ask,note_set,notes_list,notes_wait,version_push,versions_list" {
+		// The asset tools come too, but not plug-in tools or plugin_query: their arguments can name any file.
+		if strings.Join(names, ",") != "asset_get,asset_import,asset_preview,asset_search,license_report,note_ask,"+
+			"note_set,notes_list,notes_wait,span_add,span_find,version_push,versions_list" {
 			t.Errorf("tools: %v", names)
 		}
 		res, err := cs.CallTool(ctx, &sdk.CallToolParams{Name: "versions_list", Arguments: map[string]any{}})

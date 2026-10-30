@@ -189,11 +189,17 @@ func NewServerWith(p *agent.Project, version string, opts Options) *sdk.Server {
 			res, err := p.VersionsList(ctx)
 			return nil, res, err
 		})
+	addAssetTools(s, AssetsFor(p.Root), opts.Root)
 	return s
 }
 
 // inside resolves a pushed file against the project root, and refuses one outside it (after symlinks).
 func inside(root, file string) (string, error) {
+	return insideFor("a pushed file", root, file)
+}
+
+// insideFor is inside for any file a remote tool reads: what names it in the refusal.
+func insideFor(what, root, file string) (string, error) {
 	if strings.TrimSpace(file) == "" {
 		return "", &agent.Error{Code: agent.CodeBadRequest, Message: "push needs the new version's file"}
 	}
@@ -209,8 +215,8 @@ func inside(root, file string) (string, error) {
 		base = root
 	}
 	if rel, err := filepath.Rel(base, resolved); err != nil || !filepath.IsLocal(rel) {
-		return "", &agent.Error{Code: agent.CodeBadRequest, Message: fmt.Sprintf("over HTTP, a pushed file must be "+
-			"inside the project folder %s: render it there first", root)}
+		return "", &agent.Error{Code: agent.CodeBadRequest, Message: fmt.Sprintf("over HTTP, %s must be "+
+			"inside the project folder %s: put it there first", what, root)}
 	}
 	if st, err := os.Stat(resolved); err != nil || !st.Mode().IsRegular() {
 		return "", &agent.Error{Code: agent.CodeNotFound, Message: fmt.Sprintf("no such file: %s", file)}

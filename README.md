@@ -108,8 +108,10 @@ needs no token. See [`docs/sharing.md`](docs/sharing.md).
 
 ## Assets
 
-<!-- STUB (asset catalog worker): retake assets ... Replace this section. -->
-> **Stub.** The asset catalog (`retake assets …`) fills this in. See [docs/plugins.md](docs/plugins.md).
+`retake assets import media/ --license owned` catalogs a project's footage, audio, images and fonts (plus a user
+library and brand kits), with previews an agent can look at, labeled moments (spans) and licenses.
+`retake assets search "…"` finds them; `retake assets license-report <timeline|manifest>` lists publish blockers and
+credits. Agents get the same tools over MCP, and plug-ins add domain data. See [docs/plugins.md](docs/plugins.md).
 
 ## Install
 
