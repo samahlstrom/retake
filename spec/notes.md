@@ -22,8 +22,10 @@ API all build against it. Change it here first.
   | `events` | `seq` (monotonic), `kind`, `data`, `created`. This feeds SSE and `notes_wait` cursors. |
 
 - **Note keys.** A note key is `<take>/<seg>/<n>`, where n is the comment's index within that segment from the notes
-  engine. Rebuilding notes keeps existing ids and states. A key the engine no longer produces is marked
-  `retracted`, never deleted.
+  engine. `take` is the take's folder name, `seg` the segment's own id in that take (`S2`, not the S-number notes.md
+  renumbers across takes; `no-audio` for marks outside every segment), and n counts from 1, before inherited ranges
+  apply, so a carried-over comment keeps its key. Rebuilding notes keeps existing ids and states. A key the engine
+  no longer produces is marked `retracted`, never deleted.
 
 ## Note states
 
@@ -59,6 +61,10 @@ the parent version is either in the changelog or asked about in the same push.
   last.
 - **Answers.** A segment recorded to answer a question carries `answer_to: <thread id>` in `segments.json`.
 - **Done.** `session.json` gets `closed: true` when the reviewer presses Done.
+- **notes.json** keeps the legacy structure. Each comment adds `key`, and when they apply `images`
+  (`[{id, seg, file, path, mime, version, flip, video_t, box, n, session_t}]`), `answer_to` (from its segment),
+  `retracted: true` (a flagged retraction voids it and no later reinstatement restores it) and `author`. notes.md
+  tags them `image N` and `answer to question N`.
 
 ## HTTP additions
 
