@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+
+	"github.com/samahlstrom/retake/internal/sqldb"
 )
 
 // ChangeEntry is one line of a version's changelog: what it did about one note.
@@ -117,7 +119,7 @@ type PushResult struct {
 // CheckPush validates a push without recording anything: the label is free, every changelog and ask entry names
 // an open note (each once), and the push rule holds.
 func (s *Store) CheckPush(p Push) error {
-	return s.read(func(t *sql.Tx) error { return checkPush(t, p) })
+	return s.read(func(t *sqldb.Tx) error { return checkPush(t, p) })
 }
 
 func checkPush(q querier, p Push) error {

@@ -124,7 +124,7 @@ export async function openImageStore(idb: IDBFactory | undefined = globalThis.in
 export const memoryImageStore = (): ImageStore => new BufferedImages(null);
 
 export const imageUrl = (take: string, version: string | null, file: string): string =>
-  `/api/session/${encodeURIComponent(take)}/image?v=${encodeURIComponent(String(version))}&name=${encodeURIComponent(file)}`;
+  `api/session/${encodeURIComponent(take)}/image?v=${encodeURIComponent(String(version))}&name=${encodeURIComponent(file)}`;
 
 /** POSTs one image; resolves with the HTTP status, rejects when the server is unreachable. */
 export type PostImage = (url: string, body: Blob, mime: string) => Promise<number>;

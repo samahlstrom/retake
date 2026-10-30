@@ -35,9 +35,20 @@ type access struct {
 	role   team.Role
 	shared bool
 	token  *project.Token // nil for the owner
+	author string         // granted: the name the request's takes carry ("" = the Server's own)
 }
 
 type accessKey struct{}
+
+// Grant returns r marked as authorized by the caller of a Server with Options.External: it acts as role, and the
+// takes it saves carry author as session.json's author.name ("" = the Server's Author).
+func Grant(r *http.Request, role team.Role, author string) *http.Request {
+	return withAccess(r, access{role: role, shared: true, author: author})
+}
+
+// PermFor returns what a request needs on a project's routes (spec/team.md's route table): path is the path inside
+// the project, such as /api/info or /mcp.
+func PermFor(method, path string) team.Perm { return permFor(method, splitPath(path)) }
 
 // accessOf returns a request's access; a request that never went through ServeHTTP is the owner's.
 func accessOf(r *http.Request) access {
@@ -302,7 +313,8 @@ func (s *Server) mcpHandler() (http.Handler, error) {
 		return nil, err
 	}
 	p := &agent.Project{Video: s.opts.Video, Root: s.root, Store: st, Prober: s.opts.Prober}
-	s.mcpH = mcp.HTTPHandler(p, s.opts.Version)
+	s.mcpH = mcp.HTTPHandlerWith(p, s.opts.Version, mcp.Options{Root: s.root, MaxWait: mcp.RemoteWait,
+		Files: s.opts.MCPFiles})
 	return s.mcpH, nil
 }
 

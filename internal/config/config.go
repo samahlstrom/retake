@@ -23,6 +23,25 @@ type Config struct {
 	Transcribe Transcribe `toml:"transcribe"`
 	Share      Share      `toml:"share"`
 	Edit       Edit       `toml:"edit"`
+	Server     Server     `toml:"server"`
+}
+
+// Server is the [server] table (spec/server.md, "Running it"): retake serve's settings, and the admin commands'
+// (retake user, retake project). Flags and RETAKE_* environment variables override it.
+type Server struct {
+	Data           *string  `toml:"data"`
+	Listen         *string  `toml:"listen"`
+	PublicURL      *string  `toml:"public_url"`
+	TrustedProxies []string `toml:"trusted_proxies"`
+	Database       *string  `toml:"database"`
+	S3Endpoint     *string  `toml:"s3_endpoint"`
+	S3Bucket       *string  `toml:"s3_bucket"`
+	S3AccessKey    *string  `toml:"s3_access_key"`
+	S3SecretKey    *string  `toml:"s3_secret_key"`
+	S3Region       *string  `toml:"s3_region"`
+	S3Insecure     *bool    `toml:"s3_insecure"`
+	SMTPURL        *string  `toml:"smtp_url"`
+	SMTPFrom       *string  `toml:"smtp_from"`
 }
 
 // Share is the [share] table (spec/team.md): the tunnel binaries `retake share` runs.

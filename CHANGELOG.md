@@ -4,6 +4,27 @@ All notable changes are listed here. Versions follow semver once the first relea
 
 ## Unreleased
 
+### Milestone 3b: the team server
+- `retake serve --data DIR` hosts many projects (`spec/server.md`). Each is a version family with its store, served
+  at `/p/<project>/` by the same page and API as `retake open`; the page now uses relative URLs.
+- Accounts without passwords: `retake user add` prints a one-time sign-in link (or mails it, with SMTP). Its page
+  signs in only through a button, so mail scanners don't use it up. Sessions are server-side, hashed, HttpOnly,
+  Secure and SameSite=Lax, rotated daily with a one-minute grace, and end after 7 idle or 30 days; they can be
+  revoked.
+- Project members are viewers, reviewers, approvers or owners; admins own every project. A take's author is the
+  account's name. Share links and agent tokens of 3a work per project, with cookies scoped to `/p/<project>/`.
+- Every write without a Bearer token must come from the server's own origin (CSRF). `X-Forwarded-*` is believed only
+  from `--trust-proxy` addresses, and the Host must be the public URL's.
+- Uploads speak tus 1.0.0 and check the file's SHA-256. `retake remote add` and `retake push --remote` upload in
+  chunks and resume, even across runs; `POST /p/<project>/api/push` and the project's `/mcp` (`upload:<id>`) push
+  them, with the same push rule.
+- Storage drivers: SQLite and local files, or Postgres (a schema per project, same tables) and S3-compatible storage,
+  where the workspace is a cache that is uploaded as it changes and downloaded when a project opens. Media is proxied
+  from S3 with Range support. A conformance suite runs the same tests on both, with Postgres and MinIO in docker.
+- `Dockerfile` (a static binary with the page, ffmpeg and a CPU whisper.cpp, as a non-root user),
+  `deploy/docker-compose.yml` (retake, Postgres, MinIO) and `deploy/README.md`. `deploy/smoke.sh` runs the stack end
+  to end in a headless browser and tears it down.
+
 ### Release readiness (milestone 4, short of publishing)
 - Versions come from `vX.Y.Z` git tags (`scripts/version.sh`), and `retake version` prints them.
 - `.goreleaser.yaml` builds `retake` for Linux, macOS and Windows on amd64 and arm64, with the page inside, plus

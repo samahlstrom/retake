@@ -235,7 +235,7 @@ describe('recovery on page load', () => {
 
   it('builds the audio URL of spec/api.md', () => {
     expect(audioUrl('2026-10-29_20-41-05', 'v6', 'seg_01.webm', 42)).toBe(
-      '/api/session/2026-10-29_20-41-05/audio?v=v6&name=seg_01.webm&offset=42',
+      'api/session/2026-10-29_20-41-05/audio?v=v6&name=seg_01.webm&offset=42',
     );
   });
 });

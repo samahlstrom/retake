@@ -82,13 +82,8 @@ func (s *Store) CreateToken(n NewToken) (Token, error) {
 		t.Expires = now.Add(n.TTL).Format(timeFormat)
 	}
 	err := s.write(func(tx *tx) error {
-		res, err := tx.Exec(`INSERT INTO tokens (hash, role, label, created, expires) VALUES (?, ?, ?, ?, ?)`,
-			n.Hash, t.Role, t.Label, t.Created, t.Expires)
-		if err != nil {
-			return err
-		}
-		t.ID, err = res.LastInsertId()
-		return err
+		return tx.QueryRow(`INSERT INTO tokens (hash, role, label, created, expires) VALUES (?, ?, ?, ?, ?) RETURNING id`,
+			n.Hash, t.Role, t.Label, t.Created, t.Expires).Scan(&t.ID)
 	})
 	if err != nil {
 		return Token{}, fmt.Errorf("storing the token: %w", err)

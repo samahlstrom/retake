@@ -361,14 +361,11 @@ func (t *tx) syncNote(c Comment, key string, res *SyncResult) error {
 		if c.Retracted {
 			status = StatusRetracted
 		}
-		r, err := t.Exec(`INSERT INTO notes (key, version, take, seg, t0, t1, text, author, status, detail, created, updated)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			key, c.Version, c.Take, c.Seg, c.T0, c.T1, c.Text, c.Author, string(status), string(detail), now, now)
-		if err != nil {
-			return err
-		}
-		id, err := r.LastInsertId()
-		if err != nil {
+		var id int64
+		if err := t.QueryRow(`INSERT INTO notes (key, version, take, seg, t0, t1, text, author, status, detail, created,
+			updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+			key, c.Version, c.Take, c.Seg, c.T0, c.T1, c.Text, c.Author, string(status), string(detail), now,
+			now).Scan(&id); err != nil {
 			return err
 		}
 		res.Added = append(res.Added, id)
@@ -427,12 +424,9 @@ func (t *tx) syncAnswer(c Comment, key string, res *SyncResult) (ok bool, err er
 	if by == "" {
 		by = "reviewer"
 	}
-	r, err := t.Exec(`INSERT INTO threads (note, version, t, kind, by, text, options, answer_to, key, created)
-		VALUES (?, ?, ?, ?, ?, ?, '[]', ?, ?, ?)`, q.Note, c.Version, c.T0, KindAnswer, by, c.Text, q.ID, key, t.s.stamp())
-	if err != nil {
-		return false, err
-	}
-	if id, err = r.LastInsertId(); err != nil {
+	if err := t.QueryRow(`INSERT INTO threads (note, version, t, kind, by, text, options, answer_to, key, created)
+		VALUES (?, ?, ?, ?, ?, ?, '[]', ?, ?, ?) RETURNING id`, q.Note, c.Version, c.T0, KindAnswer, by, c.Text, q.ID,
+		key, t.s.stamp()).Scan(&id); err != nil {
 		return false, err
 	}
 	res.Answers = append(res.Answers, id)
