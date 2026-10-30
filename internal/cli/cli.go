@@ -68,6 +68,8 @@ const usage = `retake: review a video by talking over it. Press R, talk and draw
 usage:
   retake open <video> [--versions a.mp4 b.mp4 ...] [--port N] [--no-open] [--idle-exit MIN] [--ui-dir DIR] [--allow-host H]... [--verbose]
       serve the review page for <video> and its version family (clip_v5, v6/clip_v6, ...)
+  retake open <folder> [--port N] [--no-open] [--idle-exit MIN] [--ui-dir DIR] [--allow-host H]... [--verbose]
+      review many videos: every project in <folder> and its folders, with a home screen of them all at /
   retake sessions <video> [--json]
       list the takes saved for <video>
   retake notes build <video | .review dir | take dir> [--window 2] [--max-span 8] [--video-transcript F] [--json]
@@ -107,7 +109,8 @@ sharing (spec/team.md; links and tokens belong to the project of <video>):
   retake share <video> [--role reviewer] [--expires 24h] [--label NAME] [--tunnel cloudflare|tailscale|none]
                [--host H] [--funnel] [--tunnel-bin PATH] [--port N] [--no-qr] [--json] [--verbose]
       share the review over an HTTPS tunnel: attaches to (or starts) the server and prints a link with a QR
-      code. Roles: viewer (watch), reviewer (and record), approver (and approve, reopen). Ctrl+C stops sharing
+      code. Roles: viewer (watch), reviewer (and record), approver (and approve, reopen). Ctrl+C stops sharing.
+      Give a folder instead of a video to share its home: one link for every video in it (spec/home.md)
   retake share list <video> [--json]
       the project's tokens and running shares
   retake share revoke <video> <id> [--json]
