@@ -155,6 +155,29 @@ enum Cmd {
         #[command(flatten)]
         c: Common,
     },
+    /// Components: lock, upgrade, preview, hash (spec/components.md).
+    Component {
+        #[command(subcommand)]
+        cmd: ComponentCmd,
+    },
+    /// Check a timeline against its kits' house rules; exits 1 on errors.
+    Lint {
+        timeline: PathBuf,
+        /// Rules from this JSON file (a list, or an object with "rules") instead of the kits'.
+        #[arg(long)]
+        rules: Option<PathBuf>,
+        /// Also print the elements the rules saw.
+        #[arg(long)]
+        elements: bool,
+        #[command(flatten)]
+        c: Common,
+    },
+    /// The timeline as rendered: kit tokens replaced, component uses expanded into layers.
+    Expand {
+        timeline: PathBuf,
+        #[command(flatten)]
+        c: Common,
+    },
     /// Test media: a speech-like tone track from a words file (no TTS, no voice).
     #[command(hide = true)]
     SynthVo {
@@ -196,6 +219,62 @@ enum PatchCmd {
         c: Common,
     },
 }
+
+#[derive(Subcommand)]
+enum ComponentCmd {
+    /// Pin every package the timeline uses in its lockfile (`<stem>.lock`).
+    Lock {
+        timeline: PathBuf,
+        /// Re-pin this package (name@version) to its current hash (repeatable).
+        #[arg(long)]
+        update: Vec<String>,
+        /// Re-pin every package to its current hash.
+        #[arg(long)]
+        update_all: bool,
+        #[command(flatten)]
+        c: Common,
+    },
+    /// Move an element (or every element using a component) to another version, as one patch.
+    Upgrade {
+        timeline: PathBuf,
+        /// An element id, or `all`.
+        target: String,
+        /// The version to use, e.g. 1.1.0.
+        #[arg(long)]
+        to: String,
+        /// With `all`: the component to upgrade (needed when the timeline uses several).
+        #[arg(long)]
+        component: Option<String>,
+        /// Note ids the upgrade answers (repeatable).
+        #[arg(long)]
+        answers: Vec<String>,
+        #[arg(long)]
+        dry_run: bool,
+        #[command(flatten)]
+        c: Common,
+    },
+    /// Render each example at five moments into previews/sheet.png, plus a 2-second WebP.
+    Preview {
+        dir: PathBuf,
+        /// Output folder (default: <dir>/previews).
+        #[arg(short, long)]
+        out: Option<PathBuf>,
+        /// Skip the animated WebP.
+        #[arg(long)]
+        no_webp: bool,
+        #[command(flatten)]
+        c: Common,
+    },
+    /// A package's content hash (what lockfiles and registries pin).
+    Hash {
+        dir: PathBuf,
+        #[command(flatten)]
+        c: Common,
+    },
+}
+
+/// Set when lint found errors: the process exits 1 after printing the report.
+static LINT_FAILED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// Turns any failure into typed errors an agent can act on.
 fn to_errors(e: &anyhow::Error) -> Vec<EditError> {
@@ -495,6 +574,163 @@ fn run(cmd: Cmd) -> Result<(bool, Value, String)> {
             let n = synth::synth_vo(&words, &out, sr, dur)?;
             Ok((false, Value::Null, format!("{}: {n} words", out.display())))
         }
+        Cmd::Component { cmd } => component_cmd(cmd),
+        Cmd::Lint { timeline, rules, elements, c } => {
+            let rules = match rules {
+                Some(f) => {
+                    let v = read_json(&f)?;
+                    let list = v.get("rules").cloned().unwrap_or(v);
+                    Some(list.as_array().cloned().ok_or_else(|| {
+                        EditError::new("lint_rules", format!("{} holds no list of rules", f.display()))
+                    })?)
+                }
+                None => None,
+            };
+            let r = retake_render::lint::lint_timeline(&timeline, rules, elements)?;
+            if r.report.errors > 0 {
+                LINT_FAILED.store(true, std::sync::atomic::Ordering::Relaxed);
+            }
+            let mut lines = vec![format!(
+                "{}: {} error(s), {} warning(s) from {} rule(s) over {} element(s){}",
+                timeline.display(),
+                r.report.errors,
+                r.report.warnings,
+                r.report.rules,
+                r.report.elements,
+                if r.boxes { "" } else { " (no boxes: safe-area rules skipped)" }
+            )];
+            for v in &r.report.violations {
+                lines.push(format!("  {:<7} {:<24} {}", v.severity, v.id, v.message));
+                if let Some(h) = &v.hint {
+                    lines.push(format!("  {:<7} {:<24} → {h}", "", ""));
+                }
+            }
+            for n in &r.notes {
+                lines.push(format!("  note    {}", n.message));
+            }
+            Ok((c.json, serde_json::to_value(&r)?, lines.join("\n")))
+        }
+        Cmd::Expand { timeline, c } => {
+            let p = Project::load(&timeline)?;
+            let text = patch::pretty(&p.doc);
+            Ok((c.json, json!({"timeline": p.doc, "uses": p.uses, "kits": p.kits}), text.trim_end().to_string()))
+        }
+    }
+}
+
+fn component_cmd(cmd: ComponentCmd) -> Result<(bool, Value, String)> {
+    use retake_timeline::component::{self, LockMode};
+    match cmd {
+        ComponentCmd::Lock { timeline, update, update_all, c } => {
+            let mode = if update_all {
+                LockMode::Repin(vec![])
+            } else if !update.is_empty() {
+                LockMode::Repin(update)
+            } else {
+                LockMode::PinNew
+            };
+            let p = Project::load_with(&timeline, mode)?;
+            if p.lock_changed {
+                p.lock.write(&p.lock_path())?;
+            }
+            let human = std::iter::once(format!(
+                "{} {}",
+                p.lock_path().display(),
+                if p.lock_changed { "written" } else { "unchanged" }
+            ))
+            .chain(p.lock.packages.iter().map(|(k, e)| format!("  {k:<28} {:<9} {}", e.kind, e.hash)))
+            .collect::<Vec<_>>()
+            .join("\n");
+            Ok((c.json, json!({"lock": p.lock_path(), "changed": p.lock_changed, "packages": p.lock.packages}), human))
+        }
+        ComponentCmd::Upgrade { timeline, target, to, component, answers, dry_run, c } => {
+            if !component::is_semver(&to) {
+                return Err(
+                    EditError::new("version_invalid", format!("--to {to}: use a semver version, e.g. 1.1.0")).into()
+                );
+            }
+            let p = Project::load(&timeline)?;
+            let picked: Vec<&component::UseInfo> = if target == "all" {
+                let names: std::collections::BTreeSet<&str> = p.uses.iter().map(|u| u.name.as_str()).collect();
+                let name = match (&component, names.len()) {
+                    (Some(n), _) => n.clone(),
+                    (None, 1) => names.iter().next().unwrap().to_string(),
+                    (None, 0) => {
+                        return Err(EditError::new("upgrade_nothing", "the timeline uses no components").into());
+                    }
+                    (None, _) => {
+                        return Err(EditError::new("upgrade_ambiguous", "the timeline uses several components")
+                            .hint("name one with --component")
+                            .suggest(names.iter().map(|s| s.to_string()).collect())
+                            .into());
+                    }
+                };
+                p.uses.iter().filter(|u| u.name == name).collect()
+            } else {
+                let u = p.use_of(&target).ok_or_else(|| {
+                    EditError::new("upgrade_target", format!("`{target}` uses no component"))
+                        .suggest(p.uses.iter().map(|u| u.element.clone()).collect())
+                })?;
+                vec![u]
+            };
+            let picked: Vec<&component::UseInfo> = picked.into_iter().filter(|u| u.version != to).collect();
+            if picked.is_empty() {
+                return Err(EditError::new("upgrade_nothing", format!("nothing to upgrade: already at {to}")).into());
+            }
+            let ops: Vec<Value> = picked
+                .iter()
+                .map(|u| {
+                    let path = if u.kind == "overlay" { "use" } else { "picture/use" };
+                    json!({"op": "set", "id": u.element, "path": path, "value": format!("{}@{to}", u.name)})
+                })
+                .collect();
+            let from: std::collections::BTreeSet<&str> = picked.iter().map(|u| u.version.as_str()).collect();
+            let summary = format!(
+                "Upgrade {} {} → {to} on {}",
+                picked[0].name,
+                from.into_iter().collect::<Vec<_>>().join(", "),
+                picked.iter().map(|u| u.element.as_str()).collect::<Vec<_>>().join(", ")
+            );
+            let pj = json!({"base": p.tl.rev, "answers": answers, "summary": summary, "ops": ops});
+            let a = patch::apply(&p, &pj)?;
+            if !dry_run {
+                patch::commit(&a)?;
+            }
+            let affected = affected_units(&p, &a.project);
+            let human = format!(
+                "{} {} (rev {} → {}): {summary}{}",
+                if dry_run { "would apply" } else { "applied" },
+                a.entry.id,
+                a.entry.base,
+                a.entry.rev,
+                affected
+                    .as_ref()
+                    .map(|v| format!("; re-renders {} of {} units", v["rerender"], v["units"]))
+                    .unwrap_or_default()
+            );
+            Ok((c.json, json!({"applied": !dry_run, "patch": a.entry, "affected": affected}), human))
+        }
+        ComponentCmd::Preview { dir, out, no_webp, c } => {
+            let r = retake_render::preview::preview(
+                &dir,
+                &retake_render::preview::PreviewOptions { out, webp: !no_webp, work: None },
+            )?;
+            let human = format!(
+                "{}: {} ({} KB){}, {} example(s) in {:.1} s",
+                r.component,
+                r.sheet.display(),
+                r.sheet_bytes / 1024,
+                r.webp.as_ref().map(|w| format!(", {}", w.display())).unwrap_or_default(),
+                r.examples.len(),
+                r.seconds
+            );
+            Ok((c.json, serde_json::to_value(&r)?, human))
+        }
+        ComponentCmd::Hash { dir, c } => {
+            let hash = component::package_hash(&dir)?;
+            let files: Vec<String> = component::package_files(&dir)?.into_iter().map(|(r, _)| r).collect();
+            Ok((c.json, json!({"hash": hash, "files": files}), hash))
+        }
     }
 }
 
@@ -509,16 +745,28 @@ fn wants_json(cmd: &Cmd) -> bool {
         | Cmd::Proxy { c, .. }
         | Cmd::ResolveNote { c, .. } => c.json,
         Cmd::Patch { cmd: PatchCmd::Apply { c, .. } | PatchCmd::Log { c, .. } | PatchCmd::Revert { c, .. } } => c.json,
+        Cmd::Component {
+            cmd:
+                ComponentCmd::Lock { c, .. }
+                | ComponentCmd::Upgrade { c, .. }
+                | ComponentCmd::Preview { c, .. }
+                | ComponentCmd::Hash { c, .. },
+        } => c.json,
+        Cmd::Lint { c, .. } | Cmd::Expand { c, .. } => c.json,
         Cmd::SynthVo { .. } => false,
     }
 }
 
 fn main() -> ExitCode {
+    retake_render::init();
     let cli = Cli::parse();
     let json_mode = wants_json(&cli.cmd);
     match run(cli.cmd) {
         Ok((j, v, human)) => {
             emit(j, v, || human);
+            if LINT_FAILED.load(std::sync::atomic::Ordering::Relaxed) {
+                return ExitCode::from(1);
+            }
             ExitCode::SUCCESS
         }
         Err(e) => {

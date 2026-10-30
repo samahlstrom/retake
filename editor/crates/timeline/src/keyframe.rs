@@ -62,6 +62,12 @@ pub trait ExprEval {
     fn eval_num(&mut self, expr: &str, t: f64, value: Option<&[f64]>, props: &Value) -> Result<Vec<f64>, EditError>;
     /// Evaluates a text expression; returns the string it produced.
     fn eval_text(&mut self, expr: &str, t: f64, props: &Value) -> Result<String, EditError>;
+    /// Evaluates `expr` once with each key of the object `scope` bound as a variable (`props`, `kit`, `canvas` for a
+    /// component template; `elements`, `timeline` for a lint rule) and returns its value as JSON.
+    fn eval_json(&mut self, expr: &str, scope: &Value) -> Result<Value, EditError> {
+        let _ = scope;
+        Err(EditError::new("expr_unavailable", format!("no expression engine to run `{expr}`")))
+    }
 }
 
 /// An [`ExprEval`] that refuses every expression (for callers that have no engine).

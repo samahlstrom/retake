@@ -1,6 +1,7 @@
 //! Patches (spec/timeline.md, "Patches"): ops addressed by element id plus a path inside the element, applied
 //! atomically, logged with their inverse, and reverted only when no later patch touched the same values.
 
+use crate::component::LockMode;
 use crate::error::{EditError, Errors, ptr_escape, ptr_unescape};
 use crate::project::Project;
 use crate::resolve::{collect_ids, validate};
@@ -433,10 +434,11 @@ pub fn apply(p: &Project, patch_json: &Value) -> Result<Applied, Errors> {
         .hint("re-read the timeline and rebase the patch")
         .into());
     }
-    let (mut doc, inverse) = apply_ops(&p.doc, &patch.ops)?;
+    let (mut doc, inverse) = apply_ops(&p.src, &patch.ops).map_err(|e| component_layer_hint(p, e))?;
     let rev = p.tl.rev + 1;
     doc["rev"] = Value::from(rev);
-    let np = Project::from_doc(&p.path, doc)?;
+    // A patch that starts using a package pins it (spec/components.md, "The lockfile").
+    let np = Project::open(&p.path, doc, LockMode::PinNew, Some(p.lock.clone()))?;
     let before = validate(p);
     let new_errs: Vec<EditError> = validate(&np).into_iter().filter(|e| !before.contains(e)).collect();
     if !new_errs.is_empty() {
@@ -456,9 +458,32 @@ pub fn apply(p: &Project, patch_json: &Value) -> Result<Applied, Errors> {
     Ok(Applied { project: np, entry })
 }
 
-/// Writes an applied patch: the timeline (atomically), then one line in the log.
+/// A patch aimed at a layer a component made: say so, and point at the element's props.
+fn component_layer_hint(p: &Project, e: EditError) -> EditError {
+    if e.code != "patch_target_not_found" {
+        return e;
+    }
+    let id = e.message.split('`').nth(1).unwrap_or_default().to_string();
+    match p.uses.iter().find(|u| id.starts_with(&format!("{}/", u.element))) {
+        Some(u) => {
+            let element = u.element.clone();
+            let reference = u.reference.clone();
+            e.hint(format!(
+                "`{id}` is a layer that component {reference} makes for `{element}`: set `props` on `{element}` \
+                 instead (`retake-edit expand` shows the expansion)"
+            ))
+        }
+        None => e,
+    }
+}
+
+/// Writes an applied patch: the timeline (atomically), the lockfile when the patch pinned a package, then one line
+/// in the log.
 pub fn commit(a: &Applied) -> Result<(), EditError> {
-    write_atomic(&a.project.path, &pretty(&a.project.doc))?;
+    write_atomic(&a.project.path, &pretty(&a.project.src))?;
+    if a.project.lock_changed {
+        a.project.lock.write(&a.project.lock_path())?;
+    }
     let line = serde_json::to_string(&a.entry).expect("log entry serializes");
     let log = a.project.log_path();
     let mut f = std::fs::OpenOptions::new()
@@ -485,9 +510,9 @@ pub fn revert_patch(p: &Project, patch_id: &str) -> Result<Value, EditError> {
         )
         .hint("revert the later patch first")
     };
-    let (undone, _) = apply_ops(&p.doc, &e.inverse).map_err(|_| conflict())?;
+    let (undone, _) = apply_ops(&p.src, &e.inverse).map_err(|_| conflict())?;
     let (redone, _) = apply_ops(&undone, &e.ops).map_err(|_| conflict())?;
-    if redone != p.doc {
+    if redone != p.src {
         return Err(conflict());
     }
     Ok(serde_json::json!({

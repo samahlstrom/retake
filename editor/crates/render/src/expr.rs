@@ -147,6 +147,66 @@ impl Js {
     pub fn memory_used(&self) -> i64 {
         self.rt.memory_usage().memory_used_size
     }
+
+    /// Runs `expr` once with the keys of `scope` bound as constants; returns its value as JSON (`undefined` is null).
+    fn call_json(&mut self, expr: &str, scope: &Value) -> Result<Value, EditError> {
+        let fail = |msg: String| EditError::new("expr_error", format!("expression `{expr}`: {msg}"));
+        let names: Vec<String> = scope
+            .as_object()
+            .map(|m| m.keys().filter(|k| k.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')).cloned().collect())
+            .unwrap_or_default();
+        let key = format!("json:{}:{expr}", names.join(","));
+        let compiled = self.fns.get(&key).cloned();
+        let scope_json = scope.to_string();
+        let deadline = self.epoch.elapsed().as_micros() as u64 + JSON_BUDGET_MS * 1000;
+        self.deadline_us.store(deadline, Ordering::Relaxed);
+        let result = self.ctx.with(|ctx| -> Result<(String, Option<Persistent<Function<'static>>>), String> {
+            let describe = |e: rquickjs::Error| -> String {
+                if e.is_exception() {
+                    let ex = ctx.catch();
+                    if let Some(o) = ex.as_exception() {
+                        return o.message().unwrap_or_else(|| "exception".into());
+                    }
+                    return format!("{ex:?}");
+                }
+                e.to_string()
+            };
+            let (f, saved) = match compiled {
+                Some(p) => (p.restore(&ctx).map_err(describe)?, None),
+                None => {
+                    let src = format!(
+                        "(function (__scope) {{ \"use strict\"; const {{ {} }} = __scope; const __r = ({expr}\n); \
+                         return JSON.stringify(__r === undefined ? null : __r); }})",
+                        names.join(", ")
+                    );
+                    let f: Function = ctx.eval(src).map_err(describe)?;
+                    let saved = Persistent::save(&ctx, f.clone());
+                    (f, Some(saved))
+                }
+            };
+            let sv: JsValue = ctx.json_parse(scope_json.clone()).map_err(describe)?;
+            let freeze: Function = ctx.globals().get("__deepFreeze").map_err(describe)?;
+            let sv: JsValue = freeze.call((sv,)).map_err(describe)?;
+            let out: JsValue = f.call((sv,)).map_err(describe)?;
+            let s =
+                out.as_string().ok_or("the result can't be written as JSON")?.to_string().map_err(|e| e.to_string())?;
+            Ok((s, saved))
+        });
+        self.disarm();
+        let (text, saved) = result.map_err(fail)?;
+        if let Some(f) = saved {
+            self.fns.insert(key, f);
+        }
+        serde_json::from_str(&text).map_err(|e| fail(format!("result isn't JSON: {e}")))
+    }
+}
+
+/// The budget of one `eval_json` call: templates and lint rules run once, over more data than a per-frame expression.
+const JSON_BUDGET_MS: u64 = 2000;
+
+/// Registers QuickJS as the engine for component `$expr` templates and custom lint rules (spec/components.md).
+pub fn register() {
+    retake_timeline::component::set_evaluator(|| Ok(Box::new(Js::new()?)));
 }
 
 impl ExprEval for Js {
@@ -184,6 +244,10 @@ impl ExprEval for Js {
             }
             Err(format!("text expressions must return a string, got {}", v.type_name()))
         })
+    }
+
+    fn eval_json(&mut self, expr: &str, scope: &Value) -> Result<Value, EditError> {
+        self.call_json(expr, scope)
     }
 }
 
@@ -254,6 +318,27 @@ mod tests {
         let q = json!({"k": {"n": 1}});
         assert!(js.eval_num("(props.k.n = 2, 1)", 0.0, None, &q).is_err());
         assert_eq!(js.eval_num("props.k.n", 0.0, None, &q).unwrap(), vec![1.0]);
+    }
+
+    #[test]
+    fn json_expressions_see_their_scope() {
+        let mut js = Js::new().unwrap();
+        let scope = json!({"props": {"scale": 0.3, "pad": 8}, "canvas": {"w": 1920, "h": 1080}, "id": "pip"});
+        let v =
+            js.eval_json("[canvas.w * props.scale + 2 * props.pad, canvas.h * props.scale + 2 * props.pad]", &scope);
+        assert_eq!(v.unwrap(), json!([592, 340]), "JSON numbers, as JavaScript prints them");
+        assert_eq!(js.eval_json("`${id}/frame`", &scope).unwrap(), json!("pip/frame"));
+        assert_eq!(js.eval_json("undefined", &scope).unwrap(), Value::Null);
+        assert_eq!(
+            js.eval_json("({a: [1, 2].map((x) => x * 2)})", &json!({})).unwrap(),
+            json!({"a": [2, 4]}),
+            "objects and arrows"
+        );
+        assert!(js.eval_json("(props.pad = 1, 1)", &scope).is_err(), "the scope is frozen");
+        assert!(js.eval_json("Math.random()", &scope).is_err());
+        let e = js.eval_json("(() => { while (true) {} })()", &scope).unwrap_err();
+        assert_eq!(e.code, "expr_error");
+        assert_eq!(js.eval_json("props.scale", &scope).unwrap(), json!(0.3), "still works after an interrupt");
     }
 
     #[test]

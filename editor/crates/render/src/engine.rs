@@ -171,7 +171,12 @@ fn prop_static(p: &Option<Prop>) -> bool {
 pub fn layer_is_static(l: &Layer, a: f64, b: f64) -> bool {
     let tr = &l.transform;
     let edges_outside = l.from.is_none_or(|f| f <= a || f >= b) && l.to.is_none_or(|e| e <= a || e >= b);
-    let text_static = !matches!(&l.content, Content::Text(t) if matches!(t.text, TextValue::Expr { .. }));
+    let text_static = match &l.content {
+        Content::Text(t) => {
+            !matches!(t.text, TextValue::Expr { .. }) && t.highlight.as_ref().is_none_or(|h| h.words.is_static())
+        }
+        _ => true,
+    };
     edges_outside
         && text_static
         && prop_static(&tr.position)
@@ -226,6 +231,7 @@ fn key_json(v: &Value) -> Value {
 impl Engine {
     /// Loads, validates and resolves a timeline; probes and hashes the assets it uses.
     pub fn open(path: &Path, opts: Options) -> Result<Engine> {
+        crate::init();
         Engine::from_project(Project::load(path)?, opts)
     }
 

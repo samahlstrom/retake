@@ -1,5 +1,6 @@
 //! A timeline file on disk: loading, asset paths, the patch log path and the cache directory.
 
+use crate::component::{self, KitInfo, Lock, LockMode, UseInfo};
 use crate::error::{EditError, Errors};
 use crate::model::Timeline;
 use crate::schema;
@@ -12,35 +13,89 @@ pub struct Project {
     pub path: PathBuf,
     /// The folder relative asset paths are resolved against.
     pub dir: PathBuf,
-    /// The document as JSON (patches operate on this).
+    /// The document as written: what patches change and what is saved.
+    pub src: Value,
+    /// The document as rendered: kit tokens replaced and component uses expanded into layers (spec/components.md).
+    /// Without kits and uses it equals `src`.
     pub doc: Value,
     /// The typed view of `doc`.
     pub tl: Timeline,
+    /// The lockfile (`<stem>.lock`), with anything this load pinned.
+    pub lock: Lock,
+    /// True when `lock` differs from the file on disk (something was pinned).
+    pub lock_changed: bool,
+    /// The component uses, in document order.
+    pub uses: Vec<UseInfo>,
+    /// The kits the timeline lists that were found.
+    pub kits: Vec<KitInfo>,
 }
 
 impl Project {
-    /// Reads, parses and schema-checks a timeline file.
+    /// Reads, parses, expands and schema-checks a timeline file. Every package must be locked.
     pub fn load(path: &Path) -> Result<Project, Errors> {
+        Project::load_with(path, LockMode::Strict)
+    }
+
+    /// Like [`Project::load`], with another lock mode (`component lock` pins).
+    pub fn load_with(path: &Path, mode: LockMode) -> Result<Project, Errors> {
         let text = std::fs::read_to_string(path)
             .map_err(|e| EditError::new("timeline_unreadable", format!("can't read {}: {e}", path.display())))?;
         let doc: Value = serde_json::from_str(&text).map_err(|e| {
             EditError::new("timeline_json", format!("{} isn't valid JSON: {e}", path.display()))
                 .hint("fix the JSON syntax at the line and column given")
         })?;
-        Project::from_doc(path, doc)
+        Project::open(path, doc, mode, None)
     }
 
-    /// Builds a project from an in-memory document that claims to live at `path`.
+    /// Builds a project from an in-memory document that claims to live at `path` (its lockfile is read from there).
     pub fn from_doc(path: &Path, doc: Value) -> Result<Project, Errors> {
-        let errs = schema::check_timeline(&doc);
-        if !errs.is_empty() {
-            return Err(Errors(errs));
-        }
-        let tl: Timeline = serde_json::from_value(doc.clone())
-            .map_err(|e| EditError::new("timeline_model", format!("timeline doesn't fit the model: {e}")))?;
+        Project::open(path, doc, LockMode::Strict, None)
+    }
+
+    /// The general constructor: `lock` overrides the lockfile on disk, `mode` says what may be pinned.
+    pub fn open(path: &Path, src: Value, mode: LockMode, lock: Option<Lock>) -> Result<Project, Errors> {
         let abs = std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
         let dir = abs.parent().map(Path::to_path_buf).unwrap_or_else(|| PathBuf::from("."));
-        Ok(Project { path: abs, dir, doc, tl })
+        Project::open_in(&abs, src, mode, lock, component::search_roots(&dir))
+    }
+
+    /// [`Project::open`] with explicit component search roots (previews use the component's own folder).
+    pub fn open_in(
+        path: &Path,
+        src: Value,
+        mode: LockMode,
+        lock: Option<Lock>,
+        roots: Vec<PathBuf>,
+    ) -> Result<Project, Errors> {
+        let abs = std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
+        let dir = abs.parent().map(Path::to_path_buf).unwrap_or_else(|| PathBuf::from("."));
+        let on_disk = match lock {
+            Some(l) => l,
+            None => Lock::read(&component::lock_path(&abs))?,
+        };
+        // A document that isn't even an object with the basic shape fails the schema first, with its usual errors.
+        if !src.is_object() {
+            return Err(Errors(schema::check_timeline(&src)));
+        }
+        let x = component::expand_with_roots(&src, &dir, roots, on_disk.clone(), mode).map_err(Errors)?;
+        let errs = schema::check_timeline(&x.doc);
+        if !errs.is_empty() {
+            return Err(Errors(errs.into_iter().map(|e| blame_component(e, &x.uses)).collect()));
+        }
+        let tl: Timeline = serde_json::from_value(x.doc.clone())
+            .map_err(|e| EditError::new("timeline_model", format!("timeline doesn't fit the model: {e}")))?;
+        let lock_changed = x.lock != on_disk;
+        Ok(Project { path: abs, dir, src, doc: x.doc, tl, lock: x.lock, lock_changed, uses: x.uses, kits: x.kits })
+    }
+
+    /// The lockfile's path.
+    pub fn lock_path(&self) -> PathBuf {
+        component::lock_path(&self.path)
+    }
+
+    /// The component use of an element, if it has one.
+    pub fn use_of(&self, element: &str) -> Option<&UseInfo> {
+        self.uses.iter().find(|u| u.element == element)
     }
 
     /// Expands `~`, `$VAR` and `${VAR}` and resolves a relative path against the timeline's folder.
@@ -68,6 +123,19 @@ impl Project {
             Some(d) if !d.is_empty() => PathBuf::from(d),
             _ => self.dir.join(".retake"),
         }
+    }
+}
+
+/// A schema error inside a component's expansion names the component: the template is at fault, not the use.
+fn blame_component(e: EditError, uses: &[UseInfo]) -> EditError {
+    match e.path.as_deref().and_then(|p| uses.iter().find(|u| p.starts_with(&format!("{}/layers", u.ptr)))) {
+        Some(u) => EditError {
+            code: "component_template".into(),
+            message: format!("{} expands into an invalid layer: {}", u.reference, e.message),
+            hint: Some(format!("fix the layer templates in {}", u.dir.join("component.json").display())),
+            ..e
+        },
+        None => e,
     }
 }
 

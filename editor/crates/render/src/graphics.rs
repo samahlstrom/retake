@@ -65,6 +65,33 @@ impl Resources {
     }
 }
 
+/// Byte ranges of words `[a, b)` of `s` (words are separated by whitespace, counted from 0).
+pub fn word_ranges(s: &str, ab: &[f64]) -> Vec<(usize, usize)> {
+    let (a, b) = match ab {
+        [a, b] if a.is_finite() && b.is_finite() => (a.floor() as i64, b.floor() as i64),
+        _ => return vec![],
+    };
+    if b <= a || b <= 0 {
+        return vec![];
+    }
+    let mut out = vec![];
+    let mut idx = 0i64;
+    let mut start: Option<usize> = None;
+    for (i, c) in s.char_indices().chain(std::iter::once((s.len(), ' '))) {
+        if c.is_whitespace() {
+            if let Some(st) = start.take() {
+                if idx >= a && idx < b {
+                    out.push((st, i));
+                }
+                idx += 1;
+            }
+        } else if start.is_none() {
+            start = Some(i);
+        }
+    }
+    out
+}
+
 fn family(name: &str, weight: u32) -> String {
     format!("{name}@{weight}")
 }
@@ -128,6 +155,18 @@ impl Painter {
     }
 
     fn paragraph(&self, t: &Text, text: &str, paint: &Paint, width: f32) -> Result<Paragraph, EditError> {
+        self.paragraph_hl(t, text, paint, width, None)
+    }
+
+    /// A paragraph whose byte ranges `hl.0` are drawn with the paint `hl.1` (text `highlight`).
+    fn paragraph_hl(
+        &self,
+        t: &Text,
+        text: &str,
+        paint: &Paint,
+        width: f32,
+        hl: Option<(&[(usize, usize)], &Paint)>,
+    ) -> Result<Paragraph, EditError> {
         let w = self.res.text_weight(t);
         if !self.faces.contains(&(t.font_name().to_string(), w)) {
             return Err(EditError::new("font_unknown", format!("font {}@{w} wasn't prepared", t.font_name())));
@@ -149,7 +188,28 @@ impl Painter {
         ps.set_text_style(&ts);
         let mut b = ParagraphBuilder::new(&ps, self.fonts.clone());
         b.push_style(&ts);
-        b.add_text(text);
+        match hl {
+            Some((ranges, hp)) if !ranges.is_empty() => {
+                let mut hs = ts.clone();
+                hs.set_foreground_paint(hp);
+                let mut pos = 0;
+                for &(a, z) in ranges {
+                    if a > pos {
+                        b.add_text(&text[pos..a]);
+                    }
+                    b.push_style(&hs);
+                    b.add_text(&text[a..z]);
+                    b.pop();
+                    pos = z;
+                }
+                if pos < text.len() {
+                    b.add_text(&text[pos..]);
+                }
+            }
+            _ => {
+                b.add_text(text);
+            }
+        }
         let mut p = b.build();
         p.layout(width);
         Ok(p)
@@ -182,7 +242,14 @@ impl Painter {
             sp.set_stroke_join(PaintJoin::Round);
             out.push(self.paragraph(t, &s, &sp, w)?);
         }
-        let p = self.paragraph(t, &s, &fill, w)?;
+        let ranges = match &t.highlight {
+            Some(h) => word_ranges(&s, &h.words.eval(time, props, &mut self.js)?),
+            None => vec![],
+        };
+        let mut hp =
+            Paint::new(color4f(t.highlight.as_ref().and_then(|h| h.fill.as_deref()), Rgba([255, 210, 63, 255])), None);
+        hp.set_anti_alias(true);
+        let p = self.paragraph_hl(t, &s, &fill, w, Some((&ranges, &hp)))?;
         let h = p.height() as f64;
         out.push(p);
         Ok((out, w as f64, h))
@@ -331,6 +398,9 @@ impl Painter {
                 let s = self.js.eval_text(expr, t, props).map_err(|e| e.at(format!("layer {}", l.id)))?;
                 out.push_str(&format!("{s:?}"));
             }
+            if let Content::Text(Text { highlight: Some(h), .. }) = &l.content {
+                out.push_str(&format!("h{:?}", h.words.eval(t, props, &mut self.js)?));
+            }
             out.push(';');
         }
         Ok(out)
@@ -451,6 +521,48 @@ mod tests {
         assert_eq!(alpha_bbox(&px, 200, 100), Some([10, 15, 100, 50]));
         let c = &px[((40 * 200 + 60) * 4) as usize..][..4];
         assert!((c[3] as i32 - 128).abs() <= 1 && (c[0] as i32 - 128).abs() <= 1, "{c:?}");
+    }
+
+    #[test]
+    fn word_ranges_count_whitespace_separated_words() {
+        let s = "ONE  TWO\nTHREE";
+        assert_eq!(word_ranges(s, &[1.0, 2.0]), vec![(5, 8)]);
+        assert_eq!(word_ranges(s, &[0.0, 3.0]), vec![(0, 3), (5, 8), (9, 14)]);
+        assert_eq!(word_ranges(s, &[1.7, 2.2]), vec![(5, 8)], "floored");
+        assert!(word_ranges(s, &[-1.0, -1.0]).is_empty());
+        assert!(word_ranges(s, &[2.0, 2.0]).is_empty());
+        assert_eq!(word_ranges("é b", &[0.0, 1.0]), vec![(0, 2)], "byte ranges");
+    }
+
+    #[test]
+    fn highlight_draws_words_in_another_fill() {
+        let red = |px: &[u8]| px.chunks(4).filter(|c| c[0] > 200 && c[1] < 60 && c[2] < 60 && c[3] > 200).count();
+        let base = json!({"id": "t", "type": "text", "text": "ONE TWO THREE", "size": 60, "fill": "#ffffff"});
+        let mut hl = base.clone();
+        hl["highlight"] = json!({"words": {"expr": "[Math.floor(t), Math.floor(t) + 1]"}, "fill": "#ff0000"});
+        let (a, b) = (parse_layer(&base).unwrap(), parse_layer(&hl).unwrap());
+        let mut p = painter(&[a.clone(), b.clone()]);
+        let plain = p.render(std::slice::from_ref(&a), &json!({}), (640, 120), 1.0, (640.0, 120.0), 0.0).unwrap();
+        assert_eq!(red(&plain), 0);
+        let w0 = p.render(std::slice::from_ref(&b), &json!({}), (640, 120), 1.0, (640.0, 120.0), 0.0).unwrap();
+        let w2 = p.render(std::slice::from_ref(&b), &json!({}), (640, 120), 1.0, (640.0, 120.0), 2.0).unwrap();
+        assert!(red(&w0) > 100 && red(&w2) > 100);
+        // The red moves right from word 0 to word 2; the layout (the alpha) stays put.
+        let red_x = |px: &[u8]| {
+            let xs: Vec<usize> = px
+                .chunks(4)
+                .enumerate()
+                .filter(|(_, c)| c[0] > 200 && c[1] < 60 && c[3] > 200)
+                .map(|(i, _)| i % 640)
+                .collect();
+            xs.iter().sum::<usize>() / xs.len().max(1)
+        };
+        assert!(red_x(&w2) > red_x(&w0) + 150, "{} vs {}", red_x(&w2), red_x(&w0));
+        assert_eq!(alpha_bbox(&w0, 640, 120), alpha_bbox(&plain, 640, 120));
+        assert_ne!(
+            p.state(std::slice::from_ref(&b), &json!({}), 0.0).unwrap(),
+            p.state(std::slice::from_ref(&b), &json!({}), 2.0).unwrap()
+        );
     }
 
     #[test]

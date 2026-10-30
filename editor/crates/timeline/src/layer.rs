@@ -111,6 +111,16 @@ pub struct Text {
     pub max_width: Option<f64>,
     #[serde(default)]
     pub uppercase: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub highlight: Option<Highlight>,
+}
+
+/// Words `[a, b)` of a text layer drawn in another fill (a karaoke caption's current word, an emphasized word).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Highlight {
+    pub words: Prop,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill: Option<String>,
 }
 
 impl Text {
