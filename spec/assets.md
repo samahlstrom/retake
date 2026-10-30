@@ -304,7 +304,7 @@ Request:
  "path": "/…/rec.mp4", "import": "metadata", "title": "…", "tags": ["obs"], "caption": "",
  "license": {"status": "owned"}, "media": {"duration": 7311.4, "size": [1920, 1080], "fps": 60}, "meta": {}}
 {"type": "span", "key": "110184868:death:547.0", "asset": "obs_20261003005537", "t0": 619.5, "t1": 631.5,
- "type": "death", "label": "Sam killed by Celeste", "data": {"match_id": 110184868},
+ "span_type": "death", "label": "Sam killed by Celeste", "data": {"match_id": 110184868},
  "source_of_label": "match_data", "confidence": "high"}
 {"type": "clock", "asset": "obs_20261003005537", "domain": "deadlock:match/110184868",
  "epochs": [{"asset_t": [0, 2435], "domain_t0": -14.5, "rate": 1}], "confidence": "high", "method": "hud ocr x3"}
@@ -314,9 +314,11 @@ Request:
 
 - `asset`: `key` is the plug-in's stable key; `name` the id to use (default `<plugin>/<key>`, in the scope of the
   import). `import: "full"` imports the file like `retake assets import` (hash, copy or in place, previews) and then
-  applies the record's fields; `"metadata"` (the default) records the path without reading it. `path` is absolute or
-  relative to the request's `path` folder. Re-sending a key updates that asset.
-- `span`: `asset` is an asset key from this plug-in, or a catalog id (`proj:…`). Unknown types are refused.
+  applies the record's fields; `"metadata"` (the default) records the path without reading it. `path` is absolute, or
+  relative to the request's `path` (its folder when it is a file; the plug-in's folder when there is none).
+  Re-sending a key updates that asset.
+- `span`: `asset` is an asset key from this plug-in, or a catalog id (`proj:…`). The span's type is `span_type`
+  (`type` is the line's). Types the plug-in doesn't declare are refused.
 - `clock`: replaces the asset's clock for that domain.
 - An asset, span or clock that fails validation is reported in the import result and skipped; the rest commit.
 
