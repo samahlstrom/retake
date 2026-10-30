@@ -152,7 +152,7 @@ Common fields:
 
 | Field | Meaning |
 |---|---|
-| `id`, `type` | `type` is `text`, `shape`, `image` or `video`. |
+| `id`, `type` | `type` is `text`, `shape`, `image` or `video` (`raster` comes only from component backends). |
 | `from`, `to` | When the layer shows, in composition seconds or as anchors. Default: the whole composition. |
 | `transform.anchor` | The point of the layer's content box that `position` places, as fractions of the box. Default `[0.5, 0.5]`, the center. |
 | `transform.position` | Prop `[x, y]`. Default: the center of the frame. |
@@ -178,6 +178,8 @@ Content by type:
   frame before the transform); `loop`; `hold_from` (freeze at that source time); `clock` (`local` (default) or
   `timeline`: the source runs on the output clock, so a looping background keeps its phase across cuts); `audio`
   (`{gain_db, fade_in, fade_out}`: mix the source's sound; muted when absent).
+- **raster**: frames drawn by a component's program (`spec/components.md`, "Backends"). Only the expansion of a backend
+  component has one; a timeline that writes `type: raster` itself is refused (`raster_source`).
 
 ### Props, keyframes and easing
 
