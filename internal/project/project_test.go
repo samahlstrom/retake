@@ -68,13 +68,13 @@ func TestRoot(t *testing.T) {
 		touch(t, filepath.Join(base, f))
 	}
 	for _, tc := range []struct{ video, root string }{
-		{"tutorial/v7/tutorial_v7.mp4", "tutorial"},       // a v<N> folder
+		{"tutorial/v7/tutorial_v7.mp4", "tutorial"},          // a v<N> folder
 		{"upper/V12/a.mp4", "upper"},                         // v<N> in any case, even for an unversioned name
 		{"flat/clip_v1.mp4", "flat"},                         // no version folders: the file's own folder
 		{"nested/renders/clip_v3.mp4", "nested"},             // a sibling folder holds the same family
 		{"lonely/renders/clip_v3.mp4", "lonely/renders"},     // siblings hold another family only
 		{"plain/folder/movie.mp4", "plain/folder"},           // no version number at all
-		{"tutorial/v6/tutorial_v6.mp4", "tutorial"},       // every member finds the same root
+		{"tutorial/v6/tutorial_v6.mp4", "tutorial"},          // every member finds the same root
 		{"nested/old/clip_v2.mov", "nested"},                 // ... from either side
 		{"plain/folder/../folder/movie.mp4", "plain/folder"}, // (callers pass cleaned paths; Dir cleans anyway)
 	} {
