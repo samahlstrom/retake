@@ -1,11 +1,14 @@
 /// <reference types="vitest/config" />
 import { createServer, defineConfig, type Plugin, type ProxyOptions, type ViteDevServer } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
+import { mockNotes } from './dev/mock-notes';
 
 // `npm run dev` serves the page and proxies the API and the videos to a running review server (the Go `retake open
 // ... --no-open`, or the legacy player). RETAKE_SERVER picks it (default: the default port).
 // The server only accepts POSTs whose Origin is its own, so the proxy rewrites the Origin header to the server's.
+// RETAKE_MOCK_NOTES=1 (or =fail) stands in for the milestone-2 notes routes the server doesn't have yet (dev/).
 const server = (process.env.RETAKE_SERVER ?? 'http://127.0.0.1:8777').replace(/\/+$/, '');
+const mock = process.env.RETAKE_MOCK_NOTES;
 
 const proxy: ProxyOptions = {
   target: server,
@@ -62,7 +65,11 @@ function prerenderShell(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [svelte(), prerenderShell()],
+  plugins: [
+    svelte(),
+    prerenderShell(),
+    ...(mock ? [mockNotes({ server, transcribe: mock === 'fail' ? 'fail' : 'ok' })] : []),
+  ],
   base: '/',
   // hls.js (about 580 kB) is its own chunk, loaded only for .m3u8 versions in browsers without native HLS.
   build: { outDir: 'dist', emptyOutDir: true, target: 'es2022', chunkSizeWarningLimit: 700 },
