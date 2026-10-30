@@ -1,45 +1,144 @@
 # Retake (working name)
 
-Review a video by talking over it. Press **R**, say what you think, draw on the frame with a pen, press **R** again.
-Your notes are pinned to the exact moment. An AI agent turns them into the next version, and you flip between old and
-new with **C**.
+Retake is a video review tool for working with an AI agent. You watch a version of a video, press **R**, and talk
+and draw over it. Your notes are pinned to the exact moment and spot. An agent reads them, makes the next version,
+and asks you when it isn't sure. You flip between the old and new version with **C**.
 
-> Status: milestone 1 (the local player) is done. Not released, and the name and license aren't final.
+It runs on your machine: one `retake` binary serves the review page, keeps the notes and talks to agents over a CLI
+and MCP. An optional editor, `retake-edit`, renders videos from a timeline file that an agent changes through
+patches.
 
-## What works today
+> Status: not released yet. The name "retake" and the license aren't decided. Milestones 1 (the player) and 2 (notes,
+> agent API, questions) are done, and the editor's first slice is in. See [`docs/roadmap.md`](docs/roadmap.md).
 
-- `retake open clip_v6.mp4` opens the review page for that file and finds its other versions (`clip_v5.mp4`,
-  `../v7/clip_v7.mp4`, …) automatically.
-- **R** records a segment of voice; the pen draws only while recording. Every word and stroke is pinned to video time.
-- **[ ]** step between versions, **C** flips to the comparison version at the same moment.
-- Takes save automatically next to the video in `<name>.review/<timestamp>/`. Audio is kept in the browser until the
-  server confirms it, so closing the tab or a crash loses nothing.
-- Versions can be single files or `.m3u8` playlists.
+## Quickstart (5 minutes)
 
-All keys: R record · Space play · ←/→ 5 s · 1–4 pen color · Z undo · C compare · [ ] versions · , . frame step · F
-fullscreen.
-
-## Build and run
-
-Needs [mise](https://mise.jdx.dev) (installs the pinned Go and node) and ffmpeg (`ffprobe` reads the videos).
+You need [mise](https://mise.jdx.dev) (it installs the pinned Go, node and Rust) and ffmpeg.
 
 ```bash
 mise install
-mise exec -- make build          # page + Go binary with the page inside -> bin/retake
-bin/retake open path/to/clip_v2.mp4
-bin/retake sessions path/to/clip_v2.mp4 --json
+mise exec -- make build                                  # bin/retake, with the page built in
+(cd editor && mise exec -- cargo build --release)        # editor/target/release/retake-edit
+export PATH="$PWD/bin:$PWD/editor/target/release:$PATH"
+
+scripts/make-sample.sh ~/retake-sample                   # a short how-to video, v1 and v2, all generated
+cd ~/retake-sample
+retake open how-to/v2/how-to_v2.mp4                      # the review page opens in your browser
 ```
 
-Optional config at `~/.config/retake/config.toml`: `name`, `port`, `idle_exit_minutes`, `open_browser`.
+1. Play to step two (about 0:11) and pause.
+2. Press **R**, say "the labels at the bottom are too small", and draw a loop around the label.
+3. Press **R** again, then **Done**.
+4. Run `retake notes sync how-to/v2/how-to_v2.mp4`, then `retake notes list how-to/v2/how-to_v2.mp4`.
+5. Let an agent answer the note and push v3 ([docs/agents.md](docs/agents.md)), or do its part by hand
+   ([docs/quickstart.md](docs/quickstart.md), step 5).
+6. Run `retake open how-to/v3/how-to_v3.mp4` and press **C** to flip between v3 and v2 at the same moment.
 
-## Develop
+No microphone? `scripts/make-sample.sh ~/retake-sample --with-take` adds a recorded take for you. Turning speech into
+text needs whisper.cpp (`scripts/install-whisper.sh`); the sample's take comes with its transcript, so step 4 works
+without it. The full walkthrough is in [docs/quickstart.md](docs/quickstart.md).
+
+## Keys
+
+| Key | Does |
+|---|---|
+| **R** | Start or stop recording a segment. The pen only draws while recording. |
+| Space or K | Play or pause. |
+| ← / → | Back or forward 5 seconds. |
+| , / . | One frame back or forward. |
+| 1 2 3 4 | Pen color: red, yellow, green, white. |
+| Z (or Ctrl+Z) | Undo the last stroke or image. |
+| **C** | Flip to the comparison version at the same moment, and back. |
+| [ / ] | Step to the previous or next version, keeping the time. |
+| N | Show or hide the notes sidebar. |
+| F | Fullscreen. |
+| Ctrl+S | Save now. The page also saves on its own. |
+| Esc | Cancel a stroke, close the version list. |
+
+While recording you can also drag or paste an image onto the video. It's pinned to that moment and spot.
+
+## How it works
+
+- `retake open clip_v6.mp4` finds the other versions of the clip by name (`clip_v5.mp4`, `../v7/clip_v7.mp4`, …).
+  Versions can be single files or `.m3u8` playlists.
+- Each review is a *take*, saved next to the video in `<name>.review/<timestamp>/`: one audio file per segment, the
+  strokes and images, and the events that tie the two clocks together ([spec/take-format.md](spec/take-format.md)).
+  Audio stays in the browser until the server has it, so a crash or a closed tab loses nothing.
+- When you press Done, the server transcribes the take and turns it into notes. Each note has its text, time, strokes
+  and a snapshot of the frame. They're kept in `<project>/.retake/project.db`.
+- An agent reads the notes, makes the next version with any tool, and pushes it with a changelog. A push is refused
+  until every open note is either answered or asked about ([docs/agents.md](docs/agents.md)).
+- The sidebar on the newest version shows only the agent's questions. On older versions it shows how each note was
+  resolved.
+
+## On a phone
+
+The review page has a phone layout, portrait and landscape, with big buttons for record, flip, undo and the pen
+colors. Safari records AAC (`seg_NN.m4a`), which retake reads like any other segment.
+
+A browser only allows the microphone on a secure page: `http://127.0.0.1` on the same machine, or HTTPS. To review
+from a phone, put the server behind an HTTPS tunnel and allow its hostname:
 
 ```bash
-mise exec -- make test   # Go (race detector) + page unit tests
-mise exec -- make lint   # golangci-lint, svelte-check, eslint, prettier
-mise exec -- make e2e    # Playwright end-to-end suite on generated media
+retake open clip_v2.mp4 --no-open --allow-host my-tunnel.example.com
 ```
 
-Docs: [`spec/api.md`](spec/api.md) (HTTP API), [`spec/take-format.md`](spec/take-format.md) and
-[`spec/take.schema.json`](spec/take.schema.json) (what a review saves), [`e2e/README.md`](e2e/README.md) (what each
-end-to-end test proves), [`docs/roadmap.md`](docs/roadmap.md) (the plan).
+Anyone who has that URL can watch the versions and record takes, so share it only with people you trust.
+
+## Connect an agent
+
+`retake mcp <video>` serves the agent tools over MCP (stdio), and every CLI command takes `--json`. For Claude Code:
+
+```bash
+claude mcp add retake -- retake mcp ~/retake-sample/how-to/v2/how-to_v2.mp4
+```
+
+[docs/agents.md](docs/agents.md) covers Codex and other MCP clients, the loop, `retake watch` and the push rule.
+
+## Editing with the timeline
+
+<!-- STUB (editor bridge worker): push --render, render manifests, the time map for C. Replace this section. -->
+> **Stub.** The editor bridge (rendering and pushing a timeline revision as a version, manifests, the time map that
+> makes C land on the matching moment) fills this in.
+
+Today, `retake-edit` renders a timeline file into a video and a manifest, and you push the video with `retake push`.
+[docs/timeline.md](docs/timeline.md) explains the format.
+
+## Sharing
+
+<!-- STUB (team mode worker): retake share, accounts, roles, remote MCP. Replace this section. -->
+> **Stub.** Team mode (share links, tokens, remote MCP) fills this in. See [docs/sharing.md](docs/sharing.md).
+
+## Assets
+
+<!-- STUB (asset catalog worker): retake assets ... Replace this section. -->
+> **Stub.** The asset catalog (`retake assets …`) fills this in. See [docs/plugins.md](docs/plugins.md).
+
+## Install
+
+There are no releases yet. Once there are, this installs `retake` (and with `--with-editor`, `retake-edit`) into
+`~/.local/bin` after checking the archive's SHA-256:
+
+```bash
+curl -fsSL <release URL>/install.sh | sh -s -- --with-editor
+```
+
+Until then, build from source as in the quickstart. `retake version` prints the version.
+
+## Docs
+
+- [docs/quickstart.md](docs/quickstart.md): the whole loop on the sample project, step by step.
+- [docs/agents.md](docs/agents.md): connecting Claude Code, Codex or any MCP client.
+- [docs/config.md](docs/config.md): every config key and environment variable.
+- [docs/timeline.md](docs/timeline.md): the editor's timeline format, as a guide.
+- [docs/releasing.md](docs/releasing.md): versions, release archives, the installer and the license notices.
+- [spec/](spec/): the contracts. [api.md](spec/api.md) (HTTP), [take-format.md](spec/take-format.md),
+  [notes.md](spec/notes.md) (notes, questions, agent API), [timeline.md](spec/timeline.md),
+  [manifest.md](spec/manifest.md).
+- [CONTRIBUTING.md](CONTRIBUTING.md): development setup and tests.
+- [CHANGELOG.md](CHANGELOG.md).
+
+## License
+
+Not decided yet, so there is no LICENSE file. Third-party software in the binaries is listed in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). The sample project in `examples/sample/` is CC0.

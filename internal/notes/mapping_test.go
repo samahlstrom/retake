@@ -165,7 +165,7 @@ func TestMapping(t *testing.T) {
 
 	md := renderMD(moments, comments, flags, video, []*take{tk}, "v6", []string{"v5", "v6"})
 	for _, s := range []string{
-		"## Rules for applying these notes", "ask Sam rather than guess",
+		"## Rules for applying these notes", "ask the reviewer rather than guess",
 		"## Flags: retractions and reinstatements (2)",
 		`- #3 S2 [v6] · paused 00:08.8 · "Throw out everything I said about this clip." · FLAG retraction ` +
 			`(everything earlier on this clip): would void #1, #2`,

@@ -20,7 +20,7 @@ func IsVersionDir(name string) bool { return versionDirRE.MatchString(name) }
 
 // Root returns the project root of a video file (absolute, symlinks resolved). If the file's folder looks like a
 // version folder (v<N>, or any folder that has sibling folders holding the same family), the root is that folder's
-// parent. Otherwise it's the file's own folder. item-shop/v7/x.mp4 has the root item-shop/.
+// parent. Otherwise it's the file's own folder. tutorial/v7/x.mp4 has the root tutorial/.
 func Root(video string) string {
 	dir := filepath.Dir(video)
 	parent := filepath.Dir(dir)

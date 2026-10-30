@@ -1,0 +1,16 @@
+[
+ {
+  "id": "S1",
+  "file": "seg_01.webm",
+  "mime": "audio/webm;codecs=opus",
+  "version": "v2",
+  "flip": false,
+  "t_start": 1,
+  "t_end": 7.171,
+  "recording": false,
+  "video_start": 11,
+  "video_end": 11,
+  "video_min": 11,
+  "video_max": 11
+ }
+]

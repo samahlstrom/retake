@@ -1,5 +1,6 @@
 /bin/
 /dist/
+/dist-editor/
 /coverage/
 web/node_modules/
 web/dist/
@@ -17,3 +18,9 @@ e2e/playwright-report/
 /editor/target/
 /editor/examples/*/media/
 .retake/
+
+# the owner's private notes (never committed)
+/docs/private/
+
+# scripts/make-sample.sh default output
+/retake-sample/

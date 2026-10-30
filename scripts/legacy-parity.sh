@@ -8,7 +8,7 @@
 # and the two saved takes (and /api/info) are diffed structurally.
 #
 # usage: scripts/legacy-parity.sh [--compare-legacy] [--keep]
-# env:   LEGACY_REVIEW_DIR  the legacy review/ folder (default: ~/deadlock-editing-style/skill/scripts/review)
+# env:   LEGACY_REVIEW_DIR  the legacy review/ folder (required: there is no default)
 #        CHROMIUM_PATH      headless chromium (default: /usr/lib/chromium/chromium)
 #        RETAKE_BIN         retake binary to test (default: built from this checkout)
 #        PARITY_WORK        scratch folder (default: .retake-work/parity), deleted after a passing run
@@ -16,7 +16,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-LEGACY="${LEGACY_REVIEW_DIR:-$HOME/deadlock-editing-style/skill/scripts/review}"
+LEGACY="${LEGACY_REVIEW_DIR:-}"
 CHROME="${CHROMIUM_PATH:-/usr/lib/chromium/chromium}"
 WORK="${PARITY_WORK:-$ROOT/.retake-work/parity}"
 PORT=8811
@@ -34,6 +34,7 @@ for arg in "$@"; do
 done
 
 skip() { echo "legacy-parity: SKIP: $*"; exit 0; }
+[ -n "$LEGACY" ] || skip "LEGACY_REVIEW_DIR is not set (the legacy review/ folder)"
 for f in index.html tests/e2e_headless.mjs; do
   [ -f "$LEGACY/$f" ] || skip "legacy player not found ($LEGACY/$f); set LEGACY_REVIEW_DIR"
 done

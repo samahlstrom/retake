@@ -9,7 +9,7 @@ voice. The suite runs serially, with one browser, because the scenario is timed 
 ```bash
 make e2e                                   # builds bin/retake, then runs the suite against it
 cd e2e && npm ci && npm test               # the suite alone (needs bin/retake from `make build`)
-RETAKE_SERVER=legacy npm test              # against the legacy Python player instead (new-only tests skip)
+RETAKE_SERVER=legacy RETAKE_LEGACY_REVIEW=/path/to/review npm test   # against the legacy Python player (new-only tests skip)
 npm run typecheck                          # tsc --strict over the suite
 npm run fixtures -- <dir>                  # only generate the media, into <dir>/media
 ```
@@ -20,7 +20,7 @@ Run it through mise (`mise exec -- npm test`) to use the pinned node. Needs `ffm
 |---|---|---|
 | `RETAKE_SERVER` | `new` | `new`: `bin/retake open <video> --no-open --port <p> --idle-exit 0`. `legacy`: the Python player's `review <video> --no-open --port <p> --idle-exit 0`. |
 | `RETAKE_BIN` | `<repo>/bin/retake` | The new server's binary. |
-| `RETAKE_LEGACY_REVIEW` | `~/deadlock-editing-style/skill/scripts/review/review` | The legacy launcher. It is only run, never modified. |
+| `RETAKE_LEGACY_REVIEW` | none; required with `RETAKE_SERVER=legacy` | The legacy player's `review` launcher. It is only run, never modified. |
 | `CHROMIUM_PATH` | `/usr/lib/chromium/chromium` if it exists, else Playwright's Chromium | The browser. CI points it at Playwright's Chromium. |
 | `RETAKE_E2E_WORK` | `<repo>/.retake-work/e2e` | Scratch root: media, version families, takes, server logs. It is wiped at the start of a run and deleted after a passing run. A failing run keeps it. The suite only deletes a folder that has its `.retake-e2e` marker. |
 | `RETAKE_E2E_KEEP` | unset | Set it to keep the scratch data after a passing run too. |

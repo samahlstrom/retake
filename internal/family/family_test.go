@@ -38,7 +38,7 @@ func TestParseStem(t *testing.T) {
 		{"clip_v6", true, Name{"clip", 6, ""}},
 		{"clip_v5_draft", true, Name{"clip", 5, "_draft"}},
 		{"clip_v7_0-010_preview", true, Name{"clip", 7, "_0-010_preview"}},
-		{"item-shop-V007", true, Name{"item-shop", 7, ""}},
+		{"tutorial-V007", true, Name{"tutorial", 7, ""}},
 		{"my_video_v2", true, Name{"my_video", 2, ""}},
 		{"clip_v6_v7", true, Name{"clip", 6, "_v7"}},
 		{"clip_v6x", false, Name{}},

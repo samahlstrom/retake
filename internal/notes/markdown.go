@@ -216,6 +216,7 @@ func renderMD(moments []*Moment, comments []*Comment, flags []FlagEntry, video *
 		counts += " · " + plural(nImages, "image")
 	}
 	counts += " · " + plural(len(flags), "flag")
+	who := reviewer(takes)
 	lines := []string{
 		fmt.Sprintf("# Review notes: %s (%s)", getOr(video, "name", "?"), version), "",
 		fmt.Sprintf("video %s (%sx%s, %s fps, %s)%s  ", getOr(video, "path", "?"), getOr(video, "width", "None"),
@@ -223,20 +224,21 @@ func renderMD(moments []*Moment, comments []*Comment, flags []FlagEntry, video *
 		counts, "",
 		"## Rules for applying these notes",
 		"- Later statements override earlier ones: a higher #number was said later.",
-		"- A retraction voids the comments it refers to: the same clip/moment, unless Sam names a wider scope.",
+		"- A retraction voids the comments it refers to: the same clip/moment, unless " + who + " names a wider scope.",
 		"- A reinstatement restores what that retraction voided.",
-		"- When the scope is unclear, ask Sam rather than guess. Flags are heuristics, and nothing was deleted.",
-		fmt.Sprintf("- `[v7 flip]` = said while Sam had flipped (C) to another version to compare: it is about that "+
-			"version vs %s. `[v3]` on a %s note = recorded on v3 in a range whose frames are identical.", version,
+		"- When the scope is unclear, ask " + who + " rather than guess. Flags are heuristics, and nothing was deleted.",
+		fmt.Sprintf("- `[v7 flip]` = said while %s had flipped (C) to another version to compare: it is about that "+
+			"version vs %s. `[v3]` on a %s note = recorded on v3 in a range whose frames are identical.", who, version,
 			version),
 		"- `(audio)` = the line is about sound (VO pauses, music, volume): check the audio, not just the picture.",
 	}
 	if nImages > 0 {
-		lines = append(lines, "- `image N` = a picture Sam dropped onto the frame at that spot (framed in the "+
+		lines = append(lines, "- `image N` = a picture "+who+" dropped onto the frame at that spot (framed in the "+
 			"snapshot): use it there.")
 	}
 	if answers {
-		lines = append(lines, "- `answer to question N` = Sam's answer to your question N: apply it to what you asked.")
+		lines = append(lines, "- `answer to question N` = "+who+"'s answer to your question N: apply it to what you "+
+			"asked.")
 	}
 	lines = append(lines, "",
 		"How to read: #n = spoken order. S2 = recording segment (R on to R off; only these were recorded). "+

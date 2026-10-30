@@ -1,0 +1,9 @@
+{
+  "base": 0,
+  "answers": [],
+  "summary": "v2: a warmer title card, and the 20 g pop lands on 'grams'",
+  "ops": [
+    { "op": "set", "id": "title/card", "path": "picture/background", "value": "#3b2a20" },
+    { "op": "set", "id": "pop/grams", "path": "from", "value": "word:c/grams" }
+  ]
+}

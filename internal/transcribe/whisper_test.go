@@ -195,7 +195,7 @@ func TestWhisperTranscribeRunsCLI(t *testing.T) {
 	}
 	wav := filepath.Join(t.TempDir(), "in.wav")
 	writeWAV(t, wav, 1)
-	words, err := w.Transcribe(context.Background(), wav, Options{Prompt: "Deadlock", Language: "en"})
+	words, err := w.Transcribe(context.Background(), wav, Options{Prompt: "Retake", Language: "en"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -210,7 +210,7 @@ func TestWhisperTranscribeRunsCLI(t *testing.T) {
 	a := r[0]
 	if a[slices.Index(a, "-m")+1] != custom || a[slices.Index(a, "-vm")+1] != filepath.Join(store.Dir, vadModel.File) ||
 		a[slices.Index(a, "-f")+1] != wav || a[slices.Index(a, "-t")+1] != "3" || !slices.Contains(a, "-ng") ||
-		a[slices.Index(a, "--prompt")+1] != "Deadlock" {
+		a[slices.Index(a, "--prompt")+1] != "Retake" {
 		t.Errorf("args = %v", a)
 	}
 }
