@@ -40,6 +40,8 @@ type Env struct {
 	Stdin          io.Reader              // retake mcp reads its requests here; nil = os.Stdin
 	// Engines returns the notes engine and the transcriber for the jobs and `retake notes build`; nil = app.Engines.
 	Engines func(config.Config) jobs.Engines
+	// SharePing is how often `retake share` pings the server it attached to; 0 = DefaultSharePing.
+	SharePing time.Duration
 }
 
 func (e Env) withDefaults() Env {
@@ -94,14 +96,28 @@ the agent loop (spec/notes.md; <video> is any version of the family, and every c
       run CMD through the shell whenever notes or answers land (one at a time), with RETAKE_VIDEO,
       RETAKE_PROJECT and RETAKE_SINCE set; Ctrl+C stops
 
+sharing (spec/team.md; links and tokens belong to the project of <video>):
+  retake share <video> [--role reviewer] [--expires 24h] [--label NAME] [--tunnel cloudflare|tailscale|none]
+               [--host H] [--funnel] [--tunnel-bin PATH] [--port N] [--no-qr] [--json] [--verbose]
+      share the review over an HTTPS tunnel: attaches to (or starts) the server and prints a link with a QR
+      code. Roles: viewer (watch), reviewer (and record), approver (and approve, reopen). Ctrl+C stops sharing
+  retake share list <video> [--json]
+      the project's tokens and running shares
+  retake share revoke <video> <id> [--json]
+      end a token now
+  retake token create <video> --role viewer|reviewer|approver|agent [--label NAME] [--expires 30d] [--host H] [--json]
+      make a token without a tunnel. For an agent, print the Claude Code and Codex setup for the /mcp route
+  retake token list|revoke ...
+      the same as share list and share revoke
+
 open:
   --versions F...   the family is exactly <video> plus these files (default: detect *_vN files)
   --port N          serve on port N, or exit 2 if it's busy (default 8777, or the next free one up to 8796)
   --no-open         don't open the page in the browser
   --idle-exit MIN   exit MIN minutes after the page is gone; 0 = never (default 15)
   --ui-dir DIR      serve the page from DIR instead of the one built into the binary
-  --allow-host H    also answer at https://H, e.g. a tunnel's hostname (repeatable). Anyone with that URL can
-                    watch the versions and record takes, so only use it with a link you trust
+  --allow-host H    also answer at https://H, e.g. a reverse proxy's hostname (repeatable). Every request there
+                    needs a token (retake token create); retake share does all of this for you
   --verbose         log every request
 
 notes build:
@@ -145,6 +161,10 @@ func Main(ctx context.Context, args []string, env Env) int {
 		return watchCmd(ctx, args[1:], env)
 	case "transcribe":
 		return transcribeCmd(ctx, args[1:], env)
+	case "share":
+		return shareCmd(ctx, args[1:], env)
+	case "token":
+		return tokenCmd(ctx, args[1:], env)
 	case "version", "--version":
 		_, _ = fmt.Fprintf(env.Stdout, "retake %s\n", Version())
 		return ExitOK

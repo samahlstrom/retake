@@ -233,18 +233,9 @@ func openCmd(ctx context.Context, args []string, env Env) int {
 		}
 		explicit = append(explicit, p)
 	}
-	var page fs.FS
-	if a.uiDir != "" {
-		dir := absPath(a.uiDir, env.Getenv)
-		if page, err = ui.Files(dir); err != nil {
-			_, _ = fmt.Fprintf(env.Stderr, "retake: --ui-dir: no such folder: %s\n", dir)
-			return ExitUsage
-		}
-		if _, err := fs.Stat(page, "index.html"); err != nil {
-			_, _ = fmt.Fprintf(env.Stderr, "retake: --ui-dir %s has no index.html; / will say the page isn't built\n", dir)
-		}
-	} else {
-		page = ui.Embedded()
+	page, ok := pageFiles(env, a.uiDir)
+	if !ok {
+		return ExitUsage
 	}
 
 	tries := env.PortTries
@@ -257,27 +248,8 @@ func openCmd(ctx context.Context, args []string, env Env) int {
 		return ExitUsage
 	}
 	port := ln.Addr().(*net.TCPAddr).Port
-
-	prober := env.Prober
-	if prober == nil {
-		if !probe.Available() {
-			_, _ = fmt.Fprintln(env.Stderr, "retake: ffprobe not found on PATH: install ffmpeg so versions can be detected")
-		}
-		prober = probe.New(env.Stderr)
-	}
-	author := st.Name
-	if author == "" {
-		author = osUser(env.Getenv)
-	}
-	engines := app.Engines(cfg)
-	if env.Engines != nil {
-		engines = env.Engines(cfg)
-	}
-	srv := server.New(server.Options{
-		Video: video, Explicit: explicit, Port: port, UI: page, Author: author, Prober: prober,
-		IdleExit: idleDuration(st.IdleExit), CheckEvery: env.CheckEvery, Clock: env.Clock,
-		Log: env.Stderr, Verbose: a.verbose, AllowHosts: a.allow, Jobs: &engines,
-	})
+	srv := newServer(env, cfg, st, server.Options{Video: video, Explicit: explicit, Port: port, UI: page,
+		IdleExit: idleDuration(st.IdleExit), Verbose: a.verbose, AllowHosts: a.allow})
 
 	url := fmt.Sprintf("http://127.0.0.1:%d/", port)
 	printStartup(env.Stdout, srv, video, url, st.IdleExit)
@@ -303,6 +275,47 @@ func openCmd(ctx context.Context, args []string, env Env) int {
 		_, _ = fmt.Fprintln(env.Stdout, "\nretake: stopped")
 	}
 	return ExitOK
+}
+
+// newServer fills in what open and share serve alike (the prober, the author, the engines, the test hooks and the
+// log) and makes the server.
+func newServer(env Env, cfg config.Config, st config.Settings, o server.Options) *server.Server {
+	o.Prober = env.Prober
+	if o.Prober == nil {
+		if !probe.Available() {
+			_, _ = fmt.Fprintln(env.Stderr, "retake: ffprobe not found on PATH: install ffmpeg so versions can be detected")
+		}
+		o.Prober = probe.New(env.Stderr)
+	}
+	o.Author = st.Name
+	if o.Author == "" {
+		o.Author = osUser(env.Getenv)
+	}
+	engines := app.Engines(cfg)
+	if env.Engines != nil {
+		engines = env.Engines(cfg)
+	}
+	o.Jobs = &engines
+	o.CheckEvery, o.Clock, o.Log, o.Version = env.CheckEvery, env.Clock, env.Stderr, Version()
+	return server.New(o)
+}
+
+// pageFiles returns the page to serve: --ui-dir's folder, else the build in the binary. ok is false (after saying
+// why) when the folder doesn't exist.
+func pageFiles(env Env, uiDir string) (page fs.FS, ok bool) {
+	if uiDir == "" {
+		return ui.Embedded(), true
+	}
+	dir := absPath(uiDir, env.Getenv)
+	page, err := ui.Files(dir)
+	if err != nil {
+		_, _ = fmt.Fprintf(env.Stderr, "retake: --ui-dir: no such folder: %s\n", dir)
+		return nil, false
+	}
+	if _, err := fs.Stat(page, "index.html"); err != nil {
+		_, _ = fmt.Fprintf(env.Stderr, "retake: --ui-dir %s has no index.html; / will say the page isn't built\n", dir)
+	}
+	return page, true
 }
 
 // printStartup prints the legacy player's startup lines: the video, the family, the page URL, where takes go.
