@@ -23,6 +23,11 @@ const pageStyle = `body{margin:0;min-height:100vh;display:grid;place-items:cente
 
 // page sends one short HTML page. body is HTML; callers escape what they put in it.
 func (h *Hub) page(w http.ResponseWriter, r *http.Request, code int, title, body string) {
+	writePage(w, r, code, title, body)
+}
+
+// writePage sends one short HTML page in the review page's colors, with no script.
+func writePage(w http.ResponseWriter, r *http.Request, code int, title, body string) {
 	doc := `<!doctype html><html lang="en"><meta charset="utf-8">` +
 		`<meta name="viewport" content="width=device-width,initial-scale=1"><title>` + esc(title) + `</title>` +
 		`<style>` + pageStyle + `</style><main>` + body + `</main>`

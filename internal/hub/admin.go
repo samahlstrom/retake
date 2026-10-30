@@ -41,6 +41,8 @@ func (h *Hub) apiRoute(w http.ResponseWriter, r *http.Request, ri reqInfo, parts
 			"projects": ps})
 	case len(parts) == 1 && parts[0] == "projects" && get:
 		h.listProjects(w, r, s)
+	case len(parts) == 1 && parts[0] == "home" && get:
+		h.apiHome(w, r, s)
 	case len(parts) == 1 && parts[0] == "projects" && post:
 		h.createProject(w, r, s)
 	case len(parts) >= 3 && parts[0] == "projects" && parts[2] == "members":
