@@ -210,6 +210,67 @@ circles.
 
 ## Editing with the timeline
 
-<!-- STUB (editor bridge worker): push --render, manifests in the review loop, the time map for C. Replace this. -->
-> **Stub.** The editor bridge fills this in: pushing a timeline revision as a version (`retake push --render`),
-> how manifests reach the review side, and the time map that makes C land on the matching moment.
+When the versions you review are rendered from a timeline, Retake connects the two ([spec/bridge.md](../spec/bridge.md)).
+A push renders the timeline itself, notes point at timeline elements, C lands on the matching moment, and notes carry
+over to the next version.
+
+**A timeline project.** Retake looks for the timeline from the project root (the folder that holds the version
+folders): the path in `retake.toml` under `[edit] timeline`, else `edit/timeline.json`. The sample's `how-to/retake.toml`
+points at `../edit/timeline.json`.
+
+### Push a revision as a version
+
+```bash
+retake-edit patch apply edit/timeline.json edit/patches/02-v3.json   # its "answers": ["v2#1"]
+retake push how-to/v2/how-to_v2.mp4 --render --parent v2
+```
+
+```
+pushed v3 from v2: ~/retake-sample/how-to/v3/how-to_v3.mp4
+  rendered ../edit/timeline.json rev 2: 5 units, 2 reused, 3 rendered
+  #1 Bigger step labels: 44 px text on a taller bar (p2)
+  answered #1
+```
+
+`--render` renders the current revision (only the units that changed draw again) and moves it into the family as the
+next version, with its manifest beside it (`how-to_v3.manifest.json`) and a record of the push (`how-to_v3.push.json`).
+The changelog comes from the patches made since the parent was rendered: each patch's `answers` and `summary` become
+the line for those notes, so nothing is typed twice. `--change` still replaces a line, and `--ask` asks about a note
+instead. A patch with `"answers": []` is listed as *unrequested*, so you see everything that changed. The push rule
+holds as for any push, and it's checked before anything renders. `--draft` renders at half size with a fast encoder.
+An agent does the same with `version_push` and `render: true`.
+
+Retake runs `retake-edit` from `[edit] retake_edit` in its config, else `$RETAKE_EDIT`, `$PATH`, or
+`editor/target/release` in the repo it was built from.
+
+### Notes point at elements
+
+When `retake notes sync` (or the job after Done) runs for a version that has a manifest, each note gets *targets*:
+the timeline elements under its stroke at its moment, best first. A loop around a label resolves to the label, ahead of
+the shot under it. `retake notes list` shows the best one (`[1 stroke, on label/2]`), and `--json` and the agent's
+`notes_list` give them all, with their ids, so the agent patches the right element.
+
+### C lands on the matching moment
+
+From the manifests of two versions, Retake builds a map from one's times to the other's: units with the same pixels,
+the same voice-over seconds, or the same shot. When a patch trims 0.3 s of voice-over, everything after it plays 0.3 s
+earlier, and C, `[` and `]`, a question's version chips and "see it in v3" all show the other version at the matching
+moment, not the same clock time. `GET /api/timemap?from=v2&to=v3` serves the map. Without manifests the time stays
+as it is.
+
+### Notes carry over
+
+The newest version's sidebar shows its parent's notes at their new times, with what became of them: *unchanged* (the
+same pixels, and for `(audio)` notes the same sound), *answered, check it* (that part changed, and the note was
+answered), or *context changed*. Questions about the parent's notes move to their new times too.
+
+### Faster drafts
+
+`retake-edit proxy edit/timeline.json` makes a small copy of each video asset with a keyframe every half second, and
+draft renders read those instead. That helps most with long screen or camera recordings, which often have a keyframe
+only every few seconds. Static graphics, such as a card with a soft shadow, are drawn once per render, not once per
+frame.
+
+The editor's demo runs the whole loop with no person and no voice: `editor/examples/demo/loop.sh` renders v1, writes a
+review take, syncs its notes, patches, pushes v2 with `--render`, and prints the changelog, the carry-over and the time
+map.

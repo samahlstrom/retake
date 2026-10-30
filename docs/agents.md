@@ -119,6 +119,7 @@ Agents that run shell commands can use the CLI instead of MCP. Every command tak
 | `note_ask` | `retake ask <video> <note> "question" [--option vN]...` | Asks the reviewer about a note. Note 0 asks about the version as a whole. |
 | `note_set` | `retake note <video> <id> --status answered --in vN --change "…"` | Marks a note answered by a version that's already in the family. |
 | `version_push` | `retake push <video> <file> --parent vN --change ID="…"... --ask ID="…"...` | Adds the file to the family as the next `v<N>`, with its changelog. |
+| `version_push` with `render: true` | `retake push <video> --render [--draft] --parent vN ...` | In a timeline project: renders the timeline and pushes that; each patch's `answers` and `summary` become the changelog ([timeline.md](timeline.md#editing-with-the-timeline)). |
 | `versions_list` | `retake versions <video>` | The versions, their parents and changelogs. |
 
 Two more commands help outside the loop:

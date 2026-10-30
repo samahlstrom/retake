@@ -97,12 +97,21 @@ claude mcp add retake -- retake mcp ~/retake-sample/how-to/v2/how-to_v2.mp4
 
 ## Editing with the timeline
 
-<!-- STUB (editor bridge worker): push --render, render manifests, the time map for C. Replace this section. -->
-> **Stub.** The editor bridge (rendering and pushing a timeline revision as a version, manifests, the time map that
-> makes C land on the matching moment) fills this in.
+`retake-edit` renders a timeline file (an edit as data, changed only through patches) into a video and a manifest. In
+a timeline project, the review loop runs on it:
 
-Today, `retake-edit` renders a timeline file into a video and a manifest, and you push the video with `retake push`.
-[docs/timeline.md](docs/timeline.md) explains the format.
+```bash
+retake-edit patch apply edit/timeline.json edit/patches/02-v3.json   # the patch says which note it answers
+retake push how-to/v2/how-to_v2.mp4 --render --parent v2             # renders, pushes v3, writes the changelog
+```
+
+- `retake push --render` renders the current revision (only the changed parts draw again) and pushes it with its
+  manifest. Each patch's note ids and summary become the changelog.
+- Notes point at the timeline elements under their strokes, so an agent knows what to patch.
+- C, `[` and `]` land on the matching moment when a trim moved things, not on the same clock time.
+- The newest version shows the parent's notes as unchanged, answered (check it), or context changed.
+
+[docs/timeline.md](docs/timeline.md) explains the format and the loop.
 
 ## Sharing
 

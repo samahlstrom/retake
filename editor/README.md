@@ -57,6 +57,15 @@ retake-edit render timeline.json                                 # 5 of 6 units 
 Patching changes `timeline.json` (its `rev` and the patch log), so work on a copy if you want to keep the example
 clean.
 
+`loop.sh` runs the whole review loop on a copy, headless (`spec/bridge.md`): it renders v1 into a version family,
+starts the review server on a test port, writes a review take with three stroked notes (synthetic words, no audio),
+syncs the notes (each gets the timeline elements under its stroke), applies a patch answering one of them and a VO
+trim, pushes v2 with `retake push --render`, and prints the changelog, the notes carried over to v2 and the time map.
+
+```sh
+RETAKE_EDIT=target/release/retake-edit examples/demo/loop.sh   # needs bin/retake (make build), curl and jq
+```
+
 ## A project outside the repo
 
 A timeline can live anywhere and point at media in place: asset paths are relative to the timeline file, absolute,
