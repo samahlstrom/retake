@@ -1,6 +1,5 @@
 // Where things are, and which server is under test. Every path here is derived, never hard-coded per machine.
 import { existsSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -16,9 +15,15 @@ export const LEGACY = MODE === 'legacy';
 
 /** The new server's binary (`make build`). */
 export const RETAKE_BIN = resolve(process.env.RETAKE_BIN ?? join(REPO, 'bin', 'retake'));
-/** The legacy launcher, run with its own venv. Read-only reference: the tests only run it. */
-export const LEGACY_REVIEW = resolve(process.env.RETAKE_LEGACY_REVIEW
-  ?? join(homedir(), 'deadlock-editing-style', 'skill', 'scripts', 'review', 'review'));
+/**
+ * The legacy launcher, run with its own venv. Read-only reference: the tests only run it. Legacy mode requires
+ * RETAKE_LEGACY_REVIEW: there is no default, since the legacy player isn't part of this repo.
+ */
+const legacyReview = process.env.RETAKE_LEGACY_REVIEW;
+if (LEGACY && !legacyReview) {
+  throw new Error('RETAKE_SERVER=legacy needs RETAKE_LEGACY_REVIEW, the legacy player\'s `review` launcher');
+}
+export const LEGACY_REVIEW = legacyReview ? resolve(legacyReview) : '';
 
 /** Scratch root for one run: media, version families, takes and server logs. Wiped at the start of every run. */
 export const WORK = resolve(process.env.RETAKE_E2E_WORK ?? join(REPO, '.retake-work', 'e2e'));
