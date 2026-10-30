@@ -23,6 +23,12 @@ version.
   that probes with a duration is used.
 - **Still rendering = skipped.** A non-current file whose probe has no duration is left out until it probes. The
   family is re-scanned on every `GET /api/info`.
+- **Except a streamed render** (spec/bridge.md, "Streaming"): an `.m3u8` whose playlist has no `#EXT-X-ENDLIST`, has
+  at least one segment, and has a push record `<stem>.push.json` with `rendering` while the push holds its lock
+  (`.<stem>.lock` beside it) is in the family without being probed. It gets `rendering: true` and
+  `progress: {done, total, seconds}` (units published of all, playable seconds so far), and its `duration`, `fps`,
+  `width` and `height` are the expected ones from the record. A playlist without `#EXT-X-ENDLIST` and no live push
+  is probed as before.
 - **Labels** are `v<N>`, sorted by N. A file without a version number gets the label `current`.
 - **Explicit** (`--versions a.mp4 b.mp4`): the opened file plus the listed ones. The label is `v<N>` when the name has
   a version number, else the stem. A duplicate label gets `-<index>` appended. Files without a number sort after the
@@ -36,6 +42,8 @@ A version object:
 ```
 
 `duration` is null if ffprobe can't read one. `fps` defaults to 30.0. Probe results are cached per (path, mtime, size).
+A rendering version also has `"rendering": true, "progress": {"done": 12, "total": 50, "seconds": 41.3}`; other
+versions have neither field.
 
 ## Routes
 
@@ -61,7 +69,10 @@ Anything else is 404 `{"error": "not found"}`. Any request whose `Host` header i
 **Video files** support single HTTP ranges: `bytes=a-b`, `bytes=a-` and `bytes=-n` give 206 with `Content-Range`, and
 an unsatisfiable range gives 416 with `Content-Range: bytes */<size>`. They send `Accept-Ranges: bytes` and
 `Cache-Control: no-cache`, and use the content type for the extension (`video/mp4`, `video/quicktime`, `video/webm`,
-`video/x-matroska`, `application/vnd.apple.mpegurl`, and `video/mp4` / `video/iso.segment` for `.m4s`).
+`video/x-matroska`, `application/vnd.apple.mpegurl`, `video/mp4` / `video/iso.segment` for `.m4s`, `video/mp2t` for
+`.ts`). A playlist (`.m3u8`) can still be growing (spec/bridge.md, "Streaming"), so it also says no cache in between
+may keep it: `Cache-Control: no-cache, private`, `CDN-Cache-Control: no-store` and
+`Cloudflare-CDN-Cache-Control: no-store` (a tunnel such as Cloudflare's then always asks this server).
 
 **Every request** counts as contact for the idle timer. With `--idle-exit M` (default 15, 0 = never), the server exits
 M minutes after the last request, counting only once the page has made its first request. The page pings every 15 s.
