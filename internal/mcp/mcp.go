@@ -69,7 +69,10 @@ const (
 		`revision with retake-edit and pushes that with its render manifest: every patch since the parent's render ` +
 		`that has answers (["#5"]) becomes the changelog entry for those notes with the patch's summary, so list in ` +
 		`changes only notes no patch answers; patches with answers: [] are listed as unrequested. draft: true for a ` +
-		`fast draft render.`
+		`fast draft render. A rendered push streams (stream defaults to true): the version is a growing HLS playlist ` +
+		`in its v<N>/ folder that the reviewer can play within seconds, filling in as units render; the call returns ` +
+		`when the render is done and the push recorded. stream: false renders one MP4 first; export: true also ` +
+		`packages an MP4 beside the playlist at the end.`
 	versionsDesc = `List the versions of the video, oldest first: label, file path, duration in seconds, which is ` +
 		`the newest, and for pushed ones the parent, sha256, who pushed, when, and the changelog ([{note, summary}]). ` +
 		`open counts the notes still open on each version: a push from that version must handle them.`
@@ -113,6 +116,8 @@ type pushIn struct {
 	File    string     `json:"file,omitempty" jsonschema:"path of the rendered video file to push (none with render)"`
 	Render  bool       `json:"render,omitempty" jsonschema:"render the project's timeline with retake-edit and push that"`
 	Draft   bool       `json:"draft,omitempty" jsonschema:"with render: a draft (half size, fast encoder)"`
+	Stream  *bool      `json:"stream,omitempty" jsonschema:"with render: stream the version as it renders (default true)"`
+	Export  bool       `json:"export,omitempty" jsonschema:"with a streamed render: also package an MP4 at the end"`
 	Parent  string     `json:"parent,omitempty" jsonschema:"the version label it was made from (default: the newest version)"`
 	Label   string     `json:"label,omitempty" jsonschema:"v<N> to use instead of the next free number"`
 	Changes []changeIn `json:"changes,omitempty" jsonschema:"the notes this version addresses"`
@@ -193,7 +198,10 @@ func NewServerWith(p *agent.Project, version string, opts Options) *sdk.Server {
 				}
 			}
 			a := agent.PushArgs{File: file, Parent: in.Parent, Label: in.Label, Move: move, Render: in.Render,
-				Draft: in.Draft}
+				Draft: in.Draft, Export: in.Export}
+			if in.Stream != nil {
+				a.Stream, a.NoStream = *in.Stream, !*in.Stream
+			}
 			for _, c := range in.Changes {
 				a.Changes = append(a.Changes, project.ChangeEntry{Note: c.Note, Summary: c.Summary})
 			}

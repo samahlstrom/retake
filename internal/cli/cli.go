@@ -92,9 +92,11 @@ the agent loop (spec/notes.md; <video> is any version of the family, and every c
       mark a note answered by a version that's already in the family
   retake push <video> <file> [--parent vN] [--label vN] [--change ID="summary"]... [--ask ID="question"]... [--move]
       put <file> in the family as the next v<N>. Every note open on the parent must be in --change or --ask
-  retake push <video> --render [--draft] [--parent vN] [--label vN] [--change ID="..."]... [--ask ID="..."]...
+  retake push <video> --render [--draft] [--no-stream] [--export] [--parent vN] [--label vN] [--change ID="..."]...
       a timeline project (spec/bridge.md): render the timeline with retake-edit and push it with its render
-      manifest; the patches since the parent answer their notes, so their changelog is written for you
+      manifest; the patches since the parent answer their notes, so their changelog is written for you. It
+      streams: v<N> is a playlist in its v<N>/ folder that plays within seconds and fills in as units render
+      (--no-stream: one MP4, pushed when done; --export: also an MP4 beside the playlist at the end)
   retake versions <video>
       the versions, their parents and changelogs
   retake mcp <video>

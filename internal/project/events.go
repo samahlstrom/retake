@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"math"
 	"time"
+
+	"github.com/samahlstrom/retake/internal/family"
 )
 
 // Event kinds. They are also the SSE event names of GET /api/events.
@@ -47,10 +49,29 @@ type JobEvent struct {
 
 // VersionEvent is the data of a "version" event.
 type VersionEvent struct {
-	Why    string `json:"why"` // push
+	// Why: push; for a streamed render (spec/bridge.md, "Streaming") also rendering (it's in the family now),
+	// progress, and failed (it's gone).
+	Why    string `json:"why"`
 	Label  string `json:"label"`
 	Parent string `json:"parent,omitempty"`
 	Path   string `json:"path,omitempty"`
+	// Progress is a streamed render's progress (with why progress and rendering).
+	Progress *family.Progress `json:"progress,omitempty"`
+}
+
+// Version events without a push: a streamed render appeared, made progress, or failed.
+const (
+	WhyRendering = "rendering"
+	WhyProgress  = "progress"
+	WhyFailed    = "failed"
+)
+
+// EmitVersion appends a "version" event on its own (a push records its own with RecordPush).
+func (s *Store) EmitVersion(ev VersionEvent) error {
+	return s.write(func(t *tx) error {
+		t.emit(EventVersion, ev)
+		return nil
+	})
 }
 
 func (t *tx) flushEvents() error {

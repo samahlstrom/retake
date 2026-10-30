@@ -100,6 +100,53 @@ type RenderReport struct {
 	Frames       int64              `json:"frames"`
 	Duration     float64            `json:"duration"`
 	Timings      map[string]float64 `json:"timings"`
+	// Stream is a streamed render's playlist and timings (render --hls).
+	Stream *struct {
+		Playlist string  `json:"playlist"`
+		Segments int     `json:"segments"`
+		FirstS   float64 `json:"first_s"`
+		DoneS    float64 `json:"done_s"`
+	} `json:"stream,omitempty"`
+}
+
+// Progress is one progress line of a streamed render (`render --hls --progress`, spec/bridge.md, "Streaming").
+type Progress struct {
+	Progress string  `json:"progress"` // plan | publish | end
+	Units    int     `json:"units"`    // plan: units in the render
+	Reused   int     `json:"reused"`   // plan: units from the cache
+	Segments int     `json:"segments"` // segments planned (plan) or published (publish, end)
+	Duration float64 `json:"duration"` // plan: the expected duration
+	FPS      float64 `json:"fps"`
+	Size     []int   `json:"size"`
+	Done     int     `json:"done"`    // publish: units published
+	Total    int     `json:"total"`   // publish: units in all
+	Seconds  float64 `json:"seconds"` // publish, end: playable seconds
+	Elapsed  float64 `json:"elapsed"` // publish, end: seconds since the render started
+}
+
+// RenderStream runs `retake-edit render <timeline> --hls <playlist> --progress --json [-o <export>] [--draft]`,
+// calling progress for each progress line as it comes, and returns the final report.
+func (e Editor) RenderStream(ctx context.Context, bin, timeline, playlist, export string, draft bool,
+	progress func(Progress)) (RenderReport, error) {
+	args := []string{"render", timeline, "--hls", playlist, "--progress", "--json"}
+	if export != "" {
+		args = append(args, "-o", export)
+	}
+	if draft {
+		args = append(args, "--draft")
+	}
+	var rep RenderReport
+	err := e.runWith(ctx, bin, args, &rep, func(line []byte) bool {
+		var p Progress
+		if json.Unmarshal(line, &p) != nil || p.Progress == "" {
+			return false
+		}
+		if progress != nil {
+			progress(p)
+		}
+		return true
+	})
+	return rep, err
 }
 
 // EditError is a failure retake-edit reported (its typed errors, joined).
@@ -123,11 +170,47 @@ func (e Editor) Render(ctx context.Context, bin, timeline, out string, draft boo
 
 // run runs retake-edit with --json and decodes its result into v.
 func (e Editor) run(ctx context.Context, bin string, args []string, v any) error {
+	return e.runWith(ctx, bin, args, v, nil)
+}
+
+// lineWriter hands each complete line written to it to take, as it comes; the lines take doesn't want go to rest.
+type lineWriter struct {
+	take    func([]byte) bool
+	partial []byte
+	rest    *bytes.Buffer
+}
+
+func (w *lineWriter) Write(p []byte) (int, error) {
+	w.partial = append(w.partial, p...)
+	for {
+		i := bytes.IndexByte(w.partial, '\n')
+		if i < 0 {
+			return len(p), nil
+		}
+		line := w.partial[:i]
+		if !w.take(bytes.TrimSpace(line)) {
+			w.rest.Write(line)
+			w.rest.WriteByte('\n')
+		}
+		w.partial = w.partial[i+1:]
+	}
+}
+
+// runWith is run, with each stderr line offered to lines first (nil: none); the lines it takes aren't error text.
+func (e Editor) runWith(ctx context.Context, bin string, args []string, v any, lines func([]byte) bool) error {
 	cmd := exec.CommandContext(ctx, bin, args...) //nolint:gosec // the configured editor binary
 	cmd.Env = append(os.Environ(), e.Env...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	var lw *lineWriter
+	if lines != nil {
+		lw = &lineWriter{take: lines, rest: &stderr}
+		cmd.Stderr = lw
+	}
 	runErr := cmd.Run()
+	if lw != nil {
+		stderr.Write(lw.partial) // a last line without its newline
+	}
 	var res struct {
 		OK     bool `json:"ok"`
 		Errors []struct {

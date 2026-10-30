@@ -6,6 +6,8 @@ import (
 	"io/fs"
 	"os"
 	"strings"
+
+	"github.com/samahlstrom/retake/internal/family"
 )
 
 // PatchRef is a patch as a rendered push lists it.
@@ -42,6 +44,21 @@ type PushRecord struct {
 	Unrequested []PatchRef `json:"unrequested"`
 	Skipped     []Skipped  `json:"skipped"`
 	Units       Units      `json:"units"`
+	// Rendering is a streamed push still rendering (spec/bridge.md, "Streaming"); it's dropped when the render ends.
+	Rendering *family.RenderingState `json:"rendering,omitempty"`
+	// Stream is what a streamed push published, once it's done.
+	Stream *StreamStats `json:"stream,omitempty"`
+	// Export is the MP4 a streamed push packaged at the end (with --export), beside the playlist.
+	Export string `json:"export,omitempty"`
+}
+
+// StreamStats is a finished streamed push: its playlist, segments, and the seconds from the start of the render to
+// the first segment and to the end of the playlist.
+type StreamStats struct {
+	Playlist string  `json:"playlist"`
+	Segments int     `json:"segments"`
+	FirstS   float64 `json:"first_s"`
+	DoneS    float64 `json:"done_s"`
 }
 
 // NoteChange is one note's changelog entry from patches: their summaries and ids.

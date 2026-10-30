@@ -155,6 +155,9 @@ func TestAgentCommands(t *testing.T) {
 		{"push", w.video, render, "--render"},
 		{"push", w.video, render, "--draft"},
 		{"push", w.video, "--render", "--move"},
+		{"push", w.video, render, "--stream"},
+		{"push", w.video, "--render", "--stream", "--no-stream"},
+		{"push", w.video, "--render", "--no-stream", "--export"},
 		{"versions"},
 		{"mcp"},
 		{"watch", w.video},
@@ -337,7 +340,7 @@ echo '{"ok": true, "output": "'"$out"'", "units": 4, "reused": 3, "rendered": 1}
 		}
 	}
 	w.config(t, fmt.Sprintf("[edit]\nretake_edit = %q\n", bin))
-	code, out, errOut := w.out("push", w.video, "--render", "--parent", "v6", "--change", "2=pause cut", "--ask",
+	code, out, errOut := w.out("push", w.video, "--render", "--no-stream", "--parent", "v6", "--change", "2=pause cut", "--ask",
 		"3=which track?")
 	if code != 0 || !strings.Contains(out, "pushed v8 from v6") ||
 		!strings.Contains(out, "rendered edit/timeline.json rev 2: 4 units, 3 reused, 1 rendered") ||

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/samahlstrom/retake/internal/bridge"
+	"github.com/samahlstrom/retake/internal/family"
 	"github.com/samahlstrom/retake/internal/project"
 	"github.com/samahlstrom/retake/internal/testmedia"
 )
@@ -64,11 +65,14 @@ func TestPushRenderWithRetakeEdit(t *testing.T) {
 		"ops": [{"op": "set", "id": "pop/faster/text", "path": "fill", "value": "#ff3b30"}]}`)
 	run(bin, "patch", "apply", tl, filepath.Join(edit, "pop.json"))
 
-	res, err := p.VersionPush(context.Background(), PushArgs{Render: true, Draft: true})
+	// It streams (the default): v2 is a playlist in v2/, with the export MP4 beside it.
+	var notes []string
+	res, err := p.VersionPush(context.Background(), PushArgs{Render: true, Draft: true, Export: true,
+		Notify: func(s string) { notes = append(notes, s) }})
 	if err != nil {
 		t.Fatal(err)
 	}
-	dest := filepath.Join(root, "v2", "demo_v2.mp4")
+	dest := filepath.Join(root, "v2", "demo_v2.m3u8")
 	if res.Version.Label != "v2" || res.Version.Path != dest || len(res.Version.Changelog) != 1 ||
 		res.Version.Changelog[0].Summary != "Pop reads FASTER! in red" || res.Version.Changelog[0].Patches[0] != "p1" {
 		t.Fatalf("push = %+v", res.Version)
@@ -76,8 +80,22 @@ func TestPushRenderWithRetakeEdit(t *testing.T) {
 	if res.Render.Units != (bridge.Units{Total: 6, Reused: 5, Rendered: 1}) {
 		t.Fatalf("only the pop's unit renders again: %+v", res.Render.Units)
 	}
+	if s := res.Render.Stream; s == nil || s.Playlist != "demo_v2.m3u8" || s.Segments < 6 || s.FirstS > s.DoneS ||
+		res.Render.Rendering != nil || res.Render.Export != "demo_v2.export.mp4" {
+		t.Fatalf("stream = %+v, record = %+v", res.Render.Stream, res.Render)
+	}
+	pl, err := family.ReadPlaylist(dest)
+	if err != nil || !pl.Ended || pl.Segments != res.Render.Stream.Segments || pl.Seconds < 16 {
+		t.Fatalf("playlist = %+v %v", pl, err)
+	}
+	if st, err := os.Stat(filepath.Join(root, "v2", "demo_v2.export.mp4")); err != nil || st.Size() == 0 {
+		t.Fatalf("export: %v", err)
+	}
+	if exists(family.RenderLockPath(dest)) || len(notes) != 2 {
+		t.Fatalf("the lock is gone; a person heard when it played and when it ended: %q", notes)
+	}
 	m, err := bridge.ForVideo(dest)
-	if err != nil || m.Video != "demo_v2.mp4" || m.Timeline.Rev != 1 || len(m.Units) != 6 {
+	if err != nil || m.Video != "demo_v2.m3u8" || m.Timeline.Rev != 1 || len(m.Units) != 6 {
 		t.Fatalf("manifest = %+v %v", m, err)
 	}
 	// The versions agree everywhere but the pop's unit, so the map is the identity and only u5 changed.
