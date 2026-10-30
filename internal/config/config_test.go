@@ -45,9 +45,9 @@ func TestParse(t *testing.T) {
 				t.Errorf("%+v", c)
 			}
 		}},
-		{name: "all keys", in: "name = \"Sam\"\nport = 8811\nidle_exit_minutes = 15\nopen_browser = false\n",
+		{name: "all keys", in: "name = \"Ana\"\nport = 8811\nidle_exit_minutes = 15\nopen_browser = false\n",
 			check: func(t *testing.T, c Config) {
-				if *c.Name != "Sam" || *c.Port != 8811 || *c.IdleExitMinutes != 15 || *c.OpenBrowser {
+				if *c.Name != "Ana" || *c.Port != 8811 || *c.IdleExitMinutes != 15 || *c.OpenBrowser {
 					t.Errorf("%+v", c)
 				}
 			}},
@@ -126,7 +126,7 @@ func TestLoad(t *testing.T) {
 }
 
 func TestResolvePrecedence(t *testing.T) {
-	s, i, f, b := "Sam", 9000, 2.5, false
+	s, i, f, b := "Ana", 9000, 2.5, false
 	flagPort, flagIdle := 8811, 0.0
 	for _, tc := range []struct {
 		name  string
@@ -136,9 +136,9 @@ func TestResolvePrecedence(t *testing.T) {
 	}{
 		{"defaults", Config{}, Flags{}, Settings{Port: 8777, IdleExit: 15, OpenBrowser: true}},
 		{"file", Config{Name: &s, Port: &i, IdleExitMinutes: &f, OpenBrowser: &b}, Flags{},
-			Settings{Name: "Sam", Port: 9000, IdleExit: 2.5, OpenBrowser: false}},
+			Settings{Name: "Ana", Port: 9000, IdleExit: 2.5, OpenBrowser: false}},
 		{"flags win", Config{Name: &s, Port: &i, IdleExitMinutes: &f}, Flags{Port: &flagPort, IdleExit: &flagIdle, NoOpen: true},
-			Settings{Name: "Sam", Port: 8811, PortStrict: true, IdleExit: 0, OpenBrowser: false}},
+			Settings{Name: "Ana", Port: 8811, PortStrict: true, IdleExit: 0, OpenBrowser: false}},
 		{"file port is a preference, not strict", Config{Port: &i}, Flags{},
 			Settings{Port: 9000, IdleExit: 15, OpenBrowser: true}},
 	} {

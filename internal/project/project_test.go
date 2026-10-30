@@ -58,7 +58,7 @@ func touch(t *testing.T, path string) {
 func TestRoot(t *testing.T) {
 	base := t.TempDir()
 	for _, f := range []string{
-		"item-shop/v7/item_shop_v7.mp4", "item-shop/v6/item_shop_v6.mp4",
+		"tutorial/v7/tutorial_v7.mp4", "tutorial/v6/tutorial_v6.mp4",
 		"flat/clip_v1.mp4", "flat/clip_v2.mp4",
 		"nested/renders/clip_v3.mp4", "nested/old/clip_v2.mov",
 		"lonely/renders/clip_v3.mp4", "lonely/other/unrelated_v1.mp4",
@@ -68,13 +68,13 @@ func TestRoot(t *testing.T) {
 		touch(t, filepath.Join(base, f))
 	}
 	for _, tc := range []struct{ video, root string }{
-		{"item-shop/v7/item_shop_v7.mp4", "item-shop"},       // a v<N> folder
+		{"tutorial/v7/tutorial_v7.mp4", "tutorial"},       // a v<N> folder
 		{"upper/V12/a.mp4", "upper"},                         // v<N> in any case, even for an unversioned name
 		{"flat/clip_v1.mp4", "flat"},                         // no version folders: the file's own folder
 		{"nested/renders/clip_v3.mp4", "nested"},             // a sibling folder holds the same family
 		{"lonely/renders/clip_v3.mp4", "lonely/renders"},     // siblings hold another family only
 		{"plain/folder/movie.mp4", "plain/folder"},           // no version number at all
-		{"item-shop/v6/item_shop_v6.mp4", "item-shop"},       // every member finds the same root
+		{"tutorial/v6/tutorial_v6.mp4", "tutorial"},       // every member finds the same root
 		{"nested/old/clip_v2.mov", "nested"},                 // ... from either side
 		{"plain/folder/../folder/movie.mp4", "plain/folder"}, // (callers pass cleaned paths; Dir cleans anyway)
 	} {
@@ -255,7 +255,7 @@ func TestTransitions(t *testing.T) {
 }
 
 func comment(take, seg string, n int, t0 float64, text string) Comment {
-	return Comment{Take: take, Seg: seg, N: n, T0: t0, T1: t0 + 1, Text: text, Author: "Sam"}
+	return Comment{Take: take, Seg: seg, N: n, T0: t0, T1: t0 + 1, Text: text, Author: "Ana"}
 }
 
 const (
@@ -316,7 +316,7 @@ func TestSyncKeepsIDsAndStates(t *testing.T) {
 	byKey := notesByKey(t, s)
 	n1 := byKey[take1+"/S1/0"]
 	if n1.ID != 1 || n1.Status != StatusOpen || n1.Version != "v7" || n1.Text != "make the title bigger" ||
-		n1.Author != "Sam" || n1.T0 != 1 || n1.T1 != 2 || n1.Detail.Strokes[0].Shape != "circle" ||
+		n1.Author != "Ana" || n1.T0 != 1 || n1.T1 != 2 || n1.Detail.Strokes[0].Shape != "circle" ||
 		n1.Detail.Snapshot != "/x/snap.png" {
 		t.Fatalf("note 1 = %+v", n1)
 	}
@@ -484,7 +484,7 @@ func TestSyncAnswers(t *testing.T) {
 		t.Errorf("answered question's note is %s, want open", n.Status)
 	}
 	th, err := s.Thread(res.Answers[0])
-	if err != nil || th.Kind != KindAnswer || *th.AnswerTo != q.ID || *th.Note != 1 || th.By != "Sam" ||
+	if err != nil || th.Kind != KindAnswer || *th.AnswerTo != q.ID || *th.Note != 1 || th.By != "Ana" ||
 		th.Text != "the second one" {
 		t.Fatalf("answer = %+v %v", th, err)
 	}
@@ -910,7 +910,7 @@ func TestSidebar(t *testing.T) {
 	if got := itemIDs(items); !slices.Equal(got, []string{"note 1", "note 2", "note 3"}) {
 		t.Fatalf("v7 newest = %v", got)
 	}
-	if len(items[0].Images) != 1 || items[0].Images[0].URL != "v7/img_01.png" || items[0].By != "Sam" || *items[0].T0 != 1 {
+	if len(items[0].Images) != 1 || items[0].Images[0].URL != "v7/img_01.png" || items[0].By != "Ana" || *items[0].T0 != 1 {
 		t.Errorf("item 1 = %+v", items[0])
 	}
 	if len(items[1].Images) != 1 || items[1].Images[0].Box != [4]float64{0.5, 0.5, 0.1, 0.1} {

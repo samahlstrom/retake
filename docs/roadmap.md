@@ -1,7 +1,5 @@
 # Roadmap
 
-Design sketch (private): https://claude.ai/artifact/5zwmQevPavMzr7RcPEfpkK
-
 ## Decisions so far
 - **Solo first, team later.** No real-time co-editing.
   - Each person's comments are their own append-only takes, merged by timestamp.
@@ -60,6 +58,6 @@ Later: a shared library of graphics, styles and edit recipes.
 - The name. "retake" is a working name.
 - License. AGPL-3.0 for the server and Apache-2.0 for the client is the recommendation, not decided.
 - Graphics: native Skia from data plus JS expressions, or TS web pages in headless Chrome.
-- Pilot bar: is a close per-frame match to the v7 preview enough?
+- Pilot bar: is a close per-frame match to a reference render enough?
 - C flip: the matching moment, or the same clock time?
 - License gate: block publishing on review-only assets, or warn?

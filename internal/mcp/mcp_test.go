@@ -52,7 +52,7 @@ func newProject(t *testing.T) *agent.Project {
 	var cs []project.Comment
 	for i, text := range []string{"title bigger", "cut the pause", "music too loud"} {
 		cs = append(cs, project.Comment{Take: "2026-10-29_20-48-01", Seg: "S1", N: i + 1, T0: float64(i), T1: float64(i) + 1,
-			Text: text, Author: "Sam"})
+			Text: text, Author: "Ana"})
 	}
 	if _, err := p.Store.Sync(project.Run{Version: "v7", Comments: cs}); err != nil {
 		t.Fatal(err)

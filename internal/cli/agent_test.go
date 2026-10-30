@@ -35,7 +35,7 @@ func (w *world) seedNotes(t *testing.T) *project.Store {
 	var cs []project.Comment
 	for i, text := range []string{"title bigger", "cut the pause", "music too loud"} {
 		cs = append(cs, project.Comment{Take: agentTake, Seg: "S1", N: i + 1, T0: float64(i * 2), T1: float64(i*2 + 1),
-			Text: text, Author: "Sam"})
+			Text: text, Author: "Ana"})
 	}
 	if _, err := st.Sync(project.Run{Version: "v6", Comments: cs}); err != nil {
 		t.Fatal(err)
@@ -74,7 +74,7 @@ func TestAgentCommands(t *testing.T) {
 		t.Fatalf("notes list --json: %d %s %s", code, out, errOut)
 	}
 	code, out, _ = w.out("notes", "list", "--status", "open,question", w.video)
-	if code != 0 || !strings.Contains(out, "#1   v6   0:00.0-0:01.0  open      Sam: title bigger") ||
+	if code != 0 || !strings.Contains(out, "#1   v6   0:00.0-0:01.0  open      Ana: title bigger") ||
 		!strings.HasSuffix(out, "cursor 1\n") {
 		t.Fatalf("notes list:\n%s", out)
 	}
@@ -105,7 +105,7 @@ func TestAgentCommands(t *testing.T) {
 		t.Errorf("ask about the version: %d %q", code, out)
 	}
 	if code, out, _ = w.out("note", w.video, "#1", "--status", "answered", "--in", "v7", "--change", "title at 120%"); code != 0 ||
-		!strings.Contains(out, "answered  Sam: title bigger  -> v7: title at 120%") {
+		!strings.Contains(out, "answered  Ana: title bigger  -> v7: title at 120%") {
 		t.Errorf("note: %d %q", code, out)
 	}
 	if code, _, errOut = w.out("note", w.video, "1", "--status", "accepted"); code != 1 ||

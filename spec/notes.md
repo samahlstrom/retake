@@ -7,7 +7,7 @@ API all build against it. Change it here first.
 
 - **Project root.** If the opened file's folder looks like a version folder (`v<N>`, or any folder that has sibling
   folders holding the same family), the root is that folder's parent. Otherwise it's the file's own folder.
-  Example: `item-shop/v7/x.mp4` has the root `item-shop/`.
+  Example: `tutorial/v7/x.mp4` has the root `tutorial/`.
 - **Store.** `<root>/.retake/project.db`, SQLite (pure-Go driver `modernc.org/sqlite`, WAL). It is created on demand.
   Takes stay where they are (`<version>.review/<take>/`). The DB indexes them and holds everything that changes over
   time.
