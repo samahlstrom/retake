@@ -31,7 +31,7 @@ export const AUTHOR = 'E2E Reviewer';
 
 /**
  * HTTP ports for the servers under test, one per spec file, and the crash test's proxy: RETAKE_E2E_PORT_BASE (default
- * 8831) and the next four, so parallel checkouts can run the suite side by side.
+ * 8831) and the next five, so parallel checkouts can run the suite side by side.
  */
 const PORT_BASE = Number.parseInt(process.env.RETAKE_E2E_PORT_BASE ?? '8831', 10);
 if (!(PORT_BASE > 0 && PORT_BASE < 65531)) throw new Error(`bad RETAKE_E2E_PORT_BASE: ${process.env.RETAKE_E2E_PORT_BASE}`);
@@ -41,6 +41,7 @@ export const PORTS = {
   hls: PORT_BASE + 2,
   crashProxy: PORT_BASE + 3,
   sidebar: PORT_BASE + 4,
+  mobile: PORT_BASE + 5,
 } as const;
 
 /** Keep the scratch data even when everything passes. */

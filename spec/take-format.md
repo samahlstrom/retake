@@ -15,7 +15,7 @@ fields they don't know.
 
 | File | Contents |
 |---|---|
-| `seg_01.webm`, `seg_02.webm`, … | One Opus audio file per R-on/R-off segment. Each starts at that segment's `t_start`. Extension `webm`, `ogg` or `m4a`, whichever the browser records. |
+| `seg_01.webm`, `seg_02.webm`, … | One audio file per R-on/R-off segment. Each starts at that segment's `t_start`. The extension follows the recorder's type (`mime` in `segments.json`): Opus in `webm` or `ogg`, or AAC in mp4 as `m4a`, which is all Safari records (iOS included). |
 | `segments.json` | `[{id, file, mime, version, flip, t_start, t_end, recording, video_start, video_end, video_min, video_max}]`. `id` is `S1`, `S2`, …; `t_*` are `session_t`; `video_*` are `video_t`; `version` is the label shown while recording; `flip` is true if it was the C-flipped partner; `recording` is true while the segment is still open. |
 | `events.json` | `[{session_t, video_t, event, ...}]`. `event` is one of `start`, `rec_start`/`rec_stop` (+`seg`), `play`, `pause`, `ended`, `seek` (+`from`), `tick`, `draw_start`/`draw_end` (+`id`, `seg`; `draw_start` also `color`), `undo` (+`id`), `version` (+`shown`, `base`, `flip`). |
 | `strokes.json` | `[{id, seg, version, flip, color, session_t, session_t_end, video_t, video_t_end, paused, points}]`. `points` are `[x, y]`, normalized 0–1 to the video frame (4 decimals). `color` is `red`, `yellow`, `green` or `white`. Undone strokes are left out on save. |

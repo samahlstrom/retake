@@ -28,6 +28,8 @@ export interface TimelineData {
   histBins: Float32Array;
   histStrokes: readonly HistoryStroke[];
   takeStrokes: readonly HistoryStroke[];
+  /** The playhead knob's radius, px (default 6; the phone layout's is bigger, for the thumb). */
+  knob?: number;
 }
 
 export function drawTimeline(g: CanvasRenderingContext2D, w: number, h: number, x: TimelineData): void {
@@ -75,6 +77,6 @@ export function drawTimeline(g: CanvasRenderingContext2D, w: number, h: number, 
   }
   g.fillStyle = x.recording ? '#ff6a60' : '#fff';
   g.beginPath();
-  g.arc(tlX(x.vt, w, x.xd), y, 6, 0, Math.PI * 2);
+  g.arc(tlX(x.vt, w, x.xd), y, x.knob ?? 6, 0, Math.PI * 2);
   g.fill();
 }

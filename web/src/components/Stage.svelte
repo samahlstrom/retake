@@ -1,6 +1,7 @@
 <script lang="ts">
   // The video, the frozen last frame while another version loads, the image cards, the pen layer, the hint, the toast
-  // and the fatal message.
+  // and the fatal message. In the phone layout the stage takes the video's shape (--ar), and in portrait the hint moves
+  // out of it.
   import type { Review } from '../lib/review.svelte';
   import Hint from './Hint.svelte';
   import ImageLayer from './ImageLayer.svelte';
@@ -8,7 +9,7 @@
   let { review }: { review: Review } = $props();
 </script>
 
-<main id="stage" bind:this={review.el.stage}>
+<main id="stage" bind:this={review.el.stage} style:--ar={review.touch ? review.aspect : undefined}>
   <video
     id="video"
     preload="auto"
@@ -24,7 +25,9 @@
   <canvas id="freeze" bind:this={review.el.freeze} style:display={review.freezeShown ? 'block' : null}></canvas>
   <ImageLayer {review} />
   <canvas id="ink" class:pen={!!review.seg} {@attach review.attachInk}></canvas>
-  <Hint gone={review.hintGone} />
+  {#if review.layoutMode !== 'portrait'}
+    <Hint gone={review.hintGone} touch={review.touch} compare={review.versions.length > 1} />
+  {/if}
   <div id="toast" class="float" class:show={review.toast.show}>{review.toast.msg}</div>
   <div id="fatal" style:display={review.fatal ? 'flex' : null}>{review.fatal}</div>
 </main>

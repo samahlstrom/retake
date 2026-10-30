@@ -451,9 +451,13 @@ test('phone: the list sits under the controls behind a toggle', async () => {
   await expect(page.locator('#side')).toBeHidden();
   await page.locator('#sideToggle').click();
   await ui.waitFor(() => window.__review.sidebar!.panel, 3000);
-  const side = await box('#side'), bar = await box('#bar');
-  expect(side.y).toBeGreaterThanOrEqual(bar.y + bar.height - 1);
+  // The phone layout (portrait): the list sits under the phone controls (#pbar), and Record stays on screen below it.
+  expect(await page.evaluate(() => document.documentElement.dataset.layout)).toBe('portrait');
+  const side = await box('#side'), pbar = await box('#pbar'), rec = await box('#precord');
+  expect(side.y).toBeGreaterThanOrEqual(pbar.y + pbar.height - 1);
   expect(side.width).toBeCloseTo(PHONE.width, 0);
+  expect(rec.y + rec.height).toBeLessThanOrEqual(PHONE.height + 1);
+  expect(rec.y).toBeGreaterThanOrEqual(side.y);
   await seek(4);
   await sleep(300);
   await shot('sidebar-newest-phone.png');
@@ -471,8 +475,7 @@ test('phone: the list sits under the controls behind a toggle', async () => {
   await sleep(300);
   await shot('image-recording-phone.png');
   await ui.key('r');
-  // The milestone-1 bar is wider than a phone (the phone layout is its own work): press Done from script.
-  await page.evaluate(() => (document.querySelector('#done') as HTMLButtonElement).click());
+  await page.locator('#done').click();
   await ui.waitFor(() => window.__review.take.closed && !window.__review.take.saving, 15_000);
 });
 

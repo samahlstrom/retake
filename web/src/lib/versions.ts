@@ -28,6 +28,22 @@ export const partner = <T extends V>(vs: readonly T[], label: string | null): T 
 export const flipTarget = <T extends V>(vs: readonly T[], base: string | null, flipped: boolean): T | null =>
   (flipped ? byLabel(vs, base) : partner(vs, base)) ?? null;
 
+/**
+ * Why C would be refused with the playhead at `t`: the toast it shows then ('Only one version', or the partner only
+ * covers part of the video). null when C would flip.
+ */
+export function flipRefusal(vs: readonly V[], base: string | null, flipped: boolean, t: number): string | null {
+  const target = flipTarget(vs, base, flipped);
+  if (!target) return 'Only one version';
+  return covers(target, t) ? null : coverMessage(target);
+}
+
+/** The two versions C toggles between, for the flip button: [base, partner], or null with a single version. */
+export function flipPair(vs: readonly V[], base: string | null): [string, string] | null {
+  const pt = partner(vs, base);
+  return base && pt ? [base, pt.label] : null;
+}
+
 /** The toast after a successful flip: `v7 (newer)` / `v5 (previous)` while flipped, just the label when back. */
 export function flipToast(vs: readonly V[], base: string | null, target: V, nowFlipped: boolean): string {
   if (!nowFlipped) return target.label;

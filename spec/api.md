@@ -135,6 +135,10 @@ The toast element is `#toast`. It has the class `show` while visible, and its `t
 button is `#done`. The pen canvas is `#ink`: its box is exactly the shown video frame, so the test draws in coordinates
 normalized to it. The page has a single `<video>` element, and the test reads the playhead and play state from it.
 
+New: on a phone the page has its own layout, with the same ids. `<html data-layout>` says which one is on
+(`desktop`, `portrait` or `landscape`). The phone layout's controls are `#play`, `#verBtn` (the version list), `#flip`
+(C), `#undo` (Z), the pen colors `.sw[data-color]`, `#rec` (R) and `#done`.
+
 ## CLI (milestone 1)
 
 ```

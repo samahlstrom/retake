@@ -1,4 +1,5 @@
 import './app.css';
+import './phone.css';
 import { flushSync, hydrate, mount } from 'svelte';
 import App from './App.svelte';
 import { Review, type ReviewHook } from './lib/review.svelte';
@@ -16,5 +17,6 @@ const target = document.getElementById('app');
 if (!target) throw new Error('#app missing');
 // index.html carries the prerendered markup (vite.config.ts), so the page is there before this script runs.
 (target.firstChild ? hydrate : mount)(App, { target, props: { review } });
+review.watchLayout(); // the prerendered page is the desktop layout; a phone switches to its own here
 flushSync(); // run the mount effects now: the elements are bound before start()
 void review.start();

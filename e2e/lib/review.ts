@@ -98,6 +98,34 @@ export class Review {
     await this.page.locator(selector).click();
   }
 
+  /** A finger tap (the context needs `hasTouch`). `force`: tap it even when it looks disabled (aria-disabled). */
+  async tap(selector: string, opts: { force?: boolean } = {}): Promise<void> {
+    await this.page.locator(selector).tap(opts);
+  }
+
+  /**
+   * A one-finger drag through `points`, normalized to `selector`'s box (the pen canvas by default). Real touch input
+   * through the Chrome DevTools protocol, so the page sees touch pointer events, as on a phone. Chromium only.
+   */
+  async touchDrag(points: Point[], selector = '#ink'): Promise<void> {
+    const box = await this.page.locator(selector).boundingBox();
+    if (!box) throw new Error(`${selector} has no box`);
+    const P = points.map(([x, y]) => ({ x: box.x + x * box.width, y: box.y + y * box.height }));
+    const cdp = await this.page.context().newCDPSession(this.page);
+    try {
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [P[0]!] });
+      for (const p of P.slice(1)) {
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [p] });
+        await sleep(8);
+      }
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    } finally {
+      await cdp.detach();
+    }
+    // Chromium makes no click from a tap that starts within ~50 ms of a drag's end (no finger is that quick).
+    await sleep(150);
+  }
+
   async state(): Promise<State> {
     return this.page.evaluate(() => {
       const v = document.querySelector('video')!;
