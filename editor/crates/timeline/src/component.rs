@@ -1774,6 +1774,31 @@ mod tests {
     }
 
     #[test]
+    fn fit_maps_corners_masks_paths_and_groups() {
+        let f = Fit::new([1920, 1080], [1080, 1920]);
+        let mut l = json!({"id": "a", "type": "shape", "shape": "rect", "size": [100, 40],
+            "mask": {"rect": [0, 0, 100, 40], "radius": 8, "stroke": {"color": "#fff", "width": 4}},
+            "transform": {"corners": [0, 0, 100, 0, 100, 40, 0, 40], "perspective": 1000}});
+        fit_layer(&mut l, &f);
+        assert_eq!(l["transform"]["corners"], json!([0.0, 656.25, 56.25, 656.25, 56.25, 678.75, 0.0, 678.75]));
+        assert_eq!(l["transform"]["perspective"], json!(562.5));
+        assert_eq!(l["mask"]["rect"], json!([0.0, 0.0, 56.25, 22.5]), "a mask is in content pixels: scaled");
+        assert_eq!(l["mask"]["radius"], json!(4.5));
+        assert_eq!(l["mask"]["stroke"]["width"], json!(2.25));
+        // A path scales the whole layer; a group's children are fitted and its mask is in frame pixels.
+        let mut p = json!({"id": "p", "type": "shape", "shape": "path", "path": "M0 0 L10 0 L10 10 Z"});
+        fit_layer(&mut p, &f);
+        assert_eq!(p["transform"]["scale"], json!(0.5625));
+        let mut g = json!({"id": "g", "type": "group", "mask": {"rect": [960, 0, 960, 1080]},
+            "layers": [{"id": "g/s", "type": "shape", "shape": "rect", "size": [100, 100],
+                        "transform": {"position": [0, 0]}}]});
+        fit_layer(&mut g, &f);
+        assert_eq!(g["mask"]["rect"], json!([540.0, 656.25, 540.0, 607.5]));
+        assert_eq!(g["layers"][0]["size"], json!([56.25, 56.25]));
+        assert_eq!(g["layers"][0]["transform"]["position"], json!([0.0, 656.25]));
+    }
+
+    #[test]
     fn package_hash_skips_previews_and_hidden_files() {
         let d = std::env::temp_dir().join(format!("retake-pkg-hash-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);

@@ -387,6 +387,59 @@ fn missing_media_is_reported() {
     assert_eq!(errs[0].code, "format_rates");
 }
 
+/// Slice 4's layer constructs: groups resolve their children's anchors on the composition clock, track mattes and
+/// corner pins are checked, and expr_lib wraps every expression.
+#[test]
+fn groups_mattes_corners_and_expr_lib() {
+    let mut d = timeline();
+    d["expr_lib"] = json!("const k = 2;");
+    let pic = &mut d["scenes"][0]["shots"][1]["picture"];
+    pic["expr_lib"] = json!("const j = 3;");
+    pic["layers"] = json!([
+        {"id": "g", "type": "group", "transform": {"opacity": 0.5, "rotation_y": 20, "perspective": 900},
+         "mask": {"radius": 12, "feather": 1, "stroke": {"color": "#fff", "width": 2}}, "blend": "screen",
+         "layers": [
+            {"id": "g/m", "type": "shape", "shape": "path", "path": "M0 0 L10 0 L10 10 Z", "fill": "#fff"},
+            {"id": "g/t", "type": "text", "text": "HI", "from": "word:b/Everest", "hinting": "normal",
+             "subpixel": false, "metrics": "pillow", "matte": {"layer": "g/m", "mode": "luma"},
+             "transform": {"opacity": {"expr": "k * j * t"}}}
+         ]},
+        {"id": "pin", "type": "image", "asset": "proj:clip", "resample": "lanczos",
+         "transform": {"corners": [0, 0, 10, 0, 10, 10, 0, 10]}}
+    ]);
+    let p = project("s4-layers", d.clone());
+    let r = resolve(&p).unwrap_or_else(|e| panic!("{e:?}"));
+    let comp = &r.shots.iter().find(|s| s.id == "intro/2").unwrap().comp;
+    let child = &comp.layers_json[0]["layers"][1];
+    // Everest is at 3.8 s in output time; the shot starts at "Everyone - 0.10" = 2.1 s: 1.7 s on the shot's clock.
+    assert!(near(child["from"].as_f64().unwrap(), 1.7), "{child}");
+    let e = child["transform"]["opacity"]["expr"].as_str().unwrap();
+    assert!(e.contains("const k = 2;") && e.contains("const j = 3;") && e.contains("k * j * t"), "{e}");
+    assert!(e.find("const k").unwrap() < e.find("const j").unwrap(), "the timeline's library comes first");
+    // Errors: corners with a position, a matte that isn't a sibling, a layer matted by itself, a matted matte.
+    let mut bad = d.clone();
+    bad["scenes"][0]["shots"][1]["picture"]["layers"][1]["transform"]["position"] = json!([1, 2]);
+    bad["scenes"][0]["shots"][1]["picture"]["layers"][0]["layers"][1]["matte"]["layer"] = json!("pin");
+    let e = resolve(&project("s4-bad", bad)).unwrap_err();
+    let codes: Vec<&str> = e.iter().map(|x| x.code.as_str()).collect();
+    assert!(codes.contains(&"transform_conflict") && codes.contains(&"matte_unknown"), "{codes:?}");
+    let mut own = d.clone();
+    own["scenes"][0]["shots"][1]["picture"]["layers"][0]["layers"][1]["matte"]["layer"] = json!("g/t");
+    assert_eq!(resolve(&project("s4-self", own)).unwrap_err()[0].code, "matte_self");
+    let mut chain = d.clone();
+    chain["scenes"][0]["shots"][1]["picture"]["layers"][0]["layers"][0]["matte"] = json!({"layer": "g/t"});
+    let e = resolve(&project("s4-chain", chain)).unwrap_err();
+    assert!(e.iter().any(|x| x.code == "matte_chain"), "{e:?}");
+    // The schema refuses unknown blend modes and a corner pin of the wrong length.
+    let mut s = d.clone();
+    s["scenes"][0]["shots"][1]["picture"]["layers"][0]["blend"] = json!("dodge");
+    assert!(Project::from_doc(&scratch("s4-schema").join("timeline.json"), s).is_err());
+    let mut c = d;
+    c["scenes"][0]["shots"][1]["picture"]["layers"][1]["transform"]["corners"] = json!([0, 0, 1, 1]);
+    let e = resolve(&project("s4-corners", c)).unwrap_err();
+    assert_eq!(e[0].code, "prop_shape");
+}
+
 /// Regression (slice 3 broke it): a slice-2 timeline listed plug-ins and other references in `kits`, which 0.1
 /// recorded without loading. They still open, validate and resolve; only kit packages are loaded.
 #[test]

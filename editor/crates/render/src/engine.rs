@@ -470,7 +470,7 @@ impl Engine {
         comps.extend(res.overlays.iter().map(|o| &o.comp));
         comps.extend(res.spine.iter().filter_map(|s| s.comp.as_ref()));
         for c in &comps {
-            for l in &c.layers {
+            for l in crate::graphics::all_layers(&c.layers) {
                 match &l.content {
                     Content::Video(v) => {
                         used.insert(v.asset.clone());
