@@ -1,0 +1,25 @@
+# Only what the image builds from: go.mod, go.sum, cmd/, internal/, web/ (and the rest of the small tree).
+.git
+.github
+.claude
+.retake-work
+.retake
+bin
+dist
+dist-editor
+coverage
+docs/private
+editor/target*
+editor/examples/*/media
+examples/sample/media
+retake-sample
+web/node_modules
+web/dist
+e2e/node_modules
+e2e/test-results
+e2e/playwright-report
+**/test-results
+**/playwright-report
+**/*.tmp
+**/.DS_Store
+deploy/.env
