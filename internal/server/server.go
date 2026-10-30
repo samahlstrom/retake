@@ -78,6 +78,26 @@ type Options struct {
 	Version string
 	// Limiter counts failed token attempts; nil = team.NewLimiter().
 	Limiter *team.Limiter
+
+	// The options below are for retake serve (spec/server.md), which mounts one Server per project under
+	// /p/<name>/. retake open and retake share leave them unset.
+
+	// External says the caller has already decided who each request is and what it may do, and put that on the
+	// request with Grant: the Host, origin and token checks of spec/team.md are skipped, and a request without a
+	// grant is refused.
+	External bool
+	// BasePath is the path the Server is mounted at ("/p/demo"), for the URLs it makes (take images).
+	BasePath string
+	// Store is the project store to use instead of opening <Root>/.retake/project.db; Close leaves it open.
+	Store *project.Store
+	// FollowNewest makes the newest version of the family the current one, instead of the opened file.
+	FollowNewest bool
+	// Media, when set, may serve a version file or take image itself (from object storage, say): it returns false
+	// to let the Server serve the file at path from disk.
+	Media func(w http.ResponseWriter, r *http.Request, path, contentType string) bool
+	// MCPFiles resolves version_push's file argument on /mcp (an uploaded file's reference) to a path, and whether
+	// the push may move it. nil keeps spec/team.md's rule: a file inside the project root.
+	MCPFiles func(file string) (path string, move bool, err error)
 }
 
 // Server serves one version family.
@@ -159,13 +179,16 @@ func (s *Server) store(create bool) (*project.Store, error) {
 	if s.ctx.Err() != nil {
 		return nil, errors.New("the server is closed")
 	}
-	open := project.OpenExisting
-	if create {
-		open = project.Open
-	}
-	st, err := open(s.root)
-	if err != nil {
-		return nil, err
+	st := s.opts.Store
+	if st == nil {
+		open := project.OpenExisting
+		if create {
+			open = project.Open
+		}
+		var err error
+		if st, err = open(s.root); err != nil {
+			return nil, err
+		}
 	}
 	if s.opts.EventPoll > 0 {
 		st.Poll = s.opts.EventPoll
@@ -197,7 +220,10 @@ func (s *Server) Close() error {
 	if s.proj == nil {
 		return nil
 	}
-	err := s.proj.Close()
+	var err error
+	if s.opts.Store == nil {
+		err = s.proj.Close() // a store given in Options belongs to the caller
+	}
 	s.proj = nil
 	return err
 }
@@ -208,6 +234,11 @@ func (s *Server) stopStreams() { s.quitOnce.Do(func() { close(s.quit) }) }
 // Rescan detects the family again and returns it. Only GET /api/info rescans; other routes use the last scan.
 func (s *Server) Rescan() []family.Version {
 	f := family.Detect(s.opts.Video, s.opts.Explicit, s.opts.Prober)
+	if s.opts.FollowNewest && len(f) > 0 {
+		for i := range f {
+			f[i].Current = i == len(f)-1
+		}
+	}
 	s.fam.Store(&f)
 	return f
 }
@@ -304,6 +335,10 @@ func (s *Server) errorLog() io.Writer {
 
 // ServeHTTP implements http.Handler.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if s.opts.External {
+		s.serveGranted(w, r)
+		return
+	}
 	// A page on another site can point its own hostname at 127.0.0.1 (DNS rebinding) and then read our videos and
 	// takes as "same origin". Its requests still carry its hostname, so only answer to our own and our shares'.
 	shared, ok := s.classify(r)
@@ -335,7 +370,28 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return // refused requests don't count as contact
 	}
 	s.touch()
-	r = withAccess(r, a)
+	s.route(w, withAccess(r, a), parts)
+}
+
+// serveGranted serves a request that the caller (retake serve) has already authorized and granted (Options.External).
+// The route's permission is checked once more against the granted role.
+func (s *Server) serveGranted(w http.ResponseWriter, r *http.Request) {
+	w = &privateWriter{ResponseWriter: w} // every answer depends on who asks
+	a, ok := r.Context().Value(accessKey{}).(access)
+	parts := splitPath(r.URL.Path)
+	if !ok || !a.role.Can(permFor(r.Method, parts)) {
+		s.fail(w, r, http.StatusForbidden, "not allowed")
+		return
+	}
+	if s.opts.Verbose {
+		_, _ = fmt.Fprintf(s.opts.Log, "retake: %s %s%s (%s)\n", r.Method, s.opts.BasePath, r.URL.Path, a.role)
+	}
+	s.touch()
+	s.route(w, r, parts)
+}
+
+// route sends an authorized request to its handler.
+func (s *Server) route(w http.ResponseWriter, r *http.Request, parts []string) {
 	if len(parts) == 1 && parts[0] == "mcp" {
 		s.mcpRoute(w, r)
 		return
@@ -500,6 +556,9 @@ func (s *Server) fail(w http.ResponseWriter, r *http.Request, code int, msg stri
 }
 
 func (s *Server) originOK(r *http.Request) bool {
+	if s.opts.External {
+		return true // the caller checked the origin (spec/server.md, "CSRF")
+	}
 	vals := r.Header.Values("Origin")
 	switch len(vals) {
 	case 0:
@@ -590,7 +649,9 @@ func (s *Server) serverFields(v family.Version) store.ServerFields {
 
 func (s *Server) saveData(w http.ResponseWriter, r *http.Request, v family.Version, dir string, body []byte) {
 	sf := s.serverFields(v)
-	if a := accessOf(r); a.token != nil && a.token.Label != "" {
+	if a := accessOf(r); a.author != "" {
+		sf.Author = &store.Author{Name: a.author} // a signed-in member's name, or a guest's (spec/server.md)
+	} else if a.token != nil && a.token.Label != "" {
 		sf.Author = &store.Author{Name: a.token.Label} // a share link's person (spec/team.md)
 	}
 	s.writeMu.Lock()
