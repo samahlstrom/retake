@@ -126,7 +126,8 @@ window.__review = {
 ```
 
 The toast element is `#toast`. It has the class `show` while visible, and its `textContent` is the message. The Done
-button is `#done`.
+button is `#done`. The pen canvas is `#ink`: its box is exactly the shown video frame, so the test draws in coordinates
+normalized to it. The page has a single `<video>` element, and the test reads the playhead and play state from it.
 
 ## CLI (milestone 1)
 

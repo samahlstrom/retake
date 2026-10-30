@@ -1,0 +1,99 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go:
+    name: Go (vet, test, lint, vulncheck)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install the toolchain from mise.toml
+        uses: jdx/mise-action@v5
+      - name: go vet
+        run: go vet ./...
+      - name: go test -race
+        run: go test -race ./...
+      - name: golangci-lint
+        run: golangci-lint run
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+
+  web:
+    name: Web (check, lint, test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install the toolchain from mise.toml
+        uses: jdx/mise-action@v5
+      - run: npm ci
+      - run: npm run check
+      - run: npm run lint
+      - run: npm test
+
+  e2e:
+    name: End-to-end (Playwright, generated media)
+    needs: [go, web]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install the toolchain from mise.toml
+        uses: jdx/mise-action@v5
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - name: Install e2e dependencies
+        working-directory: e2e
+        run: npm ci
+      - name: Install Playwright's Chromium
+        working-directory: e2e
+        run: npx playwright install --with-deps chromium
+      - name: Build bin/retake
+        run: make build
+      - name: Type-check the suite
+        working-directory: e2e
+        run: npm run typecheck
+      - name: Run the suite against bin/retake
+        working-directory: e2e
+        env:
+          RETAKE_SERVER: new
+        run: |
+          CHROMIUM_PATH="$(node -e "console.log(require('@playwright/test').chromium.executablePath())")"
+          export CHROMIUM_PATH
+          echo "Chromium: $CHROMIUM_PATH"
+          npm test
+      - name: Upload the Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: |
+            e2e/playwright-report/
+            e2e/test-results/
+          retention-days: 14
+      - name: Upload the takes and server logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-takes
+          # .retake-work is a hidden folder: upload-artifact skips those unless told otherwise.
+          include-hidden-files: true
+          path: |
+            .retake-work/e2e/**/*.review/
+            .retake-work/e2e/logs/
+          if-no-files-found: ignore
+          retention-days: 14
