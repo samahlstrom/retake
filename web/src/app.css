@@ -201,9 +201,11 @@ button {
   color: #ffcf6e;
   border-color: rgba(255, 207, 110, 0.5);
 }
-/* Legacy placed the list with position/bottom/left/transform (12px above the button, centered). Bits UI's popover
-   places it the same way (side top, offset 12, centered), so only the box styles stay here. */
 #verList {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 5;
   min-width: 168px;
   padding: 6px;

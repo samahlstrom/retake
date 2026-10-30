@@ -1,6 +1,7 @@
 <script lang="ts">
   // The version label; click it for the compact list (newest first, the base marked with ·). Hidden for a single
-  // version. Keys ([ ] C) are handled globally; focus never moves into the list.
+  // version. Keys ([ ] C) are handled globally; focus never moves into the list. ContentStatic: Bits UI's popover
+  // behavior (outside click and Escape close it) with the legacy CSS placement, 12px above the button, centered.
   import { Popover } from 'bits-ui';
   import type { Review } from '../lib/review.svelte';
   import { versionTitle } from '../lib/versions';
@@ -16,15 +17,7 @@
 <div id="ver" hidden={review.versions.length < 2}>
   <Popover.Root bind:open={() => review.verOpen, (v) => (review.verOpen = v)}>
     <Popover.Trigger id="verBtn" class={review.flipped ? 'flipped' : ''} {title}>{review.shown || ''}</Popover.Trigger>
-    <Popover.Content
-      id="verList"
-      side="top"
-      sideOffset={12}
-      align="center"
-      trapFocus={false}
-      onOpenAutoFocus={keepFocus}
-      onCloseAutoFocus={keepFocus}
-    >
+    <Popover.ContentStatic id="verList" trapFocus={false} onOpenAutoFocus={keepFocus} onCloseAutoFocus={keepFocus}>
       {#each newestFirst as v (v.label)}
         <button
           data-ver={v.label}
@@ -35,6 +28,6 @@
           ></button
         >
       {/each}
-    </Popover.Content>
+    </Popover.ContentStatic>
   </Popover.Root>
 </div>
