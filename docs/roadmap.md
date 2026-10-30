@@ -51,6 +51,10 @@ Later: a shared library of graphics, styles and edit recipes.
   var.
 - Pick the name and license, then add LICENSE and update go.mod's module path if the name changes.
 - Run CI on GitHub once, since the workflow has only been linted locally.
+- notes.md still says "ask Sam" (kept for golden parity with legacy): use the take's author or a neutral "ask the
+  reviewer".
+- docs/editor-design.md is written around the owner's Deadlock project. Generalize it or move it to private notes.
+- Add a THIRD_PARTY_NOTICES file: Go fonts (BSD) compiled into the binary, plus npm/Go/Rust dependency licenses.
 
 ## Open decisions (owner)
 - The name. "retake" is a working name.
