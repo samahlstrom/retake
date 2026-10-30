@@ -60,6 +60,8 @@ usage:
       serve the review page for <video> and its version family (clip_v5, v6/clip_v6, ...)
   retake sessions <video> [--json]
       list the takes saved for <video>
+  retake notes build <video | .review dir | take dir> [--window 2] [--max-span 8] [--video-transcript F] [--json]
+      turn the takes into <stem>.review/notes.md, notes.json and snaps/ (reads transcript.json; never transcribes)
   retake version
       print the version
 
@@ -72,6 +74,11 @@ open:
   --allow-host H    also answer at https://H, e.g. a tunnel's hostname (repeatable). Anyone with that URL can
                     watch the versions and record takes, so only use it with a link you trust
   --verbose         log every request
+
+notes build:
+  --window S        seconds between comments that still count as one moment (default 2)
+  --max-span S      longest a moment may get, in video seconds (default 8)
+  --video-transcript F  the edit's own voice-over words (JSON), quoted under (audio) comments
 
 config: $XDG_CONFIG_HOME/retake/config.toml (default ~/.config/retake/config.toml), keys name, port,
 idle_exit_minutes, open_browser. Flags override it.
@@ -89,6 +96,8 @@ func Main(ctx context.Context, args []string, env Env) int {
 		return openCmd(ctx, args[1:], env)
 	case "sessions":
 		return sessionsCmd(args[1:], env)
+	case "notes":
+		return notesCmd(ctx, args[1:], env)
 	case "version", "--version":
 		_, _ = fmt.Fprintf(env.Stdout, "retake %s\n", Version())
 		return ExitOK
