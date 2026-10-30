@@ -1,14 +1,14 @@
 //! Opening a timeline for rendering and planning it: assets probed and hashed, units described hermetically, and the
 //! two cache keys (layer and unit) computed.
 
-use crate::audio::{AUDIO_VERSION, AudioPlan, Clip};
-use crate::ffmpeg::{self, EncodeSettings, MediaInfo};
+use crate::audio::{AUDIO_VERSION, AudioPlan, Clip, DuckPlan, GainCurve, Loudness, MasterPlan};
+use crate::ffmpeg::{self, EncodeSettings, MediaInfo, StreamSel};
 use crate::graphics::{DISPLAY_FONT, DISPLAY_WEIGHT, FontData, GRAPHICS_VERSION, ImageData, Resources};
 use crate::store::{Store, hex_of};
 use anyhow::{Context, Result};
 use retake_timeline::keyframe::Prop;
 use retake_timeline::layer::{Clock, Content, Layer, TextValue};
-use retake_timeline::model::{Rgba, SpineKind};
+use retake_timeline::model::{Ducks, Rgba, SpineKind, Under, gain_prop};
 use retake_timeline::resolve::{Comp, UnitKind, UnitSpan};
 use retake_timeline::{EditError, Errors, Project, Resolved, canonical_json};
 use serde::Serialize;
@@ -228,6 +228,98 @@ fn key_json(v: &Value) -> Value {
     v
 }
 
+/// Every `stream` an element asks for must exist in its asset (`audio_stream` errors list the streams there are).
+fn check_streams(project: &Project, res: &Resolved, assets: &BTreeMap<String, Asset>) -> Result<()> {
+    let mut errs = vec![];
+    let mut check = |asset: &str, stream: Option<u32>, ptr: String| {
+        let (Some(n), Some(a)) = (stream, assets.get(asset)) else { return };
+        if n as usize >= a.info.audio_streams.len() {
+            errs.push(
+                EditError::new(
+                    "audio_stream",
+                    format!("asset `{asset}` has no audio stream {n} ({})", a.info.describe_audio()),
+                )
+                .at(ptr)
+                .hint(match a.info.audio_streams.len() {
+                    0 => "the file has no sound: drop `stream`".to_string(),
+                    k => format!("streams count from 0: use 0 to {}", k - 1),
+                }),
+            );
+        }
+    };
+    for (i, s) in project.tl.spine.iter().enumerate() {
+        check(&s.asset, s.audio.as_ref().and_then(|a| a.stream), format!("/spine/{i}/audio/stream"));
+    }
+    for (i, a) in project.tl.audio.iter().enumerate() {
+        check(&a.asset, a.stream, format!("/audio/{i}/stream"));
+    }
+    let mut comps: Vec<&Comp> = res.shots.iter().map(|s| &s.comp).collect();
+    comps.extend(res.overlays.iter().map(|o| &o.comp));
+    comps.extend(res.spine.iter().filter_map(|s| s.comp.as_ref()));
+    for c in comps {
+        for (li, l) in c.layers.iter().enumerate() {
+            if let Content::Video(v) = &l.content {
+                check(&v.asset, v.audio.as_ref().and_then(|a| a.stream), format!("{}/layers/{li}/audio/stream", c.ptr));
+            }
+        }
+    }
+    if errs.is_empty() { Ok(()) } else { Err(Errors(errs).into()) }
+}
+
+/// Measures what a plan's loudness targets need: each group's integrated loudness (its clips end to end, as
+/// decoded), then, with those levels, the whole mix's for the master. `{"groups": {group: dB}, "master_gain_db"}`.
+fn compute_levels(full: &AudioPlan) -> Result<Value> {
+    let mut groups: BTreeMap<String, (f64, Vec<&Clip>)> = BTreeMap::new();
+    for c in &full.clips {
+        if let Some(l) = &c.loudness {
+            groups.entry(l.group.clone()).or_insert_with(|| (l.target, vec![])).1.push(c);
+        }
+    }
+    let to_target = |target: f64, measured: f64| {
+        if measured.is_finite() { (target - measured).clamp(-60.0, 60.0) } else { 0.0 }
+    };
+    let mut out = serde_json::Map::new();
+    for (g, (target, cs)) in groups {
+        let m = crate::audio::measure(&cs, full.sr)?;
+        out.insert(g, json!(to_target(target, m)));
+    }
+    let mut levels = json!({"groups": out, "master_gain_db": null});
+    if let Some(t) = full.master.as_ref().and_then(|m| m.loudness) {
+        let mut leveled = full.clone();
+        apply_levels(&mut leveled, &levels);
+        let raw = crate::audio::mix_raw(&leveled)?;
+        levels["master_gain_db"] = json!(to_target(t, crate::dsp::integrated_lufs(&raw, full.sr)));
+    }
+    Ok(levels)
+}
+
+fn apply_levels(ap: &mut AudioPlan, levels: &Value) {
+    for c in &mut ap.clips {
+        if let Some(l) = &mut c.loudness {
+            l.level_db = Some(levels["groups"][&l.group].as_f64().unwrap_or(0.0));
+        }
+    }
+    if let Some(m) = &mut ap.master {
+        m.gain_db = levels["master_gain_db"].as_f64();
+    }
+}
+
+/// The stream an element plays, with its channel count.
+fn stream_sel(a: &Asset, stream: Option<u32>) -> StreamSel {
+    let index = stream.unwrap_or(0);
+    let channels = a.info.audio_streams.get(index as usize).map(|s| s.channels).unwrap_or(2);
+    StreamSel { index, channels }
+}
+
+/// A resolved `gain_db`: a constant folds into the clip's gain, keys and expressions become a curve.
+fn gain_parts(p: Option<&Prop>, t0: f64, props: &Value) -> (f64, Option<GainCurve>) {
+    match p {
+        None => (0.0, None),
+        Some(Prop::Const(v)) => (v.to_vec().first().copied().unwrap_or(0.0), None),
+        Some(p) => (0.0, Some(GainCurve { prop: p.clone(), t0, props: props.clone() })),
+    }
+}
+
 impl Engine {
     /// Loads, validates and resolves a timeline; probes and hashes the assets it uses.
     pub fn open(path: &Path, opts: Options) -> Result<Engine> {
@@ -274,11 +366,12 @@ impl Engine {
         for id in &used {
             let p = project.asset_path(id)?;
             let hash = store.asset_hash(&p)?;
-            let info = match store.get_index("probe", &hash).and_then(|v| serde_json::from_value(v).ok()) {
+            // probe2: probes that list the audio streams (older ones under "probe" don't).
+            let info = match store.get_index("probe2", &hash).and_then(|v| serde_json::from_value(v).ok()) {
                 Some(i) => i,
                 None => {
                     let i = ffmpeg::probe(&p).with_context(|| format!("asset {id}"))?;
-                    store.set_index("probe", &hash, &serde_json::to_value(&i)?)?;
+                    store.set_index("probe2", &hash, &serde_json::to_value(&i)?)?;
                     i
                 }
             };
@@ -305,6 +398,7 @@ impl Engine {
             resources.images.insert(id.clone(), ImageData { bytes: Arc::new(bytes), hash });
         }
         store.save_asset_hashes()?;
+        check_streams(&project, &res, &assets)?;
         Ok(Engine { project, res, store, opts, canvas, encode, assets, resources: Arc::new(resources) })
     }
 
@@ -523,6 +617,10 @@ impl Engine {
         let s = |t: f64| (t * sr as f64).round() as i64;
         let mut clips = vec![];
         let has_audio = |id: &str| self.assets.get(id).filter(|a| a.info.audio);
+        let none = json!({});
+        let loud = |target: Option<f64>, group: &str| {
+            target.map(|t| Loudness { target: t, group: group.to_string(), level_db: None })
+        };
         for (i, sp) in self.res.spine.iter().enumerate() {
             let item = &self.project.tl.spine[i];
             let opts = item.audio.clone().unwrap_or_default();
@@ -530,6 +628,7 @@ impl Engine {
             if opts.mute {
                 continue;
             }
+            let (gain_db, gain) = gain_parts(sp.gain.as_ref(), 0.0, &none);
             clips.push(Clip {
                 role: if sp.kind == SpineKind::Insert { "insert" } else { "vo" }.into(),
                 hash: a.hash.clone(),
@@ -538,16 +637,20 @@ impl Engine {
                 src_in: sp.src_in,
                 at: s(sp.start),
                 len: s(sp.end) - s(sp.start),
-                gain_db: opts.gain_db,
+                stream: stream_sel(a, opts.stream),
+                gain_db,
+                gain,
                 fade_in: opts.fade_in,
                 fade_out: opts.fade_out,
+                fade_curve: opts.fade_curve,
                 looping: false,
-                duck_db: None,
+                duck: vec![],
+                loudness: loud(opts.loudness, &sp.id),
             });
         }
         for u in units {
             for (it, ow) in u.desc.items.iter().zip(&u.owners) {
-                let Item::Video { typed, src, k0, active, t_out0, .. } = it else { continue };
+                let Item::Video { typed, src, props, k0, active, t_out0, .. } = it else { continue };
                 let Content::Video(v) = &typed.content else { continue };
                 let Some(opts) = v.audio.clone().filter(|o| !o.mute) else { continue };
                 // The source's own sound (a draft may decode the picture from a proxy, which has none).
@@ -556,6 +659,9 @@ impl Engine {
                     Some(t) => v.in_ + t + active[0] as f64 / fps as f64,
                     None => v.in_ + (k0 + active[0]) as f64 / fps as f64,
                 };
+                // The layer's gain keys are in composition seconds.
+                let prop = gain_prop(opts.gain_db.as_ref()).ok().flatten();
+                let (gain_db, gain) = gain_parts(prop.as_ref(), (k0 + active[0]) as f64 / fps as f64, props);
                 clips.push(Clip {
                     role: "layer".into(),
                     hash: src.hash.clone(),
@@ -564,17 +670,22 @@ impl Engine {
                     src_in: t0.max(0.0),
                     at: (u.span.f0 + active[0]) * spf,
                     len: (active[1] - active[0]) * spf,
-                    gain_db: opts.gain_db,
+                    stream: stream_sel(asset, opts.stream),
+                    gain_db,
+                    gain,
                     fade_in: opts.fade_in,
                     fade_out: opts.fade_out,
+                    fade_curve: opts.fade_curve,
                     looping: v.loop_,
-                    duck_db: None,
+                    duck: self.duck_plans(opts.duck.as_ref()),
+                    loudness: loud(opts.loudness, &format!("{}#{}", ow.element, typed.id)),
                 });
             }
         }
         for (i, sp) in self.res.audio.iter().enumerate() {
             let el = &self.project.tl.audio[i];
             let Some(a) = has_audio(&el.asset) else { continue };
+            let (gain_db, gain) = gain_parts(sp.gain.as_ref(), 0.0, &none);
             clips.push(Clip {
                 role: "audio".into(),
                 hash: a.hash.clone(),
@@ -583,14 +694,87 @@ impl Engine {
                 src_in: el.in_,
                 at: s(sp.from),
                 len: s(sp.to) - s(sp.from),
-                gain_db: el.gain_db,
+                stream: stream_sel(a, el.stream),
+                gain_db,
+                gain,
                 fade_in: el.fade_in,
                 fade_out: el.fade_out,
+                fade_curve: el.fade_curve,
                 looping: el.loop_,
-                duck_db: el.duck.as_ref().map(|d| d.db),
+                duck: self.duck_plans(el.duck.as_ref()),
+                loudness: loud(el.loudness, &sp.id),
             });
         }
-        AudioPlan { v: AUDIO_VERSION, sr, fps, start, len: end - start, clips }
+        let master = self.project.tl.master.as_ref().filter(|m| m.is_active()).map(|m| MasterPlan {
+            loudness: m.loudness,
+            gain_db: None,
+            lowpass: m.lowpass,
+            true_peak: m.true_peak,
+        });
+        AudioPlan { v: AUDIO_VERSION, sr, fps, start, len: end - start, clips, master }
+    }
+
+    /// Ducking rules as mixed: span rules get their spans in output samples.
+    fn duck_plans(&self, d: Option<&Ducks>) -> Vec<DuckPlan> {
+        let Some(d) = d else { return vec![] };
+        let sr = self.project.tl.format.sample_rate as f64;
+        let s = |t: f64| (t * sr).round() as i64;
+        d.rules()
+            .into_iter()
+            .map(|r| {
+                let spans: Option<Vec<[i64; 2]>> = match &r.under {
+                    Under::Named(n) if n == "inserts" => Some(
+                        self.res
+                            .spine
+                            .iter()
+                            .filter(|x| x.kind == SpineKind::Insert)
+                            .map(|x| [s(x.start), s(x.end)])
+                            .collect(),
+                    ),
+                    Under::Named(_) => None,
+                    Under::Ids(ids) => Some(
+                        self.res.spine.iter().filter(|x| ids.contains(&x.id)).map(|x| [s(x.start), s(x.end)]).collect(),
+                    ),
+                };
+                match spans {
+                    None => DuckPlan::Vo { db: r.db, release: r.release.unwrap_or(0.35) },
+                    Some(spans) => DuckPlan::Spans {
+                        db: r.db,
+                        spans,
+                        attack: r.attack.unwrap_or(0.35),
+                        release: r.release.unwrap_or(0.35),
+                    },
+                }
+            })
+            .collect()
+    }
+
+    /// Fills in the measured levels of a plan (clips' loudness targets, the master's loudness gain), measured on the
+    /// whole timeline's mix and cached, so a range render uses the levels of the full one. With `compute` false it
+    /// only looks in the cache, and returns false when they aren't there yet.
+    pub fn audio_levels(&self, ap: &mut AudioPlan, compute: bool) -> Result<bool> {
+        if !ap.needs_levels() {
+            return Ok(true);
+        }
+        let spf = (ap.sr / ap.fps) as i64;
+        let full = if ap.start == 0 && ap.len == self.res.frames * spf {
+            ap.clone()
+        } else {
+            let all: Vec<UnitPlan> = self.res.units.iter().map(|u| self.plan_unit(u)).collect::<Result<_>>()?;
+            self.audio_plan(&all)
+        };
+        let key = hex_of(canonical_json(&json!({"v": "levels/1", "plan": full})).as_bytes());
+        let levels = match self.store.get_index("levels", &key) {
+            Some(v) => v,
+            None if !compute => return Ok(false),
+            None => {
+                let v = compute_levels(&full)?;
+                self.store.set_index("levels", &key, &v)?;
+                v
+            }
+        };
+        apply_levels(ap, &levels);
+        Ok(true)
     }
 
     pub fn audio_key(plan: &AudioPlan) -> String {

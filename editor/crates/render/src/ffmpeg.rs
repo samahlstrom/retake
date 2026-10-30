@@ -46,6 +46,35 @@ pub struct MediaInfo {
     pub size: Option<[u32; 2]>,
     pub fps: Option<f64>,
     pub audio: bool,
+    /// The audio streams in file order (`0:a:N` is `audio_streams[N]`).
+    #[serde(default)]
+    pub audio_streams: Vec<AudioStream>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AudioStream {
+    pub channels: u32,
+    /// The stream's title or language tag, if any (helps tell OBS tracks apart in errors).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+}
+
+impl MediaInfo {
+    /// "0: 2 ch (Mic), 1: 2 ch" for messages.
+    pub fn describe_audio(&self) -> String {
+        if self.audio_streams.is_empty() {
+            return "no audio streams".into();
+        }
+        self.audio_streams
+            .iter()
+            .enumerate()
+            .map(|(i, s)| match &s.title {
+                Some(t) => format!("{i}: {} ch ({t})", s.channels),
+                None => format!("{i}: {} ch", s.channels),
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
 }
 
 pub fn probe(path: &Path) -> Result<MediaInfo> {
@@ -59,6 +88,14 @@ pub fn probe(path: &Path) -> Result<MediaInfo> {
     let streams = v["streams"].as_array().cloned().unwrap_or_default();
     let video = streams.iter().find(|s| s["codec_type"] == "video");
     let audio = streams.iter().any(|s| s["codec_type"] == "audio");
+    let audio_streams = streams
+        .iter()
+        .filter(|s| s["codec_type"] == "audio")
+        .map(|s| AudioStream {
+            channels: s["channels"].as_u64().unwrap_or(2) as u32,
+            title: s["tags"]["title"].as_str().or(s["tags"]["language"].as_str()).map(String::from),
+        })
+        .collect();
     let duration = v["format"]["duration"].as_str().and_then(|d| d.parse().ok()).unwrap_or(0.0);
     let size = video.and_then(|s| Some([s["width"].as_u64()? as u32, s["height"].as_u64()? as u32]));
     let fps = video.and_then(|s| {
@@ -67,7 +104,7 @@ pub fn probe(path: &Path) -> Result<MediaInfo> {
         let (n, d): (f64, f64) = (n.parse().ok()?, d.parse().ok()?);
         if d > 0.0 && n > 0.0 { Some(n / d) } else { None }
     });
-    Ok(MediaInfo { duration, size, fps, audio })
+    Ok(MediaInfo { duration, size, fps, audio, audio_streams })
 }
 
 /// Sequential RGBA frames from a video, at the output fps, starting at `start` seconds. After the end of the file it
@@ -229,8 +266,23 @@ impl Encoder {
     }
 }
 
-/// Decodes `dur` seconds of audio from `start`, as interleaved stereo f32 at `sr`. Empty if the file has no audio.
-pub fn decode_audio(path: &Path, start: f64, dur: f64, sr: u32, looping: bool) -> Result<Vec<f32>> {
+/// Which audio stream to decode, and how many channels it has.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StreamSel {
+    /// `0:a:N`.
+    pub index: u32,
+    pub channels: u32,
+}
+
+impl Default for StreamSel {
+    fn default() -> Self {
+        StreamSel { index: 0, channels: 2 }
+    }
+}
+
+/// Decodes `dur` seconds of audio stream `sel` from `start`, as interleaved stereo f32 at `sr`. A mono stream is
+/// duplicated into both channels at unity (ffmpeg's own mono upmix is −3 dB); more channels are downmixed.
+pub fn decode_audio(path: &Path, start: f64, dur: f64, sr: u32, looping: bool, sel: StreamSel) -> Result<Vec<f32>> {
     let mut cmd = Command::new(ffmpeg_bin());
     cmd.args(["-nostdin", "-v", "error"]);
     if looping {
@@ -239,7 +291,13 @@ pub fn decode_audio(path: &Path, start: f64, dur: f64, sr: u32, looping: bool) -
     cmd.args(["-ss", &format!("{:.6}", start.max(0.0)), "-t", &format!("{:.6}", dur.max(0.0))])
         .arg("-i")
         .arg(path)
-        .args(["-vn", "-ac", "2", "-ar", &sr.to_string(), "-f", "f32le", "-"]);
+        .args(["-map", &format!("0:a:{}", sel.index), "-vn"]);
+    if sel.channels == 1 {
+        cmd.args(["-af", "pan=stereo|c0=c0|c1=c0"]);
+    } else {
+        cmd.args(["-ac", "2"]);
+    }
+    cmd.args(["-ar", &sr.to_string(), "-f", "f32le", "-"]);
     let bytes = run(&mut cmd, &format!("decoding audio from {}", path.display()))?;
     Ok(bytes.as_chunks::<4>().0.iter().map(|b| f32::from_le_bytes(*b)).collect())
 }
