@@ -106,6 +106,9 @@ func permFor(method string, parts []string) team.Perm {
 		}
 		return team.PermWatch
 	case http.MethodPost:
+		if isUnwatch(parts) {
+			return team.PermWatch // leaving a version is part of watching it (spec/home.md)
+		}
 		if len(parts) == 4 && parts[0] == "api" &&
 			(parts[1] == "notes" && parts[3] == "reopen" || parts[1] == "versions" && parts[3] == "approve") {
 			return team.PermApprove
