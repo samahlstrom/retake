@@ -1,0 +1,97 @@
+# End-to-end tests
+
+Playwright drives headless Chromium through the review page with real keys and mouse moves, while a fake mic plays
+a generated WAV. Every input is made with ffmpeg at the start of each run. There is no real footage and no real
+voice. The suite runs serially, with one browser, because the scenario is timed against the fake mic.
+
+## Run
+
+```bash
+make e2e                                   # builds bin/retake, then runs the suite against it
+cd e2e && npm ci && npm test               # the suite alone (needs bin/retake from `make build`)
+RETAKE_SERVER=legacy npm test              # against the legacy Python player instead (new-only tests skip)
+npm run typecheck                          # tsc --strict over the suite
+npm run fixtures -- <dir>                  # only generate the media, into <dir>/media
+```
+
+Run it through mise (`mise exec -- npm test`) to use the pinned node. Needs `ffmpeg`/`ffprobe` on PATH, and Chromium.
+
+| Env var | Default | Meaning |
+|---|---|---|
+| `RETAKE_SERVER` | `new` | `new`: `bin/retake open <video> --no-open --port <p> --idle-exit 0`. `legacy`: the Python player's `review <video> --no-open --port <p> --idle-exit 0`. |
+| `RETAKE_BIN` | `<repo>/bin/retake` | The new server's binary. |
+| `RETAKE_LEGACY_REVIEW` | `~/deadlock-editing-style/skill/scripts/review/review` | The legacy launcher. It is only run, never modified. |
+| `CHROMIUM_PATH` | `/usr/lib/chromium/chromium` if it exists, else Playwright's Chromium | The browser. CI points it at Playwright's Chromium. |
+| `RETAKE_E2E_WORK` | `<repo>/.retake-work/e2e` | Scratch root: media, version families, takes, server logs. It is wiped at the start of a run and deleted after a passing run. A failing run keeps it. The suite only deletes a folder that has its `.retake-e2e` marker. |
+| `RETAKE_E2E_KEEP` | unset | Set it to keep the scratch data after a passing run too. |
+
+Ports: the servers use 8831–8834 (scenario 8831, crash safety 8832 behind a proxy on 8834, HLS 8833). The browser
+talks to Playwright over a pipe, so it opens no devtools port. Each server is started for its spec file, waited on
+through `/api/ping`, and always stopped. Its log is in `<work>/logs/`.
+
+## Fixtures (`lib/fixtures.ts`)
+
+- **A version family.** `v5/clip_v5.mp4` and `v6/clip_v6.mp4` (40 s), `v7/clip_v7_0-010_preview.mp4` (a 10 s
+  preview), and a `v5/clip_v5_draft.mp4` decoy that is newer than the plain v5. All are 1280x720, 30 fps, H.264
+  yuv420p + AAC, with faststart and a keyframe every second. They have drawtext labels when fontconfig finds a font.
+- **HLS v8.** `clip_v8/clip_v8.m3u8`, made with `-hls_segment_type fmp4`, sits beside `init.mp4` and
+  `seg_NNN.m4s`. Its folder is a sibling of `v6/`, so family detection finds it as v8.
+- **Fake mic.** A 40 s WAV (48 kHz mono s16) of tone bursts, timed from the first R on the legacy selftest schedule:
+  bursts at 1.0, 3.3, 9.5, 13.0, 19.0 and 22.5 s. Each burst has its own frequency, so the audio check can tell
+  exactly which speech landed in which segment file. The 9.5 s burst falls in the unrecorded loop and must never be
+  captured. Chromium restarts the WAV every time a page opens the mic.
+
+## What each test proves
+
+**`01-schema-and-fixtures`** (no browser)
+- `spec/take.schema.json` accepts a complete take, each file on its own, the `/data` body, and unknown extra fields.
+- The schema rejects 23 kinds of broken take.
+- The fixtures have the planned lengths, codecs and HLS layout.
+- The tone analyzer finds every fake-mic burst at its time. This is the self-check behind the audio assertions
+  below.
+
+**`02-scenario`** ports the legacy `tests/e2e_headless.mjs` and `check_e2e.py`, without the transcription and notes
+checks. It runs against both servers.
+- **Family.** v5, v6 and the v7 preview are found. The newer draft decoy is skipped.
+- **A.** Without recording, play works and a drag draws nothing: no stroke, no take, and the "Press R" hint shows.
+- **S1–S4.**
+  - R-gated recording and pen.
+  - An unrecorded loop whose speech and drag are dropped.
+  - C flips to v7 at the same frame (within 40 ms) and back.
+  - S3 is recorded while flipped.
+  - Done.
+  - The serialized take has S1–S4 with the right version and flip, and strokes 1 (red, S1) and 2 (green, S4).
+  - It matches `$defs/dataBody`.
+- **`[ ]`.** Steps keep the time (within 0.8 s) and the play state. `]` and C past the preview's end are refused
+  ("only covers"). `]` inside the preview switches.
+- **Reload.** The two strokes come back as history, and no take is open.
+- **On disk.**
+  - There is exactly one take, on v6, and none for v5 or v7.
+  - The files equal what the page serialized.
+  - There is one audio file per segment and no others.
+  - Each file's decoded length is within 0.6 s of `t_end − t_start`.
+  - Each burst said during a segment is in that file, at its moment (within 0.5 s).
+  - No file holds anything said outside it, including the unrecorded loop's burst.
+  - Strokes have their color, version, flip, paused state and position, and lie inside their segment on both clocks.
+  - Event kinds and counts match (4 × rec_start/rec_stop, 2 × draw_start/draw_end, 4 version flips), and the
+    rec events line up with the segments.
+  - There are voice marks.
+- **Schema.** Every JSON file of every take validates against `spec/take.schema.json` (ajv, draft 2020-12).
+- **Author** (new only). `session.json` has `author.name` from the config file. The suite points
+  `XDG_CONFIG_HOME` at the scratch dir.
+- **Errors.** No uncaught page errors.
+
+**`03-crash-safety`** (new only)
+- While recording, every audio upload fails. The test keeps talking for 11 s, then reloads the page with uploads
+  still failing, and checks that nothing reached the disk.
+- Then uploads work again. The reloaded page must resend the take from IndexedDB on its own. The segment file must
+  hold the audio up to the reload, with each burst at its moment.
+- The failures come from a proxy in front of the server (`lib/proxy.ts`), not from `page.route`. A keepalive upload
+  sent while the page unloads bypasses browser-side routing: against the legacy page it put 55 KB on disk. The
+  proxy cuts those uploads off too.
+
+**`04-hls`** (new only)
+- `/video/v8/<file>` serves the playlist, init and segments (with ranges), and nothing outside the folder.
+- v8 is detected from its own folder.
+- C flips mp4 → m3u8 at the same time, and the playlist plays (currentTime advances, readyState ≥ 2).
+- C flips back, `]` steps to the m3u8 keeping the time and play state, and `[` steps back.
