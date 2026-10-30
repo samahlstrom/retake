@@ -640,69 +640,91 @@ func (s *Store) StartSession(userID int64, agent, ip string) (value string, sess
 // CheckSession looks up a session cookie's value. It returns the session and its user, or ErrNoSession for a
 // malformed, unknown, expired (absolutely or idle), revoked or rotated-away value, or a disabled user. When the
 // session is due for rotation, it gets a new value, returned as rotated (send it as the new cookie); the old value
-// keeps working for RotateGrace.
+// keeps working for RotateGrace. Most calls only read: the store is written at most once a minute per session.
 func (s *Store) CheckSession(value string) (sess Session, u User, rotated string, err error) {
 	if !WellFormed(SessionPrefix, value) {
 		return Session{}, User{}, "", ErrNoSession
 	}
-	hash := Hash(value)
-	now := s.now()
+	hash, now := Hash(value), s.now()
+	c, err := s.checkSession(s.db, hash, now)
+	if err != nil || !c.rotate && !c.touch {
+		return c.sess, c.user, "", err
+	}
 	err = s.write(func(tx *sqldb.Tx) error {
 		rotated = ""
-		var current bool
-		var prevUntil string
-		row := tx.QueryRow(`SELECT `+sessionCols+`, hash = ?, prev_until FROM sessions WHERE hash = ? OR prev_hash = ?`,
-			hash, hash, hash)
-		err := row.Scan(&sess.ID, &sess.UserID, &sess.Created, &sess.Rotated, &sess.Seen, &sess.Expires, &sess.Revoked,
-			&sess.Agent, &sess.IP, &current, &prevUntil)
-		if errors.Is(err, sql.ErrNoRows) {
-			return ErrNoSession
-		}
-		if err != nil {
+		if c, err = s.checkSession(tx, hash, now); err != nil {
 			return err
 		}
-		if !current {
-			if until, ok := parseTime(prevUntil); !ok || !now.Before(until) {
-				return ErrNoSession
-			}
-		}
-		seen, _ := parseTime(sess.Seen)
-		if sess.Revoked != "" || !now.Before(sess.ExpiresAt()) || now.Sub(seen) >= IdleTTL {
-			return ErrNoSession
-		}
-		if u, err = userByID(tx, sess.UserID); err != nil {
-			if errors.Is(err, ErrNotFound) {
-				return ErrNoSession
-			}
-			return err
-		}
-		if u.Disabled != "" {
-			return ErrNoSession
-		}
-		if r, ok := parseTime(sess.Rotated); current && (!ok || now.Sub(r) >= RotateEvery) {
+		if c.rotate {
 			value, newHash, err := NewSecret(SessionPrefix)
 			if err != nil {
 				return err
 			}
 			if _, err := tx.Exec(`UPDATE sessions SET prev_hash = hash, prev_until = ?, hash = ?, rotated = ?, seen = ?
-				WHERE id = ?`, stamp(now.Add(RotateGrace)), newHash, stamp(now), stamp(now), sess.ID); err != nil {
+				WHERE id = ?`, stamp(now.Add(RotateGrace)), newHash, stamp(now), stamp(now), c.sess.ID); err != nil {
 				return err
 			}
-			sess.Rotated, sess.Seen, rotated = stamp(now), stamp(now), value
+			c.sess.Rotated, c.sess.Seen, rotated = stamp(now), stamp(now), value
 			return nil
 		}
-		if now.Sub(seen) >= SeenEvery {
-			if _, err := tx.Exec(`UPDATE sessions SET seen = ? WHERE id = ?`, stamp(now), sess.ID); err != nil {
+		if c.touch {
+			if _, err := tx.Exec(`UPDATE sessions SET seen = ? WHERE id = ?`, stamp(now), c.sess.ID); err != nil {
 				return err
 			}
-			sess.Seen = stamp(now)
+			c.sess.Seen = stamp(now)
 		}
 		return nil
 	})
 	if err != nil {
 		return Session{}, User{}, "", err
 	}
-	return sess, u, rotated, nil
+	return c.sess, c.user, rotated, nil
+}
+
+// checked is a session cookie that checks out, and what is due.
+type checked struct {
+	sess   Session
+	user   User
+	rotate bool // its value is due to be replaced
+	touch  bool // its last use is due to be written
+}
+
+func (s *Store) checkSession(q querier, hash string, now time.Time) (checked, error) {
+	var c checked
+	var current bool
+	var prevUntil string
+	x := &c.sess
+	err := q.QueryRow(`SELECT `+sessionCols+`, hash = ?, prev_until FROM sessions WHERE hash = ? OR prev_hash = ?`,
+		hash, hash, hash).Scan(&x.ID, &x.UserID, &x.Created, &x.Rotated, &x.Seen, &x.Expires, &x.Revoked, &x.Agent,
+		&x.IP, &current, &prevUntil)
+	if errors.Is(err, sql.ErrNoRows) {
+		return c, ErrNoSession
+	}
+	if err != nil {
+		return c, err
+	}
+	if !current {
+		if until, ok := parseTime(prevUntil); !ok || !now.Before(until) {
+			return c, ErrNoSession
+		}
+	}
+	seen, _ := parseTime(x.Seen)
+	if x.Revoked != "" || !now.Before(x.ExpiresAt()) || now.Sub(seen) >= IdleTTL {
+		return c, ErrNoSession
+	}
+	if c.user, err = userByID(q, x.UserID); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return c, ErrNoSession
+		}
+		return c, err
+	}
+	if c.user.Disabled != "" {
+		return c, ErrNoSession
+	}
+	r, ok := parseTime(x.Rotated)
+	c.rotate = current && (!ok || now.Sub(r) >= RotateEvery)
+	c.touch = now.Sub(seen) >= SeenEvery
+	return c, nil
 }
 
 // EndSession revokes one session (sign out).

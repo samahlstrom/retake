@@ -112,6 +112,24 @@ sharing (spec/team.md; links and tokens belong to the project of <video>):
   retake token list|revoke ...
       the same as share list and share revoke
 
+the team server (spec/server.md; settings also come from RETAKE_* variables and config.toml [server]):
+  retake serve --data DIR [--listen :8080] [--public-url URL] [--trust-proxy CIDR]... [--database postgres://...]
+               [--s3-endpoint HOST:PORT [--s3-bucket B] [--s3-region R] [--s3-insecure]] [--ui-dir DIR] [--verbose]
+      host many projects for a team: sign-in links, members, share links, uploads and remote MCP at /p/<project>/
+  retake user add <email> [--name NAME] [--admin] [--expires 24h] [--json]
+      add a person and print their one-time sign-in link (mailed instead when RETAKE_SMTP_URL is set)
+  retake user link|remove|disable|enable|signout|sessions <email>   and   retake user list
+      a new sign-in link; remove or disable someone; end their sessions; list them
+  retake project add <name> [--title T] [--video FILE | --from FOLDER]   and   retake project list
+      add a project (with its first version, or a copy of a retake project folder)
+  retake project member add <project> <email> --role viewer|reviewer|approver|owner   (also remove, list)
+  retake project token create <project> --role viewer|reviewer|approver|agent [--label L] [--expires 30d]
+      a share link, or an agent token with its remote and MCP setup (also token list, token revoke <id>)
+      every server command takes --data DIR and the database flags of retake serve
+  retake remote add <name> <project URL> --token <agent token>   (also remote list, remote remove <name>)
+  retake push --remote <name> <file> [--parent vN] [--label vN] [--change ID="summary"]... [--ask ID="q"]...
+      upload <file> to the team server (resumable) and push it, with the same push rule
+
 open:
   --versions F...   the family is exactly <video> plus these files (default: detect *_vN files)
   --port N          serve on port N, or exit 2 if it's busy (default 8777, or the next free one up to 8796)
@@ -154,6 +172,9 @@ func Main(ctx context.Context, args []string, env Env) int {
 	case "note":
 		return noteCmd(ctx, args[1:], env)
 	case "push":
+		if pushesRemote(args[1:]) {
+			return remotePushCmd(ctx, args[1:], env) // to a team server (spec/server.md)
+		}
 		return pushCmd(ctx, args[1:], env)
 	case "versions":
 		return versionsCmd(ctx, args[1:], env)
@@ -169,6 +190,14 @@ func Main(ctx context.Context, args []string, env Env) int {
 		return tokenCmd(ctx, args[1:], env)
 	case "assets":
 		return assetsCmd(ctx, args[1:], env)
+	case "serve":
+		return serveCmd(ctx, args[1:], env)
+	case "user":
+		return userCmd(ctx, args[1:], env)
+	case "project":
+		return projectCmd(ctx, args[1:], env)
+	case "remote":
+		return remoteCmd(ctx, args[1:], env)
 	case "version", "--version":
 		_, _ = fmt.Fprintf(env.Stdout, "retake %s\n", Version())
 		return ExitOK
