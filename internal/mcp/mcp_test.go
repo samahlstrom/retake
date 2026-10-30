@@ -213,3 +213,55 @@ func TestServeOverStreams(t *testing.T) {
 		t.Fatal("Serve didn't return")
 	}
 }
+
+// The limits of the remote server (/mcp): a pushed file must be inside the project root, and notes_wait is capped.
+func TestRemoteLimits(t *testing.T) {
+	p := newProject(t)
+	ctx := context.Background()
+	st, ct := sdk.NewInMemoryTransports()
+	ss, err := NewServerWith(p, "test", Options{Root: p.Root, MaxWait: 50 * time.Millisecond}).Connect(ctx, st, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ss.Close() })
+	cs, err := sdk.NewClient(&sdk.Implementation{Name: "remote", Version: "1"}, nil).Connect(ctx, ct, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = cs.Close() })
+
+	var waited agent.WaitResult
+	if _, isErr := call(t, cs, "notes_wait", map[string]any{"since": 0}, &waited); isErr || len(waited.Notes) != 3 {
+		t.Fatalf("notes_wait = %+v", waited)
+	}
+	began := time.Now()
+	if _, isErr := call(t, cs, "notes_wait", map[string]any{"since": waited.Cursor, "timeout": 3600}, &waited); isErr ||
+		!waited.TimedOut || time.Since(began) > 5*time.Second {
+		t.Fatalf("an hour's wait wasn't capped: %+v after %v", waited, time.Since(began))
+	}
+
+	all := []map[string]any{{"note": 1, "summary": "a"}, {"note": 2, "summary": "b"}, {"note": 3, "summary": "c"}}
+	outside := filepath.Join(t.TempDir(), "render.mp4")
+	write(t, outside, "eight")
+	link := filepath.Join(p.Root, "link.mp4")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{outside, link, "../escape.mp4", ""} {
+		text, isErr := call(t, cs, "version_push", map[string]any{"file": f, "changes": all}, nil)
+		if !isErr || !strings.Contains(text, "inside the project folder") && !strings.Contains(text, "no such file") &&
+			!strings.Contains(text, "needs the new version's file") {
+			t.Errorf("push of %q: %v %s", f, isErr, text)
+		}
+	}
+	if _, err := os.Stat(outside); err != nil {
+		t.Errorf("the outside file was touched: %v", err)
+	}
+	// A file inside the root, named relative to it, is pushed.
+	write(t, filepath.Join(p.Root, "renders", "next.mp4"), "eight")
+	var pushed agent.PushResult
+	if text, isErr := call(t, cs, "version_push", map[string]any{"file": "renders/next.mp4", "changes": all},
+		&pushed); isErr || pushed.Version.Label != "v8" {
+		t.Fatalf("push inside the root: %s %+v", text, pushed)
+	}
+}

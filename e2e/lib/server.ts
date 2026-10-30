@@ -8,10 +8,10 @@ const LOGS = join(WORK, 'logs');
 const PIDS = join(WORK, 'pids');
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** The command line for one server: the same flags in both modes. */
-export function serverCommand(video: string, port: number): [string, string[]] {
+/** The command line for one server: the same flags in both modes, plus `extra` ones (new server only). */
+export function serverCommand(video: string, port: number, extra: string[] = []): [string, string[]] {
   const flags = ['--no-open', '--port', String(port), '--idle-exit', '0'];
-  return LEGACY ? [LEGACY_REVIEW, [video, ...flags]] : [RETAKE_BIN, ['open', video, ...flags]];
+  return LEGACY ? [LEGACY_REVIEW, [video, ...flags]] : [RETAKE_BIN, ['open', video, ...flags, ...extra]];
 }
 
 export class Server {
@@ -61,9 +61,9 @@ async function ping(port: number): Promise<boolean> {
   }
 }
 
-/** Starts a server for `video` and waits until it answers /api/ping. */
-export async function startServer(name: string, video: string, port: number): Promise<Server> {
-  const [cmd, args] = serverCommand(video, port);
+/** Starts a server for `video` and waits until it answers /api/ping. `extra`: more flags (new server only). */
+export async function startServer(name: string, video: string, port: number, extra: string[] = []): Promise<Server> {
+  const [cmd, args] = serverCommand(video, port, extra);
   if (!existsSync(cmd)) {
     throw new Error(LEGACY ? `legacy launcher not found: ${cmd} (set RETAKE_LEGACY_REVIEW)`
       : `${cmd} not found: run \`make build\` first (or set RETAKE_BIN)`);

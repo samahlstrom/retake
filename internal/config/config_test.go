@@ -82,6 +82,12 @@ func TestParse(t *testing.T) {
 					t.Errorf("%+v", c.Transcribe)
 				}
 			}},
+		{name: "share table", in: "[share]\ncloudflared = \"/opt/cf/cloudflared\"\ntailscale = \"/opt/ts/tailscale\"\n",
+			check: func(t *testing.T, c Config) {
+				if *c.Share.Cloudflared != "/opt/cf/cloudflared" || *c.Share.Tailscale != "/opt/ts/tailscale" {
+					t.Errorf("%+v", c.Share)
+				}
+			}},
 		{name: "bad engine", in: "[transcribe]\nengine = \"vosk\"", wantErr: "transcribe.engine"},
 		{name: "bad device", in: "[transcribe]\ndevice = \"gpu\"", wantErr: "transcribe.device"},
 		{name: "wrong type", in: `port = "8777"`, wantErr: "port"},

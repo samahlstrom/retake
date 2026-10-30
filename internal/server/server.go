@@ -25,6 +25,7 @@ import (
 	"github.com/samahlstrom/retake/internal/jsonx"
 	"github.com/samahlstrom/retake/internal/project"
 	"github.com/samahlstrom/retake/internal/store"
+	"github.com/samahlstrom/retake/internal/team"
 	"github.com/samahlstrom/retake/internal/ui"
 )
 
@@ -50,7 +51,8 @@ type Options struct {
 	UI       fs.FS    // the page's files; nil serves ui.NotBuiltHTML
 	Author   string   // written to session.json "author"; "" leaves it out
 	// AllowHosts are extra hostnames the page may be reached at over HTTPS, e.g. a tunnel's (abc.trycloudflare.com):
-	// their Host header is accepted and https://<host> counts as our origin for writes.
+	// their Host header is accepted and https://<host> counts as our origin for writes. Requests through them need a
+	// token (spec/team.md), as do those through the hostnames of running shares (the project's hosts table).
 	AllowHosts []string
 	Prober     family.Prober
 
@@ -71,13 +73,20 @@ type Options struct {
 	EventPoll time.Duration
 	// KeepAlive is how often /api/events sends a comment to keep idle proxies from closing it; 0 = 15 s.
 	KeepAlive time.Duration
+
+	// Version is the build's version, which /mcp reports to agents.
+	Version string
+	// Limiter counts failed token attempts; nil = team.NewLimiter().
+	Limiter *team.Limiter
 }
 
 // Server serves one version family.
 type Server struct {
 	opts    Options
-	origins map[string]bool
-	hosts   map[string]bool // Host headers we answer to; anything else is a DNS-rebinding attempt
+	origins map[string]bool // our own origins, and https://<h> of each AllowHosts name
+	local   map[string]bool // the local Host headers: 127.0.0.1:<port>, localhost:<port>
+	allow   map[string]bool // AllowHosts, lower case; with the hosts table, the shared ones. Any other Host is refused.
+	limiter *team.Limiter
 	fam     atomic.Pointer[[]family.Version]
 	writeMu sync.Mutex // serializes every take write
 
@@ -92,6 +101,9 @@ type Server struct {
 	jobsDone chan struct{} // closed when the job runner returns; nil if it never started
 	quit     chan struct{} // closed when the server shuts down: ends the event streams
 	quitOnce sync.Once
+
+	mcpMu sync.Mutex
+	mcpH  http.Handler // /mcp, built on first use
 }
 
 // New returns a Server and scans the family once.
@@ -108,16 +120,19 @@ func New(opts Options) *Server {
 	if opts.Log == nil {
 		opts.Log = io.Discard
 	}
+	if opts.Limiter == nil {
+		opts.Limiter = team.NewLimiter()
+	}
 	s := &Server{opts: opts, origins: map[string]bool{
 		fmt.Sprintf("http://127.0.0.1:%d", opts.Port): true,
 		fmt.Sprintf("http://localhost:%d", opts.Port): true,
-	}, hosts: map[string]bool{
+	}, local: map[string]bool{
 		fmt.Sprintf("127.0.0.1:%d", opts.Port): true,
 		fmt.Sprintf("localhost:%d", opts.Port): true,
-	}}
+	}, allow: map[string]bool{}, limiter: opts.Limiter}
 	for _, h := range opts.AllowHosts {
 		h = strings.ToLower(h)
-		s.hosts[h] = true
+		s.allow[h] = true
 		s.origins["https://"+h] = true
 	}
 	s.root = opts.Root
@@ -290,20 +305,41 @@ func (s *Server) errorLog() io.Writer {
 // ServeHTTP implements http.Handler.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// A page on another site can point its own hostname at 127.0.0.1 (DNS rebinding) and then read our videos and
-	// takes as "same origin". Its requests still carry its hostname, so only answer to our own.
-	if !s.hosts[strings.ToLower(r.Host)] {
+	// takes as "same origin". Its requests still carry its hostname, so only answer to our own and our shares'.
+	shared, ok := s.classify(r)
+	if !ok {
 		s.fail(w, r, http.StatusForbidden, "bad host")
 		return
 	}
-	s.touch()
 	if s.opts.Verbose {
 		sw := &statusWriter{ResponseWriter: w, code: http.StatusOK}
 		w = sw
 		defer func() {
-			_, _ = fmt.Fprintf(s.opts.Log, "retake: \"%s %s %s\" %d -\n", r.Method, r.RequestURI, r.Proto, sw.code)
+			uri := r.RequestURI
+			if strings.HasPrefix(r.URL.Path, "/s/") {
+				uri = "/s/<token>" // a share link's token stays out of the log
+			}
+			_, _ = fmt.Fprintf(s.opts.Log, "retake: \"%s %s %s\" %d -\n", r.Method, uri, r.Proto, sw.code)
 		}()
 	}
+	if shared {
+		w = &privateWriter{ResponseWriter: w}
+	}
 	parts := splitPath(r.URL.Path)
+	if len(parts) == 2 && parts[0] == "s" && (r.Method == http.MethodGet || r.Method == http.MethodHead) {
+		s.shareLink(w, r, parts[1])
+		return
+	}
+	a, ok := s.authorize(w, r, parts, shared)
+	if !ok {
+		return // refused requests don't count as contact
+	}
+	s.touch()
+	r = withAccess(r, a)
+	if len(parts) == 1 && parts[0] == "mcp" {
+		s.mcpRoute(w, r)
+		return
+	}
 	switch r.Method {
 	case http.MethodGet, http.MethodHead:
 		s.get(w, r, parts)
@@ -405,6 +441,7 @@ type infoResponse struct {
 	ReviewDir string           `json:"review_dir"`
 	Sessions  []store.Summary  `json:"sessions"`
 	History   []historyEntry   `json:"history"`
+	Role      team.Role        `json:"role"` // spec/team.md
 }
 
 type historyResponse struct {
@@ -422,6 +459,7 @@ func (s *Server) info(w http.ResponseWriter, r *http.Request) {
 		ReviewDir: store.ReviewDir(cur.Path),
 		Sessions:  store.Sessions(cur.Path),
 		History:   s.history(cur),
+		Role:      accessOf(r).role,
 	})
 }
 
@@ -467,7 +505,11 @@ func (s *Server) originOK(r *http.Request) bool {
 	case 0:
 		return true
 	case 1:
-		return s.origins[vals[0]]
+		if s.origins[vals[0]] {
+			return true
+		}
+		h, ok := strings.CutPrefix(vals[0], "https://")
+		return ok && h != "" && s.shareHost(strings.ToLower(h)) // a running share's hostname
 	}
 	return false
 }
@@ -547,10 +589,14 @@ func (s *Server) serverFields(v family.Version) store.ServerFields {
 }
 
 func (s *Server) saveData(w http.ResponseWriter, r *http.Request, v family.Version, dir string, body []byte) {
+	sf := s.serverFields(v)
+	if a := accessOf(r); a.token != nil && a.token.Label != "" {
+		sf.Author = &store.Author{Name: a.token.Label} // a share link's person (spec/team.md)
+	}
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
 	closed := takeClosed(dir)
-	err := store.SaveData(dir, body, s.serverFields(v))
+	err := store.SaveData(dir, body, sf)
 	if err == nil && closed && !takeClosed(dir) {
 		err = markClosed(dir) // a save after Done keeps the take closed
 	}

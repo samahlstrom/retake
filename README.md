@@ -77,13 +77,8 @@ The review page has a phone layout, portrait and landscape, with big buttons for
 colors. Safari records AAC (`seg_NN.m4a`), which retake reads like any other segment.
 
 A browser only allows the microphone on a secure page: `http://127.0.0.1` on the same machine, or HTTPS. To review
-from a phone, put the server behind an HTTPS tunnel and allow its hostname:
-
-```bash
-retake open clip_v2.mp4 --no-open --allow-host my-tunnel.example.com
-```
-
-Anyone who has that URL can watch the versions and record takes, so share it only with people you trust.
+from a phone, run `retake share clip_v2.mp4`: it opens an HTTPS tunnel and prints a link with a QR code. Only people
+with a valid link get in (see [Sharing](#sharing)).
 
 ## Connect an agent
 
@@ -106,8 +101,10 @@ Today, `retake-edit` renders a timeline file into a video and a manifest, and yo
 
 ## Sharing
 
-<!-- STUB (team mode worker): retake share, accounts, roles, remote MCP. Replace this section. -->
-> **Stub.** Team mode (share links, tokens, remote MCP) fills this in. See [docs/sharing.md](docs/sharing.md).
+`retake share clip_v6.mp4 --label alex` puts the review behind an HTTPS tunnel (cloudflared, or `--tunnel tailscale`)
+and prints a link with a QR code. A link is a viewer, reviewer (the default) or approver; it expires (24 h by default),
+and `retake share revoke` ends it early. Agents elsewhere use `/mcp` with `retake token create --role agent`. Local use
+needs no token. See [`docs/sharing.md`](docs/sharing.md).
 
 ## Assets
 

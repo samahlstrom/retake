@@ -1,6 +1,8 @@
 // An HTTP proxy in front of the server under test that can make audio uploads fail at the connection level.
 // Browser-side routing (page.route) can't do this reliably: a keepalive upload sent while the page unloads bypasses
 // it. Every request, keepalive or not, goes through this proxy.
+// With `as`, it stands in for a share's tunnel instead (spec/team.md): every request reaches the server with the
+// share's Host header, and the page's origin becomes https://<that host>, as through cloudflared.
 import { createServer, request, type IncomingHttpHeaders, type Server as HttpServer } from 'node:http';
 
 const AUDIO_UPLOAD = /^\/api\/session\/[^/]+\/audio$/;
@@ -15,7 +17,7 @@ export class FailingProxy {
   failed = 0;
   private server: HttpServer;
 
-  constructor(port: number, target: number) {
+  constructor(port: number, target: number, as?: { host: string }) {
     this.port = port;
     this.target = target;
     this.url = `http://127.0.0.1:${port}/`;
@@ -26,10 +28,10 @@ export class FailingProxy {
         req.socket.destroy(); // a network error, as if the server were unreachable
         return;
       }
-      const headers: IncomingHttpHeaders = { ...req.headers, host: `127.0.0.1:${target}` };
+      const headers: IncomingHttpHeaders = { ...req.headers, host: as ? as.host : `127.0.0.1:${target}` };
       // The server accepts POSTs only from its own origin: present the proxy's origin as the server's.
       if (headers.origin === `http://127.0.0.1:${port}` || headers.origin === `http://localhost:${port}`) {
-        headers.origin = `http://127.0.0.1:${target}`;
+        headers.origin = as ? `https://${as.host}` : `http://127.0.0.1:${target}`;
       }
       const up = request({ host: '127.0.0.1', port: target, method: req.method, path: req.url, headers }, (ur) => {
         res.writeHead(ur.statusCode ?? 502, ur.headers);

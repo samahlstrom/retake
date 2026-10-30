@@ -1,10 +1,16 @@
 // Package mcp serves the agent API (internal/agent) over the Model Context Protocol, using the official Go SDK:
-// `retake mcp <video>` speaks it on stdin and stdout.
+// `retake mcp <video>` speaks it on stdin and stdout, and the server's /mcp route over streamable HTTP
+// (spec/team.md), with limits for an agent on another machine.
 package mcp
 
 import (
 	"context"
+	"fmt"
 	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -108,15 +114,37 @@ type pushIn struct {
 
 type versionsIn struct{}
 
+// RemoteWait is the longest notes_wait blocks over HTTP: Cloudflare ends a response that sends nothing for 100 s.
+const RemoteWait = 50 * time.Second
+
+// Options are the limits for an agent that isn't on the server's machine (spec/team.md, "Remote MCP").
+type Options struct {
+	// Root: version_push's file must be inside this folder, and a relative one is relative to it. "" = anywhere.
+	Root string
+	// MaxWait caps notes_wait's timeout, and is its default. 0 = DefaultWait, with no cap.
+	MaxWait time.Duration
+}
+
 // NewServer returns an MCP server with the agent tools of p.
 func NewServer(p *agent.Project, version string) *sdk.Server {
+	return NewServerWith(p, version, Options{})
+}
+
+// NewServerWith returns an MCP server with the agent tools of p, within the limits of opts.
+func NewServerWith(p *agent.Project, version string, opts Options) *sdk.Server {
 	s := sdk.NewServer(&sdk.Implementation{Name: "retake", Version: version},
 		&sdk.ServerOptions{Instructions: instructions})
 	sdk.AddTool(s, &sdk.Tool{Name: "notes_wait", Description: waitDesc},
 		func(ctx context.Context, _ *sdk.CallToolRequest, in waitIn) (*sdk.CallToolResult, agent.WaitResult, error) {
 			timeout := DefaultWait
+			if opts.MaxWait > 0 {
+				timeout = opts.MaxWait
+			}
 			if in.Timeout > 0 {
 				timeout = time.Duration(in.Timeout * float64(time.Second))
+			}
+			if opts.MaxWait > 0 && timeout > opts.MaxWait {
+				timeout = opts.MaxWait
 			}
 			res, err := p.NotesWait(ctx, agent.WaitArgs{Since: in.Since, Timeout: timeout})
 			return nil, res, err
@@ -139,7 +167,14 @@ func NewServer(p *agent.Project, version string) *sdk.Server {
 		})
 	sdk.AddTool(s, &sdk.Tool{Name: "version_push", Description: pushDesc},
 		func(ctx context.Context, _ *sdk.CallToolRequest, in pushIn) (*sdk.CallToolResult, agent.PushResult, error) {
-			a := agent.PushArgs{File: in.File, Parent: in.Parent, Label: in.Label, Move: in.Move}
+			file := in.File
+			if opts.Root != "" {
+				var err error
+				if file, err = inside(opts.Root, file); err != nil {
+					return nil, agent.PushResult{}, err
+				}
+			}
+			a := agent.PushArgs{File: file, Parent: in.Parent, Label: in.Label, Move: in.Move}
 			for _, c := range in.Changes {
 				a.Changes = append(a.Changes, project.ChangeEntry{Note: c.Note, Summary: c.Summary})
 			}
@@ -155,6 +190,44 @@ func NewServer(p *agent.Project, version string) *sdk.Server {
 			return nil, res, err
 		})
 	return s
+}
+
+// inside resolves a pushed file against the project root, and refuses one outside it (after symlinks).
+func inside(root, file string) (string, error) {
+	if strings.TrimSpace(file) == "" {
+		return "", &agent.Error{Code: agent.CodeBadRequest, Message: "push needs the new version's file"}
+	}
+	if !filepath.IsAbs(file) {
+		file = filepath.Join(root, file)
+	}
+	resolved, err := filepath.EvalSymlinks(file)
+	if err != nil {
+		return "", &agent.Error{Code: agent.CodeNotFound, Message: fmt.Sprintf("no such file: %s", file)}
+	}
+	base, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		base = root
+	}
+	if rel, err := filepath.Rel(base, resolved); err != nil || !filepath.IsLocal(rel) {
+		return "", &agent.Error{Code: agent.CodeBadRequest, Message: fmt.Sprintf("over HTTP, a pushed file must be "+
+			"inside the project folder %s: render it there first", root)}
+	}
+	if st, err := os.Stat(resolved); err != nil || !st.Mode().IsRegular() {
+		return "", &agent.Error{Code: agent.CodeNotFound, Message: fmt.Sprintf("no such file: %s", file)}
+	}
+	return resolved, nil
+}
+
+// HTTPHandler serves the tools of p over MCP's streamable HTTP transport, stateless, with the remote limits: a
+// pushed file inside the project root, notes_wait at most RemoteWait. It checks no token and no Host header: the
+// caller (the server's /mcp route) does both.
+func HTTPHandler(p *agent.Project, version string) http.Handler {
+	s := NewServerWith(p, version, Options{Root: p.Root, MaxWait: RemoteWait})
+	return sdk.NewStreamableHTTPHandler(func(*http.Request) *sdk.Server { return s }, &sdk.StreamableHTTPOptions{
+		Stateless: true,
+		// The server answers only its own and its shares' hostnames; the SDK's own check would refuse a tunnel's.
+		DisableLocalhostProtection: true,
+	})
 }
 
 // Serve serves the tools of p on in and out (newline-delimited JSON-RPC, as on stdio) until the client hangs up

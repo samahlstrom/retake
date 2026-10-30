@@ -78,6 +78,25 @@ CREATE TABLE events (
 	created TEXT NOT NULL
 );
 `,
+	// 2: sharing (spec/team.md): tokens, stored as hashes, and the hostnames of running shares.
+	`
+CREATE TABLE tokens (
+	id      INTEGER PRIMARY KEY AUTOINCREMENT,     -- what share list shows and share revoke takes
+	hash    TEXT NOT NULL UNIQUE,                  -- SHA-256 of the token, hex; the token itself is never stored
+	role    TEXT NOT NULL CHECK (role IN ('viewer', 'reviewer', 'approver', 'agent')),
+	label   TEXT NOT NULL DEFAULT '',              -- who it's for
+	created TEXT NOT NULL,
+	expires TEXT NOT NULL DEFAULT '',              -- '' = never
+	revoked TEXT NOT NULL DEFAULT ''               -- '' = not revoked, else when
+);
+
+CREATE TABLE hosts (
+	host    TEXT PRIMARY KEY,                      -- a share's public hostname, lower case
+	tunnel  TEXT NOT NULL DEFAULT '',              -- cloudflare | tailscale | none
+	pid     INTEGER NOT NULL DEFAULT 0,            -- the retake share process that added it
+	created TEXT NOT NULL
+);
+`,
 }
 
 // SchemaVersion is the schema version this build writes.

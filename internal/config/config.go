@@ -21,6 +21,13 @@ type Config struct {
 	OpenBrowser     *bool    `toml:"open_browser"`
 
 	Transcribe Transcribe `toml:"transcribe"`
+	Share      Share      `toml:"share"`
+}
+
+// Share is the [share] table (spec/team.md): the tunnel binaries `retake share` runs.
+type Share struct {
+	Cloudflared *string `toml:"cloudflared"` // unset or "" = cloudflared on $PATH
+	Tailscale   *string `toml:"tailscale"`   // unset or "" = tailscale on $PATH
 }
 
 // Transcribe is the [transcribe] table (spec/notes.md, "Config additions"). internal/transcribe reads it.

@@ -59,7 +59,12 @@ export interface Info {
   stem?: string;
   review_dir?: string;
   sessions?: unknown[];
+  /** Who the page acts as (spec/team.md). A server without team mode sends none: the owner. */
+  role?: Role;
 }
+
+/** A page's role: the owner (local), or a share link's. */
+export type Role = 'owner' | 'viewer' | 'reviewer' | 'approver' | 'agent';
 
 /** An event in the take's log. `p` is the page clock (seconds); serialize turns it into session_t. */
 export interface TakeEvent {

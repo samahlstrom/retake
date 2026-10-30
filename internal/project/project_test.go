@@ -109,7 +109,7 @@ func TestOpenCreatesWALStore(t *testing.T) {
 	if err := s.db.QueryRow("PRAGMA user_version").Scan(&v); err != nil || v != SchemaVersion {
 		t.Errorf("user_version = %d (%v), want %d", v, err, SchemaVersion)
 	}
-	for _, table := range []string{"notes", "threads", "versions", "jobs", "events"} {
+	for _, table := range []string{"notes", "threads", "versions", "jobs", "events", "tokens", "hosts"} {
 		var n int
 		if err := s.db.QueryRow("SELECT count(*) FROM " + table).Scan(&n); err != nil {
 			t.Errorf("table %s: %v", table, err)

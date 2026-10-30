@@ -35,6 +35,7 @@ the Go standard library and these modules:
 | `modernc.org/mathutil` | v1.7.1 | BSD-3-Clause |
 | `modernc.org/memory` | v1.12.1 | BSD-3-Clause |
 | `modernc.org/sqlite` | v1.61.0 | BSD-3-Clause AND public domain (SQLite) AND MIT |
+| `rsc.io/qr` | v0.2.0 | BSD-3-Clause |
 
 `golang.org/x/image` carries the Go fonts: Go Bold is compiled in (see Fonts).
 
@@ -1641,6 +1642,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 - Go module `github.com/google/uuid` v1.6.0: Copyright (c) 2009,2014 Google Inc. All rights reserved.
 - Go module `github.com/remyoudompheng/bigfft` v0.0.0-20230129092748-24d4a6f8daec: Copyright (c) 2012 The Go Authors. All rights reserved.
 - Go module `modernc.org/memory` v1.12.1: Copyright (c) 2009 The Go Authors. All rights reserved.
+- Go module `rsc.io/qr` v0.2.0: Copyright (c) 2009 The Go Authors. All rights reserved.
 
 ```text
 Redistribution and use in source and binary forms, with or without
