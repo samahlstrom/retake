@@ -100,6 +100,7 @@ class BufferedChunks implements ChunkStore {
       try {
         const tx = this.#db.transaction(STORE, 'readwrite');
         tx.objectStore(STORE).put(rec);
+        tx.commit?.(); // commit now, not when the event loop gets round to it: the page may be closing
         await done(tx);
         return;
       } catch (err) {
@@ -217,32 +218,38 @@ export interface RecoverResult {
   recovered: number;
   /** Bytes sent. */
   sent: number;
-  /** Files left in the buffer (other video, server unreachable, or a hole the server can't fill). */
+  /** Files left in the buffer: another video, a hole the server can't fill, or a failure worth retrying. */
   kept: number;
+  /** Of the kept files, those that failed in a way worth retrying (server unreachable or erroring). */
+  retry: number;
 }
 
 /**
  * Resend what earlier takes left in the buffer. Each file first asks the server for its size (a probe at an offset
  * past any end gets 409 with the size), then sends only the missing tail. Chunks are only resent for a version
- * whose file path is the one they were recorded on.
+ * whose file path is the one they were recorded on. `skip` leaves out takes another writer owns (this page's own
+ * takes, which its saver uploads), so two writers never race on one file.
  */
 export async function recoverPending(
   store: ChunkStore,
   family: readonly { label: string; path: string }[],
   post: Post,
+  skip: (take: string) => boolean = () => false,
 ): Promise<RecoverResult> {
-  const res: RecoverResult = { recovered: 0, sent: 0, kept: 0 };
+  const res: RecoverResult = { recovered: 0, sent: 0, kept: 0, retry: 0 };
   for (const f of groupPending(await store.list())) {
+    if (skip(f.take)) continue;
     const v = family.find((x) => x.label === f.version);
     if (!v || (f.path && v.path !== f.path)) {
-      res.kept++;
+      res.kept++; // another video on this port, or a version that is gone: keep it for when it is back
       continue;
     }
+    let size: number | undefined;
+    const all = runs(f),
+      end = all[all.length - 1].end;
     try {
-      const all = runs(f),
-        end = all[all.length - 1].end;
       const probe = await post(audioUrl(f.take, f.version, f.file, PROBE_OFFSET), new Blob([]));
-      let size = probe.status === 409 ? probe.json.size : undefined;
+      size = probe.status === 409 ? probe.json.size : undefined;
       for (const run of all) {
         // the server must already reach this run (else there is a hole it can't fill), and not hold all of it yet
         for (let tries = 0; typeof size === 'number' && size >= run.start && size < run.end && tries < 3; tries++) {
@@ -251,12 +258,20 @@ export async function recoverPending(
           size = r.status === 200 || r.status === 409 ? r.json.size : undefined;
         }
       }
-      if (typeof size === 'number' && size > 0) await store.confirm(f.take, f.version, f.file, size);
-      if (typeof size === 'number' && size >= end) res.recovered++;
-      else res.kept++;
     } catch {
-      res.kept++; // server gone: try again on the next load
+      size = undefined; // server unreachable
     }
+    if (typeof size === 'number' && size > 0) await store.confirm(f.take, f.version, f.file, size);
+    if (typeof size === 'number' && size >= end) {
+      res.recovered++;
+      continue;
+    }
+    res.kept++;
+    // The server stops short of a run, in a gap the buffer can't fill: stuck. Anything else (errors, refusals) may
+    // work later.
+    const at = size;
+    const hole = typeof at === 'number' && !all.some((r) => at >= r.start && at < r.end);
+    if (!hole) res.retry++;
   }
   return res;
 }

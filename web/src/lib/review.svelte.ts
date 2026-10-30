@@ -112,6 +112,12 @@ export class Review {
   /** The audio buffer. Memory until IndexedDB has opened (every chunk waits for `#storeReady`). */
   #store: ChunkStore = memoryChunkStore();
   #storeReady: Promise<ChunkStore> = Promise.resolve(this.#store);
+  /** Takes started on this page: the saver owns their uploads, so recovery leaves them alone. */
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- bookkeeping, nothing renders it
+  readonly #ownTakes = new Set<string>();
+  /** Closed takes (Done, or a version step) whose last save failed: autosave keeps trying them. */
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- bookkeeping, nothing renders it
+  readonly #unsaved = new Set<Take>();
   readonly #saver = new Saver({
     serialize: (t) => this.serialize(t),
     toast: (m, ms) => this.toast.say(m, ms),
@@ -176,6 +182,7 @@ export class Review {
     // eslint-disable-next-line svelte/prefer-svelte-reactivity -- a timestamp, not state
     const d = new Date();
     t.id = stamp(d);
+    this.#ownTakes.add(t.id);
     t.created = isoLocal(d);
     t.t0 = now();
     t.version = this.base;
@@ -250,15 +257,24 @@ export class Review {
     });
   }
 
-  /** Resend audio that earlier takes left in the buffer (the page closed or crashed before the server had it). */
+  /**
+   * Resend audio that earlier takes left in the buffer (the page closed or crashed before the server had it). Retries
+   * every AUTOSAVE_MS while the server is unreachable or refusing, until it has everything.
+   */
   async recover(): Promise<void> {
     const store = await this.#storeReady;
-    const res = await recoverPending(store, this.versions, async (url, body) => {
-      const r = await fetch(url, { method: 'POST', body });
-      return { status: r.status, json: (await r.json().catch(() => ({}))) as { size?: number } };
-    });
+    const res = await recoverPending(
+      store,
+      this.versions,
+      async (url, body) => {
+        const r = await fetch(url, { method: 'POST', body });
+        return { status: r.status, json: (await r.json().catch(() => ({}))) as { size?: number } };
+      },
+      (take) => this.#ownTakes.has(take),
+    );
     if (res.recovered || res.kept)
       console.info(`retake: audio buffer: ${res.recovered} file(s) recovered (${res.sent} bytes), ${res.kept} kept`);
+    if (res.retry) setTimeout(() => void this.recover().catch(() => {}), AUTOSAVE_MS);
   }
 
   // ---------------------------------------------------------------- recording: R toggles a segment
@@ -625,6 +641,7 @@ export class Review {
     if (t.id && !t.closed) {
       t.closed = true;
       void this.save(t);
+      this.#unsaved.add(t);
     }
     this.base = label;
     this.flipped = false;
@@ -687,6 +704,7 @@ export class Review {
     if (this.seg) await this.stopRec();
     await this.save(t);
     t.closed = true;
+    if (t.saveErr) this.#unsaved.add(t);
     this.closeMic();
     this.doneSaved = true;
     this.toast.say(t.saveErr ? MSG_SAVE_FAILED : 'Saved. Press R to start a new take.', 4000);
@@ -840,6 +858,11 @@ export class Review {
     setInterval(() => {
       const t = this.take;
       if (t.id && !t.closed && (t.dirty || this.seg)) void this.save(t);
+      for (const c of this.#unsaved) {
+        if (c.saving) continue;
+        if (c.saveErr) void this.save(c);
+        else this.#unsaved.delete(c);
+      }
     }, AUTOSAVE_MS);
     setInterval(() => {
       fetch('/api/ping').catch(() => {});

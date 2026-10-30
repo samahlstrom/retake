@@ -157,7 +157,7 @@ describe('recovery on page load', () => {
     expect(srv.calls[0]).toEqual({ file: key, offset: PROBE_OFFSET, body: '' });
     expect(srv.calls[1]).toEqual({ file: key, offset: 4, body: 'efgh' });
     expect(srv.files.get(key)).toBe('abcdefgh');
-    expect(res).toEqual({ recovered: 1, sent: 4, kept: 0 });
+    expect(res).toEqual({ recovered: 1, sent: 4, kept: 0, retry: 0 });
     expect(await store.list()).toEqual([]);
   });
 
@@ -165,7 +165,7 @@ describe('recovery on page load', () => {
     const store = memoryChunkStore();
     await store.put(chunk(0, 'abc'));
     const srv = fakeServer({ [key]: 'abc' });
-    expect(await recoverPending(store, fam, srv.post)).toEqual({ recovered: 1, sent: 0, kept: 0 });
+    expect(await recoverPending(store, fam, srv.post)).toEqual({ recovered: 1, sent: 0, kept: 0, retry: 0 });
     expect(srv.calls.length).toBe(1);
     expect(await store.list()).toEqual([]);
   });
@@ -183,7 +183,7 @@ describe('recovery on page load', () => {
     await store.put(chunk(0, 'abc', { path: '/videos/other/clip_v6.mp4' }));
     await store.put(chunk(0, 'abc', { version: 'v9' }));
     const srv = fakeServer();
-    expect(await recoverPending(store, fam, srv.post)).toEqual({ recovered: 0, sent: 0, kept: 2 });
+    expect(await recoverPending(store, fam, srv.post)).toEqual({ recovered: 0, sent: 0, kept: 2, retry: 0 });
     expect(srv.calls).toEqual([]);
     expect((await store.list()).length).toBe(2);
   });
@@ -192,7 +192,7 @@ describe('recovery on page load', () => {
     const store = memoryChunkStore();
     await store.put(chunk(5, 'fgh'));
     const srv = fakeServer({ [key]: 'ab' });
-    expect(await recoverPending(store, fam, srv.post)).toEqual({ recovered: 0, sent: 0, kept: 1 });
+    expect(await recoverPending(store, fam, srv.post)).toEqual({ recovered: 0, sent: 0, kept: 1, retry: 0 });
     expect(srv.files.get(key)).toBe('ab');
     expect((await store.list()).length).toBe(1);
   });
@@ -201,8 +201,36 @@ describe('recovery on page load', () => {
     const store = memoryChunkStore();
     await store.put(chunk(0, 'abc'));
     const down: Post = () => Promise.reject(new TypeError('Failed to fetch'));
-    expect(await recoverPending(store, fam, down)).toEqual({ recovered: 0, sent: 0, kept: 1 });
+    expect(await recoverPending(store, fam, down)).toEqual({ recovered: 0, sent: 0, kept: 1, retry: 1 });
     expect((await store.list()).length).toBe(1);
+  });
+
+  it('leaves takes another writer owns alone (this page saves its own)', async () => {
+    const store = memoryChunkStore();
+    await store.put(chunk(0, 'abc'));
+    const srv = fakeServer();
+    expect(await recoverPending(store, fam, srv.post, (take) => take === '2026-10-29_20-41-05')).toEqual({
+      recovered: 0,
+      sent: 0,
+      kept: 0,
+      retry: 0,
+    });
+    expect(srv.calls).toEqual([]);
+  });
+
+  it('retries a server that errors, until it has the whole file (uploads failed, then the page reloaded)', async () => {
+    const store = await openChunkStore(new FakeIDBFactory());
+    for (const c of [chunk(0, 'abc'), chunk(3, 'de'), chunk(5, 'fgh')]) await store.put(c);
+    const srv = fakeServer({ [key]: 'abc' }); // the first chunk made it before uploads started failing
+    let failing = true;
+    const flaky: Post = (url, body) =>
+      failing ? Promise.resolve({ status: 502, json: { error: 'bad gateway' } }) : srv.post(url, body);
+    expect(await recoverPending(store, fam, flaky)).toEqual({ recovered: 0, sent: 0, kept: 1, retry: 1 });
+    expect((await store.list()).length).toBe(3);
+    failing = false;
+    expect(await recoverPending(store, fam, flaky)).toEqual({ recovered: 1, sent: 5, kept: 0, retry: 0 });
+    expect(srv.files.get(key)).toBe('abcdefgh');
+    expect(await store.list()).toEqual([]);
   });
 
   it('builds the audio URL of spec/api.md', () => {
