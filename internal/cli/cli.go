@@ -76,6 +76,8 @@ usage:
       print the version
   retake assets <import|search|get|preview|span|set|resolve|license-report|plugins|plugin|kit|sql|mcp> ...
       the asset catalog: footage, audio, images, fonts, spans and licenses (retake assets help)
+  retake lib <search|add|list|describe|pack|recipe export|lint> ...
+      components, brand kits and edit recipes as shareable packages (retake lib help)
 
 the agent loop (spec/notes.md; <video> is any version of the family, and every command takes --json):
   retake notes list <video> [--status S]... [--version vN]
@@ -172,6 +174,8 @@ func Main(ctx context.Context, args []string, env Env) int {
 		return tokenCmd(ctx, args[1:], env)
 	case "assets":
 		return assetsCmd(ctx, args[1:], env)
+	case "lib":
+		return libCmd(ctx, args[1:], env)
 	case "version", "--version":
 		_, _ = fmt.Fprintf(env.Stdout, "retake %s\n", Version())
 		return ExitOK

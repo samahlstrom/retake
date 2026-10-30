@@ -1,0 +1,343 @@
+{
+  "schema": "retake-registry/0.1",
+  "name": "library",
+  "packages": [
+    {
+      "name": "callout-arrow",
+      "type": "component",
+      "version": "1.0.0",
+      "title": "Callout arrow",
+      "description": "A label on a pill with an arrow that draws out from it to a point of the picture, then a ring that pings around the point. Point at a detail the voice talks about: a button, a part, a face in a crowd.",
+      "category": "callout",
+      "use_as": [
+        "overlay"
+      ],
+      "tags": [
+        "arrow",
+        "callout",
+        "annotation",
+        "pointer",
+        "label"
+      ],
+      "license": "CC0-1.0",
+      "hash": "b3:c4275ef26a05f789ae78f89d0d11145c2de7adb6a7450b2770008a5eb9014c6f",
+      "path": "components/callout-arrow",
+      "files": [
+        {
+          "path": "component.json",
+          "hash": "b3:19d05d8ca50d4ee1040d4848ac9e6618e259c84401ba23339749009feed82135",
+          "size": 7230
+        }
+      ],
+      "previews": {
+        "sheet": "components/callout-arrow/previews/sheet.png"
+      }
+    },
+    {
+      "name": "caption",
+      "type": "component",
+      "version": "1.0.0",
+      "title": "Karaoke caption",
+      "description": "Word-timed captions from a words JSON: the voice-over's words grouped into short lines, each line shown while it is spoken, the current word lit in the highlight color. Pass words as \"$words:<spine-id>\" so they follow the VO through every trim, or inline as [{w, s, e}] in seconds on the overlay's clock.",
+      "category": "caption",
+      "use_as": [
+        "overlay"
+      ],
+      "tags": [
+        "captions",
+        "subtitles",
+        "karaoke",
+        "words",
+        "accessibility"
+      ],
+      "license": "CC0-1.0",
+      "hash": "b3:4738af1258ed1f0a1c100b934a964ee3dab116a7348b216ea9c5aeb852147d0e",
+      "path": "components/caption",
+      "files": [
+        {
+          "path": "component.json",
+          "hash": "b3:12f155a22d7af1d98d681494437941c3ed8931d010bae7c15c0121f6186ee408",
+          "size": 5341
+        }
+      ],
+      "previews": {
+        "sheet": "components/caption/previews/sheet.png"
+      }
+    },
+    {
+      "name": "clean",
+      "type": "kit",
+      "version": "1.0.0",
+      "title": "Clean",
+      "description": "A neutral dark kit: off-white type on near-black, one warm yellow accent, Baloo 2 throughout, and house rules for pacing (one pop at a time, room between pops, a budget for punch-ins) and placement (graphics inside the action-safe area, names never over captions).",
+      "license": "CC0-1.0",
+      "hash": "b3:6e9262372e8fac6770e8fe1d91741c911a0f0229d5a998d58fd40ccdb7337390",
+      "path": "kits/clean",
+      "files": [
+        {
+          "path": "kit.json",
+          "hash": "b3:b3945e0f1c23eca0444b4b3937a33a38944090213c0bacfff925cfd9c37ceb73",
+          "size": 2922
+        }
+      ],
+      "requires": [
+        "title-card@1.0.0",
+        "pop-text@1.0.0",
+        "lower-third@1.0.0",
+        "caption@1.0.0",
+        "pip-frame@1.0.0",
+        "progress-bar@1.0.0",
+        "zoom-punch@1.0.0",
+        "counter@1.0.0",
+        "callout-arrow@1.0.0",
+        "freeze-frame-highlight@1.0.0"
+      ]
+    },
+    {
+      "name": "counter",
+      "type": "component",
+      "version": "1.0.0",
+      "title": "Counter",
+      "description": "A number that counts from one value to another with an ease-out, then gives a small bump when it lands: a stat, a price, a score, a percentage. The number is an expression, so prefix, suffix, decimals and thousands separators are props. An optional label sits under it.",
+      "category": "counter",
+      "use_as": [
+        "overlay"
+      ],
+      "tags": [
+        "number",
+        "stat",
+        "count up",
+        "data",
+        "kinetic type"
+      ],
+      "license": "CC0-1.0",
+      "hash": "b3:6ddefa19dde233403a240ce759578b91667347f59e6bbe5977c83d2ece350cf1",
+      "path": "components/counter",
+      "files": [
+        {
+          "path": "component.json",
+          "hash": "b3:e30b1042eeefd0cc7a7e8799a2fa5d22cc09c5a0379ae1692e9afa2589c9ed3d",
+          "size": 4773
+        }
+      ],
+      "previews": {
+        "sheet": "components/counter/previews/sheet.png"
+      }
+    },
+    {
+      "name": "freeze-frame-highlight",
+      "type": "component",
+      "version": "1.0.0",
+      "title": "Freeze frame highlight",
+      "description": "Footage that freezes on a moment with a camera-flash blink, dims everything but a circle around the point that matters, rings it, and names it. For \"see this?\" moments: a mistake, a tell, the thing to watch. Use it as a shot's picture.",
+      "category": "freeze",
+      "use_as": [
+        "picture"
+      ],
+      "tags": [
+        "freeze",
+        "spotlight",
+        "highlight",
+        "replay",
+        "footage"
+      ],
+      "license": "CC0-1.0",
+      "hash": "b3:f9815751fee5dddb1814049f9a8e958962bdeb1c6b6d9f6ea7450e8958d361d0",
+      "path": "components/freeze-frame-highlight",
+      "files": [
+        {
+          "path": "component.json",
+          "hash": "b3:bd59cbad81cb55af0af2df15e6cd6313edc57673292cb2d9b533c59cdbe60625",
+          "size": 5125
+        }
+      ],
+      "previews": {
+        "sheet": "components/freeze-frame-highlight/previews/sheet.png"
+      }
+    },
+    {
+      "name": "lower-third",
+      "type": "component",
+      "version": "1.0.0",
+      "title": "Lower third",
+      "description": "A name and a role on a plate in the lower left: the accent bar drops in, the plate wipes out from it, the words slide in, and everything fades on the element's end. For introducing a person, a place or a source.",
+      "category": "lower-third",
+      "use_as": [
+        "overlay"
+      ],
+      "tags": [
+        "name",
+        "title",
+        "identity",
+        "label",
+        "lower third"
+      ],
+      "license": "CC0-1.0",
+      "hash": "b3:17a3ba9ee39fe0b6211b72555b0a6a802f510e6e2a638d7a17f2d8f86629585c",
+      "path": "components/lower-third",
+      "files": [
+        {
+          "path": "component.json",
+          "hash": "b3:8520df7b53667a5f4f752e50cec347a6366933ac6aedfd37082a1f6ed70e144d",
+          "size": 4817
+        }
+      ],
+      "previews": {
+        "sheet": "components/lower-third/previews/sheet.png"
+      }
+    },
+    {
+      "name": "pip-frame",
+      "type": "component",
+      "version": "1.0.0",
+      "title": "Picture in picture",
+      "description": "A second video in a framed, shadowed box over the picture: a face cam, a reference clip, a before/after. It pops in, plays, and fades out on the element's end. Optional small label above the frame.",
+      "category": "pip",
+      "use_as": [
+        "overlay"
+      ],
+      "tags": [
+        "pip",
+        "picture in picture",
+        "facecam",
+        "inset",
+        "video"
+      ],
+      "license": "CC0-1.0",
+      "hash": "b3:301c76948b2eee1eb75bc38f5a1729fbcf8b0a020040294ac87c7d3393c6f9bb",
+      "path": "components/pip-frame",
+      "files": [
+        {
+          "path": "component.json",
+          "hash": "b3:761ab7cc75ef36c448d28d5bee5958c5b90a39bde45703e909f46ecbdd3eba99",
+          "size": 4447
+        }
+      ],
+      "previews": {
+        "sheet": "components/pip-frame/previews/sheet.png"
+      }
+    },
+    {
+      "name": "pop-text",
+      "type": "component",
+      "version": "1.0.0",
+      "title": "Pop text",
+      "description": "A word or two that lands over the picture to stress what the voice says: pops (or rises) in, settles, and fades out on the element's end. Big, bold, outlined, readable over any footage. One at a time.",
+      "category": "pop",
+      "use_as": [
+        "overlay"
+      ],
+      "tags": [
+        "text",
+        "emphasis",
+        "pop",
+        "kinetic type"
+      ],
+      "license": "CC0-1.0",
+      "hash": "b3:490a6d11f06299f6f3880721d0fd3b969093f0c68b1c0d595b9f38dc457226de",
+      "path": "components/pop-text",
+      "files": [
+        {
+          "path": "component.json",
+          "hash": "b3:a4314181ff16cf0b44b45bc131b24f2d42be7b41191ae0899a5561d26b70e7b7",
+          "size": 3689
+        }
+      ],
+      "previews": {
+        "sheet": "components/pop-text/previews/sheet.png"
+      }
+    },
+    {
+      "name": "progress-bar",
+      "type": "component",
+      "version": "1.0.0",
+      "title": "Progress bar",
+      "description": "A thin bar that fills over the element's length, from one fraction to another: how far into a chapter, a list or a countdown the viewer is. A dot rides the leading edge; an optional label sits above the start.",
+      "category": "progress",
+      "use_as": [
+        "overlay"
+      ],
+      "tags": [
+        "progress",
+        "timer",
+        "chapter",
+        "bar",
+        "countdown"
+      ],
+      "license": "CC0-1.0",
+      "hash": "b3:fa44c96df3a4513e849a942f1b92abd9782adce6f2818a1df9336b3308516b7c",
+      "path": "components/progress-bar",
+      "files": [
+        {
+          "path": "component.json",
+          "hash": "b3:07c0b4099274f534179ad9879cc3527fa9e8998a7d84e8c1edbcc80d5c5d783c",
+          "size": 4782
+        }
+      ],
+      "previews": {
+        "sheet": "components/progress-bar/previews/sheet.png"
+      }
+    },
+    {
+      "name": "title-card",
+      "type": "component",
+      "version": "1.0.0",
+      "title": "Title card",
+      "description": "A full-frame title for an opening or a new chapter: a big title that settles in, an accent rule that draws out from under it, and an optional subtitle that rises in after. A soft glow in the accent color sits behind the title. Use it as a shot's picture.",
+      "category": "title",
+      "use_as": [
+        "picture"
+      ],
+      "tags": [
+        "title",
+        "chapter",
+        "opener",
+        "card"
+      ],
+      "license": "CC0-1.0",
+      "hash": "b3:3a0dfa3381231c172b7889a954d13b4d958b05511076404e370931b208b5c5e2",
+      "path": "components/title-card",
+      "files": [
+        {
+          "path": "component.json",
+          "hash": "b3:cafa92d93b4585b1574553299f36aa6f649417829739fb78dbb4f9e52c1a8500",
+          "size": 4843
+        }
+      ],
+      "previews": {
+        "sheet": "components/title-card/previews/sheet.png"
+      }
+    },
+    {
+      "name": "zoom-punch",
+      "type": "component",
+      "version": "1.0.0",
+      "title": "Zoom punch",
+      "description": "Footage that punches in on a point at a moment: a fast keyframed scale toward the focus, then a hold (or an ease back out). The classic emphasis cut for a reaction, a detail or a punchline. Use it as a shot's picture; it fills the frame.",
+      "category": "zoom",
+      "use_as": [
+        "picture"
+      ],
+      "tags": [
+        "zoom",
+        "punch in",
+        "emphasis",
+        "footage",
+        "camera"
+      ],
+      "license": "CC0-1.0",
+      "hash": "b3:b417e9c01582458ac05f08b83a6c020e034bedf447ba19fa6f3083ef08033786",
+      "path": "components/zoom-punch",
+      "files": [
+        {
+          "path": "component.json",
+          "hash": "b3:bf207c50d8726bf067885a237f80f27f0dd2aa281b3ef722d9491f0f913f2e4d",
+          "size": 3422
+        }
+      ],
+      "previews": {
+        "sheet": "components/zoom-punch/previews/sheet.png"
+      }
+    }
+  ]
+}
