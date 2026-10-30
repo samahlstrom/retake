@@ -1,0 +1,102 @@
+{
+  "schema": "retake-component/0.1",
+  "name": "freeze-frame-highlight",
+  "version": "1.0.0",
+  "title": "Freeze frame highlight",
+  "description": "Footage that freezes on a moment with a camera-flash blink, dims everything but a circle around the point that matters, rings it, and names it. For \"see this?\" moments: a mistake, a tell, the thing to watch. Use it as a shot's picture.",
+  "license": "CC0-1.0",
+  "authors": ["Retake contributors"],
+  "tags": ["freeze", "spotlight", "highlight", "replay", "footage"],
+  "category": "freeze",
+  "use_as": ["picture"],
+  "canvas": [1920, 1080],
+  "duration": 3.0,
+  "props": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["asset"],
+    "properties": {
+      "asset": { "type": "string", "x-retake-input": "video", "description": "The footage asset id." },
+      "in": { "type": "number", "minimum": 0, "default": 0, "description": "Source seconds at the shot's start." },
+      "freeze": { "type": "number", "minimum": 0, "default": 0.6, "description": "Seconds into the shot when the picture freezes." },
+      "point": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2, "default": [960, 540], "description": "The center of the highlight, [x, y] in design pixels." },
+      "radius": { "type": "number", "minimum": 20, "maximum": 700, "default": 170, "description": "The highlight's radius, design pixels." },
+      "label": { "type": "string", "maxLength": 40, "default": "", "description": "A line naming what to look at. Empty: none." },
+      "label_at": { "type": ["array", "null"], "items": { "type": "number" }, "default": null, "description": "Where the label's center goes, [x, y]; null puts it under the circle (or over it, near the bottom)." },
+      "dim": { "type": "number", "minimum": 0, "maximum": 0.95, "default": 0.6, "description": "How dark the rest of the frame gets." },
+      "color": { "type": "string", "default": "kit:color.accent", "description": "Ring and label." },
+      "flash": { "type": "boolean", "default": true, "description": "A white blink when it freezes." }
+    }
+  },
+  "tokens": {
+    "color": { "accent": "#ffd23f", "ink": "#101114" }
+  },
+  "layers": [
+    {
+      "id": "video",
+      "type": "video",
+      "asset": "$props.asset",
+      "in": "$props.in",
+      "hold_from": { "$expr": "props.in + props.freeze" },
+      "fit": "cover"
+    },
+    {
+      "id": "dim",
+      "type": "shape",
+      "shape": "ellipse",
+      "size": { "$expr": "[props.radius * 2 + 6000, props.radius * 2 + 6000]" },
+      "stroke": { "color": { "$expr": "'#000000' + Math.round(props.dim * 255).toString(16).padStart(2, '0')" }, "width": 6000 },
+      "blur": 6,
+      "transform": {
+        "position": "$props.point",
+        "opacity": { "$expr": "({keys: [{t: props.freeze + 0.05, v: 0, ease: 'out-cubic'}, {t: props.freeze + 0.4, v: 1}]})" }
+      }
+    },
+    {
+      "id": "ring",
+      "type": "shape",
+      "shape": "ellipse",
+      "size": { "$expr": "[props.radius * 2, props.radius * 2]" },
+      "stroke": { "color": "$props.color", "width": 9 },
+      "shadow": { "color": "#00000099", "dx": 0, "dy": 4, "blur": 14 },
+      "transform": {
+        "position": "$props.point",
+        "scale": { "$expr": "({keys: [{t: props.freeze + 0.15, v: 1.35, ease: 'out-back'}, {t: props.freeze + 0.45, v: 1}]})" },
+        "opacity": { "$expr": "({keys: [{t: props.freeze + 0.15, v: 0}, {t: props.freeze + 0.3, v: 1}]})" }
+      }
+    },
+    {
+      "id": "label",
+      "type": "text",
+      "text": "$props.label",
+      "uppercase": true,
+      "size": 60,
+      "max_width": 1400,
+      "fill": "$props.color",
+      "stroke": { "color": "kit:color.ink", "width": 7 },
+      "shadow": { "color": "#00000099", "dx": 0, "dy": 6, "blur": 16 },
+      "transform": {
+        "position": { "$expr": "(() => { const p = props.label_at || [props.point[0], props.point[1] + props.radius + 80 > 1000 ? props.point[1] - props.radius - 70 : props.point[1] + props.radius + 70]; return {keys: [{t: props.freeze + 0.3, v: [p[0], p[1] + 30], ease: 'out-cubic'}, {t: props.freeze + 0.65, v: p}]}; })()" },
+        "opacity": { "$expr": "({keys: [{t: props.freeze + 0.3, v: 0}, {t: props.freeze + 0.6, v: 1}]})" }
+      }
+    },
+    {
+      "id": "flash",
+      "type": "shape",
+      "shape": "rect",
+      "size": [1920, 1080],
+      "fill": "#ffffff",
+      "transform": {
+        "position": [960, 540],
+        "opacity": { "$expr": "props.flash ? {keys: [{t: Math.max(0, props.freeze - 0.01), v: 0}, {t: props.freeze + 0.03, v: 0.7, ease: 'out-quad'}, {t: props.freeze + 0.28, v: 0}]} : 0" }
+      }
+    }
+  ],
+  "examples": [
+    { "name": "freeze and name it", "props": { "asset": "proj:footage", "freeze": 0.5, "point": [1200, 520], "label": "Watch the square" }, "duration": 2.6 },
+    { "name": "small circle, no flash", "props": { "asset": "proj:footage", "freeze": 0.3, "point": [640, 360], "radius": 110, "dim": 0.75, "flash": false, "color": "#5bc0eb" }, "duration": 2.0 }
+  ],
+  "changelog": [
+    { "version": "1.0.0", "date": "2026-10-30", "changes": "First version." }
+  ]
+}

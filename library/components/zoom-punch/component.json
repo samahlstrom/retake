@@ -1,0 +1,63 @@
+{
+  "schema": "retake-component/0.1",
+  "name": "zoom-punch",
+  "version": "1.0.0",
+  "title": "Zoom punch",
+  "description": "Footage that punches in on a point at a moment: a fast keyframed scale toward the focus, then a hold (or an ease back out). The classic emphasis cut for a reaction, a detail or a punchline. Use it as a shot's picture; it fills the frame.",
+  "license": "CC0-1.0",
+  "authors": ["Retake contributors"],
+  "tags": ["zoom", "punch in", "emphasis", "footage", "camera"],
+  "category": "zoom",
+  "use_as": ["picture"],
+  "canvas": [1920, 1080],
+  "duration": 2.5,
+  "props": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["asset"],
+    "properties": {
+      "asset": { "type": "string", "x-retake-input": "video", "description": "The footage asset id." },
+      "in": { "type": "number", "minimum": 0, "default": 0, "description": "Source seconds at the shot's start." },
+      "at": { "type": "number", "minimum": 0, "default": 0.6, "description": "Seconds into the shot when the punch lands." },
+      "amount": { "type": "number", "minimum": 1, "maximum": 4, "default": 1.35, "description": "The zoom after the punch (1 = none)." },
+      "speed": { "type": "number", "minimum": 0.04, "maximum": 1.5, "default": 0.16, "description": "Seconds the punch takes." },
+      "focus": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2, "default": [960, 540], "description": "The point zoomed toward, [x, y] in design pixels of the frame." },
+      "release": { "type": ["number", "null"], "default": null, "description": "Seconds after the punch to ease back to 1; null holds the zoom to the end." },
+      "flash": { "type": "boolean", "default": false, "description": "A quick white flash on the punch." },
+      "audio": { "type": "boolean", "default": true, "description": "Mix the footage's own sound." }
+    }
+  },
+  "layers": [
+    {
+      "id": "video",
+      "type": "video",
+      "asset": "$props.asset",
+      "in": "$props.in",
+      "fit": "cover",
+      "audio": { "$expr": "props.audio ? {gain_db: 0} : null" },
+      "transform": {
+        "anchor": { "$expr": "[props.focus[0] / 1920, props.focus[1] / 1080]" },
+        "position": "$props.focus",
+        "scale": { "$expr": "(() => { const a = props.at, b = props.at + props.speed; const k = [{t: 0, v: 1}, {t: a, v: 1, ease: 'out-expo'}, {t: b, v: props.amount}]; if (props.release !== null) { k[2].ease = 'in-out-cubic'; k.push({t: b + props.release, v: props.amount, ease: 'in-out-cubic'}); k.push({t: b + props.release + 0.35, v: 1}); } return {keys: k}; })()" }
+      }
+    },
+    {
+      "id": "flash",
+      "type": "shape",
+      "shape": "rect",
+      "size": [1920, 1080],
+      "fill": "#ffffff",
+      "transform": {
+        "position": [960, 540],
+        "opacity": { "$expr": "props.flash ? {keys: [{t: Math.max(0, props.at - 0.02), v: 0}, {t: props.at + 0.02, v: 0.55, ease: 'out-quad'}, {t: props.at + 0.22, v: 0}]} : 0" }
+      }
+    }
+  ],
+  "examples": [
+    { "name": "punch and hold", "props": { "asset": "proj:footage", "at": 0.5, "focus": [1180, 520] }, "duration": 2.0 },
+    { "name": "punch, flash, release", "props": { "asset": "proj:footage", "at": 0.4, "amount": 1.6, "flash": true, "release": 0.7, "focus": [700, 600] }, "duration": 2.4 }
+  ],
+  "changelog": [
+    { "version": "1.0.0", "date": "2026-10-30", "changes": "First version." }
+  ]
+}

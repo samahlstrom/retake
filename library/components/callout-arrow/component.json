@@ -1,0 +1,129 @@
+{
+  "schema": "retake-component/0.1",
+  "name": "callout-arrow",
+  "version": "1.0.0",
+  "title": "Callout arrow",
+  "description": "A label on a pill with an arrow that draws out from it to a point of the picture, then a ring that pings around the point. Point at a detail the voice talks about: a button, a part, a face in a crowd.",
+  "license": "CC0-1.0",
+  "authors": ["Retake contributors"],
+  "tags": ["arrow", "callout", "annotation", "pointer", "label"],
+  "category": "callout",
+  "use_as": ["overlay"],
+  "canvas": [1920, 1080],
+  "duration": 2.6,
+  "props": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["label", "target"],
+    "properties": {
+      "label": { "type": "string", "minLength": 1, "maxLength": 32, "description": "The words on the pill." },
+      "target": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2, "description": "The point the arrow tips at, [x, y] in design pixels." },
+      "from": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2, "default": [560, 300], "description": "The center of the label, [x, y] in design pixels." },
+      "color": { "type": "string", "default": "kit:color.accent", "description": "Pill, arrow and ring." },
+      "text_color": { "type": "string", "default": "kit:color.ink", "description": "The label's letters." },
+      "size": { "type": "number", "minimum": 24, "maximum": 96, "default": 46, "description": "Label size, design pixels." },
+      "thickness": { "type": "number", "minimum": 3, "maximum": 30, "default": 10, "description": "Arrow thickness, design pixels." },
+      "gap": { "type": "number", "minimum": 0, "default": 34, "description": "Space between the arrow's tip and the target." },
+      "ring": { "type": "boolean", "default": true, "description": "A ring that pings around the target." }
+    }
+  },
+  "tokens": {
+    "color": { "accent": "#ffd23f", "ink": "#101114" }
+  },
+  "layers": [
+    {
+      "id": "ring",
+      "type": "shape",
+      "shape": "ellipse",
+      "size": [96, 96],
+      "stroke": { "color": "$props.color", "width": 7 },
+      "transform": {
+        "position": "$props.target",
+        "scale": { "keys": [ { "t": 0.55, "v": 0.3, "ease": "out-back" }, { "t": 0.85, "v": 1 } ] },
+        "opacity": { "$expr": "props.ring ? {keys: [{t: 0.55, v: 0}, {t: 0.7, v: 1}, {t: 'end:' + id + '-0.2', v: 1}, {t: 'end:' + id, v: 0}]} : 0" }
+      }
+    },
+    {
+      "id": "shaft",
+      "type": "shape",
+      "shape": "rect",
+      "size": { "$expr": "(() => { const [fx, fy] = props.from, [tx, ty] = props.target; const len = Math.hypot(tx - fx, ty - fy); const start = Math.min(len * 0.45, props.size * 1.3); return [Math.max(10, len - start - props.gap), props.thickness]; })()" },
+      "radius": { "$expr": "props.thickness / 2" },
+      "fill": "$props.color",
+      "shadow": { "color": "#00000066", "dx": 0, "dy": 4, "blur": 10 },
+      "transform": {
+        "anchor": [0, 0.5],
+        "position": { "$expr": "(() => { const [fx, fy] = props.from, [tx, ty] = props.target; const len = Math.hypot(tx - fx, ty - fy) || 1; const start = Math.min(len * 0.45, props.size * 1.3); return [fx + (tx - fx) / len * start, fy + (ty - fy) / len * start]; })()" },
+        "rotation": { "$expr": "Math.atan2(props.target[1] - props.from[1], props.target[0] - props.from[0]) * 180 / Math.PI" },
+        "scale": { "keys": [ { "t": 0.15, "v": [0, 1], "ease": "out-cubic" }, { "t": 0.5, "v": [1, 1] } ] },
+        "opacity": { "keys": [ { "t": 0.15, "v": 0 }, { "t": 0.2, "v": 1 }, { "t": "end:$id-0.2", "v": 1 }, { "t": "end:$id", "v": 0 } ] }
+      }
+    },
+    {
+      "id": "head-a",
+      "type": "shape",
+      "shape": "rect",
+      "size": { "$expr": "[props.thickness * 3.2, props.thickness]" },
+      "radius": { "$expr": "props.thickness / 2" },
+      "fill": "$props.color",
+      "transform": {
+        "anchor": { "$expr": "[1 - 0.5 / 3.2, 0.5]" },
+        "position": { "$expr": "(() => { const [fx, fy] = props.from, [tx, ty] = props.target; const len = Math.hypot(tx - fx, ty - fy) || 1; return [tx - (tx - fx) / len * props.gap, ty - (ty - fy) / len * props.gap]; })()" },
+        "rotation": { "$expr": "Math.atan2(props.target[1] - props.from[1], props.target[0] - props.from[0]) * 180 / Math.PI + 38" },
+        "scale": { "keys": [ { "t": 0.45, "v": 0.2, "ease": "out-back" }, { "t": 0.62, "v": 1 } ] },
+        "opacity": { "keys": [ { "t": 0.45, "v": 0 }, { "t": 0.5, "v": 1 }, { "t": "end:$id-0.2", "v": 1 }, { "t": "end:$id", "v": 0 } ] }
+      }
+    },
+    {
+      "id": "head-b",
+      "type": "shape",
+      "shape": "rect",
+      "size": { "$expr": "[props.thickness * 3.2, props.thickness]" },
+      "radius": { "$expr": "props.thickness / 2" },
+      "fill": "$props.color",
+      "transform": {
+        "anchor": { "$expr": "[1 - 0.5 / 3.2, 0.5]" },
+        "position": { "$expr": "(() => { const [fx, fy] = props.from, [tx, ty] = props.target; const len = Math.hypot(tx - fx, ty - fy) || 1; return [tx - (tx - fx) / len * props.gap, ty - (ty - fy) / len * props.gap]; })()" },
+        "rotation": { "$expr": "Math.atan2(props.target[1] - props.from[1], props.target[0] - props.from[0]) * 180 / Math.PI - 38" },
+        "scale": { "keys": [ { "t": 0.45, "v": 0.2, "ease": "out-back" }, { "t": 0.62, "v": 1 } ] },
+        "opacity": { "keys": [ { "t": 0.45, "v": 0 }, { "t": 0.5, "v": 1 }, { "t": "end:$id-0.2", "v": 1 }, { "t": "end:$id", "v": 0 } ] }
+      }
+    },
+    {
+      "id": "pill",
+      "type": "shape",
+      "shape": "rect",
+      "size": { "$expr": "[props.label.length * props.size * 0.6 + props.size * 1.2, props.size * 1.55]" },
+      "radius": { "$expr": "props.size * 0.775" },
+      "fill": "$props.color",
+      "shadow": { "color": "#00000073", "dx": 0, "dy": 8, "blur": 22 },
+      "transform": {
+        "position": "$props.from",
+        "scale": { "keys": [ { "t": 0, "v": 0.6, "ease": "out-back" }, { "t": 0.22, "v": 1 } ] },
+        "opacity": { "keys": [ { "t": 0, "v": 0 }, { "t": 0.1, "v": 1 }, { "t": "end:$id-0.2", "v": 1 }, { "t": "end:$id", "v": 0 } ] }
+      }
+    },
+    {
+      "id": "label",
+      "type": "text",
+      "text": "$props.label",
+      "uppercase": true,
+      "size": "$props.size",
+      "line_height": 1.0,
+      "fill": "$props.text_color",
+      "transform": {
+        "position": { "$expr": "[props.from[0], props.from[1] + props.size * 0.04]" },
+        "scale": { "keys": [ { "t": 0, "v": 0.6, "ease": "out-back" }, { "t": 0.22, "v": 1 } ] },
+        "opacity": { "keys": [ { "t": 0, "v": 0 }, { "t": 0.1, "v": 1 }, { "t": "end:$id-0.2", "v": 1 }, { "t": "end:$id", "v": 0 } ] }
+      }
+    }
+  ],
+  "examples": [
+    { "name": "down and right", "props": { "label": "Bloom", "from": [560, 300], "target": [1180, 640] }, "duration": 2.6 },
+    { "name": "up and left, blue", "props": { "label": "Dial here", "from": [1400, 820], "target": [820, 420], "color": "#5bc0eb" }, "duration": 2.6 },
+    { "name": "short, no ring", "props": { "label": "New", "from": [1500, 300], "target": [1500, 640], "ring": false, "size": 40 }, "duration": 2.0 }
+  ],
+  "changelog": [
+    { "version": "1.0.0", "date": "2026-10-30", "changes": "First version." }
+  ]
+}

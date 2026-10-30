@@ -24,3 +24,6 @@ e2e/playwright-report/
 
 # scripts/make-sample.sh default output
 /retake-sample/
+
+# component previews: the WebPs are made on demand (retake-edit component preview); the sheets are committed
+/library/**/previews/*.webp

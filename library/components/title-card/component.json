@@ -1,0 +1,103 @@
+{
+  "schema": "retake-component/0.1",
+  "name": "title-card",
+  "version": "1.0.0",
+  "title": "Title card",
+  "description": "A full-frame title for an opening or a new chapter: a big title that settles in, an accent rule that draws out from under it, and an optional subtitle that rises in after. A soft glow in the accent color sits behind the title. Use it as a shot's picture.",
+  "license": "CC0-1.0",
+  "authors": ["Retake contributors"],
+  "tags": ["title", "chapter", "opener", "card"],
+  "category": "title",
+  "use_as": ["picture"],
+  "canvas": [1920, 1080],
+  "duration": 2.5,
+  "props": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["title"],
+    "properties": {
+      "title": { "type": "string", "minLength": 1, "maxLength": 60, "description": "The title. Wraps at max_width; \\n breaks the line." },
+      "subtitle": { "type": "string", "maxLength": 90, "default": "", "description": "A line under the rule. Empty: none." },
+      "align": { "enum": ["center", "left"], "default": "center", "description": "center, or left-aligned at x 180 (for a chapter number look)." },
+      "size": { "type": "number", "minimum": 48, "maximum": 220, "default": 128, "description": "Title size, design pixels." },
+      "bg": { "type": "string", "default": "kit:color.bg", "description": "Background color." },
+      "color": { "type": "string", "default": "kit:color.text", "description": "Title color." },
+      "accent": { "type": "string", "default": "kit:color.accent", "description": "The rule and the glow." },
+      "muted": { "type": "string", "default": "kit:color.muted", "description": "Subtitle color." },
+      "uppercase": { "type": "boolean", "default": true, "description": "Upper-case the title." },
+      "glow": { "type": "boolean", "default": true, "description": "The soft accent glow behind the title." }
+    }
+  },
+  "tokens": {
+    "color": { "bg": "#15171c", "text": "#f7f7f2", "accent": "#ffd23f", "muted": "#a3a9b4" }
+  },
+  "background": "$props.bg",
+  "layers": [
+    {
+      "id": "glow",
+      "type": "shape",
+      "shape": "ellipse",
+      "size": [1300, 560],
+      "fill": { "$expr": "props.accent.length === 7 ? props.accent + '24' : props.accent" },
+      "blur": 150,
+      "transform": {
+        "position": { "$expr": "props.align === 'left' ? [700, 560] : [960, 560]" },
+        "opacity": { "$expr": "props.glow ? {keys: [{t: 0, v: 0, ease: 'out-cubic'}, {t: 0.8, v: 1}]} : 0" }
+      }
+    },
+    {
+      "id": "title",
+      "type": "text",
+      "text": "$props.title",
+      "uppercase": "$props.uppercase",
+      "size": "$props.size",
+      "line_height": 1.0,
+      "max_width": { "$expr": "props.align === 'left' ? 1500 : 1600" },
+      "align": "$props.align",
+      "fill": "$props.color",
+      "shadow": { "color": "#00000066", "dx": 0, "dy": 8, "blur": 24 },
+      "transform": {
+        "anchor": { "$expr": "props.align === 'left' ? [0, 1] : [0.5, 1]" },
+        "position": { "$expr": "props.align === 'left' ? [180, 585] : [960, 585]" },
+        "scale": { "keys": [ { "t": 0, "v": 0.94, "ease": "out-cubic" }, { "t": 0.45, "v": 1 } ] },
+        "opacity": { "keys": [ { "t": 0, "v": 0 }, { "t": 0.3, "v": 1 } ] }
+      }
+    },
+    {
+      "id": "rule",
+      "type": "shape",
+      "shape": "rect",
+      "size": [240, 12],
+      "radius": 6,
+      "fill": "$props.accent",
+      "transform": {
+        "anchor": { "$expr": "props.align === 'left' ? [0, 0.5] : [0.5, 0.5]" },
+        "position": { "$expr": "props.align === 'left' ? [184, 626] : [960, 626]" },
+        "scale": { "keys": [ { "t": 0.18, "v": [0, 1], "ease": "out-expo" }, { "t": 0.7, "v": [1, 1] } ] }
+      }
+    },
+    {
+      "id": "subtitle",
+      "type": "text",
+      "text": "$props.subtitle",
+      "size": 58,
+      "weight": 600,
+      "max_width": 1500,
+      "align": "$props.align",
+      "fill": "$props.muted",
+      "transform": {
+        "anchor": { "$expr": "props.align === 'left' ? [0, 0] : [0.5, 0]" },
+        "position": { "$expr": "((x) => ({keys: [{t: 0.32, v: [x, 690], ease: 'out-cubic'}, {t: 0.75, v: [x, 664]}]}))(props.align === 'left' ? 182 : 960)" },
+        "opacity": { "keys": [ { "t": 0.32, "v": 0 }, { "t": 0.7, "v": 1 } ] }
+      }
+    }
+  ],
+  "examples": [
+    { "name": "opener", "props": { "title": "Pour-over coffee", "subtitle": "in a few simple steps" }, "duration": 2.5 },
+    { "name": "chapter, left", "props": { "title": "Chapter 2\nThe grind", "align": "left", "size": 112, "uppercase": false }, "duration": 2.5 },
+    { "name": "bold, no glow", "props": { "title": "Why it matters", "bg": "#1d2b45", "accent": "#5bc0eb", "glow": false, "size": 150 }, "duration": 2.0 }
+  ],
+  "changelog": [
+    { "version": "1.0.0", "date": "2026-10-30", "changes": "First version: centered or left title, accent rule, subtitle, glow." }
+  ]
+}

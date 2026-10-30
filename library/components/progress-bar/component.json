@@ -1,0 +1,97 @@
+{
+  "schema": "retake-component/0.1",
+  "name": "progress-bar",
+  "version": "1.0.0",
+  "title": "Progress bar",
+  "description": "A thin bar that fills over the element's length, from one fraction to another: how far into a chapter, a list or a countdown the viewer is. A dot rides the leading edge; an optional label sits above the start.",
+  "license": "CC0-1.0",
+  "authors": ["Retake contributors"],
+  "tags": ["progress", "timer", "chapter", "bar", "countdown"],
+  "category": "progress",
+  "use_as": ["overlay"],
+  "canvas": [1920, 1080],
+  "duration": 3.0,
+  "props": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "from": { "type": "number", "minimum": 0, "maximum": 1, "default": 0, "description": "The filled fraction at the element's start." },
+      "to": { "type": "number", "minimum": 0, "maximum": 1, "default": 1, "description": "The filled fraction at the element's end." },
+      "y": { "type": "number", "default": 1040, "description": "Vertical center of the bar, design pixels." },
+      "margin": { "type": "number", "minimum": 0, "maximum": 800, "default": 96, "description": "Space left and right of the bar, design pixels." },
+      "height": { "type": "number", "minimum": 2, "maximum": 60, "default": 10, "description": "Bar thickness, design pixels." },
+      "color": { "type": "string", "default": "kit:color.accent", "description": "The filled part." },
+      "track": { "type": "string", "default": "#ffffff2e", "description": "The empty part, usually translucent." },
+      "dot": { "type": "boolean", "default": true, "description": "A dot on the leading edge." },
+      "label": { "type": "string", "maxLength": 40, "default": "", "description": "A small label above the bar's left end. Empty: none." },
+      "label_color": { "type": "string", "default": "kit:color.text", "description": "Label color." }
+    }
+  },
+  "tokens": {
+    "color": { "accent": "#ffd23f", "text": "#f7f7f2" }
+  },
+  "layers": [
+    {
+      "id": "track",
+      "type": "shape",
+      "shape": "rect",
+      "size": { "$expr": "[1920 - 2 * props.margin, props.height]" },
+      "radius": { "$expr": "props.height / 2" },
+      "fill": "$props.track",
+      "transform": {
+        "anchor": [0, 0.5],
+        "position": { "$expr": "[props.margin, props.y]" },
+        "opacity": { "keys": [ { "t": 0, "v": 0 }, { "t": 0.2, "v": 1 }, { "t": "end:$id-0.2", "v": 1 }, { "t": "end:$id", "v": 0 } ] }
+      }
+    },
+    {
+      "id": "fill",
+      "type": "shape",
+      "shape": "rect",
+      "size": { "$expr": "[1920 - 2 * props.margin, props.height]" },
+      "radius": { "$expr": "props.height / 2" },
+      "fill": "$props.color",
+      "transform": {
+        "anchor": [0, 0.5],
+        "position": { "$expr": "[props.margin, props.y]" },
+        "scale": { "keys": [ { "t": 0, "v": [{ "$expr": "Math.max(props.from, 0.0001)" }, 1] }, { "t": "end:$id", "v": [{ "$expr": "Math.max(props.to, 0.0001)" }, 1] } ] },
+        "opacity": { "keys": [ { "t": 0, "v": 0 }, { "t": 0.2, "v": 1 }, { "t": "end:$id-0.2", "v": 1 }, { "t": "end:$id", "v": 0 } ] }
+      }
+    },
+    {
+      "id": "dot",
+      "type": "shape",
+      "shape": "ellipse",
+      "size": { "$expr": "[props.height * 2.4, props.height * 2.4]" },
+      "fill": "$props.color",
+      "shadow": { "color": "#00000066", "dx": 0, "dy": 3, "blur": 8 },
+      "transform": {
+        "position": { "$expr": "((w) => ({keys: [{t: 0, v: [props.margin + w * props.from, props.y]}, {t: 'end:' + id, v: [props.margin + w * props.to, props.y]}]}))(1920 - 2 * props.margin)" },
+        "opacity": { "$expr": "props.dot ? {keys: [{t: 0, v: 0}, {t: 0.2, v: 1}, {t: 'end:' + id + '-0.2', v: 1}, {t: 'end:' + id, v: 0}]} : 0" }
+      }
+    },
+    {
+      "id": "label",
+      "type": "text",
+      "text": "$props.label",
+      "uppercase": true,
+      "size": 28,
+      "align": "left",
+      "fill": "$props.label_color",
+      "shadow": { "color": "#000000aa", "dx": 0, "dy": 2, "blur": 6 },
+      "transform": {
+        "anchor": [0, 1],
+        "position": { "$expr": "[props.margin, props.y - props.height / 2 - 14]" },
+        "opacity": { "keys": [ { "t": 0, "v": 0 }, { "t": 0.25, "v": 1 }, { "t": "end:$id-0.2", "v": 1 }, { "t": "end:$id", "v": 0 } ] }
+      }
+    }
+  ],
+  "examples": [
+    { "name": "whole video", "props": { "label": "Step 2 of 4" }, "duration": 3.0 },
+    { "name": "a chapter, 25 to 50 percent", "props": { "from": 0.25, "to": 0.5, "y": 980, "height": 16, "color": "#5bc0eb", "dot": false }, "duration": 2.5 },
+    { "name": "top, edge to edge", "props": { "y": 6, "margin": 0, "height": 12, "track": "#00000000", "dot": false }, "duration": 2.0 }
+  ],
+  "changelog": [
+    { "version": "1.0.0", "date": "2026-10-30", "changes": "First version." }
+  ]
+}
