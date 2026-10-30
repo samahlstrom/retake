@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"slices"
 	"time"
 )
@@ -87,7 +88,7 @@ func (s *Store) Job(id int64) (Job, error) { return jobByID(s.db, id) }
 // Jobs returns the jobs, newest first, up to limit (<= 0: all).
 func (s *Store) Jobs(limit int) ([]Job, error) {
 	if limit <= 0 {
-		limit = -1
+		limit = math.MaxInt64 // every row; the same SQL on SQLite and Postgres
 	}
 	return queryJobs(s.db, `ORDER BY id DESC LIMIT ?`, limit)
 }
@@ -103,13 +104,9 @@ func (t *tx) insertJob(kind string, args JobArgs) (Job, error) {
 		return Job{}, err
 	}
 	now := t.s.stamp()
-	r, err := t.Exec(`INSERT INTO jobs (kind, args, state, created, updated) VALUES (?, ?, ?, ?, ?)`, kind, string(b),
-		JobQueued, now, now)
-	if err != nil {
-		return Job{}, err
-	}
-	id, err := r.LastInsertId()
-	if err != nil {
+	var id int64
+	if err := t.QueryRow(`INSERT INTO jobs (kind, args, state, created, updated) VALUES (?, ?, ?, ?, ?) RETURNING id`,
+		kind, string(b), JobQueued, now, now).Scan(&id); err != nil {
 		return Job{}, err
 	}
 	j, err := jobByID(t, id)

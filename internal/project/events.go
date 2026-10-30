@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"math"
 	"time"
 )
 
@@ -69,7 +70,7 @@ func (t *tx) flushEvents() error {
 // Events returns up to limit events after since, oldest first (limit <= 0: all).
 func (s *Store) Events(since int64, limit int) ([]Event, error) {
 	if limit <= 0 {
-		limit = -1
+		limit = math.MaxInt64 // every row; the same SQL on SQLite and Postgres
 	}
 	rows, err := s.db.Query(`SELECT seq, kind, data, created FROM events WHERE seq > ? ORDER BY seq LIMIT ?`, since, limit)
 	if err != nil {
