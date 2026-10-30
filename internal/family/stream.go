@@ -3,6 +3,7 @@ package family
 import (
 	"bufio"
 	"encoding/json"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -11,20 +12,50 @@ import (
 	"github.com/samahlstrom/retake/internal/jsonx"
 )
 
-// A streamed render (spec/bridge.md, "Streaming") is an HLS EVENT playlist that grows while its push renders it.
-// It is in the family as soon as it lists a segment, with rendering set, as long as the push is alive.
+// A streamed version (spec/bridge.md, "Streaming") is an HLS EVENT playlist that renders on demand: pending until
+// someone watches it, rendering while someone does, complete once it has #EXT-X-ENDLIST. Its push record says how to
+// render it and what to expect; its playlist and render lock say how far it is.
 
-// Progress is how far a streamed render is: units published of all, and the seconds playable so far.
-type Progress struct {
+// Stream states.
+const (
+	StatePending   = "pending"
+	StateRendering = "rendering"
+	StateComplete  = "complete"
+)
+
+// StreamState is a streamed version's state for the page: units published of all, and the seconds playable.
+type StreamState struct {
+	State   string      `json:"state"`
 	Done    int         `json:"done"`
 	Total   int         `json:"total"`
 	Seconds jsonx.Float `json:"seconds"`
+}
+
+// StreamRecord is the "stream" object of a streamed push's record (<stem>.push.json): how to render the version,
+// what its plan expects, and how its renders went.
+type StreamRecord struct {
+	State    string   `json:"state"`
+	Playlist string   `json:"playlist"`
+	Poster   string   `json:"poster,omitempty"`
+	Doc      string   `json:"doc"`              // the timeline snapshot it renders, beside the playlist
+	Export   string   `json:"export,omitempty"` // the MP4 the completing render also packages, beside the playlist
+	Duration float64  `json:"duration"`
+	FPS      float64  `json:"fps"`
+	Size     []int    `json:"size,omitempty"`
+	Done     int      `json:"done"`
+	Total    int      `json:"total"`
+	Seconds  float64  `json:"seconds"`
+	Renders  int      `json:"renders"`
+	FirstS   *float64 `json:"first_s"`
+	DoneS    *float64 `json:"done_s"`
+	Error    string   `json:"error,omitempty"`
 }
 
 // Playlist is what Retake reads from an HLS media playlist.
 type Playlist struct {
 	Segments int
 	Seconds  float64 // the sum of the EXTINF durations
+	Units    int     // the last "# unit N" mark of a streamed render: units published
 	Ended    bool    // #EXT-X-ENDLIST
 }
 
@@ -52,6 +83,10 @@ func ReadPlaylist(path string) (Playlist, error) {
 			pending = true
 		case line == "#EXT-X-ENDLIST":
 			pl.Ended = true
+		case strings.HasPrefix(line, "# unit "):
+			if n, err := strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(line, "# unit "))); err == nil {
+				pl.Units = n
+			}
 		case line == "" || strings.HasPrefix(line, "#"):
 		case pending:
 			pl.Segments++
@@ -61,78 +96,73 @@ func ReadPlaylist(path string) (Playlist, error) {
 	return pl, sc.Err()
 }
 
-// RenderingState is the "rendering" object of a streamed push's record (<stem>.push.json): the expected
-// duration, frame rate and size from the render plan, and the units published so far.
-type RenderingState struct {
-	Playlist string  `json:"playlist,omitempty"`
-	Duration float64 `json:"duration,omitempty"`
-	FPS      float64 `json:"fps,omitempty"`
-	Size     []int   `json:"size,omitempty"`
-	Done     int     `json:"done"`
-	Total    int     `json:"total"`
-	Started  string  `json:"started,omitempty"`
-}
-
-// renderingOf reads the rendering state from a playlist's push record; nil when it has none (or no record).
-func renderingOf(playlist string) *RenderingState {
-	b, err := os.ReadFile(sidecar(playlist, ".push.json"))
+// ReadStreamRecord reads the stream object of a playlist's push record; nil when it has none (or no record).
+func ReadStreamRecord(playlist string) *StreamRecord {
+	b, err := os.ReadFile(Sidecar(playlist, ".push.json"))
 	if err != nil {
 		return nil
 	}
 	var rec struct {
-		Rendering *RenderingState `json:"rendering"`
+		Stream *StreamRecord `json:"stream"`
 	}
 	if json.Unmarshal(b, &rec) != nil {
 		return nil
 	}
-	return rec.Rendering
+	return rec.Stream
 }
 
-func sidecar(video, suffix string) string {
+// Sidecar is a file beside a version named after it: X.m3u8 -> X<suffix>.
+func Sidecar(video, suffix string) string {
 	return filepath.Join(filepath.Dir(video), Stem(filepath.Base(video))+suffix)
 }
 
-// RenderLockPath is the lock a streamed push holds on its playlist while it renders: .<stem>.lock beside it.
+// RenderLockPath is the lock a render holds on its playlist: .<stem>.lock beside it.
 func RenderLockPath(playlist string) string {
 	return filepath.Join(filepath.Dir(playlist), "."+Stem(filepath.Base(playlist))+".lock")
 }
 
-// streaming reports whether path is a streamed render in progress that can be listed: a playlist without
-// #EXT-X-ENDLIST that has a segment, a push record with rendering, and a live push holding its lock. It returns the
-// version's expected info and progress.
-func streaming(path string) (info streamInfo, ok bool) {
-	if !IsPlaylist(path) {
-		return info, false
+// State is a streamed version's state: complete when its playlist ended, rendering while a render holds its lock,
+// else pending. Done and Seconds come from the playlist, Total from the record.
+func State(playlist string, rec *StreamRecord) StreamState {
+	pl, _ := ReadPlaylist(playlist)
+	st := StreamState{State: StatePending, Done: pl.Units, Total: rec.Total, Seconds: jsonx.Float(round3(pl.Seconds))}
+	switch {
+	case pl.Ended:
+		st.State, st.Done = StateComplete, rec.Total
+	case RenderLive(playlist):
+		st.State = StateRendering
 	}
-	pl, err := ReadPlaylist(path)
-	if err != nil || pl.Ended || pl.Segments == 0 {
-		return info, false
-	}
-	st := renderingOf(path)
-	if st == nil || !RenderLive(path) {
-		return info, false
-	}
-	info.duration = st.Duration
-	if info.duration <= 0 {
-		info.duration = pl.Seconds
-	}
-	info.fps = st.FPS
-	if info.fps <= 0 {
-		info.fps = 30
-	}
-	if len(st.Size) == 2 {
-		w, h := st.Size[0], st.Size[1]
-		info.width, info.height = &w, &h
-	}
-	info.progress = Progress{Done: st.Done, Total: st.Total, Seconds: jsonx.Float(round3(pl.Seconds))}
-	return info, true
+	return st
 }
 
-type streamInfo struct {
-	duration      float64
-	fps           float64
-	width, height *int
-	progress      Progress
+// streamed reports whether path is a streamed version, with what its record expects and its state. It's listed in
+// every state and never probed.
+func streamed(path, label string) (Version, bool) {
+	if !IsPlaylist(path) {
+		return Version{}, false
+	}
+	rec := ReadStreamRecord(path)
+	if rec == nil {
+		return Version{}, false
+	}
+	st := State(path, rec)
+	d := rec.Duration
+	if d <= 0 {
+		d = float64(st.Seconds)
+	}
+	fps := rec.FPS
+	if fps <= 0 {
+		fps = 30
+	}
+	v := Version{Duration: jsonx.FloatPtr(&d), FPS: jsonx.Float(fps), Stream: &st}
+	if len(rec.Size) == 2 {
+		w, h := rec.Size[0], rec.Size[1]
+		v.Width, v.Height = &w, &h
+	}
+	if rec.Poster != "" {
+		v.Poster = "video/" + url.PathEscape(label) + "/" + url.PathEscape(rec.Poster)
+	}
+	return v, true
 }
 
 func round3(x float64) float64 {

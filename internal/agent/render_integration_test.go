@@ -6,10 +6,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/samahlstrom/retake/internal/bridge"
 	"github.com/samahlstrom/retake/internal/family"
 	"github.com/samahlstrom/retake/internal/project"
+	"github.com/samahlstrom/retake/internal/stream"
 	"github.com/samahlstrom/retake/internal/testmedia"
 )
 
@@ -65,7 +67,8 @@ func TestPushRenderWithRetakeEdit(t *testing.T) {
 		"ops": [{"op": "set", "id": "pop/faster/text", "path": "fill", "value": "#ff3b30"}]}`)
 	run(bin, "patch", "apply", tl, filepath.Join(edit, "pop.json"))
 
-	// It streams (the default): v2 is a playlist in v2/, with the export MP4 beside it.
+	// It streams (the default): v2 is pending at once, a playlist in v2/ with its poster; it renders when watched,
+	// and the render that completes also packages the export MP4.
 	var notes []string
 	res, err := p.VersionPush(context.Background(), PushArgs{Render: true, Draft: true, Export: true,
 		Notify: func(s string) { notes = append(notes, s) }})
@@ -80,19 +83,42 @@ func TestPushRenderWithRetakeEdit(t *testing.T) {
 	if res.Render.Units != (bridge.Units{Total: 6, Reused: 5, Rendered: 1}) {
 		t.Fatalf("only the pop's unit renders again: %+v", res.Render.Units)
 	}
-	if s := res.Render.Stream; s == nil || s.Playlist != "demo_v2.m3u8" || s.Segments < 6 || s.FirstS > s.DoneS ||
-		res.Render.Rendering != nil || res.Render.Export != "demo_v2.export.mp4" {
-		t.Fatalf("stream = %+v, record = %+v", res.Render.Stream, res.Render)
+	if s := res.Render.Stream; s == nil || s.State != family.StatePending || s.Total != 6 || s.Duration != 16.1 ||
+		s.Export != "demo_v2.export.mp4" || len(notes) != 1 {
+		t.Fatalf("stream = %+v, notes %q", res.Render.Stream, notes)
+	}
+	if st, err := os.Stat(filepath.Join(root, "v2", "demo_v2.poster.jpg")); err != nil || st.Size() < 100 {
+		t.Fatalf("poster: %v", err)
+	}
+	m0 := stream.New(stream.Options{Editor: p.Editor})
+	defer m0.Close()
+	if _, err := m0.Watch(stream.Target{Label: "v2", Playlist: dest, Root: root}, "test"); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(60 * time.Second)
+	for st, _ := m0.State(dest); st.State != family.StateComplete; st, _ = m0.State(dest) {
+		if time.Now().After(deadline) {
+			t.Fatalf("not complete: %+v", st)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	for m0.Rendering(dest) {
+		time.Sleep(10 * time.Millisecond)
 	}
 	pl, err := family.ReadPlaylist(dest)
-	if err != nil || !pl.Ended || pl.Segments != res.Render.Stream.Segments || pl.Seconds < 16 {
+	if err != nil || !pl.Ended || pl.Units != 6 || pl.Seconds < 16 {
 		t.Fatalf("playlist = %+v %v", pl, err)
+	}
+	rec, err := bridge.ReadPushRecord(dest)
+	if err != nil || rec.Stream.State != family.StateComplete || rec.Stream.Renders != 1 || rec.Stream.DoneS == nil ||
+		rec.Stream.FirstS == nil || *rec.Stream.FirstS > *rec.Stream.DoneS {
+		t.Fatalf("record = %+v %v", rec.Stream, err)
 	}
 	if st, err := os.Stat(filepath.Join(root, "v2", "demo_v2.export.mp4")); err != nil || st.Size() == 0 {
 		t.Fatalf("export: %v", err)
 	}
-	if exists(family.RenderLockPath(dest)) || len(notes) != 2 {
-		t.Fatalf("the lock is gone; a person heard when it played and when it ended: %q", notes)
+	if exists(family.RenderLockPath(dest)) {
+		t.Fatal("the lock is gone")
 	}
 	m, err := bridge.ForVideo(dest)
 	if err != nil || m.Video != "demo_v2.m3u8" || m.Timeline.Rev != 1 || len(m.Units) != 6 {

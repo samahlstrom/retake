@@ -49,20 +49,23 @@ type JobEvent struct {
 
 // VersionEvent is the data of a "version" event.
 type VersionEvent struct {
-	// Why: push; for a streamed render (spec/bridge.md, "Streaming") also rendering (it's in the family now),
-	// progress, and failed (it's gone).
+	// Why: push; for a streamed version (spec/bridge.md, "Streaming") also rendering, progress, stopped, complete and
+	// failed.
 	Why    string `json:"why"`
 	Label  string `json:"label"`
 	Parent string `json:"parent,omitempty"`
 	Path   string `json:"path,omitempty"`
-	// Progress is a streamed render's progress (with why progress and rendering).
-	Progress *family.Progress `json:"progress,omitempty"`
+	// Stream is a streamed version's state, and Error why its render failed.
+	Stream *family.StreamState `json:"stream,omitempty"`
+	Error  string              `json:"error,omitempty"`
 }
 
-// Version events without a push: a streamed render appeared, made progress, or failed.
+// Version events of a streamed version's render.
 const (
 	WhyRendering = "rendering"
 	WhyProgress  = "progress"
+	WhyStopped   = "stopped"
+	WhyComplete  = "complete"
 	WhyFailed    = "failed"
 )
 

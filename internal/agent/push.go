@@ -339,9 +339,8 @@ type VersionView struct {
 	Path     string `json:"path"`
 	Newest   bool   `json:"newest"`
 	InFamily bool   `json:"in_family"` // false: pushed, but not found or not playable (yet)
-	// Rendering is a streamed push still rendering (spec/bridge.md, "Streaming"), with its progress.
-	Rendering bool                  `json:"rendering,omitempty"`
-	Progress  *family.Progress      `json:"progress,omitempty"`
+	// Stream is a streamed version's state (spec/bridge.md, "Streaming"): pending, rendering or complete.
+	Stream    *family.StreamState   `json:"stream,omitempty"`
 	Duration  *float64              `json:"duration"`
 	SHA256    string                `json:"sha256,omitempty"`
 	Parent    string                `json:"parent,omitempty"`
@@ -381,7 +380,7 @@ func (p *Project) VersionsList(_ context.Context) (VersionsResult, error) {
 	}
 	for i, v := range fam {
 		view := VersionView{Label: v.Label, N: v.N, Path: v.Path, Newest: i == len(fam)-1, InFamily: true}
-		view.Rendering, view.Progress = v.Rendering, v.Progress
+		view.Stream = v.Stream
 		if v.Duration != nil {
 			d := float64(*v.Duration)
 			view.Duration = &d

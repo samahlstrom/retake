@@ -5,9 +5,11 @@ import (
 	"errors"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/samahlstrom/retake/internal/family"
+	"github.com/samahlstrom/retake/internal/jsonx"
 )
 
 // PatchRef is a patch as a rendered push lists it.
@@ -44,21 +46,8 @@ type PushRecord struct {
 	Unrequested []PatchRef `json:"unrequested"`
 	Skipped     []Skipped  `json:"skipped"`
 	Units       Units      `json:"units"`
-	// Rendering is a streamed push still rendering (spec/bridge.md, "Streaming"); it's dropped when the render ends.
-	Rendering *family.RenderingState `json:"rendering,omitempty"`
-	// Stream is what a streamed push published, once it's done.
-	Stream *StreamStats `json:"stream,omitempty"`
-	// Export is the MP4 a streamed push packaged at the end (with --export), beside the playlist.
-	Export string `json:"export,omitempty"`
-}
-
-// StreamStats is a finished streamed push: its playlist, segments, and the seconds from the start of the render to
-// the first segment and to the end of the playlist.
-type StreamStats struct {
-	Playlist string  `json:"playlist"`
-	Segments int     `json:"segments"`
-	FirstS   float64 `json:"first_s"`
-	DoneS    float64 `json:"done_s"`
+	// Stream is a streamed push's render (spec/bridge.md, "Streaming"): how to render it, and how far it is.
+	Stream *family.StreamRecord `json:"stream,omitempty"`
 }
 
 // NoteChange is one note's changelog entry from patches: their summaries and ids.
@@ -135,4 +124,39 @@ func ReadPushRecord(video string) (*PushRecord, error) {
 		return nil, err
 	}
 	return &r, nil
+}
+
+// WritePushRecord writes a version's push record beside it, whole (a temporary file renamed over it).
+func WritePushRecord(video string, rec PushRecord) error {
+	b, err := jsonx.Marshal(rec)
+	if err != nil {
+		return err
+	}
+	b, err = jsonx.Indent1(b)
+	if err != nil {
+		return err
+	}
+	return writeAtomic(PushRecordPath(video), b)
+}
+
+// writeAtomic writes path whole: a temporary file beside it, renamed over it.
+func writeAtomic(path string, b []byte) error {
+	f, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return err
+	}
+	if _, err := f.Write(b); err != nil {
+		_ = f.Close()
+		_ = os.Remove(f.Name())
+		return err
+	}
+	if err := f.Close(); err != nil {
+		_ = os.Remove(f.Name())
+		return err
+	}
+	if err := os.Chmod(f.Name(), 0o644); err != nil { //nolint:gosec // a record others may read
+		_ = os.Remove(f.Name())
+		return err
+	}
+	return os.Rename(f.Name(), path)
 }

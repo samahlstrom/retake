@@ -6,27 +6,23 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
-	"sync"
-	"time"
 
 	"github.com/samahlstrom/retake/internal/bridge"
 	"github.com/samahlstrom/retake/internal/family"
-	"github.com/samahlstrom/retake/internal/jsonx"
 	"github.com/samahlstrom/retake/internal/project"
 	"github.com/samahlstrom/retake/internal/store"
 )
 
-// emptyPlaylist is the playlist before its first segment: it takes the version's number, and the family doesn't
-// list it yet (it has no segment).
-const emptyPlaylist = "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-PLAYLIST-TYPE:EVENT\n#EXT-X-TARGETDURATION:6\n"
+// emptyPlaylist is a streamed version's playlist before its first segment: it takes the version's number. The
+// renderer replaces it with its own (the same header) when it publishes.
+const emptyPlaylist = "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-PLAYLIST-TYPE:EVENT\n#EXT-X-TARGETDURATION:6\n" +
+	"#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-INDEPENDENT-SEGMENTS\n#EXT-X-START:TIME-OFFSET=0\n"
 
-// progressEvery is the least time between two progress events of a streamed render.
-const progressEvery = time.Second
-
-// streamPush renders a push as a growing HLS playlist in its version folder (spec/bridge.md, "Streaming"). The
-// version is in the family from the first published unit on; the push is recorded when the playlist ends. A failed
-// or interrupted render takes everything back out and emits a "failed" event.
+// streamPush pushes a version that renders on demand (spec/bridge.md, "Streaming"): it snapshots the timeline,
+// plans it, renders only its first frame as the poster, writes the playlist header and the push record (pending),
+// and records the push. The review server renders it while someone watches it.
 func (p *Project) streamPush(ctx context.Context, a PushArgs, push project.Push, rec bridge.PushRecord,
 	timeline, bin string) (PushResult, error) {
 	playlist := push.Path
@@ -39,131 +35,83 @@ func (p *Project) streamPush(ctx context.Context, a PushArgs, push project.Push,
 	if err := os.MkdirAll(dir, 0o755); err != nil { //nolint:gosec // a version folder others may read
 		return PushResult{}, errorf(CodeFailed, "%v", err)
 	}
-	unlock, err := family.LockRender(playlist)
-	if err != nil {
+	doc, poster := family.Sidecar(playlist, ".timeline.json"), family.Sidecar(playlist, ".poster.jpg")
+	rpath := bridge.PushRecordPath(playlist)
+	undo := func(why error) (PushResult, error) {
+		for _, f := range []string{playlist, doc, poster, rpath} {
+			_ = os.Remove(f)
+		}
 		if newDir {
 			_ = os.Remove(dir)
-		}
-		return PushResult{}, errorf(CodeFailed, "locking %s: %v", playlist, err)
-	}
-	rpath, mpath := bridge.PushRecordPath(playlist), bridge.ManifestPath(playlist)
-	export := ""
-	if a.Export {
-		export = filepath.Join(dir, stem+".export.mp4")
-	}
-	notify := func(format string, args ...any) {
-		if a.Notify != nil {
-			a.Notify(fmt.Sprintf(format, args...))
-		}
-	}
-	event := func(why string, pg *family.Progress) {
-		ev := project.VersionEvent{Why: why, Label: push.Label, Parent: push.Parent, Path: playlist, Progress: pg}
-		if err := p.Store.EmitVersion(ev); err != nil {
-			notify("retake: the %s event of %s: %v", why, push.Label, err)
-		}
-	}
-	announced := false
-	fail := func(why error) (PushResult, error) {
-		for _, f := range []string{playlist, rpath, mpath, export, bridge.ManifestPath(export)} {
-			if f != "" {
-				_ = os.Remove(f)
-			}
-		}
-		for _, pattern := range []string{"seg_[0-9]*.ts", "." + stem + "-*", "." + stem + ".*.tmp"} {
-			if matches, err := filepath.Glob(filepath.Join(dir, pattern)); err == nil {
-				for _, m := range matches {
-					_ = os.Remove(m)
-				}
-			}
-		}
-		unlock()
-		if newDir {
-			_ = os.Remove(dir) // only if empty: a take someone recorded on it meanwhile stays
-		}
-		if announced {
-			event(project.WhyFailed, nil)
 		}
 		return PushResult{}, why
 	}
 
-	rec.Rendering = &family.RenderingState{Playlist: filepath.Base(playlist),
-		Started: time.Now().UTC().Format(time.RFC3339)}
-	var mu sync.Mutex // the progress lines come in on the editor's output goroutine
-	writeRec := func() error {
-		b, err := jsonx.Marshal(rec)
-		if err != nil {
-			return err
-		}
-		return store.WriteJSON(rpath, b)
+	// The snapshot: the revision this version is, whenever it renders.
+	src, err := os.ReadFile(timeline) //nolint:gosec // the project's timeline
+	if err != nil {
+		return undo(errorf(CodeFailed, "%v", err))
 	}
-	if err := writeRec(); err != nil {
-		return fail(errorf(CodeFailed, "writing %s: %v", rpath, err))
+	if err := store.WriteFileAtomic(doc, src); err != nil {
+		return undo(errorf(CodeFailed, "writing %s: %v", doc, err))
 	}
+	args := bridge.StreamArgs{Timeline: timeline, Doc: doc, Playlist: playlist, Draft: a.Draft}
+	plan, err := p.Editor.Plan(ctx, bin, args)
+	if err != nil {
+		return undo(errorf(CodeFailed, "planning %s: %v", timeline, err))
+	}
+	if err := makePoster(ctx, p.Editor, bin, args, poster); err != nil {
+		return undo(errorf(CodeFailed, "the poster: %v", err))
+	}
+	st := &family.StreamRecord{State: family.StatePending, Playlist: filepath.Base(playlist),
+		Poster: filepath.Base(poster), Doc: filepath.Base(doc), FPS: plan.FPS, Size: plan.Size,
+		Total: plan.Hits + plan.Misses}
+	if len(plan.Range) == 2 {
+		st.Duration = plan.Range[1]
+	}
+	if a.Export {
+		st.Export = stem + ".export.mp4"
+	}
+	rec.Stream = st
+	rec.Units = bridge.Units{Total: plan.Hits + plan.Misses, Reused: plan.Hits, Rendered: plan.Misses}
 	if err := store.WriteFileAtomic(playlist, []byte(emptyPlaylist)); err != nil {
-		return fail(errorf(CodeFailed, "writing %s: %v", playlist, err))
+		return undo(errorf(CodeFailed, "writing %s: %v", playlist, err))
 	}
-
-	var last time.Time
-	reused := 0 // units from the cache, from the plan
-	progress := func(pr bridge.Progress) {
-		mu.Lock()
-		defer mu.Unlock()
-		st := rec.Rendering
-		switch pr.Progress {
-		case "plan":
-			st.Duration, st.FPS, st.Size, st.Total = pr.Duration, pr.FPS, pr.Size, pr.Units
-			reused = pr.Reused
-			if err := writeRec(); err != nil {
-				notify("retake: writing %s: %v", rpath, err)
-			}
-		case "publish":
-			st.Done, st.Total = pr.Done, pr.Total
-			if err := writeRec(); err != nil {
-				notify("retake: writing %s: %v", rpath, err)
-			}
-			pg := &family.Progress{Done: pr.Done, Total: pr.Total, Seconds: jsonx.Float(pr.Seconds)}
-			switch {
-			case !announced:
-				announced, last = true, time.Now()
-				event(project.WhyRendering, pg)
-				notify("%s is playable %.1f s into the render: %.1f of %.1f s, %d of %d units (%d from the cache)",
-					push.Label, pr.Elapsed, pr.Seconds, st.Duration, pr.Done, pr.Total, reused)
-			case time.Since(last) >= progressEvery || pr.Done == pr.Total:
-				last = time.Now()
-				event(project.WhyProgress, pg)
-			}
-		case "end":
-			notify("%s rendered in %.1f s: %d segments, %.1f s", push.Label, pr.Elapsed, pr.Segments, pr.Seconds)
-		}
+	if err := bridge.WritePushRecord(playlist, rec); err != nil {
+		return undo(errorf(CodeFailed, "writing %s: %v", rpath, err))
 	}
-	rep, err := p.Editor.RenderStream(ctx, bin, timeline, playlist, export, a.Draft, progress)
+	sum, err := hashFile(doc) // the snapshot is what the version is until it renders
 	if err != nil {
-		return fail(errorf(CodeFailed, "rendering %s: %v", timeline, err))
-	}
-	mu.Lock()
-	defer mu.Unlock()
-	rec.Rendering = nil
-	rec.Units = bridge.Units{Total: rep.Units, Reused: rep.Reused, Rendered: rep.Rendered}
-	if s := rep.Stream; s != nil {
-		rec.Stream = &bridge.StreamStats{Playlist: filepath.Base(playlist), Segments: s.Segments, FirstS: s.FirstS,
-			DoneS: s.DoneS}
-	}
-	if export != "" {
-		rec.Export = filepath.Base(export)
-	}
-	if err := writeRec(); err != nil {
-		return fail(errorf(CodeFailed, "writing %s: %v", rpath, err))
-	}
-	sum, err := hashFile(playlist)
-	if err != nil {
-		return fail(errorf(CodeFailed, "%v", err))
+		return undo(errorf(CodeFailed, "%v", err))
 	}
 	push.SHA256 = sum
 	res, err := p.Store.RecordPush(push)
 	if err != nil {
-		return fail(wrap(err))
+		return undo(wrap(err))
 	}
-	unlock()
+	if a.Notify != nil {
+		a.Notify(fmt.Sprintf("%s streams when someone opens it: %d units (%d cached), %.1f s", push.Label,
+			rec.Units.Total, rec.Units.Reused, st.Duration))
+	}
 	return PushResult{Version: res.Version, Answered: nonNil(res.Answered), Questions: nonNil(res.Questions),
-		Render: &rec, Manifest: mpath}, nil
+		Render: &rec}, nil
+}
+
+// makePoster renders the first frame and keeps it as a JPEG at out.
+func makePoster(ctx context.Context, ed bridge.Editor, bin string, a bridge.StreamArgs, out string) error {
+	tmp, err := os.MkdirTemp(filepath.Dir(out), ".poster-")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.RemoveAll(tmp) }()
+	png, err := ed.Frame(ctx, bin, a, 0, tmp)
+	if err != nil {
+		return err
+	}
+	jpg := filepath.Join(tmp, "poster.jpg")
+	cmd := exec.CommandContext(ctx, "ffmpeg", "-nostdin", "-v", "error", "-y", "-i", png, "-q:v", "3", jpg) //nolint:gosec // argv only
+	if b, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("ffmpeg: %w: %s", err, b)
+	}
+	return os.Rename(jpg, out)
 }

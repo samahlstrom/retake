@@ -9,7 +9,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
+	"time"
 )
 
 // EditorName is the editor's binary.
@@ -124,16 +127,33 @@ type Progress struct {
 	Elapsed  float64 `json:"elapsed"` // publish, end: seconds since the render started
 }
 
-// RenderStream runs `retake-edit render <timeline> --hls <playlist> --progress --json [-o <export>] [--draft]`,
-// calling progress for each progress line as it comes, and returns the final report.
-func (e Editor) RenderStream(ctx context.Context, bin, timeline, playlist, export string, draft bool,
-	progress func(Progress)) (RenderReport, error) {
-	args := []string{"render", timeline, "--hls", playlist, "--progress", "--json"}
-	if export != "" {
-		args = append(args, "-o", export)
+// StreamArgs say what a streamed render renders and where to.
+type StreamArgs struct {
+	Timeline string // the timeline file
+	Doc      string // a snapshot of it to render instead, as if it were the timeline ("" = the file itself)
+	Playlist string
+	Export   string // also package an MP4 here at the end ("" = none)
+	Draft    bool
+}
+
+func (a StreamArgs) common(args []string) []string {
+	if a.Doc != "" {
+		args = append(args, "--doc", a.Doc)
 	}
-	if draft {
+	if a.Draft {
 		args = append(args, "--draft")
+	}
+	return args
+}
+
+// RenderStream runs `retake-edit render <timeline> [--doc <snapshot>] --hls <playlist> --progress --json
+// [-o <export>] [--draft]`, calling progress for each progress line as it comes, and returns the final report.
+// Cancelling ctx stops it with SIGTERM (SIGKILL after StopWait): what it published stays.
+func (e Editor) RenderStream(ctx context.Context, bin string, a StreamArgs, progress func(Progress)) (RenderReport,
+	error) {
+	args := a.common([]string{"render", a.Timeline, "--hls", a.Playlist, "--progress", "--json"})
+	if a.Export != "" {
+		args = append(args, "-o", a.Export)
 	}
 	var rep RenderReport
 	err := e.runWith(ctx, bin, args, &rep, func(line []byte) bool {
@@ -148,6 +168,44 @@ func (e Editor) RenderStream(ctx context.Context, bin, timeline, playlist, expor
 	})
 	return rep, err
 }
+
+// PlanReport is what `retake-edit plan --json` reports that a streamed push needs.
+type PlanReport struct {
+	Size   []int     `json:"size"`
+	FPS    float64   `json:"fps"`
+	Range  []float64 `json:"range"`
+	Hits   int       `json:"hits"`
+	Misses int       `json:"misses"`
+}
+
+// Plan runs `retake-edit plan <timeline> [--doc <snapshot>] --json [--draft]`: the units and what they'll give,
+// without rendering.
+func (e Editor) Plan(ctx context.Context, bin string, a StreamArgs) (PlanReport, error) {
+	var rep PlanReport
+	err := e.run(ctx, bin, a.common([]string{"plan", a.Timeline, "--json"}), &rep)
+	return rep, err
+}
+
+// Frame runs `retake-edit frames <timeline> <t> -o <dir> [--doc <snapshot>] --json [--draft]` and returns the PNG's
+// path.
+func (e Editor) Frame(ctx context.Context, bin string, a StreamArgs, t float64, dir string) (string, error) {
+	var rep struct {
+		Frames []struct {
+			Path string `json:"path"`
+		} `json:"frames"`
+	}
+	args := a.common([]string{"frames", a.Timeline, strconv.FormatFloat(t, 'f', -1, 64), "-o", dir, "--json"})
+	if err := e.run(ctx, bin, args, &rep); err != nil {
+		return "", err
+	}
+	if len(rep.Frames) == 0 {
+		return "", errors.New("retake-edit frames gave no frame")
+	}
+	return rep.Frames[0].Path, nil
+}
+
+// StopWait is how long a cancelled retake-edit has after SIGTERM before it's killed.
+var StopWait = 5 * time.Second
 
 // EditError is a failure retake-edit reported (its typed errors, joined).
 type EditError struct {
@@ -200,6 +258,14 @@ func (w *lineWriter) Write(p []byte) (int, error) {
 func (e Editor) runWith(ctx context.Context, bin string, args []string, v any, lines func([]byte) bool) error {
 	cmd := exec.CommandContext(ctx, bin, args...) //nolint:gosec // the configured editor binary
 	cmd.Env = append(os.Environ(), e.Env...)
+	// Cancelled (a streamed render nobody watches any more): SIGTERM first, so it ends at once and cleanly, then a kill.
+	cmd.Cancel = func() error {
+		if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
+			return cmd.Process.Kill()
+		}
+		return nil
+	}
+	cmd.WaitDelay = StopWait
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	var lw *lineWriter

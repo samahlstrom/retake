@@ -46,13 +46,13 @@ echo '{"ok": true, "units": 2, "reused": 1, "rendered": 1, "stream": {"playlist"
 	args := filepath.Join(t.TempDir(), "args")
 	e := Editor{Configured: bin, Env: []string{"ARGS=" + args}}
 	var got []Progress
-	rep, err := e.RenderStream(context.Background(), bin, "t.json", "v2/x_v2.m3u8", "v2/x_v2.export.mp4", true,
-		func(p Progress) { got = append(got, p) })
+	rep, err := e.RenderStream(context.Background(), bin, StreamArgs{Timeline: "t.json", Doc: "v2/x_v2.timeline.json",
+		Playlist: "v2/x_v2.m3u8", Export: "v2/x_v2.export.mp4", Draft: true}, func(p Progress) { got = append(got, p) })
 	if err != nil {
 		t.Fatal(err)
 	}
 	if b, _ := os.ReadFile(args); strings.TrimSpace(string(b)) !=
-		"render t.json --hls v2/x_v2.m3u8 --progress --json -o v2/x_v2.export.mp4 --draft" {
+		"render t.json --hls v2/x_v2.m3u8 --progress --json --doc v2/x_v2.timeline.json --draft -o v2/x_v2.export.mp4" {
 		t.Fatalf("args: %s", b)
 	}
 	if len(got) != 3 || got[0].Progress != "plan" || got[0].Units != 2 || got[0].Duration != 8 || got[1].Done != 1 ||
@@ -65,7 +65,7 @@ echo '{"ok": true, "units": 2, "reused": 1, "rendered": 1, "stream": {"playlist"
 
 	// A failure keeps the other stderr lines as its message, not the progress.
 	e.Env = append(e.Env, "FAIL=1")
-	_, err = e.RenderStream(context.Background(), bin, "t.json", "x.m3u8", "", false, nil)
+	_, err = e.RenderStream(context.Background(), bin, StreamArgs{Timeline: "t.json", Playlist: "x.m3u8"}, nil)
 	if err == nil || !strings.Contains(err.Error(), "ffmpeg exploded") || !strings.Contains(err.Error(), "a warning") ||
 		strings.Contains(err.Error(), "progress") {
 		t.Fatalf("failure: %v", err)

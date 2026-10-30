@@ -18,7 +18,6 @@ import (
 	"testing/fstest"
 	"time"
 
-	"github.com/samahlstrom/retake/internal/family"
 	"github.com/samahlstrom/retake/internal/probe"
 	"github.com/samahlstrom/retake/internal/testmedia"
 )
@@ -380,78 +379,6 @@ func TestPlaylistFiles(t *testing.T) {
 	}
 	if r := h.get("/video/v1/clip_v9.m3u8", nil); r.code != 404 || !bytes.Contains(r.body, []byte("no such version")) {
 		t.Errorf("unknown label: %d %s", r.code, r.body)
-	}
-}
-
-// A streamed render in progress (spec/bridge.md, "Streaming") is in /api/info with rendering and progress, and its
-// growing playlist and segments are served like any playlist version's.
-func TestRenderingVersion(t *testing.T) {
-	testmedia.Need(t)
-	root := t.TempDir()
-	testmedia.Video(t, filepath.Join(root, "v6", "clip_v6.mp4"), 1)
-	dir := filepath.Join(root, "v7")
-	pl := filepath.Join(dir, "clip_v7.m3u8")
-	testmedia.HLS(t, dir, "clip_v7.m3u8", 2)
-	b, err := os.ReadFile(pl)
-	if err != nil {
-		t.Fatal(err)
-	}
-	growing := strings.Replace(string(b), "#EXT-X-ENDLIST\n", "", 1)
-	if err := os.WriteFile(pl, []byte(growing), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "clip_v7.push.json"), []byte(`{"version": "v7", "rendering": `+
-		`{"playlist": "clip_v7.m3u8", "duration": 30, "fps": 25, "size": [64, 36], "done": 1, "total": 9}}`), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	unlock, err := family.LockRender(pl)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer unlock()
-	h := start(t, Options{Video: filepath.Join(root, "v6", "clip_v6.mp4"), Prober: probe.New(nil)})
-	var info struct {
-		Versions []struct {
-			Label     string          `json:"label"`
-			Duration  float64         `json:"duration"`
-			Rendering bool            `json:"rendering"`
-			Progress  family.Progress `json:"progress"`
-		} `json:"versions"`
-	}
-	r := h.get("/api/info", nil)
-	if err := json.Unmarshal(r.body, &info); err != nil {
-		t.Fatal(err)
-	}
-	if len(info.Versions) != 2 {
-		t.Fatalf("versions: %s", r.body)
-	}
-	v := info.Versions[1]
-	if v.Label != "v7" || !v.Rendering || v.Duration != 30 || v.Progress.Done != 1 || v.Progress.Total != 9 ||
-		v.Progress.Seconds <= 0 {
-		t.Fatalf("v7: %+v", v)
-	}
-	if bytes.Count(r.body, []byte(`"rendering"`)) != 1 {
-		t.Fatalf("only the rendering version has the field: %s", r.body)
-	}
-	if r := h.get("/video/v7/clip_v7.m3u8", nil); r.code != 200 || bytes.Contains(r.body, []byte("ENDLIST")) ||
-		r.header.Get("CDN-Cache-Control") != "no-store" {
-		t.Fatalf("growing playlist: %d %s", r.code, r.body)
-	}
-	if r := h.get("/video/v7/seg_000.ts", nil); r.code != 200 {
-		t.Fatalf("segment: %d", r.code)
-	}
-	// The render is done: the playlist ends and it's probed like any version.
-	unlock()
-	if err := os.WriteFile(pl, b, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	info.Versions = nil // Unmarshal would keep fields the new answer leaves out
-	r = h.get("/api/info", nil)
-	if err := json.Unmarshal(r.body, &info); err != nil {
-		t.Fatal(err)
-	}
-	if len(info.Versions) != 2 || info.Versions[1].Rendering || bytes.Contains(r.body, []byte(`"rendering"`)) {
-		t.Fatalf("done: %s", r.body)
 	}
 }
 
