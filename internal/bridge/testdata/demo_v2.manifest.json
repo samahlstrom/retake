@@ -1,0 +1,1222 @@
+{
+ "schema": "manifest/0.1",
+ "timeline": {
+  "id": "demo",
+  "rev": 2,
+  "hash": "b3:4ca44c24ca2448f996cb58278845d5d501b28e6246d5a77bc1159665e7888c98"
+ },
+ "video": "demo_v2.mp4",
+ "size": [
+  1920,
+  1080
+ ],
+ "fps": 30,
+ "duration": 15.8,
+ "frames": 474,
+ "range": [
+  0.0,
+  15.8
+ ],
+ "draft": true,
+ "units": [
+  {
+   "unit": "u1",
+   "key": "b3:c39799c0ead8c0af265f797c3e5b4ebbc60c877a254cd6687fa6e81375a526ac",
+   "kind": "shot",
+   "scene": "open",
+   "shot": "open/title",
+   "t": [
+    0.0,
+    2.0
+   ],
+   "frames": [
+    0,
+    60
+   ],
+   "video_hash": "b3:048d5d349d3aa719b8cd5f03743b99b89d62c8f57783d032125f07c81e0bd6d0",
+   "audio_hash": "b3:5a3b9e91b892484d84d5a74f6245b1b28fb3b3cc5c5fb2a601b3e38b25cf4536",
+   "segment": "seg/048d5d349d3aa719b8cd5f03743b99b89d62c8f57783d032125f07c81e0bd6d0.mp4",
+   "reused": true,
+   "elements": [
+    {
+     "id": "open/title",
+     "ptr": "/scenes/0/shots/0",
+     "kind": "shot",
+     "z": 0,
+     "t": [
+      0.0,
+      2.0
+     ],
+     "box": [
+      [
+       0.0,
+       0.0,
+       0.0,
+       1920.0,
+       1080.0
+      ]
+     ],
+     "anchors": {
+      "at": "start:a"
+     }
+    },
+    {
+     "id": "bed",
+     "ptr": "/audio/0",
+     "kind": "audio",
+     "z": -1,
+     "t": [
+      0.0,
+      2.0
+     ],
+     "sources": [
+      {
+       "asset": "proj:music",
+       "in": 0.0,
+       "out": 2.0
+      }
+     ],
+     "anchors": {
+      "from": "start:a"
+     }
+    },
+    {
+     "id": "a",
+     "ptr": "/spine/0",
+     "kind": "spine",
+     "z": -1,
+     "t": [
+      0.0,
+      2.0
+     ],
+     "sources": [
+      {
+       "asset": "proj:vo",
+       "in": 0.2,
+       "out": 2.2
+      }
+     ]
+    }
+   ],
+   "words": [
+    [
+     0.1,
+     0.52,
+     "Welcome"
+    ],
+    [
+     0.58,
+     0.7,
+     "to"
+    ],
+    [
+     0.74,
+     0.86,
+     "the"
+    ],
+    [
+     0.9,
+     1.32,
+     "retake"
+    ],
+    [
+     1.38,
+     1.82,
+     "demo."
+    ]
+   ]
+  },
+  {
+   "unit": "u2",
+   "key": "b3:a088f98fdd57616c1edc659b0956d4c1a5b399facb2f87d410ffab67248ea024",
+   "kind": "shot",
+   "scene": "open",
+   "shot": "open/footage",
+   "t": [
+    2.0,
+    3.6
+   ],
+   "frames": [
+    60,
+    108
+   ],
+   "video_hash": "b3:6c50ecad973af27e2d9f2a7c6672c265cf6c30c0f44d09e21509754a81d2e7ff",
+   "audio_hash": "b3:3983b4acfc8a5ab605cb0b2d2b40f4e51922518b93802370411353d5c2ce841d",
+   "segment": "seg/6c50ecad973af27e2d9f2a7c6672c265cf6c30c0f44d09e21509754a81d2e7ff.mp4",
+   "reused": false,
+   "elements": [
+    {
+     "id": "open/footage/v",
+     "ptr": "/scenes/0/shots/1/picture/layers/0",
+     "kind": "layer",
+     "z": 0,
+     "t": [
+      2.0,
+      3.6
+     ],
+     "box": [
+      [
+       2.0,
+       0.0,
+       0.0,
+       1920.0,
+       1080.0
+      ]
+     ],
+     "sources": [
+      {
+       "asset": "proj:footage",
+       "in": 2.0,
+       "out": 3.6
+      }
+     ],
+     "parent": "open/footage"
+    },
+    {
+     "id": "open/footage",
+     "ptr": "/scenes/0/shots/1",
+     "kind": "shot",
+     "z": 0,
+     "t": [
+      2.0,
+      3.6
+     ],
+     "box": [
+      [
+       2.0,
+       0.0,
+       0.0,
+       1920.0,
+       1080.0
+      ]
+     ],
+     "sources": [
+      {
+       "asset": "proj:footage",
+       "in": 2.0,
+       "out": 3.6
+      }
+     ],
+     "anchors": {
+      "at": "word:a/Every-0.10"
+     }
+    },
+    {
+     "id": "bed",
+     "ptr": "/audio/0",
+     "kind": "audio",
+     "z": -1,
+     "t": [
+      2.0,
+      3.6
+     ],
+     "sources": [
+      {
+       "asset": "proj:music",
+       "in": 2.0,
+       "out": 3.6
+      }
+     ],
+     "anchors": {
+      "from": "start:a"
+     }
+    },
+    {
+     "id": "a",
+     "ptr": "/spine/0",
+     "kind": "spine",
+     "z": -1,
+     "t": [
+      2.0,
+      3.6
+     ],
+     "sources": [
+      {
+       "asset": "proj:vo",
+       "in": 2.2,
+       "out": 3.8
+      }
+     ]
+    }
+   ],
+   "words": [
+    [
+     2.1,
+     2.4,
+     "Every"
+    ],
+    [
+     2.44,
+     2.76,
+     "frame"
+    ],
+    [
+     2.8,
+     2.98,
+     "here"
+    ],
+    [
+     3.02,
+     3.12,
+     "is"
+    ],
+    [
+     3.16,
+     3.66,
+     "generated."
+    ]
+   ]
+  },
+  {
+   "unit": "u3",
+   "key": "b3:b47505d0827dd16387cb1902410ea71216e110e3b66f20368e7ccdbbe983b47c",
+   "kind": "insert",
+   "shot": "meme",
+   "t": [
+    3.6,
+    5.1
+   ],
+   "frames": [
+    108,
+    153
+   ],
+   "video_hash": "b3:0d1dc517fbcdc848433d034a76e48112d46e0f50e8118f6b1ccea038f3398a6b",
+   "audio_hash": "b3:a85325581d54742041b92232b6396e7723ce00290d8a25e850c1ca74e245223d",
+   "segment": "seg/0d1dc517fbcdc848433d034a76e48112d46e0f50e8118f6b1ccea038f3398a6b.mp4",
+   "reused": true,
+   "elements": [
+    {
+     "id": "meme",
+     "ptr": "/spine/1",
+     "kind": "insert",
+     "z": 0,
+     "t": [
+      3.6,
+      5.1
+     ],
+     "box": [
+      [
+       3.6,
+       1.5,
+       0.0,
+       1917.0,
+       1080.0
+      ]
+     ],
+     "sources": [
+      {
+       "asset": "proj:clip",
+       "in": 2.0,
+       "out": 3.5
+      }
+     ]
+    },
+    {
+     "id": "meme/picture",
+     "ptr": "/spine/1/picture/layers/0",
+     "kind": "layer",
+     "z": 0,
+     "t": [
+      3.6,
+      5.1
+     ],
+     "box": [
+      [
+       3.6,
+       1.5,
+       0.0,
+       1917.0,
+       1080.0
+      ]
+     ],
+     "sources": [
+      {
+       "asset": "proj:clip",
+       "in": 2.0,
+       "out": 3.5
+      }
+     ],
+     "parent": "meme"
+    },
+    {
+     "id": "bed",
+     "ptr": "/audio/0",
+     "kind": "audio",
+     "z": -1,
+     "t": [
+      3.6,
+      5.1
+     ],
+     "sources": [
+      {
+       "asset": "proj:music",
+       "in": 3.6,
+       "out": 5.1
+      }
+     ],
+     "anchors": {
+      "from": "start:a"
+     }
+    }
+   ],
+   "words": []
+  },
+  {
+   "unit": "u4",
+   "key": "b3:a2baf75c54c3c9bd84456ec1f88f2d2c36e9fcdc7bdafbc319d00366b20fe447",
+   "kind": "shot",
+   "scene": "open",
+   "shot": "open/footage",
+   "t": [
+    5.1,
+    5.4
+   ],
+   "frames": [
+    153,
+    162
+   ],
+   "video_hash": "b3:d26e1bc77384cf12f8e7c2b94b65dd6272ec0e47990e7c582a10334037b8e2b7",
+   "audio_hash": "b3:2b21b24e868e66f9ca015d3f776ce12ba0647b44e37c719f5bfaf29ad60eef96",
+   "segment": "seg/d26e1bc77384cf12f8e7c2b94b65dd6272ec0e47990e7c582a10334037b8e2b7.mp4",
+   "reused": false,
+   "elements": [
+    {
+     "id": "open/footage/v",
+     "ptr": "/scenes/0/shots/1/picture/layers/0",
+     "kind": "layer",
+     "z": 0,
+     "t": [
+      5.1,
+      5.4
+     ],
+     "box": [
+      [
+       5.1,
+       0.0,
+       0.0,
+       1920.0,
+       1080.0
+      ]
+     ],
+     "sources": [
+      {
+       "asset": "proj:footage",
+       "in": 3.6,
+       "out": 3.9
+      }
+     ],
+     "parent": "open/footage"
+    },
+    {
+     "id": "open/footage",
+     "ptr": "/scenes/0/shots/1",
+     "kind": "shot",
+     "z": 0,
+     "t": [
+      5.1,
+      5.4
+     ],
+     "box": [
+      [
+       5.1,
+       0.0,
+       0.0,
+       1920.0,
+       1080.0
+      ]
+     ],
+     "sources": [
+      {
+       "asset": "proj:footage",
+       "in": 3.6,
+       "out": 3.9
+      }
+     ],
+     "anchors": {
+      "at": "word:a/Every-0.10"
+     }
+    },
+    {
+     "id": "bed",
+     "ptr": "/audio/0",
+     "kind": "audio",
+     "z": -1,
+     "t": [
+      5.1,
+      5.4
+     ],
+     "sources": [
+      {
+       "asset": "proj:music",
+       "in": 5.1,
+       "out": 5.4
+      }
+     ],
+     "anchors": {
+      "from": "start:a"
+     }
+    }
+   ],
+   "words": []
+  },
+  {
+   "unit": "u5",
+   "key": "b3:75e6dfa1730256c856232267876a501c4b923d5888791fe879ebf907fbb0d89b",
+   "kind": "shot",
+   "scene": "body",
+   "shot": "body/footage",
+   "t": [
+    5.4,
+    10.766667
+   ],
+   "frames": [
+    162,
+    323
+   ],
+   "video_hash": "b3:e546b79e497683fbb1576ac96c42139e99e641ebc0a0ea5bad146d8f395c7834",
+   "audio_hash": "b3:7d1b2ff65daa30e34525136ac9166a3325c2cd41e2121a5817aab7c1843585ec",
+   "segment": "seg/e546b79e497683fbb1576ac96c42139e99e641ebc0a0ea5bad146d8f395c7834.mp4",
+   "reused": false,
+   "elements": [
+    {
+     "id": "pop/faster",
+     "ptr": "/scenes/1/overlays/0",
+     "kind": "overlay",
+     "z": 3,
+     "t": [
+      7.366667,
+      8.0
+     ],
+     "box": [
+      [
+       5.4,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      [
+       7.366667,
+       588.0,
+       784.0,
+       764.0,
+       200.0
+      ],
+      [
+       7.4,
+       642.0,
+       796.0,
+       654.0,
+       178.0
+      ],
+      [
+       7.433333,
+       658.0,
+       800.0,
+       620.0,
+       172.0
+      ],
+      [
+       7.466667,
+       660.0,
+       800.0,
+       618.0,
+       172.0
+      ],
+      [
+       8.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ]
+     ],
+     "anchors": {
+      "from": "word:b/faster#2",
+      "to": "word:b/Watch-0.10"
+     }
+    },
+    {
+     "id": "pip/v",
+     "ptr": "/scenes/1/overlays/1/layers/1",
+     "kind": "layer",
+     "z": 1,
+     "t": [
+      8.1,
+      10.5
+     ],
+     "box": [
+      [
+       5.4,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      [
+       8.1,
+       1852.6,
+       584.0,
+       67.4,
+       432.0
+      ],
+      [
+       8.133333,
+       1708.3,
+       584.0,
+       211.7,
+       432.0
+      ],
+      [
+       8.166667,
+       1585.3,
+       584.0,
+       334.7,
+       432.0
+      ],
+      [
+       8.2,
+       1482.0,
+       584.0,
+       438.0,
+       432.0
+      ],
+      [
+       8.233333,
+       1396.5,
+       584.0,
+       523.5,
+       432.0
+      ],
+      [
+       8.266667,
+       1327.3,
+       584.0,
+       592.7,
+       432.0
+      ],
+      [
+       8.3,
+       1272.6,
+       584.0,
+       647.4,
+       432.0
+      ],
+      [
+       8.333333,
+       1230.7,
+       584.0,
+       689.3,
+       432.0
+      ],
+      [
+       8.366667,
+       1199.9,
+       584.0,
+       694.8,
+       432.0
+      ],
+      [
+       8.4,
+       1178.5,
+       584.0,
+       694.8,
+       432.0
+      ],
+      [
+       8.433333,
+       1164.8,
+       584.0,
+       694.8,
+       432.0
+      ],
+      [
+       8.466667,
+       1157.0,
+       584.0,
+       694.8,
+       432.0
+      ],
+      [
+       8.5,
+       1153.6,
+       584.0,
+       694.8,
+       432.0
+      ],
+      [
+       8.533333,
+       1152.6,
+       584.0,
+       694.8,
+       432.0
+      ],
+      [
+       10.5,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ]
+     ],
+     "sources": [
+      {
+       "asset": "proj:clip",
+       "in": 5.0,
+       "out": 7.4
+      }
+     ],
+     "parent": "pip"
+    },
+    {
+     "id": "pip",
+     "ptr": "/scenes/1/overlays/1",
+     "kind": "overlay",
+     "z": 1,
+     "t": [
+      8.1,
+      10.5
+     ],
+     "box": [
+      [
+       5.4,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      [
+       8.1,
+       1776.0,
+       554.0,
+       144.0,
+       520.0
+      ],
+      [
+       8.133333,
+       1632.0,
+       554.0,
+       288.0,
+       520.0
+      ],
+      [
+       8.166667,
+       1508.0,
+       554.0,
+       412.0,
+       520.0
+      ],
+      [
+       8.2,
+       1404.0,
+       554.0,
+       516.0,
+       520.0
+      ],
+      [
+       8.233333,
+       1320.0,
+       554.0,
+       600.0,
+       520.0
+      ],
+      [
+       8.266667,
+       1250.0,
+       554.0,
+       670.0,
+       520.0
+      ],
+      [
+       8.3,
+       1196.0,
+       554.0,
+       724.0,
+       520.0
+      ],
+      [
+       8.333333,
+       1154.0,
+       554.0,
+       766.0,
+       520.0
+      ],
+      [
+       8.366667,
+       1122.0,
+       554.0,
+       798.0,
+       520.0
+      ],
+      [
+       8.4,
+       1102.0,
+       554.0,
+       818.0,
+       520.0
+      ],
+      [
+       8.433333,
+       1088.0,
+       554.0,
+       832.0,
+       520.0
+      ],
+      [
+       8.466667,
+       1080.0,
+       554.0,
+       840.0,
+       520.0
+      ],
+      [
+       8.5,
+       1076.0,
+       554.0,
+       844.0,
+       520.0
+      ],
+      [
+       10.5,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ]
+     ],
+     "sources": [
+      {
+       "asset": "proj:clip",
+       "in": 5.0,
+       "out": 7.4
+      }
+     ],
+     "anchors": {
+      "from": "word:b/Watch",
+      "to": "end:b"
+     }
+    },
+    {
+     "id": "body/footage/v",
+     "ptr": "/scenes/1/shots/0/picture/layers/0",
+     "kind": "layer",
+     "z": 0,
+     "t": [
+      5.4,
+      10.766667
+     ],
+     "box": [
+      [
+       5.4,
+       0.0,
+       0.0,
+       1920.0,
+       1080.0
+      ]
+     ],
+     "sources": [
+      {
+       "asset": "proj:footage",
+       "in": 10.0,
+       "out": 15.366667
+      }
+     ],
+     "parent": "body/footage"
+    },
+    {
+     "id": "body/footage",
+     "ptr": "/scenes/1/shots/0",
+     "kind": "shot",
+     "z": 0,
+     "t": [
+      5.4,
+      10.766667
+     ],
+     "box": [
+      [
+       5.4,
+       0.0,
+       0.0,
+       1920.0,
+       1080.0
+      ]
+     ],
+     "sources": [
+      {
+       "asset": "proj:footage",
+       "in": 10.0,
+       "out": 15.366667
+      }
+     ],
+     "anchors": {
+      "at": "start:b"
+     }
+    },
+    {
+     "id": "bed",
+     "ptr": "/audio/0",
+     "kind": "audio",
+     "z": -1,
+     "t": [
+      5.4,
+      10.766667
+     ],
+     "sources": [
+      {
+       "asset": "proj:music",
+       "in": 5.4,
+       "out": 10.766667
+      }
+     ],
+     "anchors": {
+      "from": "start:a"
+     }
+    },
+    {
+     "id": "b",
+     "ptr": "/spine/2",
+     "kind": "spine",
+     "z": -1,
+     "t": [
+      5.4,
+      10.5
+     ],
+     "sources": [
+      {
+       "asset": "proj:vo",
+       "in": 4.3,
+       "out": 9.4
+      }
+     ]
+    },
+    {
+     "id": "c",
+     "ptr": "/spine/3",
+     "kind": "spine",
+     "z": -1,
+     "t": [
+      10.5,
+      10.766667
+     ],
+     "sources": [
+      {
+       "asset": "proj:vo",
+       "in": 9.6,
+       "out": 9.866667
+      }
+     ]
+    }
+   ],
+   "words": [
+    [
+     5.6,
+     5.8,
+     "This"
+    ],
+    [
+     5.84,
+     6.08,
+     "pop"
+    ],
+    [
+     6.12,
+     6.36,
+     "says"
+    ],
+    [
+     6.4,
+     6.76,
+     "faster"
+    ],
+    [
+     6.82,
+     6.98,
+     "when"
+    ],
+    [
+     7.02,
+     7.1,
+     "I"
+    ],
+    [
+     7.14,
+     7.34,
+     "say"
+    ],
+    [
+     7.38,
+     7.8,
+     "faster."
+    ],
+    [
+     8.1,
+     8.4,
+     "Watch"
+    ],
+    [
+     8.44,
+     8.54,
+     "the"
+    ],
+    [
+     8.58,
+     8.96,
+     "corner"
+    ],
+    [
+     9.0,
+     9.12,
+     "for"
+    ],
+    [
+     9.16,
+     9.26,
+     "the"
+    ],
+    [
+     9.3,
+     9.6,
+     "picture"
+    ],
+    [
+     9.64,
+     9.72,
+     "in"
+    ],
+    [
+     9.76,
+     10.2,
+     "picture."
+    ],
+    [
+     10.7,
+     10.82,
+     "The"
+    ]
+   ]
+  },
+  {
+   "unit": "u6",
+   "key": "b3:6f5eb9f940422415026185c3e678293eb3a4f8ce56524a0966bb9967386cad24",
+   "kind": "shot",
+   "scene": "body",
+   "shot": "body/bg",
+   "t": [
+    10.766667,
+    15.8
+   ],
+   "frames": [
+    323,
+    474
+   ],
+   "video_hash": "b3:57b007ef523256cbb013185fefde4aa3946a6d5e0621d916df3c73a09db5f0fd",
+   "audio_hash": "b3:b51e52e249ee2e52f175aed504e2c56a9ef381bc49852f60e4df926a83694683",
+   "segment": "seg/57b007ef523256cbb013185fefde4aa3946a6d5e0621d916df3c73a09db5f0fd.mp4",
+   "reused": false,
+   "elements": [
+    {
+     "id": "lower",
+     "ptr": "/scenes/1/overlays/2",
+     "kind": "overlay",
+     "z": 2,
+     "t": [
+      10.866667,
+      14.2
+     ],
+     "box": [
+      [
+       10.766667,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      [
+       10.9,
+       78.0,
+       904.0,
+       764.0,
+       112.0
+      ],
+      [
+       14.2,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ]
+     ],
+     "anchors": {
+      "from": "word:c/music",
+      "to": "word:c/That's-0.10"
+     }
+    },
+    {
+     "id": "body/bg/loop",
+     "ptr": "/scenes/1/shots/1/picture/layers/0",
+     "kind": "layer",
+     "z": 0,
+     "t": [
+      10.766667,
+      15.8
+     ],
+     "box": [
+      [
+       10.766667,
+       0.0,
+       0.0,
+       1920.0,
+       1080.0
+      ]
+     ],
+     "sources": [
+      {
+       "asset": "proj:loop",
+       "in": 10.766667,
+       "out": 15.8
+      }
+     ],
+     "parent": "body/bg"
+    },
+    {
+     "id": "body/bg",
+     "ptr": "/scenes/1/shots/1",
+     "kind": "shot",
+     "z": 0,
+     "t": [
+      10.766667,
+      15.8
+     ],
+     "box": [
+      [
+       10.766667,
+       0.0,
+       0.0,
+       1920.0,
+       1080.0
+      ]
+     ],
+     "sources": [
+      {
+       "asset": "proj:loop",
+       "in": 10.766667,
+       "out": 15.8
+      }
+     ],
+     "anchors": {
+      "at": "word:c/music-0.10"
+     }
+    },
+    {
+     "id": "bed",
+     "ptr": "/audio/0",
+     "kind": "audio",
+     "z": -1,
+     "t": [
+      10.766667,
+      15.8
+     ],
+     "sources": [
+      {
+       "asset": "proj:music",
+       "in": 10.766667,
+       "out": 15.8
+      }
+     ],
+     "anchors": {
+      "from": "start:a"
+     }
+    },
+    {
+     "id": "c",
+     "ptr": "/spine/3",
+     "kind": "spine",
+     "z": -1,
+     "t": [
+      10.766667,
+      15.4
+     ],
+     "sources": [
+      {
+       "asset": "proj:vo",
+       "in": 9.866667,
+       "out": 14.5
+      }
+     ]
+    }
+   ],
+   "words": [
+    [
+     10.86,
+     11.2,
+     "music"
+    ],
+    [
+     11.24,
+     11.46,
+     "bed"
+    ],
+    [
+     11.5,
+     11.74,
+     "runs"
+    ],
+    [
+     11.78,
+     12.02,
+     "under"
+    ],
+    [
+     12.06,
+     12.56,
+     "everything"
+    ],
+    [
+     12.6,
+     12.7,
+     "and"
+    ],
+    [
+     12.74,
+     13.04,
+     "ducks"
+    ],
+    [
+     13.08,
+     13.3,
+     "under"
+    ],
+    [
+     13.34,
+     13.46,
+     "my"
+    ],
+    [
+     13.5,
+     13.9,
+     "voice."
+    ],
+    [
+     14.3,
+     14.6,
+     "That's"
+    ],
+    [
+     14.64,
+     14.76,
+     "the"
+    ],
+    [
+     14.8,
+     15.2,
+     "edit."
+    ]
+   ]
+  }
+ ],
+ "stats": {
+  "total": 6,
+  "reused": 2,
+  "rendered": 4
+ }
+}
