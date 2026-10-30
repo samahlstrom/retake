@@ -1,0 +1,159 @@
+[
+ {
+  "session_t": 0.0,
+  "video_t": 8.0,
+  "event": "start",
+  "playing": false,
+  "rate": 1,
+  "version": "v6",
+  "base": "v6",
+  "flip": false
+ },
+ {
+  "session_t": 0.5,
+  "video_t": 8.0,
+  "event": "rec_start",
+  "seg": "S1",
+  "playing": false,
+  "version": "v6",
+  "flip": false
+ },
+ {
+  "session_t": 1.0,
+  "video_t": 8.0,
+  "event": "play"
+ },
+ {
+  "session_t": 3.0,
+  "video_t": 10.0,
+  "event": "pause"
+ },
+ {
+  "session_t": 3.3,
+  "video_t": 10.0,
+  "event": "draw_start",
+  "id": 1,
+  "seg": "S1",
+  "color": "red"
+ },
+ {
+  "session_t": 3.5,
+  "video_t": 10.0,
+  "event": "draw_end",
+  "id": 1,
+  "seg": "S1"
+ },
+ {
+  "session_t": 6.0,
+  "video_t": 10.0,
+  "event": "rec_stop",
+  "seg": "S1"
+ },
+ {
+  "session_t": 7.0,
+  "video_t": 6.0,
+  "event": "seek",
+  "from": 10.0
+ },
+ {
+  "session_t": 7.2,
+  "video_t": 6.0,
+  "event": "play"
+ },
+ {
+  "session_t": 9.2,
+  "video_t": 8.0,
+  "event": "tick"
+ },
+ {
+  "session_t": 10.0,
+  "video_t": 8.8,
+  "event": "pause"
+ },
+ {
+  "session_t": 11.0,
+  "video_t": 8.8,
+  "event": "rec_start",
+  "seg": "S2",
+  "playing": false,
+  "version": "v6",
+  "flip": false
+ },
+ {
+  "session_t": 14.5,
+  "video_t": 8.8,
+  "event": "rec_stop",
+  "seg": "S2"
+ },
+ {
+  "session_t": 15.0,
+  "video_t": 8.8,
+  "event": "play"
+ },
+ {
+  "session_t": 17.0,
+  "video_t": 10.8,
+  "event": "pause"
+ },
+ {
+  "session_t": 17.5,
+  "video_t": 10.8,
+  "event": "version",
+  "shown": "v5",
+  "base": "v6",
+  "flip": true
+ },
+ {
+  "session_t": 18.0,
+  "video_t": 10.8,
+  "event": "rec_start",
+  "seg": "S3",
+  "playing": false,
+  "version": "v5",
+  "flip": true
+ },
+ {
+  "session_t": 20.5,
+  "video_t": 10.8,
+  "event": "rec_stop",
+  "seg": "S3"
+ },
+ {
+  "session_t": 21.0,
+  "video_t": 10.8,
+  "event": "version",
+  "shown": "v6",
+  "base": "v6",
+  "flip": false
+ },
+ {
+  "session_t": 22.0,
+  "video_t": 10.8,
+  "event": "rec_start",
+  "seg": "S4",
+  "playing": false,
+  "version": "v6",
+  "flip": false
+ },
+ {
+  "session_t": 24.2,
+  "video_t": 10.8,
+  "event": "draw_start",
+  "id": 2,
+  "seg": "S4",
+  "color": "green"
+ },
+ {
+  "session_t": 24.4,
+  "video_t": 10.8,
+  "event": "draw_end",
+  "id": 2,
+  "seg": "S4"
+ },
+ {
+  "session_t": 25.0,
+  "video_t": 10.8,
+  "event": "rec_stop",
+  "seg": "S4"
+ }
+]

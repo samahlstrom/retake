@@ -1,0 +1,24 @@
+[
+ {
+  "session_t": 0.0,
+  "video_t": 3.0,
+  "event": "start",
+  "playing": true,
+  "rate": 1
+ },
+ {
+  "session_t": 2.0,
+  "video_t": 5.0,
+  "event": "tick"
+ },
+ {
+  "session_t": 4.0,
+  "video_t": 7.0,
+  "event": "pause"
+ },
+ {
+  "session_t": 8.5,
+  "video_t": 7.0,
+  "event": "end"
+ }
+]

@@ -1,0 +1,15 @@
+{
+ "format": 2,
+ "session": "2025-12-01_08-00-00",
+ "rec": {
+  "duration": 9.0
+ },
+ "video": {
+  "path": "/videos/clip_v2.mp4",
+  "name": "clip_v2.mp4",
+  "duration": 30,
+  "fps": 29.97,
+  "width": 1280,
+  "height": 720
+ }
+}

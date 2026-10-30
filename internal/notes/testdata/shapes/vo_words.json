@@ -1,0 +1,55 @@
+{
+ "segments": [
+  {
+   "words": [
+    {
+     "word": " Souls",
+     "start": 4.1,
+     "end": 4.5
+    },
+    {
+     "word": " are",
+     "start": 4.5,
+     "end": 4.7
+    },
+    {
+     "word": " the",
+     "start": 4.7,
+     "end": 4.8
+    },
+    {
+     "word": " currency.",
+     "start": 4.8,
+     "end": 6.0
+    }
+   ]
+  },
+  {
+   "words": [
+    {
+     "word": " Here's",
+     "start": 20.2,
+     "end": 20.6
+    },
+    {
+     "word": " the",
+     "start": 20.6,
+     "end": 20.7
+    },
+    {
+     "word": " hook.",
+     "start": 20.7,
+     "end": 21.4
+    },
+    {
+     "word": " Watch",
+     "start": 23.9,
+     "end": 24.3
+    }
+   ]
+  },
+  {
+   "text": "no timing here"
+  }
+ ]
+}

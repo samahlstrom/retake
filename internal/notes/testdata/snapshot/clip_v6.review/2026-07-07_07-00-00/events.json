@@ -1,0 +1,139 @@
+[
+ {
+  "session_t": 0.0,
+  "video_t": 1.0,
+  "event": "start",
+  "playing": false,
+  "rate": 1,
+  "version": "v6",
+  "base": "v6",
+  "flip": false
+ },
+ {
+  "session_t": 0.5,
+  "video_t": 1.0,
+  "event": "rec_start",
+  "seg": "S1",
+  "playing": false,
+  "version": "v6",
+  "flip": false
+ },
+ {
+  "session_t": 2.1,
+  "video_t": 1.0,
+  "event": "draw_start",
+  "id": 1,
+  "seg": "S1",
+  "color": "red"
+ },
+ {
+  "session_t": 2.5,
+  "video_t": 1.0,
+  "event": "draw_end",
+  "id": 1,
+  "seg": "S1"
+ },
+ {
+  "session_t": 3.0,
+  "video_t": 1.0,
+  "event": "rec_stop",
+  "seg": "S1"
+ },
+ {
+  "session_t": 3.2,
+  "video_t": 1.0,
+  "event": "version",
+  "shown": "v5",
+  "base": "v6",
+  "flip": true
+ },
+ {
+  "session_t": 3.5,
+  "video_t": 1.0,
+  "event": "rec_start",
+  "seg": "S2",
+  "playing": false,
+  "version": "v5",
+  "flip": true
+ },
+ {
+  "session_t": 5.1,
+  "video_t": 1.0,
+  "event": "draw_start",
+  "id": 2,
+  "seg": "S2",
+  "color": "yellow"
+ },
+ {
+  "session_t": 5.3,
+  "video_t": 1.0,
+  "event": "draw_end",
+  "id": 2,
+  "seg": "S2"
+ },
+ {
+  "session_t": 5.5,
+  "video_t": 1.0,
+  "event": "rec_stop",
+  "seg": "S2"
+ },
+ {
+  "session_t": 5.8,
+  "video_t": 1.0,
+  "event": "version",
+  "shown": "v6",
+  "base": "v6",
+  "flip": false
+ },
+ {
+  "session_t": 6.0,
+  "video_t": 4.5,
+  "event": "seek",
+  "from": 1.0
+ },
+ {
+  "session_t": 6.5,
+  "video_t": 4.5,
+  "event": "rec_start",
+  "seg": "S3",
+  "playing": false,
+  "version": "v6",
+  "flip": false
+ },
+ {
+  "session_t": 8.1,
+  "video_t": 4.5,
+  "event": "draw_start",
+  "id": 3,
+  "seg": "S3",
+  "color": "white"
+ },
+ {
+  "session_t": 8.4,
+  "video_t": 4.5,
+  "event": "draw_end",
+  "id": 3,
+  "seg": "S3"
+ },
+ {
+  "session_t": 8.5,
+  "video_t": 4.5,
+  "event": "draw_start",
+  "id": 4,
+  "seg": "S3",
+  "color": "green"
+ },
+ {
+  "session_t": 8.7,
+  "video_t": 4.5,
+  "event": "draw_end",
+  "id": 4,
+  "seg": "S3"
+ },
+ {
+  "session_t": 9.0,
+  "video_t": 4.5,
+  "event": "rec_stop",
+  "seg": "S3"
+ }
+]

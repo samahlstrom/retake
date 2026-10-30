@@ -1,0 +1,538 @@
+{
+ "video": {
+  "path": "@ROOT@/clip_v6.mp4",
+  "name": "clip_v6.mp4",
+  "duration": 6.0,
+  "fps": 10.0,
+  "width": 320,
+  "height": 180
+ },
+ "version": "v6",
+ "family": [
+  "v5",
+  "v6"
+ ],
+ "window": 2.0,
+ "max_span": 8.0,
+ "generated": "(ignored by the tests)",
+ "rules": [
+  "later statements override earlier ones (higher order = later)",
+  "a retraction voids the comments it refers to: same clip/moment unless Sam names a wider scope",
+  "a reinstatement restores what that retraction voided",
+  "when scope is unclear, ask Sam rather than guess; flags are heuristics, nothing was deleted"
+ ],
+ "clock": "video_t = seconds in the video; session_t = seconds since the take started (segment audio starts at t_start)",
+ "takes": [
+  {
+   "take": "2026-07-07_07-00-00",
+   "version": "v6",
+   "recorded": 7.0,
+   "ranges": null,
+   "inherit_note": null,
+   "models": [
+    "whisper small (cpu)"
+   ],
+   "warnings": [],
+   "small_strokes_dropped": 0
+  }
+ ],
+ "segments": [
+  {
+   "label": "S1",
+   "take": "2026-07-07_07-00-00",
+   "id": "S1",
+   "file": "seg_01.webm",
+   "mime": "audio/webm;codecs=opus",
+   "version": "v6",
+   "flip": false,
+   "t_start": 0.5,
+   "t_end": 3.0,
+   "recording": false,
+   "video_start": 1.0,
+   "video_end": 1.0,
+   "video_min": 1.0,
+   "video_max": 1.0
+  },
+  {
+   "label": "S2",
+   "take": "2026-07-07_07-00-00",
+   "id": "S2",
+   "file": "seg_02.webm",
+   "mime": "audio/webm;codecs=opus",
+   "version": "v5",
+   "flip": true,
+   "t_start": 3.5,
+   "t_end": 5.5,
+   "recording": false,
+   "video_start": 1.0,
+   "video_end": 1.0,
+   "video_min": 1.0,
+   "video_max": 1.0
+  },
+  {
+   "label": "S3",
+   "take": "2026-07-07_07-00-00",
+   "id": "S3",
+   "file": "seg_03.webm",
+   "mime": "audio/webm;codecs=opus",
+   "version": "v6",
+   "flip": false,
+   "t_start": 6.5,
+   "t_end": 9.0,
+   "recording": false,
+   "video_start": 4.5,
+   "video_end": 4.5,
+   "video_min": 4.5,
+   "video_max": 4.5
+  }
+ ],
+ "flags": [],
+ "moments": [
+  {
+   "id": "M1",
+   "start": 1.0,
+   "end": 1.0,
+   "comments": [
+    {
+     "take": "2026-07-07_07-00-00",
+     "seg": "S1",
+     "version": "v6",
+     "flip": false,
+     "pass": 1,
+     "mode": "paused",
+     "anchor": 1.0,
+     "video_t": 1.0,
+     "video_t_end": 1.0,
+     "session_t": 1.0,
+     "session_t_end": 2.5,
+     "text": "Circle this player.",
+     "unclear": false,
+     "moved": null,
+     "audio": false,
+     "speech": [
+      {
+       "text": "Circle this player.",
+       "conf": 0.95,
+       "session_t": 1.0,
+       "session_t_end": 1.98,
+       "video_t": 1.0,
+       "video_t_end": 1.0,
+       "path": null
+      }
+     ],
+     "strokes": [
+      {
+       "id": 1,
+       "color": "red",
+       "seg": "S1",
+       "video_t": 1.0,
+       "version": "v6",
+       "flip": false,
+       "desc": "red circle around (0.40,0.35)–(0.60,0.65)",
+       "bbox": [
+        0.4,
+        0.351,
+        0.6,
+        0.65
+       ],
+       "from": [
+        0.6,
+        0.5
+       ],
+       "to": [
+        0.595,
+        0.547
+       ],
+       "shape": "circle",
+       "points": [
+        [
+         0.6,
+         0.5
+        ],
+        [
+         0.598,
+         0.5298
+        ],
+        [
+         0.5921,
+         0.5584
+        ],
+        [
+         0.5825,
+         0.5847
+        ],
+        [
+         0.5697,
+         0.6076
+        ],
+        [
+         0.554,
+         0.6262
+        ],
+        [
+         0.5362,
+         0.6398
+        ],
+        [
+         0.517,
+         0.6478
+        ],
+        [
+         0.4971,
+         0.6499
+        ],
+        [
+         0.4773,
+         0.6461
+        ],
+        [
+         0.4584,
+         0.6364
+        ],
+        [
+         0.4411,
+         0.6213
+        ],
+        [
+         0.4263,
+         0.6013
+        ],
+        [
+         0.4143,
+         0.5773
+        ],
+        [
+         0.4058,
+         0.5502
+        ],
+        [
+         0.401,
+         0.5212
+        ],
+        [
+         0.4002,
+         0.4912
+        ],
+        [
+         0.4033,
+         0.4617
+        ],
+        [
+         0.4103,
+         0.4336
+        ],
+        [
+         0.4209,
+         0.4082
+        ],
+        [
+         0.4346,
+         0.3865
+        ],
+        [
+         0.451,
+         0.3693
+        ],
+        [
+         0.4693,
+         0.3573
+        ],
+        [
+         0.4888,
+         0.3509
+        ],
+        [
+         0.5087,
+         0.3506
+        ],
+        [
+         0.5284,
+         0.3562
+        ],
+        [
+         0.5469,
+         0.3675
+        ],
+        [
+         0.5635,
+         0.3841
+        ],
+        [
+         0.5776,
+         0.4053
+        ],
+        [
+         0.5886,
+         0.4303
+        ],
+        [
+         0.596,
+         0.4581
+        ],
+        [
+         0.5997,
+         0.4875
+        ],
+        [
+         0.5993,
+         0.5175
+        ],
+        [
+         0.595,
+         0.5467
+        ]
+       ],
+       "n": 1,
+       "session_t": 2.1,
+       "session_t_end": 2.5
+      }
+     ],
+     "order": 1,
+     "moment": "M1",
+     "flag": null
+    },
+    {
+     "take": "2026-07-07_07-00-00",
+     "seg": "S2",
+     "version": "v5",
+     "flip": true,
+     "pass": 1,
+     "mode": "paused",
+     "anchor": 1.0,
+     "video_t": 1.0,
+     "video_t_end": 1.0,
+     "session_t": 3.8,
+     "session_t_end": 5.3,
+     "text": "The old one had a better angle.",
+     "unclear": false,
+     "moved": null,
+     "audio": false,
+     "speech": [
+      {
+       "text": "The old one had a better angle.",
+       "conf": 0.95,
+       "session_t": 3.8,
+       "session_t_end": 4.98,
+       "video_t": 1.0,
+       "video_t_end": 1.0,
+       "path": null
+      }
+     ],
+     "strokes": [
+      {
+       "id": 2,
+       "color": "yellow",
+       "seg": "S2",
+       "video_t": 1.0,
+       "version": "v5",
+       "flip": true,
+       "desc": "yellow line (0.10,0.10)→(0.30,0.20) heading right",
+       "bbox": [
+        0.1,
+        0.1,
+        0.3,
+        0.2
+       ],
+       "from": [
+        0.1,
+        0.1
+       ],
+       "to": [
+        0.3,
+        0.2
+       ],
+       "shape": "line",
+       "points": [
+        [
+         0.1,
+         0.1
+        ],
+        [
+         0.3,
+         0.2
+        ]
+       ],
+       "n": 2,
+       "session_t": 5.1,
+       "session_t_end": 5.3
+      }
+     ],
+     "order": 2,
+     "moment": "M1",
+     "flag": null
+    }
+   ],
+   "snapshot": "snaps/01_00-01-0.png",
+   "snapshot_t": 1.0
+  },
+  {
+   "id": "M2",
+   "start": 4.5,
+   "end": 4.5,
+   "comments": [
+    {
+     "take": "2026-07-07_07-00-00",
+     "seg": "S3",
+     "version": "v6",
+     "flip": false,
+     "pass": 1,
+     "mode": "paused",
+     "anchor": 4.5,
+     "video_t": 4.5,
+     "video_t_end": 4.5,
+     "session_t": 7.0,
+     "session_t_end": 8.7,
+     "text": "Arrow to the score.",
+     "unclear": false,
+     "moved": null,
+     "audio": false,
+     "speech": [
+      {
+       "text": "Arrow to the score.",
+       "conf": 0.95,
+       "session_t": 7.0,
+       "session_t_end": 7.98,
+       "video_t": 4.5,
+       "video_t_end": 4.5,
+       "path": null
+      }
+     ],
+     "strokes": [
+      {
+       "id": 3,
+       "color": "white",
+       "seg": "S3",
+       "video_t": 4.5,
+       "version": "v6",
+       "flip": false,
+       "desc": "white arrow (0.20,0.30)→(0.60,0.30) pointing right",
+       "bbox": [
+        0.2,
+        0.26,
+        0.6,
+        0.34
+       ],
+       "from": [
+        0.2,
+        0.3
+       ],
+       "to": [
+        0.6,
+        0.3
+       ],
+       "shape": "arrow",
+       "points": [
+        [
+         0.2,
+         0.3
+        ],
+        [
+         0.24,
+         0.3
+        ],
+        [
+         0.28,
+         0.3
+        ],
+        [
+         0.32,
+         0.3
+        ],
+        [
+         0.36,
+         0.3
+        ],
+        [
+         0.4,
+         0.3
+        ],
+        [
+         0.44,
+         0.3
+        ],
+        [
+         0.48,
+         0.3
+        ],
+        [
+         0.52,
+         0.3
+        ],
+        [
+         0.56,
+         0.3
+        ],
+        [
+         0.6,
+         0.3
+        ],
+        [
+         0.56,
+         0.26
+        ],
+        [
+         0.6,
+         0.3
+        ],
+        [
+         0.56,
+         0.34
+        ]
+       ],
+       "n": 3,
+       "session_t": 8.1,
+       "session_t_end": 8.4
+      },
+      {
+       "id": 4,
+       "color": "green",
+       "seg": "S3",
+       "video_t": 4.5,
+       "version": "v6",
+       "flip": false,
+       "desc": "green line (0.70,0.70)→(0.90,0.70) heading right",
+       "bbox": [
+        0.7,
+        0.7,
+        0.9,
+        0.7
+       ],
+       "from": [
+        0.7,
+        0.7
+       ],
+       "to": [
+        0.9,
+        0.7
+       ],
+       "shape": "line",
+       "points": [
+        [
+         0.7,
+         0.7
+        ],
+        [
+         0.9,
+         0.7
+        ]
+       ],
+       "n": 4,
+       "session_t": 8.5,
+       "session_t_end": 8.7
+      }
+     ],
+     "order": 3,
+     "moment": "M2",
+     "flag": null
+    }
+   ],
+   "snapshot": "snaps/02_00-04-5.png",
+   "snapshot_t": 4.5
+  }
+ ],
+ "chronological": [
+  1,
+  2,
+  3
+ ]
+}

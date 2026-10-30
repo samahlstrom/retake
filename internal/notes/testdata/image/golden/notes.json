@@ -1,0 +1,191 @@
+{
+ "video": {
+  "path": "/videos/clip_v6.mp4",
+  "name": "clip_v6.mp4",
+  "duration": 60.0,
+  "fps": 30.0,
+  "width": 1920,
+  "height": 1080
+ },
+ "version": "v6",
+ "family": [
+  "v5",
+  "v6"
+ ],
+ "window": 2.0,
+ "max_span": 8.0,
+ "generated": "(ignored by the tests)",
+ "rules": [
+  "later statements override earlier ones (higher order = later)",
+  "a retraction voids the comments it refers to: same clip/moment unless Sam names a wider scope",
+  "a reinstatement restores what that retraction voided",
+  "when scope is unclear, ask Sam rather than guess; flags are heuristics, nothing was deleted"
+ ],
+ "clock": "video_t = seconds in the video; session_t = seconds since the take started (segment audio starts at t_start)",
+ "takes": [
+  {
+   "take": "2026-05-05_12-00-00",
+   "version": "v6",
+   "recorded": 14.5,
+   "ranges": null,
+   "inherit_note": null,
+   "models": [
+    "whisper small (cpu)"
+   ],
+   "warnings": [],
+   "small_strokes_dropped": 0
+  }
+ ],
+ "segments": [
+  {
+   "label": "S1",
+   "take": "2026-05-05_12-00-00",
+   "id": "S1",
+   "file": "seg_01.webm",
+   "mime": "audio/webm;codecs=opus",
+   "version": "v6",
+   "flip": false,
+   "t_start": 0.5,
+   "t_end": 4.0,
+   "recording": false,
+   "video_start": 14.0,
+   "video_end": 14.0,
+   "video_min": 14.0,
+   "video_max": 14.0
+  },
+  {
+   "label": "S2",
+   "take": "2026-05-05_12-00-00",
+   "id": "S2",
+   "file": "seg_02.webm",
+   "mime": "audio/webm;codecs=opus",
+   "version": "v6",
+   "flip": false,
+   "t_start": 5.0,
+   "t_end": 16.0,
+   "recording": false,
+   "video_start": 14.5,
+   "video_end": 25.5,
+   "video_min": 14.5,
+   "video_max": 24.5
+  }
+ ],
+ "flags": [],
+ "moments": [
+  {
+   "id": "M1",
+   "start": 14.0,
+   "end": 16.48,
+   "comments": [
+    {
+     "take": "2026-05-05_12-00-00",
+     "seg": "S1",
+     "version": "v6",
+     "flip": false,
+     "pass": 1,
+     "mode": "paused",
+     "anchor": 14.0,
+     "video_t": 14.0,
+     "video_t_end": 14.0,
+     "session_t": 1.0,
+     "session_t_end": 3.3,
+     "text": "Use this meme here instead.",
+     "unclear": false,
+     "moved": null,
+     "audio": false,
+     "speech": [
+      {
+       "text": "Use this meme here instead.",
+       "conf": 0.95,
+       "session_t": 1.0,
+       "session_t_end": 2.48,
+       "video_t": 14.0,
+       "video_t_end": 14.0,
+       "path": null
+      }
+     ],
+     "strokes": [
+      {
+       "id": 1,
+       "color": "yellow",
+       "seg": "S1",
+       "video_t": 14.0,
+       "version": "v6",
+       "flip": false,
+       "desc": "yellow line (0.20,0.60)→(0.45,0.60) heading right",
+       "bbox": [
+        0.2,
+        0.6,
+        0.45,
+        0.6
+       ],
+       "from": [
+        0.2,
+        0.6
+       ],
+       "to": [
+        0.45,
+        0.6
+       ],
+       "shape": "line",
+       "points": [
+        [
+         0.2,
+         0.6
+        ],
+        [
+         0.45,
+         0.6
+        ]
+       ],
+       "n": 1,
+       "session_t": 3.0,
+       "session_t_end": 3.3
+      }
+     ],
+     "order": 1,
+     "moment": "M1",
+     "flag": null
+    },
+    {
+     "take": "2026-05-05_12-00-00",
+     "seg": "S2",
+     "version": "v6",
+     "flip": false,
+     "pass": 1,
+     "mode": "playing",
+     "anchor": 15.0,
+     "video_t": 15.0,
+     "video_t_end": 16.48,
+     "session_t": 5.5,
+     "session_t_end": 6.98,
+     "text": "And this logo in the corner.",
+     "unclear": false,
+     "moved": null,
+     "audio": false,
+     "speech": [
+      {
+       "text": "And this logo in the corner.",
+       "conf": 0.95,
+       "session_t": 5.5,
+       "session_t_end": 6.98,
+       "video_t": 15.0,
+       "video_t_end": 16.48,
+       "path": null
+      }
+     ],
+     "strokes": [],
+     "order": 2,
+     "moment": "M1",
+     "flag": null
+    }
+   ],
+   "snapshot": null,
+   "snapshot_t": null
+  }
+ ],
+ "chronological": [
+  1,
+  2
+ ]
+}

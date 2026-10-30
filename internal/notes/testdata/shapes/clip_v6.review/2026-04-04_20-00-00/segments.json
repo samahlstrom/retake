@@ -1,0 +1,30 @@
+[
+ {
+  "id": "S1",
+  "file": "seg_01.webm",
+  "mime": "audio/webm;codecs=opus",
+  "version": "v6",
+  "flip": false,
+  "t_start": 0.2,
+  "t_end": 5.0,
+  "recording": false,
+  "video_start": 5.0,
+  "video_end": 5.0,
+  "video_min": 5.0,
+  "video_max": 5.0
+ },
+ {
+  "id": "S2",
+  "file": "seg_02.webm",
+  "mime": "audio/webm;codecs=opus",
+  "version": "v6",
+  "flip": false,
+  "t_start": 6.5,
+  "t_end": 11.0,
+  "recording": false,
+  "video_start": 20.5,
+  "video_end": 25.0,
+  "video_min": 20.5,
+  "video_max": 23.2
+ }
+]

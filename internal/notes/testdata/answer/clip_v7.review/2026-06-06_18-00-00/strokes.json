@@ -1,0 +1,24 @@
+[
+ {
+  "id": 1,
+  "seg": "S2",
+  "version": "v7",
+  "flip": false,
+  "color": "green",
+  "session_t": 6.2,
+  "session_t_end": 6.5,
+  "video_t": 22.0,
+  "video_t_end": 22.0,
+  "paused": true,
+  "points": [
+   [
+    0.3,
+    0.3
+   ],
+   [
+    0.6,
+    0.3
+   ]
+  ]
+ }
+]

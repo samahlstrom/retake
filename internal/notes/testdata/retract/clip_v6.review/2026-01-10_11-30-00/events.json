@@ -1,0 +1,89 @@
+[
+ {
+  "session_t": 0.0,
+  "video_t": 30.0,
+  "event": "start",
+  "playing": false,
+  "rate": 1,
+  "version": "v6",
+  "base": "v6",
+  "flip": false
+ },
+ {
+  "session_t": 1.0,
+  "video_t": 30.0,
+  "event": "rec_start",
+  "seg": "S1",
+  "playing": false,
+  "version": "v6",
+  "flip": false
+ },
+ {
+  "session_t": 4.0,
+  "video_t": 30.0,
+  "event": "rec_stop",
+  "seg": "S1"
+ },
+ {
+  "session_t": 5.0,
+  "video_t": 44.0,
+  "event": "seek",
+  "from": 30.0
+ },
+ {
+  "session_t": 5.5,
+  "video_t": 44.0,
+  "event": "play"
+ },
+ {
+  "session_t": 6.0,
+  "video_t": 44.5,
+  "event": "rec_start",
+  "seg": "S2",
+  "playing": true,
+  "version": "v6",
+  "flip": false
+ },
+ {
+  "session_t": 7.5,
+  "video_t": 46.0,
+  "event": "tick"
+ },
+ {
+  "session_t": 9.5,
+  "video_t": 48.0,
+  "event": "tick"
+ },
+ {
+  "session_t": 10.0,
+  "video_t": 48.5,
+  "event": "pause"
+ },
+ {
+  "session_t": 13.5,
+  "video_t": 48.5,
+  "event": "rec_stop",
+  "seg": "S2"
+ },
+ {
+  "session_t": 15.0,
+  "video_t": 20.0,
+  "event": "seek",
+  "from": 48.5
+ },
+ {
+  "session_t": 16.0,
+  "video_t": 20.0,
+  "event": "rec_start",
+  "seg": "S3",
+  "playing": false,
+  "version": "v6",
+  "flip": false
+ },
+ {
+  "session_t": 21.5,
+  "video_t": 20.0,
+  "event": "rec_stop",
+  "seg": "S3"
+ }
+]

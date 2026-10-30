@@ -1,0 +1,9 @@
+{
+ "target": "clip_v6.review",
+ "args": [
+  "--window",
+  "3",
+  "--max-span",
+  "6"
+ ]
+}

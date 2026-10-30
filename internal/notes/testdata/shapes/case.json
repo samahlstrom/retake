@@ -1,0 +1,7 @@
+{
+ "target": "clip_v6.review",
+ "args": [
+  "--video-transcript",
+  "vo_words.json"
+ ]
+}

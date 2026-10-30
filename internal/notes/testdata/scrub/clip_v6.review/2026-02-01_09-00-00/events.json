@@ -1,0 +1,314 @@
+[
+ {
+  "session_t": 0.0,
+  "video_t": 37.9,
+  "event": "start",
+  "playing": false,
+  "rate": 1,
+  "version": "v6",
+  "base": "v6",
+  "flip": false
+ },
+ {
+  "session_t": 0.0,
+  "video_t": 37.9,
+  "event": "play"
+ },
+ {
+  "session_t": 0.0,
+  "video_t": 37.9,
+  "event": "rec_start",
+  "seg": "S1",
+  "playing": true,
+  "version": "v6",
+  "flip": false
+ },
+ {
+  "session_t": 1.0,
+  "video_t": 38.9,
+  "event": "seek",
+  "from": 38.9
+ },
+ {
+  "session_t": 1.0,
+  "video_t": 38.9,
+  "event": "pause"
+ },
+ {
+  "session_t": 2.0,
+  "video_t": 43.3,
+  "event": "seek",
+  "from": 38.9
+ },
+ {
+  "session_t": 4.0,
+  "video_t": 43.3,
+  "event": "rec_stop",
+  "seg": "S1"
+ },
+ {
+  "session_t": 5.0,
+  "video_t": 10.0,
+  "event": "seek",
+  "from": 43.3
+ },
+ {
+  "session_t": 5.5,
+  "video_t": 10.0,
+  "event": "play"
+ },
+ {
+  "session_t": 6.0,
+  "video_t": 10.5,
+  "event": "rec_start",
+  "seg": "S2",
+  "playing": true,
+  "version": "v6",
+  "flip": false
+ },
+ {
+  "session_t": 7.5,
+  "video_t": 12.0,
+  "event": "tick"
+ },
+ {
+  "session_t": 8.0,
+  "video_t": 12.5,
+  "event": "pause"
+ },
+ {
+  "session_t": 11.6,
+  "video_t": 12.5,
+  "event": "draw_start",
+  "id": 1,
+  "seg": "S2",
+  "color": "yellow"
+ },
+ {
+  "session_t": 12.0,
+  "video_t": 12.5,
+  "event": "draw_end",
+  "id": 1,
+  "seg": "S2"
+ },
+ {
+  "session_t": 12.5,
+  "video_t": 12.5,
+  "event": "rec_stop",
+  "seg": "S2"
+ },
+ {
+  "session_t": 13.0,
+  "video_t": 12.5,
+  "event": "play"
+ },
+ {
+  "session_t": 13.0,
+  "video_t": 12.5,
+  "event": "rate",
+  "rate": 2.0
+ },
+ {
+  "session_t": 13.5,
+  "video_t": 13.5,
+  "event": "rec_start",
+  "seg": "S3",
+  "playing": true,
+  "version": "v6",
+  "flip": false
+ },
+ {
+  "session_t": 15.0,
+  "video_t": 16.5,
+  "event": "tick"
+ },
+ {
+  "session_t": 16.0,
+  "video_t": 18.5,
+  "event": "pause"
+ },
+ {
+  "session_t": 16.5,
+  "video_t": 18.5,
+  "event": "draw_start",
+  "id": 2,
+  "seg": "S3",
+  "color": "white"
+ },
+ {
+  "session_t": 16.9,
+  "video_t": 18.5,
+  "event": "draw_end",
+  "id": 2,
+  "seg": "S3"
+ },
+ {
+  "session_t": 17.5,
+  "video_t": 18.5,
+  "event": "play"
+ },
+ {
+  "session_t": 19.5,
+  "video_t": 22.5,
+  "event": "tick"
+ },
+ {
+  "session_t": 21.5,
+  "video_t": 26.5,
+  "event": "tick"
+ },
+ {
+  "session_t": 23.5,
+  "video_t": 30.5,
+  "event": "tick"
+ },
+ {
+  "session_t": 25.5,
+  "video_t": 34.5,
+  "event": "tick"
+ },
+ {
+  "session_t": 26.0,
+  "video_t": 35.5,
+  "event": "draw_start",
+  "id": 3,
+  "seg": "S3",
+  "color": "red"
+ },
+ {
+  "session_t": 26.4,
+  "video_t": 36.3,
+  "event": "draw_end",
+  "id": 3,
+  "seg": "S3"
+ },
+ {
+  "session_t": 27.0,
+  "video_t": 37.5,
+  "event": "rec_stop",
+  "seg": "S3"
+ },
+ {
+  "session_t": 27.5,
+  "video_t": 38.5,
+  "event": "rate",
+  "rate": 1.0
+ },
+ {
+  "session_t": 27.5,
+  "video_t": 38.5,
+  "event": "tick"
+ },
+ {
+  "session_t": 28.0,
+  "video_t": 39.0,
+  "event": "pause"
+ },
+ {
+  "session_t": 29.0,
+  "video_t": 20.0,
+  "event": "seek",
+  "from": 39.0
+ },
+ {
+  "session_t": 29.5,
+  "video_t": 20.0,
+  "event": "play"
+ },
+ {
+  "session_t": 30.0,
+  "video_t": 20.5,
+  "event": "rec_start",
+  "seg": "S4",
+  "playing": true,
+  "version": "v6",
+  "flip": false
+ },
+ {
+  "session_t": 31.5,
+  "video_t": 22.0,
+  "event": "tick"
+ },
+ {
+  "session_t": 33.3,
+  "video_t": 23.8,
+  "event": "draw_start",
+  "id": 4,
+  "seg": null,
+  "color": "red"
+ },
+ {
+  "session_t": 33.5,
+  "video_t": 24.0,
+  "event": "draw_end",
+  "id": 4,
+  "seg": null
+ },
+ {
+  "session_t": 33.5,
+  "video_t": 24.0,
+  "event": "tick"
+ },
+ {
+  "session_t": 35.5,
+  "video_t": 26.0,
+  "event": "tick"
+ },
+ {
+  "session_t": 37.5,
+  "video_t": 28.0,
+  "event": "tick"
+ },
+ {
+  "session_t": 38.0,
+  "video_t": 28.5,
+  "event": "rec_stop",
+  "seg": "S4"
+ },
+ {
+  "session_t": 39.0,
+  "video_t": 57.0,
+  "event": "seek",
+  "from": 29.5
+ },
+ {
+  "session_t": 39.5,
+  "video_t": 57.5,
+  "event": "play"
+ },
+ {
+  "session_t": 40.0,
+  "video_t": 58.0,
+  "event": "rec_start",
+  "seg": "S5",
+  "playing": true,
+  "version": "v6",
+  "flip": false
+ },
+ {
+  "session_t": 41.5,
+  "video_t": 59.5,
+  "event": "tick"
+ },
+ {
+  "session_t": 43.5,
+  "video_t": 60.0,
+  "event": "tick"
+ },
+ {
+  "session_t": 45.5,
+  "video_t": 60.0,
+  "event": "tick"
+ },
+ {
+  "session_t": 46.0,
+  "video_t": 60.0,
+  "event": "rec_stop",
+  "seg": "S5"
+ },
+ {
+  "session_t": 46.5,
+  "video_t": 60.0,
+  "event": "pause"
+ }
+]
