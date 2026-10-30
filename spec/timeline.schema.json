@@ -75,6 +75,9 @@
     "end": {
       "$ref": "#/$defs/anchor"
     },
+    "master": {
+      "$ref": "#/$defs/master"
+    },
     "meta": {
       "$ref": "#/$defs/meta"
     }
@@ -206,14 +209,129 @@
         }
       }
     },
+    "gainDb": {
+      "description": "Gain in dB: a number (-96 to 24), keys or an expression on the element's own clock.",
+      "anyOf": [
+        {
+          "type": "number",
+          "minimum": -96,
+          "maximum": 24
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/prop"
+            },
+            {
+              "type": "object"
+            }
+          ]
+        }
+      ]
+    },
+    "fadeCurve": {
+      "enum": [
+        "linear",
+        "equal-power",
+        "s-curve",
+        "log"
+      ]
+    },
+    "audioStream": {
+      "description": "The file's N-th audio stream, from 0 (ffmpeg 0:a:N).",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 63
+    },
+    "loudness": {
+      "description": "Target integrated loudness, LUFS (ITU-R BS.1770-4).",
+      "type": "number",
+      "minimum": -70,
+      "maximum": 0
+    },
+    "duckRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "db"
+      ],
+      "properties": {
+        "db": {
+          "type": "number",
+          "minimum": -96,
+          "maximum": 0
+        },
+        "under": {
+          "oneOf": [
+            {
+              "enum": [
+                "vo",
+                "inserts"
+              ]
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/id"
+              }
+            }
+          ]
+        },
+        "attack": {
+          "$ref": "#/$defs/seconds"
+        },
+        "release": {
+          "$ref": "#/$defs/seconds"
+        }
+      }
+    },
+    "duck": {
+      "description": "One ducking rule or a list (their gains multiply).",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/duckRule"
+        },
+        {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/duckRule"
+          }
+        }
+      ]
+    },
+    "master": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "loudness": {
+          "$ref": "#/$defs/loudness"
+        },
+        "true_peak": {
+          "description": "Ceiling in dBTP.",
+          "type": "number",
+          "minimum": -30,
+          "maximum": 0
+        },
+        "lowpass": {
+          "description": "2-pole Butterworth low-pass, Hz.",
+          "type": "number",
+          "minimum": 20,
+          "maximum": 48000
+        },
+        "meta": {
+          "$ref": "#/$defs/meta"
+        }
+      }
+    },
     "audioOpts": {
+      "description": "A spine item's sound.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
         "gain_db": {
-          "type": "number",
-          "minimum": -96,
-          "maximum": 24
+          "$ref": "#/$defs/gainDb"
         },
         "fade_in": {
           "$ref": "#/$defs/seconds"
@@ -221,8 +339,48 @@
         "fade_out": {
           "$ref": "#/$defs/seconds"
         },
+        "fade_curve": {
+          "$ref": "#/$defs/fadeCurve"
+        },
         "mute": {
           "type": "boolean"
+        },
+        "stream": {
+          "$ref": "#/$defs/audioStream"
+        },
+        "loudness": {
+          "$ref": "#/$defs/loudness"
+        }
+      }
+    },
+    "layerAudio": {
+      "description": "A video layer's sound: the spine item's options plus duck.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "gain_db": {
+          "$ref": "#/$defs/gainDb"
+        },
+        "fade_in": {
+          "$ref": "#/$defs/seconds"
+        },
+        "fade_out": {
+          "$ref": "#/$defs/seconds"
+        },
+        "fade_curve": {
+          "$ref": "#/$defs/fadeCurve"
+        },
+        "mute": {
+          "type": "boolean"
+        },
+        "stream": {
+          "$ref": "#/$defs/audioStream"
+        },
+        "loudness": {
+          "$ref": "#/$defs/loudness"
+        },
+        "duck": {
+          "$ref": "#/$defs/duck"
         }
       }
     },
@@ -508,9 +666,7 @@
           "type": "boolean"
         },
         "gain_db": {
-          "type": "number",
-          "minimum": -96,
-          "maximum": 24
+          "$ref": "#/$defs/gainDb"
         },
         "fade_in": {
           "$ref": "#/$defs/seconds"
@@ -518,19 +674,17 @@
         "fade_out": {
           "$ref": "#/$defs/seconds"
         },
+        "fade_curve": {
+          "$ref": "#/$defs/fadeCurve"
+        },
+        "stream": {
+          "$ref": "#/$defs/audioStream"
+        },
+        "loudness": {
+          "$ref": "#/$defs/loudness"
+        },
         "duck": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "db"
-          ],
-          "properties": {
-            "db": {
-              "type": "number",
-              "minimum": -60,
-              "maximum": 0
-            }
-          }
+          "$ref": "#/$defs/duck"
         },
         "meta": {
           "$ref": "#/$defs/meta"
@@ -1049,7 +1203,7 @@
           ]
         },
         "audio": {
-          "$ref": "#/$defs/audioOpts"
+          "$ref": "#/$defs/layerAudio"
         }
       },
       "not": {
