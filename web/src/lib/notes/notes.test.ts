@@ -165,7 +165,7 @@ describe('Notes', () => {
     es.emit('version', {}, '9');
     expect(onVersion).toHaveBeenCalledOnce();
     expect(onVersion).toHaveBeenLastCalledWith({});
-    const progress = { why: 'progress', label: 'v9', progress: { done: 3, total: 8, seconds: 12.5 } };
+    const progress = { why: 'progress', label: 'v9', stream: { state: 'rendering', done: 3, total: 8, seconds: 12.5 } };
     es.emit('version', progress, '10');
     expect(onVersion).toHaveBeenLastCalledWith(progress);
     es.emit('version', 'not json', '11');

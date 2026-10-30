@@ -239,9 +239,10 @@ button {
   color: var(--dim);
   font-weight: 400;
 }
-/* A streamed render still filling in: a chip after its label in the list, a dot on the button while it's shown. The
-   list floats, so the chip only widens it; the dot sits over the button's border, so nothing moves. */
-#verList .rendering {
+/* A streamed version that isn't complete: a chip after its label in the list ("pending", "rendering 12/50"), a dot on
+   the button while it's shown. The list floats, so the chip only widens it; the dot sits over the button's border, so
+   nothing moves. */
+#verList .stream {
   margin-left: 8px;
   color: var(--voice);
   font-size: 11px;

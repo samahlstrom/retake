@@ -129,6 +129,16 @@ export class VideoSource {
     });
   }
 
+  /** Shows no version at all, only the element's poster: a streamed version with nothing rendered yet. A pending
+   * load is cancelled (it rejects as superseded). */
+  clear(): void {
+    this.#pending?.(new Error('superseded'));
+    this.#dropHls();
+    this.plan = null;
+    this.video.removeAttribute('src');
+    this.video.load();
+  }
+
   destroy(): void {
     this.#pending?.(new Error('destroyed'));
     this.#dropHls();

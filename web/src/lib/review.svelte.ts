@@ -63,6 +63,7 @@ import type {
   Role,
   Segment,
   Stroke,
+  StreamState,
   Take,
   TakeData,
   TakeEvent,
@@ -73,18 +74,20 @@ import type {
 import { mapTime, TimeMaps } from './timemap';
 import {
   byLabel,
-  fallbackFor,
+  failedToast,
   flipRefusal,
   flipTarget,
   flipToast,
+  incomplete,
   landing,
   neighbor,
-  newlyRendering,
+  newlyStreamed,
+  readyToast,
   renderedEnd,
-  renderingToast,
   stepTarget,
-  withProgress,
+  withStream,
 } from './versions';
+import { Watcher } from './watch';
 import { addVoice, drawWave, levelDb, newAcc, newVad, pushBars, vadStep, type WaveBar } from './voice';
 import { clamp, fmt, isoLocal, now, r3, stamp } from './util';
 
@@ -236,12 +239,23 @@ export class Review {
   /** Where the pointer last was over the video (normalized): a pasted image lands there. */
   lastPointer: Point | null = null;
   #cardSig = '';
-  /** Versions seen rendering on this page (spec/bridge.md, "Streaming"): each is announced once, and keeps its
-   * family duration after it completes (see mediaDuration). */
+  /** Streamed versions seen incomplete on this page (spec/bridge.md, "Streaming"): each is announced once, and keeps
+   * its family duration after it completes (see mediaDuration). */
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- bookkeeping, not state
-  #seenRendering = new Set<string>();
+  #seenStreams = new Set<string>();
   /** The family refresh in flight, so a burst of events asks /api/info once. */
   #refreshing: Promise<void> | null = null;
+  /** Tells the server which incomplete stream this page shows, so it renders while someone watches. */
+  readonly watcher = new Watcher({ onStream: (label, s) => this.#applyStream(label, s) });
+  /**
+   * The shown version is an incomplete stream with nothing rendered yet: the page shows its poster, and loads it
+   * once its first segment is out, at `t`, playing if `play` (it was playing, or Space was pressed meanwhile).
+   */
+  #posterOnly: { label: string; t: number; play: boolean } | null = null;
+  /** That version's load is under way (a progress event and a watch answer may both say it's playable). */
+  #loadingWait = false;
+  /** A note the last version switch left (it landed at an incomplete stream's start): replaces the switch's toast. */
+  #landNote: string | null = null;
 
   el = {} as Elements;
   #ictx!: CanvasRenderingContext2D;
@@ -327,14 +341,14 @@ export class Review {
   }
 
   /**
-   * The length of the version on screen, for the timeline, scrubbing and the voice bins. A streamed render's player
-   * only knows the playlist so far (hls.js: its length, which grows; Safari: Infinity), so a version that is or was
-   * rendering on this page uses the expected (then the final) duration from the family, and the scale never grows.
-   * Otherwise the video's own, else /api/info's.
+   * The length of the version on screen, for the timeline, scrubbing and the voice bins. An incomplete stream's
+   * player only knows the playlist so far (hls.js: its length, which grows; Safari: Infinity; nothing at all before
+   * its first segment), so a version that is or was incomplete on this page uses the expected (then the final)
+   * duration from the family, and the scale never grows. Otherwise the video's own, else /api/info's.
    */
   mediaDuration(): number {
     const v = this.shownVersion();
-    if (v?.duration && (v.rendering || this.#seenRendering.has(v.label))) return v.duration;
+    if (v?.duration && (incomplete(v) || this.#seenStreams.has(v.label))) return v.duration;
     const d = this.video?.duration;
     return (d && isFinite(d) ? d : 0) || this.info.duration || 0;
   }
@@ -392,8 +406,9 @@ export class Review {
   // ---------------------------------------------------------------- saving (automatic)
   save = (t: Take | null = this.take): Promise<void> | undefined => this.#saver.save(t);
 
-  /** Page closing: best-effort keepalive upload of the last few seconds. */
+  /** Page closing: best-effort keepalive upload of the last few seconds, and the stream on screen is unwatched. */
   flushOnExit = (): void => {
+    this.watcher.leave();
     const t = this.take,
       s = this.seg;
     if (!t || !t.id || t.closed) return;
@@ -586,7 +601,14 @@ export class Review {
 
   // ---------------------------------------------------------------- player
   togglePlay = (): void => {
-    const video = this.video;
+    const video = this.video,
+      wait = this.#posterOnly;
+    if (wait) {
+      // nothing rendered yet: it plays (or not) once its first segment is out
+      wait.play = !wait.play;
+      this.paused = !wait.play;
+      return;
+    }
     if (video.paused || video.ended)
       video.play().catch((err: Error) => this.toast.say('Could not play: ' + err.message));
     else video.pause();
@@ -618,11 +640,12 @@ export class Review {
   };
   onPause = (): void => {
     this.logEv('pause');
-    this.paused = this.video.paused;
+    // On a stream's poster the button shows whether it plays once its first segment is out.
+    this.paused = this.#posterOnly ? !this.#posterOnly.play : this.video.paused;
   };
   onEnded = (): void => {
-    // A streamed render that's still filling in waits for its next segments; it hasn't ended.
-    if (this.shownVersion()?.rendering) return;
+    // An incomplete stream waits for its next segments; it hasn't ended.
+    if (incomplete(this.shownVersion())) return;
     this.logEv('ended');
   };
   onSeeking = (): void => {
@@ -653,9 +676,9 @@ export class Review {
   }
   onVideoError = (): void => {
     const v = this.shownVersion();
-    if (v?.rendering) {
-      // Its render may have just failed (the `failed` event moves the page off it): not a file that won't play.
-      this.toast.say(`Could not play ${v.label} yet`, 3000);
+    if (incomplete(v)) {
+      // Its render may have just failed (the `failed` event says so): not a file that won't play.
+      if (v) this.toast.say(`Could not play ${v.label} yet`, 3000);
       return;
     }
     this.fatal = FATAL(this.info.name);
@@ -1105,26 +1128,43 @@ export class Review {
   };
 
   /**
-   * A `version` event (spec/bridge.md, "Streaming"). `progress` moves a rendering version's chip and coverage in place
-   * (no refetch); anything else (`rendering`, `push`, which also ends a stream, `failed`) reloads the family.
+   * A `version` event (spec/bridge.md, "Streaming"). `progress` moves a streamed version's chip and coverage in place
+   * (no refetch); anything else (`push`, `rendering`, `stopped`, `complete`, `failed`) reloads the family.
    */
   onVersionEvent = (e: VersionEvent): void => {
-    if (e.why === 'progress' && e.label && e.progress) {
+    if (e.why === 'progress' && e.label && e.stream) {
       if (!byLabel(this.versions, e.label)) {
         if (!this.#refreshing) void this.refreshFamily(); // its arrival is still on the way
         return;
       }
-      const vs = withProgress(this.versions, e.label, e.progress);
-      if (vs !== this.versions) this.versions = this.info.versions = vs as Version[];
+      this.#applyStream(e.label, e.stream);
       return;
     }
+    if (e.why === 'failed' && e.label) this.toast.say(failedToast(e.label, e.error), 5000);
     void this.refreshFamily(e);
   };
 
-  /** The family changed (a version was pushed, or a streamed render appeared, completed or failed). The video on
+  /** A streamed version's state from a progress event or a watch answer: the chip and the coverage move in place, and
+   * a version on screen that waited for its first segment loads now. */
+  #applyStream(label: string, s: StreamState): void {
+    const vs = withStream(this.versions, label, s);
+    if (vs !== this.versions) this.versions = this.info.versions = vs as Version[];
+    this.#afterStream();
+  }
+
+  /** After the family's stream states changed: load a version that waited for its first segment, and watch what's on
+   * screen while it's incomplete (and stop once it's complete). */
+  #afterStream(): void {
+    const v = this.shownVersion();
+    const wait = this.#posterOnly;
+    if (wait && v && wait.label === v.label && (!incomplete(v) || (renderedEnd(v) ?? 0) > 0)) void this.#loadWaiting();
+    this.watcher.watch(v && incomplete(v) ? v.label : null);
+  }
+
+  /** The family changed (a version was pushed, or a stream started, stopped, completed or failed). The video on
    * screen is never reloaded: a completed stream's player sees the playlist's end by itself. */
   refreshFamily(e: VersionEvent = {}): Promise<void> {
-    // One at a time, in order: the answer for an older event never lands after a newer one (a stale "rendering").
+    // One at a time, in order: the answer for an older event never lands after a newer one (a stale state).
     const run: Promise<void> = (this.#refreshing ?? Promise.resolve())
       .then(() => this.#refreshFamily(e))
       .finally(() => {
@@ -1135,8 +1175,10 @@ export class Review {
   }
 
   async #refreshFamily(e: VersionEvent): Promise<void> {
-    this.maps.clear(); // a new version brings its own render manifest (a stream's comes at its end)
-    const before = this.versions;
+    // A stream starting or stopping changes no manifest: the maps and the sidebar stay. Anything else may (a new
+    // version, or a stream that completed and now has its manifest, so its parent's notes carry over).
+    const light = e.why === 'rendering' || e.why === 'stopped';
+    if (!light) this.maps.clear();
     try {
       const info = (await (await fetch('api/info')).json()) as Info;
       if (info.versions?.length) {
@@ -1144,35 +1186,22 @@ export class Review {
         this.versions = info.versions;
       }
       if (info.label && info.label === this.info.label) this.info.duration = info.duration;
-      this.#announceRendering();
+      this.#announceStreams();
       if (this.video?.readyState >= 1) this.syncDuration();
-      if (e.why === 'failed' && e.label) await this.#renderFailed(e.label, before, e.parent);
-      this.#prefetchMaps();
+      this.#afterStream();
+      if (!light) this.#prefetchMaps();
     } catch {
       /* server gone */
     }
-    void this.notes.refresh(); // a completed stream's parent notes now carry over
+    if (!light) void this.notes.refresh();
   }
 
-  /** Says once that a streamed render has appeared, and how to get to it. */
-  #announceRendering(): void {
-    const fresh = newlyRendering(this.versions, this.#seenRendering);
-    for (const v of fresh) this.#seenRendering.add(v.label);
+  /** Says once that a streamed version was pushed, and how to get to it. */
+  #announceStreams(): void {
+    const fresh = newlyStreamed(this.versions, this.#seenStreams);
+    for (const v of fresh) this.#seenStreams.add(v.label);
     const v = fresh[fresh.length - 1];
-    if (v) this.toast.say(renderingToast(this.versions, this.base, v.label, this.touch), 4000);
-  }
-
-  /** A streamed render failed and left the family: say so, and leave it if it's on screen or the base. */
-  async #renderFailed(label: string, before: readonly Version[], parent?: string): Promise<void> {
-    const gone = byLabel(before, label);
-    if (!gone || byLabel(this.versions, label)) return;
-    if (this.base === label) {
-      const to = fallbackFor(this.versions, gone, parent);
-      if (to) await this.setBase(to.label);
-    } else if (this.shown === label && this.flipped) {
-      await this.flip(); // back to the base
-    }
-    this.toast.say(`${label}'s render failed`, 4000);
+    if (v) this.toast.say(readyToast(this.versions, this.base, v.label, this.touch), 4000);
   }
 
   async #postDone(t: Take): Promise<void> {
@@ -1226,10 +1255,13 @@ export class Review {
       v = byLabel(this.versions, label);
     if (!v || this.switching) return false;
     this.switching = true;
-    this.frozenT = video.currentTime;
+    this.#landNote = null;
+    // On a stream's poster (nothing rendered yet) the moment and the play state are the ones it waits with.
+    const wait = this.#posterOnly;
+    const from = wait ? wait.t : video.currentTime;
+    this.frozenT = from;
     const segs = await this.maps.get(this.shown, label);
-    const from = video.currentTime,
-      wasPlaying = !video.paused,
+    const wasPlaying = wait ? wait.play : !video.paused,
       land = landing(v, from, segs);
     if ('refuse' in land) {
       this.switching = false;
@@ -1237,7 +1269,24 @@ export class Review {
       return false;
     }
     const t = land.t;
+    this.#landNote = land.note ?? null;
     this.frozenT = from;
+    this.#posterOnly = null;
+    this.#setPoster(v);
+    if (incomplete(v) && (renderedEnd(v) ?? 0) <= 0) {
+      // A stream with nothing rendered yet (spec/bridge.md, "Streaming"): its poster at once, and watching it starts
+      // its render; the video loads once the first segment is out (#loadWaiting).
+      if (wasPlaying) video.pause();
+      this.#source.clear();
+      this.#posterOnly = { label, t, play: wasPlaying };
+      this.paused = !wasPlaying;
+      this.shown = label;
+      void this.notes.load(label);
+      this.#prefetchMaps();
+      this.switching = false;
+      this.#afterStream();
+      return true;
+    }
     const fz = this.el.freeze;
     if (video.videoWidth) {
       fz.width = video.videoWidth;
@@ -1248,9 +1297,7 @@ export class Review {
     if (wasPlaying) video.pause();
     try {
       await this.#source.load(v);
-      const seeked = new Promise((res) => video.addEventListener('seeked', res, { once: true }));
-      video.currentTime = Math.min(t, (video.duration || t) - 0.001);
-      await seeked;
+      await this.#landAt(t, incomplete(v));
       this.shown = label;
       void this.notes.load(label); // the sidebar follows the version on screen
       this.#prefetchMaps();
@@ -1261,8 +1308,46 @@ export class Review {
     } finally {
       this.freezeShown = false;
       this.switching = false;
+      this.#afterStream();
     }
     return true;
+  }
+
+  /** Seeks the freshly loaded video to `t`. A stream still filling in may take a while to have that frame, so then
+   * the switch doesn't wait for it for more than 5 s. */
+  async #landAt(t: number, patient: boolean): Promise<void> {
+    const video = this.video;
+    const seeked = new Promise((res) => video.addEventListener('seeked', res, { once: true }));
+    video.currentTime = Math.min(t, (video.duration || t) - 0.001);
+    await (patient ? Promise.race([seeked, new Promise((res) => setTimeout(res, 5000))]) : seeked);
+  }
+
+  /** The video's poster: a streamed version's first frame, shown until its video has a frame. */
+  #setPoster(v: Pick<Version, 'poster'> | undefined): void {
+    if (v?.poster) this.video.poster = v.poster;
+    else this.video.removeAttribute('poster');
+  }
+
+  /** The version on its poster has a segment now: load it, land where it waits, and play if it should. */
+  async #loadWaiting(): Promise<void> {
+    const wait = this.#posterOnly,
+      v = wait && byLabel(this.versions, wait.label);
+    if (!wait || !v || this.shown !== wait.label || this.#loadingWait || this.switching) return;
+    this.#loadingWait = true;
+    const video = this.video;
+    try {
+      await this.#source.load(v);
+      if (this.#posterOnly !== wait) return; // the page moved on meanwhile
+      await this.#landAt(wait.t, true);
+      if (this.#posterOnly !== wait) return;
+      this.#posterOnly = null;
+      if (wait.play) await video.play().catch(() => {});
+      this.paused = video.paused;
+    } catch {
+      /* superseded by another version, or it won't load: the video's error handler says so */
+    } finally {
+      this.#loadingWait = false;
+    }
   }
 
   /** Fetches the time maps from the version on screen to the ones C, [ and ] go to next, so they're here in time. */
@@ -1287,7 +1372,8 @@ export class Review {
     if (!(await this.showVersion(target.label))) return;
     this.flipped = !this.flipped;
     this.logEv('version', { shown: this.shown, base: this.base, flip: this.flipped });
-    this.toast.say(flipToast(this.versions, this.base, target, this.flipped), 1200);
+    const note = this.#landNote;
+    this.toast.say(note ?? flipToast(this.versions, this.base, target, this.flipped), note ? 3200 : 1200);
   };
 
   /** Make `label` the base: stops any recording; the next R starts a fresh take on that version. */
@@ -1315,7 +1401,8 @@ export class Review {
     this.flipped = false;
     this.newTake();
     void this.loadHistory(label);
-    this.toast.say(`Now on ${label}`, 1400);
+    const note = this.#landNote;
+    this.toast.say(note ?? `Now on ${label}`, note ? 3200 : 1400);
   }
 
   stepBase(dir: number): void {
@@ -1493,11 +1580,13 @@ export class Review {
     }
     const g = tl.getContext('2d') as CanvasRenderingContext2D;
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const md = this.mediaDuration();
+    const md = this.mediaDuration(),
+      rendered = renderedEnd(this.shownVersion());
     drawTimeline(g, w, h, {
-      d: this.video.duration ? md : 0,
+      // an incomplete stream's length is known before its video is (its poster shows until the first segment)
+      d: this.video.duration || rendered !== null ? md : 0,
       xd: md || 1,
-      rendered: renderedEnd(this.shownVersion()),
+      rendered,
       vt,
       recording: !!this.seg,
       takeBins: this.take.bins,
@@ -1602,13 +1691,23 @@ export class Review {
     document.title = `Review · ${this.info.name}`;
     this.role = this.info.role ?? null;
     this.versions = this.info.versions || [];
-    // Renders already under way when the page opens show their chip; only ones that appear later are announced.
-    for (const v of newlyRendering(this.versions, this.#seenRendering)) this.#seenRendering.add(v.label);
+    // Streams already there when the page opens show their chip; only ones pushed later are announced.
+    for (const v of newlyStreamed(this.versions, this.#seenStreams)) this.#seenStreams.add(v.label);
     this.base = this.shown = this.info.label || null;
     this.take.version = this.base;
     this.addHistory(this.info.history);
-    const cur = byLabel(this.versions, this.base) ?? (this.base ? { label: this.base, name: this.info.name } : null);
-    this.#source.load(cur).catch(() => {}); // a failure shows the fatal message (video error event)
+    const curV = byLabel(this.versions, this.base);
+    const cur = curV ?? (this.base ? { label: this.base, name: this.info.name } : null);
+    this.#setPoster(curV);
+    if (curV && incomplete(curV) && (renderedEnd(curV) ?? 0) <= 0) {
+      this.#posterOnly = { label: curV.label, t: 0, play: false }; // opened on a stream with nothing rendered yet
+    } else this.#source.load(cur).catch(() => {}); // a failure shows the fatal message (video error event)
+    // Watch the stream on screen while the page is visible; say so at once when it's hidden or closed.
+    document.addEventListener('visibilitychange', () => this.watcher.visibility(document.visibilityState !== 'hidden'));
+    addEventListener('pageshow', (e) => {
+      if (e.persisted) this.watcher.visibility(true); // back from the back-forward cache
+    });
+    this.#afterStream();
     this.layout();
     requestAnimationFrame(this.loop);
     if (this.canRecord) {

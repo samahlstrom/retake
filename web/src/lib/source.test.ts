@@ -175,6 +175,20 @@ describe('VideoSource', () => {
     expect(video.src).toBe('video/v7/v7.m3u8');
   });
 
+  it('clears to the poster alone: hls.js gone, no source, a pending load cancelled', async () => {
+    const video = fakeVideo(false);
+    const { Hls, made } = fakeHls();
+    const src = new VideoSource(video.media, { loadHls: async () => Hls });
+    const p = src.load({ label: 'v7', name: 'v7.m3u8' });
+    await tick();
+    src.clear();
+    await expect(p).rejects.toThrow('superseded');
+    expect(made[0].destroyed).toBe(true);
+    expect(src.plan).toBeNull();
+    expect(video.removeAttribute).toHaveBeenCalledWith('src');
+    expect(video.load).toHaveBeenCalled();
+  });
+
   it('rejects a load that another load replaced', async () => {
     const video = fakeVideo(false);
     const src = new VideoSource(video.media);
