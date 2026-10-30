@@ -93,6 +93,9 @@ The response is `{"ok": true, "dir": "<take folder>"}`.
   from `size`.
 - otherwise write the body at `offset`, truncate the file after it, and respond `{"size": offset + len(body)}`.
 
+`offset` is a 64-bit integer. After a reload, the page asks for a file's size by posting an empty body at offset
+`9007199254740991` (2^53 − 1), which must get the 409 above and write nothing.
+
 ## Reads
 
 - **`sessions`**: one entry per take folder of a version, sorted by name:
