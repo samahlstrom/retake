@@ -75,11 +75,19 @@
     "end": {
       "$ref": "#/$defs/anchor"
     },
+    "expr_lib": {
+      "$ref": "#/$defs/exprLib"
+    },
     "meta": {
       "$ref": "#/$defs/meta"
     }
   },
   "$defs": {
+    "exprLib": {
+      "description": "JavaScript statements (helpers) run before every expression they serve (spec/timeline.md, Expressions).",
+      "type": "string",
+      "maxLength": 50000
+    },
     "meta": {
       "description": "Free-form data the engine never reads."
     },
@@ -401,6 +409,9 @@
         "props": {
           "type": "object"
         },
+        "expr_lib": {
+          "$ref": "#/$defs/exprLib"
+        },
         "layers": {
           "type": "array",
           "items": {
@@ -453,6 +464,9 @@
         },
         "props": {
           "type": "object"
+        },
+        "expr_lib": {
+          "$ref": "#/$defs/exprLib"
         },
         "layers": {
           "type": "array",
@@ -599,7 +613,7 @@
             "type": "number"
           },
           "minItems": 1,
-          "maxItems": 4
+          "maxItems": 8
         }
       ]
     },
@@ -718,10 +732,136 @@
         "rotation": {
           "$ref": "#/$defs/prop"
         },
+        "rotation_x": {
+          "$ref": "#/$defs/prop"
+        },
+        "rotation_y": {
+          "$ref": "#/$defs/prop"
+        },
+        "perspective": {
+          "$ref": "#/$defs/prop"
+        },
+        "corners": {
+          "description": "[x0, y0, x1, y1, x2, y2, x3, y3]: where the content box's top-left, top-right, bottom-right and bottom-left corners land.",
+          "$ref": "#/$defs/prop"
+        },
         "opacity": {
           "$ref": "#/$defs/prop"
         }
       }
+    },
+    "blend": {
+      "enum": [
+        "normal",
+        "add",
+        "screen",
+        "multiply",
+        "overlay",
+        "lighten",
+        "darken"
+      ]
+    },
+    "mask": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "shape": {
+          "enum": [
+            "rect",
+            "ellipse",
+            "path"
+          ]
+        },
+        "rect": {
+          "$ref": "#/$defs/prop"
+        },
+        "radius": {
+          "$ref": "#/$defs/prop"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "feather": {
+          "$ref": "#/$defs/prop"
+        },
+        "invert": {
+          "type": "boolean"
+        },
+        "stroke": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "color",
+            "width"
+          ],
+          "properties": {
+            "color": {
+              "$ref": "#/$defs/color"
+            },
+            "width": {
+              "type": "number",
+              "minimum": 0
+            },
+            "align": {
+              "enum": [
+                "inside",
+                "center",
+                "outside"
+              ]
+            }
+          }
+        }
+      },
+      "if": {
+        "properties": {
+          "shape": {
+            "const": "path"
+          }
+        },
+        "required": [
+          "shape"
+        ]
+      },
+      "then": {
+        "required": [
+          "path"
+        ]
+      }
+    },
+    "matte": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "layer"
+      ],
+      "properties": {
+        "layer": {
+          "$ref": "#/$defs/id"
+        },
+        "mode": {
+          "enum": [
+            "alpha",
+            "alpha-inverted",
+            "luma",
+            "luma-inverted"
+          ]
+        }
+      }
+    },
+    "resample": {
+      "enum": [
+        "bilinear",
+        "lanczos"
+      ]
+    },
+    "box": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "minItems": 4,
+      "maxItems": 4
     },
     "layerCommon": {
       "type": "object",
@@ -738,7 +878,8 @@
             "text",
             "shape",
             "image",
-            "video"
+            "video",
+            "group"
           ]
         },
         "from": {
@@ -759,6 +900,15 @@
         "shadow": {
           "$ref": "#/$defs/shadow"
         },
+        "blend": {
+          "$ref": "#/$defs/blend"
+        },
+        "mask": {
+          "$ref": "#/$defs/mask"
+        },
+        "matte": {
+          "$ref": "#/$defs/matte"
+        },
         "meta": {
           "$ref": "#/$defs/meta"
         }
@@ -776,7 +926,8 @@
             "text",
             "shape",
             "image",
-            "video"
+            "video",
+            "group"
           ]
         }
       },
@@ -828,6 +979,42 @@
           "then": {
             "$ref": "#/$defs/videoLayer"
           }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "group"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/groupLayer"
+          }
+        }
+      ]
+    },
+    "groupLayer": {
+      "type": "object",
+      "required": [
+        "type",
+        "layers"
+      ],
+      "properties": {
+        "type": {
+          "const": "group"
+        },
+        "layers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/layer"
+          }
+        }
+      },
+      "unevaluatedProperties": false,
+      "allOf": [
+        {
+          "$ref": "#/$defs/layerCommon"
         }
       ]
     },
@@ -896,6 +1083,23 @@
         "uppercase": {
           "type": "boolean"
         },
+        "hinting": {
+          "enum": [
+            "none",
+            "slight",
+            "normal",
+            "full"
+          ]
+        },
+        "subpixel": {
+          "type": "boolean"
+        },
+        "metrics": {
+          "enum": [
+            "skia",
+            "pillow"
+          ]
+        },
         "highlight": {
           "type": "object",
           "additionalProperties": false,
@@ -923,9 +1127,25 @@
       "type": "object",
       "required": [
         "type",
-        "shape",
-        "size"
+        "shape"
       ],
+      "if": {
+        "properties": {
+          "shape": {
+            "const": "path"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "path"
+        ]
+      },
+      "else": {
+        "required": [
+          "size"
+        ]
+      },
       "properties": {
         "type": {
           "const": "shape"
@@ -933,8 +1153,13 @@
         "shape": {
           "enum": [
             "rect",
-            "ellipse"
+            "ellipse",
+            "path"
           ]
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
         },
         "size": {
           "type": "array",
@@ -987,6 +1212,9 @@
           },
           "minItems": 2,
           "maxItems": 2
+        },
+        "resample": {
+          "$ref": "#/$defs/resample"
         }
       },
       "unevaluatedProperties": false,
@@ -1050,6 +1278,23 @@
         },
         "audio": {
           "$ref": "#/$defs/audioOpts"
+        },
+        "resample": {
+          "$ref": "#/$defs/resample"
+        },
+        "delogo": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/box"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/box"
+              }
+            }
+          ]
         }
       },
       "not": {

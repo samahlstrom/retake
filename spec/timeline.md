@@ -42,6 +42,7 @@ down. Colors are `#rgb`, `#rrggbb` or `#rrggbbaa`.
 | `scenes` | Shots and overlays (below). |
 | `audio` | Music beds and other audio (below). |
 | `end` | An anchor for the end of the output. Default: the end of the last spine item. |
+| `expr_lib` | JavaScript helpers every expression can use ("Expressions", below). |
 
 Readers must reject unknown fields: a typo in a property name would otherwise be silently ignored. Extra data goes
 under any object's `meta` field, which the engine never reads.
@@ -138,8 +139,8 @@ Resolution is deterministic and errors are typed, with a JSON pointer and a hint
 
 - A **shot** starts at `at` and runs until the next shot starts (in document order across scenes), or to the end.
   Shots must resolve in non-decreasing order. Before the first shot the picture is `format.background`.
-- A shot's `picture` and an **overlay** are both *compositions*: `{background?, props?, layers}`, or a component use
-  `{use, props}` (below). Layers draw bottom to top. An overlay draws over the shots from `from` to `to`; overlays
+- A shot's `picture` and an **overlay** are both *compositions*: `{background?, props?, expr_lib?, layers}`, or a
+  component use `{use, props}` (below). Layers draw bottom to top. An overlay draws over the shots from `from` to `to`; overlays
   stack by `z` (default 0), then document order.
 - Composition time `t` starts at 0 when the shot or overlay starts, and pauses during inserts.
 
@@ -152,16 +153,22 @@ Common fields:
 
 | Field | Meaning |
 |---|---|
-| `id`, `type` | `type` is `text`, `shape`, `image` or `video`. |
+| `id`, `type` | `type` is `text`, `shape`, `image`, `video` or `group`. |
 | `from`, `to` | When the layer shows, in composition seconds or as anchors. Default: the whole composition. |
 | `transform.anchor` | The point of the layer's content box that `position` places, as fractions of the box. Default `[0.5, 0.5]`, the center. |
 | `transform.position` | Prop `[x, y]`. Default: the center of the frame. |
 | `transform.scale` | Prop, a number or `[sx, sy]`. Default 1. |
 | `transform.rotation` | Prop, degrees clockwise. Default 0. |
+| `transform.rotation_x`, `transform.rotation_y` | Props, degrees: the layer turned in 3D about its anchor and seen in perspective (below). Default 0. |
+| `transform.perspective` | Prop, the viewer's distance from the frame in pixels for `rotation_x` / `rotation_y`. Default: the frame's diagonal. |
+| `transform.corners` | Prop of 8 numbers, `[x0, y0, x1, y1, x2, y2, x3, y3]`: a corner pin, where the content box's top-left, top-right, bottom-right and bottom-left corners land, in composition pixels. It replaces `anchor`, `position`, `scale`, `rotation` and the 3D props (setting both is an error). |
 | `transform.opacity` | Prop, 0–1. Default 1. |
 | `crop` | Prop `[x, y, w, h]` in the content's own pixels (images and video: source pixels, before `fit`). |
-| `blur` | Prop, a Gaussian blur sigma in pixels. |
-| `shadow` | `{color, dx, dy, blur}`: a drop shadow under the layer. |
+| `blur` | Prop, a Gaussian blur sigma in pixels. Any layer, video and groups included. |
+| `shadow` | `{color, dx, dy, blur}`: a drop shadow under the layer. Any layer. |
+| `blend` | How the layer combines with what's under it: `normal` (default), `add`, `screen`, `multiply`, `overlay`, `lighten` or `darken` (below). |
+| `mask` | A shape that cuts the layer out, with feather and an optional outline (below). |
+| `matte` | `{layer, mode}`: a track matte, another layer of the same composition whose alpha or luma cuts this one out (below). |
 
 Content by type:
 
@@ -170,14 +177,92 @@ Content by type:
   (default), `right`), `line_height` (multiple of the size, default 1.12), `max_width` (wrap at spaces), `uppercase`,
   `highlight` (`{words, fill}`: words `[a, b)` of the text, counted from 0 across whitespace-separated words, drawn in
   `fill`; `words` is a prop, so keyframes or an expression can move it, e.g. a karaoke caption's current word; `[-1,
-  -1]` highlights nothing). `\n` breaks lines. Text is shaped with HarfBuzz, so kerning applies.
-- **shape**: `shape` (`rect` or `ellipse`), `size` `[w, h]`, `radius` (rect corners), `fill`, `stroke`.
-- **image**: `asset`, optional `size` `[w, h]` (one of them may be `null` to keep the aspect).
+  -1]` highlights nothing). `\n` breaks lines. Text is shaped with HarfBuzz, so kerning applies. Rendering options:
+  `hinting`, `subpixel` and `metrics` (below).
+- **shape**: `shape` (`rect`, `ellipse` or `path`), `size` `[w, h]`, `radius` (rect corners), `path` (SVG path data
+  in the layer's own pixels, for `path`; `size` then defaults to the path's right and bottom extent), `fill`,
+  `stroke`.
+- **image**: `asset`, optional `size` `[w, h]` (one of them may be `null` to keep the aspect), `resample` (below).
 - **video**: `asset`; `in` (the source time at composition time 0, default 0) or `sync: {src, to}` (source time `src`
   plays at anchor `to`); `fit` (`contain` (default), `cover`, `stretch` or `none`: how the cropped source fits the
   frame before the transform); `loop`; `hold_from` (freeze at that source time); `clock` (`local` (default) or
   `timeline`: the source runs on the output clock, so a looping background keeps its phase across cuts); `audio`
-  (`{gain_db, fade_in, fade_out}`: mix the source's sound; muted when absent).
+  (`{gain_db, fade_in, fade_out}`: mix the source's sound; muted when absent); `resample` (below); `delogo`
+  (`[x, y, w, h]` in source pixels, or a list of them: ffmpeg's `delogo` interpolates over the box, e.g. a recorded
+  FPS meter, before anything else sees the frame).
+- **group**: `layers`, drawn together as one picture, then transformed, masked, faded and blended as one layer (an
+  opacity group, like an After Effects precomp). Its content box is the whole frame, so its default transform
+  changes nothing, and its children are placed in composition pixels on the same clock. `transform.opacity` applies
+  to the flattened group (children don't show through each other), and the children's `blend` modes combine them
+  with each other inside the group only. Ids inside are unique like any other.
+
+### Perspective and corner pins
+
+`rotation_x` and `rotation_y` turn a layer in 3D about its anchor point, and `perspective` projects it back onto the
+frame, as CSS's `perspective(d) rotateX(x) rotateY(y)`: a content point is placed relative to the anchor, scaled,
+rotated in the plane (`rotation`), turned about the vertical axis (`rotation_y`; positive turns the right edge away
+from the viewer), then about the horizontal axis (`rotation_x`; positive tips the top edge away), projected from a
+viewer `perspective` pixels in front of the frame with the vanishing point at `position`, and moved to `position`.
+`corners` instead pins the content box's four corners anywhere (a homography). Both work on every layer type, with
+keyframes and expressions, and both are one projective transform: graphics are drawn through it by Skia, and footage
+is sampled through it from one decode per source (bilinear, with box-filtered mip levels where it shrinks, and edges
+anti-aliased against transparency). A layer with perspective is decoded at its 2D size (the size `scale` gives,
+before the projection).
+
+### Blend modes
+
+`blend` combines the layer's pixels (after its mask, matte, effects and opacity) with everything drawn under it in
+its composition: `normal` ("over"), `add` (sum, clipped at white), `screen`, `multiply`, `overlay`, `lighten` and
+`darken`, the separable modes of the W3C compositing spec (as Skia's `Plus`, `Screen`, `Multiply`, `Overlay`,
+`Lighten` and `Darken`), on premultiplied 8-bit sRGB values. A glow drawn with `add` brightens what's under it the
+way a light does; `multiply` darkens. Inside a group, a child's mode combines it with the group's earlier children
+only.
+
+### Masks and mattes
+
+```json
+"mask":  { "shape": "rect", "radius": 22, "feather": 0.6, "stroke": { "color": "#ece7dc", "width": 2 } },
+"matte": { "layer": "card/fade", "mode": "luma" }
+```
+
+A **mask** is in the pixels of the layer's content box (the box `anchor` refers to: a text's laid-out box, a shape's
+`size`, an image's displayed size, a video's cropped source after `fit`, a group's frame), with the origin at its
+top-left, so it moves, scales, turns and warps with the layer.
+
+| Field | Meaning |
+|---|---|
+| `shape` | `rect` (default), `ellipse` or `path`. |
+| `rect` | Prop `[x, y, w, h]`: the rect or the ellipse's bounds. Default: the whole content box. |
+| `radius` | Prop: rounded corners of a `rect`. Default 0. |
+| `path` | SVG path data, for `path`. |
+| `feather` | Prop: a Gaussian blur sigma of the mask's edge, in content pixels. Default 0 (a sharp, anti-aliased edge). |
+| `invert` | Keep what's outside the shape instead. |
+| `stroke` | `{color, width, align}`: an outline drawn along the mask's edge, over the masked content (so a rounded card's outline follows its corners). `align` is `inside` (default: the outline stays within the shape), `center` or `outside`. |
+
+The order is After Effects': content, then the mask (and its outline), then `blur` and `shadow`, then opacity, then
+the track matte, then the blend mode. So a masked card casts a rounded shadow; to cut a shape out of a *blurred*
+layer (a glow outside a card only), use a track matte, which applies after the blur.
+
+A **track matte** names another layer of the same `layers` list. That layer is drawn only as the matte, never by
+itself (its own times, transform and effects apply), and the layer is multiplied by its `alpha` (default),
+`alpha-inverted` (1 − alpha), `luma` (the Rec. 709 luma of its premultiplied color, so transparent counts as black)
+or `luma-inverted`. A matte layer can't have a matte of its own.
+
+### Resampling
+
+`resample` on image and video layers: `bilinear` (default) or `lanczos`. With `lanczos`, the source is resampled once
+with a Lanczos-3 filter to its 2D-scaled size (the size `scale` gives, before rotation and perspective), then placed:
+images like Pillow's `Image.LANCZOS` resize; footage in the decode pipe with ffmpeg's Lanczos scaler, cropped first
+when the crop doesn't change over the unit (so a cropped card is decoded at exactly its size and not resampled
+twice). Placed on whole pixels and not rotated, the resized pixels are copied as they are.
+
+### Text rendering
+
+| Field | Meaning |
+|---|---|
+| `hinting` | `none`, `slight`, `normal` or `full`: FreeType's hinting of the outlines. Default: Skia's paragraph default (`slight`, with subpixel positioning). |
+| `subpixel` | `true` (default): glyphs sit at fractions of a pixel. `false` puts each glyph on whole pixels, as FreeType-based tools such as Pillow do. |
+| `metrics` | `skia` (default): each line box is `line_height` × `size` with the font's ascent and descent centred in it (half leading). `pillow`: lines are placed as Pillow's `ImageDraw.text(…, anchor="mm")` places them, centred between the font's ascender and descender rounded to whole pixels as FreeType rounds them, with whole-pixel glyph positions, normal hinting and Pillow's stroke. Use it to match drawings made with Pillow. |
 
 ### Props, keyframes and easing
 
@@ -205,6 +290,17 @@ Content by type:
 `value` (the keyframed or constant value, if any) and `props` (the composition's `props`, read-only). It has no I/O,
 no `Date`, and `Math.random` throws, so the same `t` gives the same result in any order. Each call has a time and
 memory limit. The result must have the prop's type (a number, an array of numbers, or a string for `text`).
+
+**Shared code.** `expr_lib` holds JavaScript statements (helper functions and constants) that every expression can
+use: at the top level for the whole timeline, and on a composition (a shot's `picture`, an overlay, an insert's
+`picture`) for its layers, after the timeline's. An expression then runs as `(() => { <timeline expr_lib>
+<composition expr_lib> return (<expr>); })()`, so it stays one expression and the helpers aren't repeated in every
+prop. A library is part of the expressions it serves: changing it re-renders exactly the graphics that use it.
+
+```json
+"expr_lib": "const ease = x => (x = Math.min(1, Math.max(0, x)), x * x * (3 - 2 * x));",
+"layers": [ { "id": "pop", "type": "text", "text": "HI", "transform": { "opacity": { "expr": "ease(t / 0.3)" } } } ]
+```
 
 ## Components and kits
 
@@ -275,6 +371,10 @@ one closed-GOP H.264 segment, and segments concatenate with `-c copy`. Two keys 
 - **Unit key**: a hash of the fully resolved unit description, the only input the compositor gets: canvas, frame
   count, encoder settings, every layer with its source hashes and source times (including absolute-time inputs such
   as a `clock: timeline` background's phase), and the layer keys of the graphics on it.
+- A graphics layer that blends with what's under it in another way than `normal`, has a track matte, or is one, is
+  a run of its own (the compositor applies the mode and the matte, so they are in the unit key, not the layer key).
+  A group of graphics only is drawn inside its run; a group with footage in it is composited by the compositor, its
+  children rendered into the group's own picture first.
 
 So a ripple that moves a unit without changing what it shows reuses its segment byte for byte, and a ripple that
 changes a unit's length re-encodes it but reuses its cached graphics. Both keys hash a component's expansion, never
