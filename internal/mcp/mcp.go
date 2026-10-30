@@ -154,6 +154,7 @@ func NewServer(p *agent.Project, version string) *sdk.Server {
 			res, err := p.VersionsList(ctx)
 			return nil, res, err
 		})
+	AddAssetTools(s, AssetsFor(p.Root))
 	return s
 }
 

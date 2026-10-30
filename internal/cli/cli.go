@@ -72,6 +72,8 @@ usage:
       turn the takes into <stem>.review/notes.md, notes.json and snaps/ (reads transcript.json; never transcribes)
   retake version
       print the version
+  retake assets <import|search|get|preview|span|set|resolve|license-report|plugins|plugin|kit|sql|mcp> ...
+      the asset catalog: footage, audio, images, fonts, spans and licenses (retake assets help)
 
 the agent loop (spec/notes.md; <video> is any version of the family, and every command takes --json):
   retake notes list <video> [--status S]... [--version vN]
@@ -145,6 +147,8 @@ func Main(ctx context.Context, args []string, env Env) int {
 		return watchCmd(ctx, args[1:], env)
 	case "transcribe":
 		return transcribeCmd(ctx, args[1:], env)
+	case "assets":
+		return assetsCmd(ctx, args[1:], env)
 	case "version", "--version":
 		_, _ = fmt.Fprintf(env.Stdout, "retake %s\n", Version())
 		return ExitOK

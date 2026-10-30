@@ -123,7 +123,9 @@ func TestToolsOverMCP(t *testing.T) {
 		names = append(names, n)
 	}
 	slices.Sort(names)
-	if !slices.Equal(names, []string{"note_ask", "note_set", "notes_list", "notes_wait", "version_push", "versions_list"}) {
+	if !slices.Equal(names, []string{"asset_get", "asset_import", "asset_preview", "asset_search", "license_report",
+		"note_ask", "note_set", "notes_list", "notes_wait", "plugin_query", "span_add", "span_find", "version_push",
+		"versions_list"}) {
 		t.Fatalf("tools = %v", names)
 	}
 	if d := tools["version_push"].Description; !strings.Contains(d, "PUSH RULE") || !strings.Contains(d, "open on the parent") {
