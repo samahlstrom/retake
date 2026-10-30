@@ -1,5 +1,5 @@
-// Keyboard: the legacy player's keys, unchanged, plus N (milestone 2) to show or hide the notes sidebar and E for the
-// eraser. Handled on window in the capture phase so they work whatever has focus, and nothing else on the page sees
+// Keyboard: the legacy player's keys, unchanged, plus N (milestone 2) to show or hide the notes sidebar, E for the
+// eraser and > for the next video of a home. Handled on window in the capture phase so they work whatever has focus, and nothing else on the page sees
 // them.
 
 export type Action =
@@ -21,7 +21,8 @@ export type Action =
   | 'color4'
   | 'fullscreen'
   | 'notes'
-  | 'eraser';
+  | 'eraser'
+  | 'next';
 
 const PLAIN: Record<string, Action> = {
   ' ': 'togglePlay',
@@ -43,10 +44,13 @@ const PLAIN: Record<string, Action> = {
   f: 'fullscreen',
   n: 'notes',
   e: 'eraser',
+  // The next video to review, in a home (spec/home.md). Shift+. on a US keyboard: its own character, so it never
+  // reaches '.' (a frame step), and N stays the notes.
+  '>': 'next',
 };
 
 /** Keys that do nothing on auto-repeat (holding R must not toggle recording on and off). */
-const NO_REPEAT = 'kzrfcne[] ';
+const NO_REPEAT = 'kzrfcne[]> ';
 
 export interface KeyLike {
   key: string;

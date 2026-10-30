@@ -31,6 +31,7 @@ import {
   resizeBox,
 } from './images';
 import { ERASE_RADIUS, strokesHit, sweep, undoTarget } from './eraser';
+import { homeContext, nextToReview, NO_MORE, normalizeHome, projectUrl, unwatchUrl, viewerId, type Card } from './home';
 import { Scrubber } from './scrub';
 import { keyAction, type Action } from './keys';
 import { layoutMode, type LayoutMode } from './layout';
@@ -119,6 +120,8 @@ export interface ReviewHook {
   readonly mic: Mic | null;
   readonly notes: Notes['snapshot'];
   readonly sidebar: SidebarView;
+  /** The page is a project of a home (spec/home.md), and the next project to review. */
+  readonly home: { available: boolean; next: string | null };
   serialize(t: Take): TakeData;
   save(t?: Take): Promise<void> | undefined;
 }
@@ -191,6 +194,21 @@ export class Review {
   aspect = $state('16 / 9');
   /** What C would say if it were refused now, else null: the phone layout's flip button shows it disabled. */
   flipBlocked = $state<string | null>(null);
+  /** The page is a project of a home (retake open <folder>, spec/home.md): it's under /p/<name>/ and the home
+   * answered. Then "All videos", "Next video" and > are there. */
+  homeAvailable = $state(false);
+  /** The next project to review, from the home. */
+  homeNext = $state.raw<Card | null>(null);
+  /** Where the page sits in its home, from its path; null outside one. */
+  homeCtx: { home: string; project: string } | null = null;
+  /** This page load's id for the unwatch call. */
+  readonly viewer = viewerId();
+  get homeHref(): string {
+    return this.homeCtx?.home ?? '/';
+  }
+  get nextHref(): string {
+    return this.homeCtx && this.homeNext ? projectUrl(this.homeCtx.home, this.homeNext.name) : '';
+  }
 
   /** The phone layout: touch wording (tap ●) instead of keys. */
   get touch(): boolean {
@@ -247,6 +265,12 @@ export class Review {
   /** Closed takes whose POST /done waits for their save to go through. */
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- bookkeeping, nothing renders it
   readonly #donePending = new Set<Take>();
+  /** The versions this page played: leaving sends the unwatch call for each (spec/home.md). */
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- bookkeeping, nothing renders it
+  readonly #watched = new Set<string>();
+  /** The last Done's POST /done, which "Next video" waits for before it leaves. */
+  #doneCall: Promise<void> = Promise.resolve();
+  #leaving = false;
   readonly #saver = new Saver({
     serialize: (t) => this.serialize(t),
     toast: (m, ms) => this.toast.say(m, ms),
@@ -291,6 +315,9 @@ export class Review {
       },
       get sidebar() {
         return r.sidebar;
+      },
+      get home() {
+        return { available: r.homeAvailable, next: r.homeNext?.name ?? null };
       },
       serialize: (t: Take) => r.serialize(t),
       save: (t?: Take) => r.save(t),
@@ -370,6 +397,25 @@ export class Review {
       }
     }
     this.#saver.flush(t);
+  };
+
+  /** The page is going away (closed, reloaded, or navigating): the last audio, and the unwatch calls. */
+  onPageHide = (): void => {
+    this.flushOnExit();
+    this.leave();
+  };
+
+  /** Tell the server this page no longer watches the versions it played, so the streaming side can stop a render no
+   * one watches (spec/home.md, "Close means close"). A beacon: it goes out even as the page unloads. */
+  leave = (): void => {
+    if (typeof navigator === 'undefined' || typeof navigator.sendBeacon !== 'function') return;
+    for (const label of this.#watched) {
+      try {
+        navigator.sendBeacon(unwatchUrl(label, this.viewer));
+      } catch {
+        /* best effort */
+      }
+    }
   };
 
   /** A recorded chunk goes into the local buffer first; the next save uploads it. */
@@ -1149,6 +1195,7 @@ export class Review {
       video.currentTime = Math.min(t, (video.duration || t) - 0.001);
       await seeked;
       this.shown = label;
+      this.#watched.add(label);
       void this.notes.load(label); // the sidebar follows the version on screen
       this.#prefetchMaps();
       if (wasPlaying) await video.play().catch(() => {});
@@ -1298,10 +1345,53 @@ export class Review {
     if (t.saveErr) {
       this.#unsaved.add(t);
       this.#donePending.add(t);
-    } else void this.#postDone(t); // the server transcribes it and writes up the notes
+    } else this.#doneCall = this.#postDone(t).catch(() => {}); // the server transcribes it and writes up the notes
     this.closeMic();
     this.doneSaved = true;
     this.toast.say(t.saveErr ? MSG_SAVE_FAILED : this.touch ? MSG_SAVED_TOUCH : MSG_SAVED, 4000);
+    if (this.homeCtx) void this.loadHome(); // "Next video" shows the next one to review
+  };
+
+  // ---------------------------------------------------------------- the home (spec/home.md)
+  /** Reads the home: whether there is one, and the next project to review. */
+  async loadHome(): Promise<void> {
+    const ctx = this.homeCtx;
+    if (!ctx) return;
+    try {
+      const r = await fetch(`${ctx.home}api/home`);
+      if (!r.ok) return;
+      const h = normalizeHome(await r.json());
+      this.homeNext = nextToReview(h.projects, ctx.project);
+      this.homeAvailable = true;
+    } catch {
+      /* no home here, or the server is gone */
+    }
+  }
+
+  /** "Next video" and >: a take in progress is closed and saved like Done, then the next project to review opens. */
+  goNext = async (): Promise<void> => {
+    const ctx = this.homeCtx;
+    if (!ctx || this.#leaving || this.starting) return;
+    this.#leaving = true;
+    let going = false;
+    try {
+      const t = this.take;
+      if (t.id && !t.closed) {
+        await this.done();
+        if (t.saveErr) return; // its toast says so; the take stays on this page
+      }
+      await Promise.race([this.#doneCall, new Promise((res) => setTimeout(res, 3000))]);
+      await this.loadHome();
+      const next = this.homeNext;
+      if (!next) {
+        if (this.homeAvailable) this.toast.say(NO_MORE, 2600);
+        return;
+      }
+      going = true;
+      location.assign(projectUrl(ctx.home, next.name));
+    } finally {
+      if (!going) this.#leaving = false;
+    }
   };
 
   run(act: Action): void {
@@ -1359,6 +1449,9 @@ export class Review {
         break;
       case 'notes':
         this.toggleSidebar();
+        break;
+      case 'next':
+        void this.goNext();
         break;
     }
   }
@@ -1488,6 +1581,9 @@ export class Review {
       fetch('api/ping').catch(() => {});
     }, PING_MS);
     new ResizeObserver(this.layout).observe(this.el.stage);
+    // In a home, the first frame the home showed is the poster while the video loads (spec/home.md).
+    this.homeCtx = homeContext(location.pathname);
+    if (this.homeCtx) video.poster = 'api/poster';
 
     try {
       this.info = (await (await fetch('api/info')).json()) as Info;
@@ -1498,6 +1594,7 @@ export class Review {
     this.role = this.info.role ?? null;
     this.versions = this.info.versions || [];
     this.base = this.shown = this.info.label || null;
+    if (this.base) this.#watched.add(this.base);
     this.take.version = this.base;
     this.addHistory(this.info.history);
     const cur = byLabel(this.versions, this.base) ?? (this.base ? { label: this.base, name: this.info.name } : null);
@@ -1511,6 +1608,7 @@ export class Review {
     }
     void this.notes.load(this.shown); // no sidebar at all if the server has no notes routes
     this.#prefetchMaps();
+    void this.loadHome();
   }
 
   /** Resend images that earlier takes left in the image buffer, like recover() does for audio. */

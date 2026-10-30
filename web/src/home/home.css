@@ -1,0 +1,179 @@
+/* The home screen: the review page's colors and type (app.css), cards of first frames. */
+:root {
+  --bg: #09090a;
+  --hair: rgba(255, 255, 255, 0.07);
+  --text: #ececef;
+  --dim: #85858d;
+  --voice: #5ac8fa;
+  --amber: #ffcf6e;
+}
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font:
+    13px/1.4 Inter,
+    'Adwaita Sans',
+    system-ui,
+    'Noto Sans',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+body {
+  overflow-x: hidden;
+}
+.home {
+  max-width: 1720px;
+  margin: 0 auto;
+  padding: 28px 28px 56px;
+}
+header {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  min-height: 24px;
+  margin-bottom: 22px;
+}
+h1 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.sub {
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+.err {
+  color: #ff7a70;
+}
+.empty {
+  max-width: 34rem;
+  color: var(--dim);
+  line-height: 1.6;
+}
+.empty code {
+  color: var(--text);
+}
+.grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(268px, 1fr));
+  gap: 24px 18px;
+}
+.card {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+  border-radius: 10px;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+/* The frame's box is fixed at 16:9, so nothing moves when the thumbnail arrives. */
+.thumb {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 10px;
+  background: #121215;
+  border: 1px solid var(--hair);
+}
+.thumb img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.3s ease;
+}
+.card:hover .thumb img {
+  transform: scale(1.025);
+}
+.card:hover .thumb,
+.card:focus-visible .thumb {
+  border-color: rgba(255, 255, 255, 0.22);
+}
+.card:focus-visible .thumb {
+  outline: 2px solid var(--voice);
+  outline-offset: 2px;
+}
+.len {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgba(9, 9, 10, 0.72);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  backdrop-filter: blur(8px);
+}
+.meta {
+  display: grid;
+  gap: 6px;
+  padding: 10px 2px 0;
+}
+.title {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--dim);
+}
+.ver {
+  color: var(--text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.chip {
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--hair);
+  font-size: 12px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.chip.to_review {
+  color: #fff;
+  border-color: rgba(90, 200, 250, 0.5);
+  background: rgba(90, 200, 250, 0.14);
+}
+.chip.being_edited {
+  color: var(--amber);
+  border-color: rgba(255, 207, 110, 0.4);
+  background: rgba(255, 207, 110, 0.08);
+}
+@media (max-width: 640px) {
+  .home {
+    padding: 18px 16px 40px;
+  }
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 20px;
+  }
+}
+@media (min-width: 2200px) {
+  html,
+  body {
+    font-size: 14.5px;
+  }
+  .grid {
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  }
+}

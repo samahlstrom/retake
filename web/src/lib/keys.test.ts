@@ -47,6 +47,14 @@ describe('keys', () => {
     expect(keyAction(k('e', { repeat: true }))).toEqual({ act: null, stop: true });
   });
 
+  it('> opens the next video of a home (once per press), and stays apart from . and N', () => {
+    expect(keyAction(k('>'))).toEqual({ act: 'next', stop: true });
+    expect(keyAction(k('>', { repeat: true }))).toEqual({ act: null, stop: true });
+    expect(keyAction(k('.'))).toEqual({ act: 'frameNext', stop: true });
+    expect(keyAction(k('N'))).toEqual({ act: 'notes', stop: true });
+    expect(keyAction(k('>', { ctrlKey: true }))).toBeNull();
+  });
+
   it('saves on Ctrl/Cmd+S and undoes on Ctrl/Cmd+Z without stopping the event', () => {
     expect(keyAction(k('s', { ctrlKey: true }))).toEqual({ act: 'save', stop: false });
     expect(keyAction(k('S', { metaKey: true }))).toEqual({ act: 'save', stop: false });
