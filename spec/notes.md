@@ -78,7 +78,7 @@ the parent version is either in the changelog or asked about in the same push.
 - `transcribe(take)` writes `transcript.json` in the legacy format:
   `{"files": {"seg_01.webm": {size, model, prompt, duration, words: [{w, s, e, p}]}}}`, where w is the word with its
   leading space, s and e are seconds into that file, and p is the probability. Files already transcribed with the same
-  size and model are skipped.
+  size, model and prompt are skipped.
 - `notes(version)` runs the notes engine for that version (all its takes plus inherited ones). It writes
   `<stem>.review/notes.md` and `notes.json`, then syncs the `notes` table and emits a `notes` event.
 
@@ -128,4 +128,5 @@ engine = "auto"      # auto | whisper.cpp | command
 model = "large-v3"   # whisper.cpp model name; falls back to "small" on CPU when auto
 device = "auto"      # auto | cuda | cpu
 command = ""         # engine = "command": a program that reads an audio path and prints transcript words as JSON
+whisper_cli = ""     # whisper-cli's path; "" = $PATH, then scripts/install-whisper.sh's $XDG_DATA_HOME/retake/whisper.cpp
 ```

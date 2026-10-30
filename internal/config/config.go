@@ -19,6 +19,17 @@ type Config struct {
 	Port            *int     `toml:"port"`              // preferred port (the next free one is used if busy)
 	IdleExitMinutes *float64 `toml:"idle_exit_minutes"` // 0 = never
 	OpenBrowser     *bool    `toml:"open_browser"`
+
+	Transcribe Transcribe `toml:"transcribe"`
+}
+
+// Transcribe is the [transcribe] table (spec/notes.md, "Config additions"). internal/transcribe reads it.
+type Transcribe struct {
+	Engine     *string `toml:"engine"`      // auto | whisper.cpp | command
+	Model      *string `toml:"model"`       // whisper.cpp model name, or the path of a ggml .bin file
+	Device     *string `toml:"device"`      // auto | cuda | cpu
+	Command    *string `toml:"command"`     // engine = "command": the program (and arguments) to run
+	WhisperCLI *string `toml:"whisper_cli"` // the whisper-cli binary; unset = $PATH, then the install-whisper.sh folder
 }
 
 // Path returns the config file's path. getenv is os.Getenv in production.
@@ -63,8 +74,10 @@ func Parse(s string) (Config, []string, error) {
 		if len(k) == 0 || seen[k[0]] {
 			continue // a table's keys come after the table itself
 		}
-		seen[k[0]] = true
-		warnings = append(warnings, fmt.Sprintf("unknown key %q", k[0]))
+		if len(k) == 1 {
+			seen[k[0]] = true
+		}
+		warnings = append(warnings, fmt.Sprintf("unknown key %q", k.String()))
 	}
 	sort.Strings(warnings)
 	if c.Port != nil && (*c.Port < 1 || *c.Port > 65535) {
@@ -72,6 +85,12 @@ func Parse(s string) (Config, []string, error) {
 	}
 	if c.IdleExitMinutes != nil && *c.IdleExitMinutes < 0 {
 		return Config{}, warnings, fmt.Errorf("idle_exit_minutes %g is negative", *c.IdleExitMinutes)
+	}
+	if e := c.Transcribe.Engine; e != nil && *e != "auto" && *e != "whisper.cpp" && *e != "command" {
+		return Config{}, warnings, fmt.Errorf("transcribe.engine %q isn't auto, whisper.cpp or command", *e)
+	}
+	if d := c.Transcribe.Device; d != nil && *d != "auto" && *d != "cuda" && *d != "cpu" {
+		return Config{}, warnings, fmt.Errorf("transcribe.device %q isn't auto, cuda or cpu", *d)
 	}
 	return c, warnings, nil
 }
