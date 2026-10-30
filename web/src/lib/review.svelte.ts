@@ -940,7 +940,7 @@ export class Review {
   /** A `version` event: the family changed (a new version was pushed). */
   async refreshFamily(): Promise<void> {
     try {
-      const info = (await (await fetch('/api/info')).json()) as Info;
+      const info = (await (await fetch('api/info')).json()) as Info;
       if (info.versions?.length) {
         this.info.versions = info.versions;
         this.versions = info.versions;
@@ -1089,7 +1089,7 @@ export class Review {
     this.hist.images = [];
     this.hist.bins = new Float32Array(this.nBins());
     try {
-      const d = (await (await fetch(`/api/history?v=${encodeURIComponent(label)}`)).json()) as {
+      const d = (await (await fetch(`api/history?v=${encodeURIComponent(label)}`)).json()) as {
         history?: HistoryEntry[];
       };
       this.addHistory(d.history);
@@ -1336,12 +1336,12 @@ export class Review {
       }
     }, AUTOSAVE_MS);
     setInterval(() => {
-      fetch('/api/ping').catch(() => {});
+      fetch('api/ping').catch(() => {});
     }, PING_MS);
     new ResizeObserver(this.layout).observe(this.el.stage);
 
     try {
-      this.info = (await (await fetch('/api/info')).json()) as Info;
+      this.info = (await (await fetch('api/info')).json()) as Info;
     } catch {
       this.toast.say('Review server not reachable', 8000);
     }

@@ -1,6 +1,7 @@
-// Where the <video> gets a version from. A plain file (mp4, mov, webm, mkv) is `/video/<label>`, as the legacy page did.
-// A chunked playlist (a version whose file name ends in .m3u8) is `/video/<label>/<name>`, so its relative segment
+// Where the <video> gets a version from. A plain file (mp4, mov, webm, mkv) is `video/<label>`, as the legacy page did.
+// A chunked playlist (a version whose file name ends in .m3u8) is `video/<label>/<name>`, so its relative segment
 // URLs resolve beside it; it plays natively where the browser can (Safari, some Chromes), else through hls.js on MSE.
+// The URLs are relative to the page, so the page works at / (retake open) and at a server's /p/<name>/.
 import type { Version } from './types';
 
 export const HLS_MIME = 'application/vnd.apple.mpegurl';
@@ -12,12 +13,12 @@ export const isPlaylist = (name: string | undefined | null): boolean => /\.m3u8$
 
 /** The URL and the player for a version (`null` = the current version, before /api/info answered). */
 export function planSource(v: Pick<Version, 'label' | 'name'> | null, canPlayHls: boolean): SourcePlan {
-  if (!v) return { kind: 'file', url: '/video' };
+  if (!v) return { kind: 'file', url: 'video' };
   if (isPlaylist(v.name)) {
-    const url = `/video/${encodeURIComponent(v.label)}/${encodeURIComponent(v.name)}`;
+    const url = `video/${encodeURIComponent(v.label)}/${encodeURIComponent(v.name)}`;
     return canPlayHls ? { kind: 'native-hls', url } : { kind: 'hls.js', url };
   }
-  return { kind: 'file', url: `/video/${encodeURIComponent(v.label)}` };
+  return { kind: 'file', url: `video/${encodeURIComponent(v.label)}` };
 }
 
 /** What VideoSource needs of hls.js (kept narrow so tests can fake it). */

@@ -5,12 +5,12 @@ import { applyJob, jobLine } from './jobs';
 import type { Job, NoteItem, NotesResponse } from './types';
 
 const enc = encodeURIComponent;
-export const notesUrl = (v: string): string => `/api/notes?v=${enc(v)}`;
-export const reopenUrl = (id: number): string => `/api/notes/${enc(String(id))}/reopen`;
+export const notesUrl = (v: string): string => `api/notes?v=${enc(v)}`;
+export const reopenUrl = (id: number): string => `api/notes/${enc(String(id))}/reopen`;
 export const doneUrl = (take: string, version: string | null): string =>
-  `/api/session/${enc(take)}/done?v=${enc(String(version))}`;
+  `api/session/${enc(take)}/done?v=${enc(String(version))}`;
 export const eventsUrl = (since: number | null): string =>
-  since == null ? '/api/events' : `/api/events?since=${enc(String(since))}`;
+  since == null ? 'api/events' : `api/events?since=${enc(String(since))}`;
 
 /** localStorage key of the desktop sidebar's open/closed state. */
 export const SIDEBAR_KEY = 'retake.sidebar';

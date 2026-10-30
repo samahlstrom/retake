@@ -8,7 +8,7 @@ import { MSG_IMAGE_REFUSED } from './images';
 import type { Segment, Take, TakeData, TakeImage } from './types';
 
 export const dataUrl = (take: string, version: string | null): string =>
-  `/api/session/${encodeURIComponent(take)}/data?v=${encodeURIComponent(String(version))}`;
+  `api/session/${encodeURIComponent(take)}/data?v=${encodeURIComponent(String(version))}`;
 
 export interface SaverDeps {
   serialize: (t: Take) => TakeData;

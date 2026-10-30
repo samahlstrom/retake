@@ -70,7 +70,8 @@ export default defineConfig({
     prerenderShell(),
     ...(mock ? [mockNotes({ server, transcribe: mock === 'fail' ? 'fail' : 'ok' })] : []),
   ],
-  base: '/',
+  // Relative asset and API URLs: the same build works at / (retake open) and at /p/<name>/ (retake serve).
+  base: './',
   // hls.js (about 580 kB) is its own chunk, loaded only for .m3u8 versions in browsers without native HLS.
   build: { outDir: 'dist', emptyOutDir: true, target: 'es2022', chunkSizeWarningLimit: 700 },
   server: { proxy: { '/api': proxy, '/video': proxy } },
