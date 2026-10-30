@@ -251,18 +251,13 @@ fn draw_mask_stroke(canvas: &Canvas, path: &Path, width: f64, color: &str, align
 
 /// The image filter of a layer's `blur` and `shadow` (sigmas and offsets in the canvas's current pixels).
 fn effects_filter(blur: f64, shadow: Option<&Shadow>, k: f32) -> Option<skia_safe::ImageFilter> {
-    let mut filter = if blur > 0.0 { image_filters::blur((blur as f32 * k, blur as f32 * k), None, None, None) } else { None };
+    let mut filter =
+        if blur > 0.0 { image_filters::blur((blur as f32 * k, blur as f32 * k), None, None, None) } else { None };
     if let Some(sh) = shadow {
         let sigma = (sh.blur / 2.0).max(0.0) as f32 * k;
         let col = color4f(sh.color.as_deref(), Rgba([0, 0, 0, 160]));
-        filter = image_filters::drop_shadow(
-            (sh.dx as f32 * k, sh.dy as f32 * k),
-            (sigma, sigma),
-            col,
-            None,
-            filter,
-            None,
-        );
+        filter =
+            image_filters::drop_shadow((sh.dx as f32 * k, sh.dy as f32 * k), (sigma, sigma), col, None, filter, None);
     }
     filter
 }
@@ -631,7 +626,13 @@ impl Painter {
     }
 
     /// Lays out a text layer: the paragraphs to paint (stroke first), their vertical offset, and the content box.
-    fn text(&mut self, l: &Layer, t: &Text, time: f64, props: &Value) -> Result<(Vec<Paragraph>, f32, f64, f64), EditError> {
+    fn text(
+        &mut self,
+        l: &Layer,
+        t: &Text,
+        time: f64,
+        props: &Value,
+    ) -> Result<(Vec<Paragraph>, f32, f64, f64), EditError> {
         let mut s = match &t.text {
             TextValue::Str(s) => s.clone(),
             TextValue::Expr { expr } => {
@@ -685,7 +686,13 @@ impl Painter {
     }
 
     /// The body and content box of a non-video layer at `t`.
-    fn body(&mut self, l: &Layer, t: f64, props: &Value, comp: (f64, f64)) -> Result<Option<(Body, f64, f64)>, EditError> {
+    fn body(
+        &mut self,
+        l: &Layer,
+        t: f64,
+        props: &Value,
+        comp: (f64, f64),
+    ) -> Result<Option<(Body, f64, f64)>, EditError> {
         Ok(Some(match &l.content {
             Content::Text(tx) => {
                 let (ps, dy, w, h) = self.text(l, tx, t, props)?;
@@ -739,8 +746,7 @@ impl Painter {
         let blur = eval1(&l.blur, t, props, &mut self.js)?.unwrap_or(0.0).max(0.0);
         let filter = effects_filter(blur, l.shadow.as_ref(), 1.0);
         let group = matches!(body, Body::Group(_));
-        let layered =
-            placed.opacity < 1.0 || filter.is_some() || l.mask.is_some() || blend != Blend::Normal || group;
+        let layered = placed.opacity < 1.0 || filter.is_some() || l.mask.is_some() || blend != Blend::Normal || group;
         if layered {
             let mut lp = Paint::default();
             lp.set_alpha_f(placed.opacity as f32);
@@ -976,7 +982,6 @@ impl Painter {
         Ok(out)
     }
 }
-
 
 /// Encodes a premultiplied RGBA frame (opaque) as PNG.
 pub fn png(px: &[u8], w: u32, h: u32) -> Result<Vec<u8>, EditError> {

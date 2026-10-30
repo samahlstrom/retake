@@ -214,7 +214,11 @@ pub fn decode_plan(it: &Item, canvas: &Canvas, fps: u32, js: &mut Js, gk: f64) -
     let full = (((sw * s / 2.0).round() as u32 * 2).max(2), ((sh * s / 2.0).round() as u32 * 2).max(2));
     let side = |k: f64, len: f64, full: u32| if k >= s - 1e-9 { full } else { even_up(len * k).min(full) };
     let (w, h) = (side(kx, sw, full.0), side(ky, sh, full.1));
-    Ok(DecodePlan { d: Decode { w, h, crop: None, lanczos: false, delogo }, off: [0.0, 0.0], k: [w as f64 / sw, h as f64 / sh] })
+    Ok(DecodePlan {
+        d: Decode { w, h, crop: None, lanczos: false, delogo },
+        off: [0.0, 0.0],
+        k: [w as f64 / sw, h as f64 / sh],
+    })
 }
 
 /// The size a video item is decoded at (see [`decode_plan`]).
@@ -505,7 +509,8 @@ impl Ctx<'_, '_> {
         let vs = self.vids.get(slot).expect("video state");
         let (off, k) = (vs.plan.off, vs.plan.k);
         let (bw, bh) = (vs.plan.d.w, vs.plan.d.h);
-        let buf_to_out = src_to_out.then_affine(&Affine::translate(off[0], off[1]).then(&Affine::scale(1.0 / k[0], 1.0 / k[1])));
+        let buf_to_out =
+            src_to_out.then_affine(&Affine::translate(off[0], off[1]).then(&Affine::scale(1.0 / k[0], 1.0 / k[1])));
         let bcrop = [(c[0] - off[0]) * k[0], (c[1] - off[1]) * k[1], c[2] * k[0], c[3] * k[1]];
         let buf = vs.reader.as_ref().map(|r| r.current()).context("video reader")?;
         if Ctx::needs_layer(typed) {
@@ -523,7 +528,14 @@ impl Ctx<'_, '_> {
 
     /// Draws a group with footage: its items into the group's own picture, then that picture through the group's
     /// transform, mask, filters and opacity. Returns its box.
-    fn draw_group(&mut self, target: &mut Frame, it: &Item, i: i64, js: &mut Js, to_out: &Proj) -> Result<Option<[f64; 4]>> {
+    fn draw_group(
+        &mut self,
+        target: &mut Frame,
+        it: &Item,
+        i: i64,
+        js: &mut Js,
+        to_out: &Proj,
+    ) -> Result<Option<[f64; 4]>> {
         let Item::Group { typed, props, k0, items, .. } = it else { return Ok(None) };
         let t = (k0 + i) as f64 / self.fps;
         if !typed.visible_at(t) {

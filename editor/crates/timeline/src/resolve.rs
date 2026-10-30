@@ -652,10 +652,11 @@ impl<'a> Resolver<'a> {
         if let Some(Value::Object(tr)) = obj.get("transform")
             && tr.contains_key("corners")
         {
-            let clash: Vec<&str> = ["anchor", "position", "scale", "rotation", "rotation_x", "rotation_y", "perspective"]
-                .into_iter()
-                .filter(|k| tr.contains_key(*k))
-                .collect();
+            let clash: Vec<&str> =
+                ["anchor", "position", "scale", "rotation", "rotation_x", "rotation_y", "perspective"]
+                    .into_iter()
+                    .filter(|k| tr.contains_key(*k))
+                    .collect();
             if !clash.is_empty() {
                 errs.push(
                     EditError::new(

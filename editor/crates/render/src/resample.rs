@@ -145,7 +145,8 @@ mod tests {
         let out = lanczos_rgba(&src, 32, 32, [0.0, 0.0, 32.0, 32.0], 8, 8);
         let mid = out[(4 * 8 + 4) * 4] as i32;
         assert!((mid - 128).abs() <= 2, "{mid}");
-        let half: Vec<u8> = (0..8 * 4).flat_map(|i| if i % 8 < 4 { [255u8, 0, 0, 255] } else { [0, 0, 255, 255] }).collect();
+        let half: Vec<u8> =
+            (0..8 * 4).flat_map(|i| if i % 8 < 4 { [255u8, 0, 0, 255] } else { [0, 0, 255, 255] }).collect();
         let left = lanczos_rgba(&half, 8, 4, [0.0, 0.0, 4.0, 4.0], 4, 4);
         assert!(left.chunks(4).all(|p| p[0] >= 250 && p[2] <= 5), "{left:?}");
     }

@@ -332,7 +332,8 @@ pub fn warp_image(dst: &mut Frame, src: &[u8], sw: u32, sh: u32, crop: [f64; 4],
     let Some(inv) = h.invert() else { return };
     let Some(b) = h.bbox(crop, dst.w as f64, dst.h as f64) else { return };
     let (x0, y0) = ((b[0].floor() as i64 - 1).max(0), (b[1].floor() as i64 - 1).max(0));
-    let (x1, y1) = (((b[0] + b[2]).ceil() as i64 + 1).min(dst.w as i64), ((b[1] + b[3]).ceil() as i64 + 1).min(dst.h as i64));
+    let (x1, y1) =
+        (((b[0] + b[2]).ceil() as i64 + 1).min(dst.w as i64), ((b[1] + b[3]).ceil() as i64 + 1).min(dst.h as i64));
     if x1 <= x0 || y1 <= y0 {
         return;
     }

@@ -632,13 +632,7 @@ impl Engine {
                 let (js, ls): (Vec<Value>, Vec<Layer>) = g.into_iter().unzip();
                 let key = self.run_key(&js, &ls, list.props, range, still);
                 runs.push(RunSpec { key: key.clone(), layers: ls, props: list.props.clone(), range, still });
-                items.push(Item::Graphics {
-                    key,
-                    k0: at.k0,
-                    active: at.active,
-                    fx: Fx::default(),
-                    slot: owners.len(),
-                });
+                items.push(Item::Graphics { key, k0: at.k0, active: at.active, fx: Fx::default(), slot: owners.len() });
                 owners.push(at.owner.clone());
             }
         };
@@ -725,8 +719,7 @@ impl Engine {
                 }
             }
             Content::Group(g) if l.has_video() => {
-                let cj: Vec<Value> =
-                    j.get("layers").and_then(Value::as_array).cloned().unwrap_or_default();
+                let cj: Vec<Value> = j.get("layers").and_then(Value::as_array).cloned().unwrap_or_default();
                 let cp: Vec<String> = (0..g.layers.len()).map(|k| format!("{lptr}/layers/{k}")).collect();
                 let child = List { js: &cj, ls: &g.layers, ptrs: &cp, props: list.props };
                 let mut nested = vec![];
