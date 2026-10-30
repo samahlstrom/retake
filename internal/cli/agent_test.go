@@ -152,6 +152,9 @@ func TestAgentCommands(t *testing.T) {
 		{"push", w.video, render, "--change", "2"},
 		{"push", w.video, render, "--ask", "x=why"},
 		{"push", w.video, render, "--frob"},
+		{"push", w.video, render, "--render"},
+		{"push", w.video, render, "--draft"},
+		{"push", w.video, "--render", "--move"},
 		{"versions"},
 		{"mcp"},
 		{"watch", w.video},
@@ -302,6 +305,57 @@ func TestWatch(t *testing.T) {
 	}
 	if !strings.Contains(w.stderr.String(), "retake watch: stopped") {
 		t.Errorf("stderr: %s", w.stderr.String())
+	}
+}
+
+// push --render in a timeline project, with a stand-in retake-edit named by [edit] retake_edit.
+func TestPushRenderCommand(t *testing.T) {
+	w := newWorld(t)
+	w.seedNotes(t)
+	bin := filepath.Join(w.root, "tools", "retake-edit")
+	script := `#!/bin/sh
+out="$4"
+printf 'rendered' > "$out"
+cat > "${out%.mp4}.manifest.json" <<EOF
+{"schema": "manifest/0.1", "timeline": {"id": "t", "rev": 2, "hash": "b3:0"}, "video": "x.mp4", "size": [64, 36],
+ "fps": 10, "duration": 10, "frames": 100, "range": [0, 10], "draft": false, "units": []}
+EOF
+echo '{"ok": true, "output": "'"$out"'", "units": 4, "reused": 3, "rendered": 1}'
+`
+	for path, body := range map[string]string{
+		bin: script,
+		filepath.Join(w.root, "edit", "timeline.json"): `{"rev": 2}`,
+		filepath.Join(w.root, "edit", "timeline.patches.jsonl"): `{"id": "p1", "rev": 1, "answers": ["v6#1"], "summary": "title 20% bigger"}
+{"id": "p2", "rev": 2, "answers": [], "summary": "bed fades out earlier"}
+`,
+	} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	w.config(t, fmt.Sprintf("[edit]\nretake_edit = %q\n", bin))
+	code, out, errOut := w.out("push", w.video, "--render", "--parent", "v6", "--change", "2=pause cut", "--ask",
+		"3=which track?")
+	if code != 0 || !strings.Contains(out, "pushed v8 from v6") ||
+		!strings.Contains(out, "rendered edit/timeline.json rev 2: 4 units, 3 reused, 1 rendered") ||
+		!strings.Contains(out, "#1 title 20% bigger (p1)") || !strings.Contains(out, "#2 pause cut") ||
+		!strings.Contains(out, "unrequested p2: bed fades out earlier") || !strings.Contains(out, "asked about #3") {
+		t.Fatalf("push --render: %d\n%s\n%s", code, out, errOut)
+	}
+	if _, err := os.Stat(filepath.Join(w.root, "v8", "clip_v8.manifest.json")); err != nil {
+		t.Fatal("no manifest beside v8")
+	}
+	code, out, _ = w.out("versions", w.video)
+	if code != 0 || !strings.Contains(out, "#1 title 20% bigger (p1)") || !strings.Contains(out, "unrequested p2") {
+		t.Fatalf("versions:\n%s", out)
+	}
+	code, out, _ = w.out("versions", w.video, "--json")
+	vs := decode[agent.VersionsResult](t, out)
+	if code != 0 || vs.Versions[len(vs.Versions)-1].Render == nil {
+		t.Fatalf("versions --json: %s", out)
 	}
 }
 

@@ -39,8 +39,9 @@ const (
 		`accepted (the reviewer approved that version) or retracted (the reviewer took it back; ignore it). It also has ` +
 		`the strokes drawn on the frame (shape, color, box [x, y, w, h] normalized 0-1), images the reviewer dropped ` +
 		`(file path, box), a snapshot image path, and threads (your questions and their answers, oldest first). Filter ` +
-		`by status and by version (notes on it, including ones carried over from older takes). Returns a cursor for ` +
-		`notes_wait.`
+		`by status and by version (notes on it, including ones carried over from older takes). When the version was ` +
+		`rendered from a timeline (it has a render manifest), each note also has targets: the timeline elements under ` +
+		`its strokes, best first ({id, kind, ptr, score, z, box}); patch those ids. Returns a cursor for notes_wait.`
 	askDesc = `Ask the reviewer a question about one note when you can't tell what they want. The note goes from ` +
 		`open to question, which satisfies the push rule for it. The reviewer answers by voice in the review page; ` +
 		`notes_wait then returns the answer and the note, open again. When the answer is a choice between versions ` +
@@ -57,7 +58,12 @@ const (
 		`either in changes (note id + a one-line summary of what you changed) or in asks (note id + a question for ` +
 		`the reviewer). Otherwise the push is rejected, nothing is copied, and the error lists the ids of the ` +
 		`unhandled notes. Only open notes can be listed, each once. Changed notes become answered in the new version; ` +
-		`asked ones become question. Returns the version record, the answered note ids and the question ids.`
+		`asked ones become question. Returns the version record, the answered note ids and the question ids. ` +
+		`In a timeline project (edit/timeline.json), render: true (and no file) renders the timeline's current ` +
+		`revision with retake-edit and pushes that with its render manifest: every patch since the parent's render ` +
+		`that has answers (["#5"]) becomes the changelog entry for those notes with the patch's summary, so list in ` +
+		`changes only notes no patch answers; patches with answers: [] are listed as unrequested. draft: true for a ` +
+		`fast draft render.`
 	versionsDesc = `List the versions of the video, oldest first: label, file path, duration in seconds, which is ` +
 		`the newest, and for pushed ones the parent, sha256, who pushed, when, and the changelog ([{note, summary}]). ` +
 		`open counts the notes still open on each version: a push from that version must handle them.`
@@ -98,7 +104,9 @@ type askEntry struct {
 }
 
 type pushIn struct {
-	File    string     `json:"file" jsonschema:"path of the rendered video file to push"`
+	File    string     `json:"file,omitempty" jsonschema:"path of the rendered video file to push (none with render)"`
+	Render  bool       `json:"render,omitempty" jsonschema:"render the project's timeline with retake-edit and push that"`
+	Draft   bool       `json:"draft,omitempty" jsonschema:"with render: a draft (half size, fast encoder)"`
 	Parent  string     `json:"parent,omitempty" jsonschema:"the version label it was made from (default: the newest version)"`
 	Label   string     `json:"label,omitempty" jsonschema:"v<N> to use instead of the next free number"`
 	Changes []changeIn `json:"changes,omitempty" jsonschema:"the notes this version addresses"`
@@ -139,7 +147,8 @@ func NewServer(p *agent.Project, version string) *sdk.Server {
 		})
 	sdk.AddTool(s, &sdk.Tool{Name: "version_push", Description: pushDesc},
 		func(ctx context.Context, _ *sdk.CallToolRequest, in pushIn) (*sdk.CallToolResult, agent.PushResult, error) {
-			a := agent.PushArgs{File: in.File, Parent: in.Parent, Label: in.Label, Move: in.Move}
+			a := agent.PushArgs{File: in.File, Parent: in.Parent, Label: in.Label, Move: in.Move, Render: in.Render,
+				Draft: in.Draft}
 			for _, c := range in.Changes {
 				a.Changes = append(a.Changes, project.ChangeEntry{Note: c.Note, Summary: c.Summary})
 			}

@@ -21,6 +21,12 @@ type Config struct {
 	OpenBrowser     *bool    `toml:"open_browser"`
 
 	Transcribe Transcribe `toml:"transcribe"`
+	Edit       Edit       `toml:"edit"`
+}
+
+// Edit is the [edit] table (spec/bridge.md): the editor engine that renders timeline projects.
+type Edit struct {
+	RetakeEdit *string `toml:"retake_edit"` // the retake-edit binary; unset = $RETAKE_EDIT, $PATH, editor/target/release
 }
 
 // Transcribe is the [transcribe] table (spec/notes.md, "Config additions"). internal/transcribe reads it.

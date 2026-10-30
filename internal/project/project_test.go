@@ -538,7 +538,7 @@ func TestPushRule(t *testing.T) {
 		t.Errorf("message = %q", err)
 	}
 
-	push.Changelog = []ChangeEntry{{1, "bigger title"}, {2, "pause cut"}, {4, "carried note fixed"}}
+	push.Changelog = []ChangeEntry{{Note: 1, Summary: "bigger title"}, {Note: 2, Summary: "pause cut"}, {Note: 4, Summary: "carried note fixed"}}
 	err = s.CheckPush(push)
 	if !errors.As(err, &pr) || !slices.Equal(pr.Notes, []int64{3}) || !strings.Contains(err.Error(), "note #3 is open on v7") {
 		t.Fatalf("one missing: %v", err)
@@ -605,7 +605,7 @@ func TestPushRule(t *testing.T) {
 	if err := s.CheckPush(Push{Label: "v9", Parent: "v8", Scope: Scope{Version: "v8"}}); err != nil {
 		t.Errorf("empty push on a clean parent: %v", err)
 	}
-	err = s.CheckPush(Push{Label: "v9", Parent: "v8", Scope: Scope{Version: "v8"}, Changelog: []ChangeEntry{{3, "x"}}})
+	err = s.CheckPush(Push{Label: "v9", Parent: "v8", Scope: Scope{Version: "v8"}, Changelog: []ChangeEntry{{Note: 3, Summary: "x"}}})
 	var te *TransitionError
 	if !errors.As(err, &te) || te.From != StatusQuestion || !strings.Contains(err.Error(), "waits for the reviewer's answer") {
 		t.Errorf("answering a question note: %v", err)
@@ -919,7 +919,7 @@ func TestSidebar(t *testing.T) {
 	img := q
 
 	if _, err := s.RecordPush(Push{Label: "v8", Parent: "v7", Scope: Scope{Version: "v7"},
-		Changelog: []ChangeEntry{{1, "title bigger"}, {2, "pause cut"}}, Asks: []PushAsk{{3, "which track?"}}}); err != nil {
+		Changelog: []ChangeEntry{{Note: 1, Summary: "title bigger"}, {Note: 2, Summary: "pause cut"}}, Asks: []PushAsk{{3, "which track?"}}}); err != nil {
 		t.Fatal(err)
 	}
 	general, _ := s.Ask(Ask{Version: "v7", Text: "too long overall?"})

@@ -13,6 +13,7 @@ import (
 
 	"github.com/samahlstrom/retake/internal/agent"
 	"github.com/samahlstrom/retake/internal/app"
+	"github.com/samahlstrom/retake/internal/bridge"
 	"github.com/samahlstrom/retake/internal/family"
 	"github.com/samahlstrom/retake/internal/jobs"
 	"github.com/samahlstrom/retake/internal/mcp"
@@ -126,7 +127,17 @@ func openProject(env Env, cmd, video string) (*agent.Project, int) {
 		_, _ = fmt.Fprintf(env.Stderr, "retake %s: %v\n", cmd, err)
 		return nil, ExitError
 	}
+	p.Editor = editorOf(env)
 	return p, ExitOK
+}
+
+// editorOf says where retake-edit is: [edit] retake_edit, else $RETAKE_EDIT, $PATH, editor/target/release.
+func editorOf(env Env) bridge.Editor {
+	e := bridge.Editor{Getenv: env.Getenv}
+	if c := loadConfig(env); c.Edit.RetakeEdit != nil {
+		e.Configured = absPath(*c.Edit.RetakeEdit, env.Getenv)
+	}
+	return e
 }
 
 // videoClock formats video seconds as m:ss.s.
@@ -154,6 +165,9 @@ func noteLine(n agent.NoteView) string {
 	}
 	if len(n.Images) > 0 {
 		extra = append(extra, plural(len(n.Images), "image"))
+	}
+	if len(n.Targets) > 0 {
+		extra = append(extra, "on "+n.Targets[0].ID)
 	}
 	if len(extra) > 0 {
 		line += "  [" + strings.Join(extra, ", ") + "]"
@@ -415,10 +429,10 @@ func parseEntries(name string, vals []string) ([]project.ChangeEntry, error) {
 }
 
 func pushCmd(ctx context.Context, args []string, env Env) int {
-	var asJSON, move bool
+	var asJSON, move, render, draft bool
 	var parent, label string
 	var changes, asks []string
-	f := flags{bools: map[string]*bool{"--json": &asJSON, "--move": &move},
+	f := flags{bools: map[string]*bool{"--json": &asJSON, "--move": &move, "--render": &render, "--draft": &draft},
 		values: map[string]*string{"--parent": &parent, "--label": &label},
 		multi:  map[string]*[]string{"--change": &changes, "--ask": &asks}}
 	pos, help, err := f.parse(args)
@@ -426,8 +440,16 @@ func pushCmd(ctx context.Context, args []string, env Env) int {
 		_, _ = io.WriteString(env.Stdout, usage)
 		return ExitOK
 	}
-	if err == nil && len(pos) != 2 {
-		err = errors.New("give the video (any version of the family) and the new version's file")
+	switch {
+	case err != nil:
+	case render && len(pos) != 1:
+		err = errors.New("with --render, give only the video (any version of the family): the render is the new file")
+	case render && move:
+		err = errors.New("--move is for a file you give; a render is always moved in")
+	case !render && draft:
+		err = errors.New("--draft goes with --render")
+	case !render && len(pos) != 2:
+		err = errors.New("give the video (any version of the family) and the new version's file, or --render")
 	}
 	var ch, ak []project.ChangeEntry
 	if err == nil {
@@ -444,7 +466,10 @@ func pushCmd(ctx context.Context, args []string, env Env) int {
 		return code
 	}
 	defer func() { _ = p.Close() }()
-	a := agent.PushArgs{File: absPath(pos[1], env.Getenv), Parent: parent, Label: label, Changes: ch, Move: move}
+	a := agent.PushArgs{Parent: parent, Label: label, Changes: ch, Move: move, Render: render, Draft: draft}
+	if !render {
+		a.File = absPath(pos[1], env.Getenv)
+	}
 	for _, x := range ak {
 		a.Asks = append(a.Asks, project.PushAsk{Note: x.Note, Text: x.Summary})
 	}
@@ -457,6 +482,23 @@ func pushCmd(ctx context.Context, args []string, env Env) int {
 		return ExitOK
 	}
 	_, _ = fmt.Fprintf(env.Stdout, "pushed %s from %s: %s\n", res.Version.Label, res.Version.Parent, res.Version.Path)
+	if r := res.Render; r != nil {
+		_, _ = fmt.Fprintf(env.Stdout, "  rendered %s rev %d: %d units, %d reused, %d rendered\n", r.Timeline, r.Rev,
+			r.Units.Total, r.Units.Reused, r.Units.Rendered)
+		for _, c := range res.Version.Changelog {
+			_, _ = fmt.Fprintf(env.Stdout, "  #%d %s", c.Note, c.Summary)
+			if len(c.Patches) > 0 {
+				_, _ = fmt.Fprintf(env.Stdout, " (%s)", strings.Join(c.Patches, ", "))
+			}
+			_, _ = fmt.Fprintln(env.Stdout)
+		}
+		for _, u := range r.Unrequested {
+			_, _ = fmt.Fprintf(env.Stdout, "  unrequested %s: %s\n", u.ID, u.Summary)
+		}
+		for _, s := range r.Skipped {
+			_, _ = fmt.Fprintf(env.Stdout, "  skipped %s's answer %s: %s\n", s.Patch, s.Answer, s.Why)
+		}
+	}
 	if len(res.Answered) > 0 {
 		_, _ = fmt.Fprintf(env.Stdout, "  answered %s\n", ids(res.Answered))
 	}
@@ -522,7 +564,18 @@ func versionsCmd(ctx context.Context, args []string, env Env) int {
 		}
 		_, _ = fmt.Fprintln(env.Stdout, line)
 		for _, c := range v.Changelog {
-			_, _ = fmt.Fprintf(env.Stdout, "       #%d %s\n", c.Note, c.Summary)
+			line := fmt.Sprintf("       #%d %s", c.Note, c.Summary)
+			if len(c.Patches) > 0 {
+				line += " (" + strings.Join(c.Patches, ", ") + ")"
+			}
+			_, _ = fmt.Fprintln(env.Stdout, line)
+		}
+		if r := v.Render; r != nil {
+			for _, u := range r.Unrequested {
+				_, _ = fmt.Fprintf(env.Stdout, "       unrequested %s: %s\n", u.ID, u.Summary)
+			}
+			_, _ = fmt.Fprintf(env.Stdout, "       rendered from %s rev %d: %d units, %d reused\n", r.Timeline, r.Rev,
+				r.Units.Total, r.Units.Reused)
 		}
 	}
 	return ExitOK
