@@ -1006,8 +1006,44 @@
     "resample": {
       "enum": [
         "bilinear",
-        "lanczos"
+        "lanczos",
+        "unfiltered"
       ]
+    },
+    "gradient": {
+      "description": "A linear gradient in the layer's own pixels: from the first color at (x0, y0) to the last at (x1, y1).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "linear",
+        "colors"
+      ],
+      "properties": {
+        "linear": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 4,
+          "maxItems": 4
+        },
+        "colors": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "$ref": "#/$defs/color"
+          }
+        },
+        "stops": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        }
+      }
     },
     "box": {
       "type": "array",
@@ -1407,7 +1443,14 @@
           "minimum": 0
         },
         "fill": {
-          "$ref": "#/$defs/color"
+          "oneOf": [
+            {
+              "$ref": "#/$defs/color"
+            },
+            {
+              "$ref": "#/$defs/gradient"
+            }
+          ]
         },
         "stroke": {
           "$ref": "#/$defs/stroke"

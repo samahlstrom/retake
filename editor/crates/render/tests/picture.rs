@@ -427,6 +427,32 @@ fn lanczos_footage_is_ffmpegs_crop_and_scale_exactly() {
 }
 
 #[test]
+fn gradients_and_unfiltered_sampling() {
+    let f = frame(
+        "gradient",
+        json!([{"id": "g", "type": "shape", "shape": "rect", "size": [200, 40],
+        "fill": {"linear": [0, 0, 200, 0], "colors": ["#ff0000", "#0000ff"]}, "transform": {"position": [160, 90]}}]),
+        0.0,
+    );
+    let (l, m, r) = (px(&f, 61, 90), px(&f, 160, 90), px(&f, 259, 90));
+    assert!(l[0] > 245 && l[2] < 10 && r[2] > 245 && r[0] < 10, "{l:?} {r:?}");
+    assert!((m[0] as i32 - 128).abs() <= 3 && (m[2] as i32 - 128).abs() <= 3, "{m:?}");
+    // Unfiltered: decoded at full size whatever the scale, and sampled without mips (it aliases where it shrinks).
+    let layer = |r: &str| {
+        json!([{"id": "v", "type": "video", "asset": "proj:pattern", "fit": "none", "resample": r,
+        "transform": {"scale": 0.25, "rotation_y": 10}}])
+    };
+    let e = engine("unfiltered-plan", &timeline(layer("unfiltered")));
+    let plan = e.plan().unwrap().remove(0);
+    let v = walk_items(&plan.desc.items).into_iter().find(|i| matches!(i, Item::Video { .. })).unwrap();
+    let mut js = Js::new().unwrap();
+    assert_eq!(unit::decode_size(v, &e.canvas, e.fps(), &mut js).unwrap(), (W, H));
+    let (u, b) = (frame("unf", layer("unfiltered"), 0.0), frame("bil", layer("bilinear"), 0.0));
+    let p = psnr(&u.px, &b.px, W, |_, _| true);
+    assert!(p > 20.0 && p < 60.0, "same picture, sampled differently: {p:.1} dB");
+}
+
+#[test]
 fn delogo_matches_ffmpeg() {
     let ours = frame(
         "delogo",

@@ -1,6 +1,6 @@
 //! Rendering: graphics runs into cached alpha frames, and units through the compositor into H.264 segments.
 
-use crate::composite::{Affine, Frame, alpha_bbox, crop_px, warp_image};
+use crate::composite::{Affine, Frame, alpha_bbox, crop_px, warp_image, warp_image_with};
 use crate::engine::{Canvas, Item, RunSpec, UnitPlan, walk_items};
 use crate::expr::Js;
 use crate::ffmpeg::{Decode, Encoder, VideoReader};
@@ -212,7 +212,9 @@ pub fn decode_plan(it: &Item, canvas: &Canvas, fps: u32, js: &mut Js, gk: f64) -
         });
     }
     let full = (((sw * s / 2.0).round() as u32 * 2).max(2), ((sh * s / 2.0).round() as u32 * 2).max(2));
-    let side = |k: f64, len: f64, full: u32| if k >= s - 1e-9 { full } else { even_up(len * k).min(full) };
+    let unfiltered = v.resample == Resample::Unfiltered;
+    let side =
+        |k: f64, len: f64, full: u32| if unfiltered || k >= s - 1e-9 { full } else { even_up(len * k).min(full) };
     let (w, h) = (side(kx, sw, full.0), side(ky, sh, full.1));
     Ok(DecodePlan {
         d: Decode { w, h, crop: None, lanczos: false, delogo },
@@ -513,15 +515,16 @@ impl Ctx<'_, '_> {
             src_to_out.then_affine(&Affine::translate(off[0], off[1]).then(&Affine::scale(1.0 / k[0], 1.0 / k[1])));
         let bcrop = [(c[0] - off[0]) * k[0], (c[1] - off[1]) * k[1], c[2] * k[0], c[3] * k[1]];
         let buf = vs.reader.as_ref().map(|r| r.current()).context("video reader")?;
+        let mips = v.resample != Resample::Unfiltered;
         if Ctx::needs_layer(typed) {
             let mut tmp = Frame::new(w, h);
-            warp_image(&mut tmp, buf, bw, bh, bcrop, &buf_to_out, p.opacity);
+            warp_image_with(&mut tmp, buf, bw, bh, bcrop, &buf_to_out, p.opacity, mips);
             self.layer_effects(&mut tmp, typed, (c[2] * fx, c[3] * fy), &p.m, p.opacity, t, props, js)?;
             if let Some(b) = tmp.bbox() {
                 target.blend_frame(&tmp, b, Blend::Normal);
             }
         } else {
-            warp_image(target, buf, bw, bh, bcrop, &buf_to_out, p.opacity);
+            warp_image_with(target, buf, bw, bh, bcrop, &buf_to_out, p.opacity, mips);
         }
         Ok(if p.opacity > 0.0 { src_to_out.bbox(c, w as f64, h as f64) } else { None })
     }

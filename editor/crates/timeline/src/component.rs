@@ -1133,6 +1133,9 @@ pub fn fit_layer(l: &mut Value, f: &Fit) {
             if let Some(Value::Object(s)) = m.get_mut("stroke") {
                 scale_field(s, "width", k);
             }
+            if let Some(Value::Object(g)) = m.get_mut("fill") {
+                scale_field(g, "linear", k);
+            }
         }
         "image" => {
             if m.contains_key("size") {

@@ -10,8 +10,8 @@ use crate::transform::{self, Proj};
 use retake_timeline::EditError;
 use retake_timeline::keyframe::{ExprEval, Prop};
 use retake_timeline::layer::{
-    Align, Blend, Content, Hinting, Layer, Mask, MaskShape, MatteMode, Metrics, Resample, Shadow, Shape, ShapeKind,
-    StrokeAlign, Text, TextValue,
+    Align, Blend, Content, Fill, Gradient, Hinting, Layer, Mask, MaskShape, MatteMode, Metrics, Resample, Shadow,
+    Shape, ShapeKind, StrokeAlign, Text, TextValue,
 };
 use retake_timeline::model::Rgba;
 use serde_json::Value;
@@ -149,6 +149,17 @@ fn eval1(p: &Option<Prop>, t: f64, props: &Value, ex: &mut dyn ExprEval) -> Resu
         Some(p) => Ok(p.eval(t, props, ex)?.first().copied()),
         None => Ok(None),
     }
+}
+
+/// A linear gradient shader in the layer's own pixels.
+fn gradient_shader(g: &Gradient) -> Option<skia_safe::Shader> {
+    let colors: Vec<Color4f> = g.colors.iter().map(|c| color4f(Some(c), Rgba::WHITE)).collect();
+    let stops: Option<Vec<f32>> = g.stops.as_ref().map(|s| s.iter().map(|x| *x as f32).collect());
+    let [x0, y0, x1, y1] = g.linear.map(|x| x as f32);
+    let stops = stops.filter(|s| s.len() == colors.len());
+    let cs = skia_safe::gradient::Colors::new(&colors, stops.as_deref(), skia_safe::TileMode::Clamp, None);
+    let gr = skia_safe::gradient::Gradient::new(cs, skia_safe::gradient::Interpolation::default());
+    skia_safe::gradient::shaders::linear_gradient(((x0, y0), (x1, y1)), &gr, None)
 }
 
 /// A shape's content box: its `size`, or a path's right and bottom extent.
@@ -787,10 +798,19 @@ impl Painter {
                         canvas.draw_path(path.as_ref().expect("parsed above"), paint);
                     }
                 };
-                if let Some(f) = &s.fill {
-                    let mut p = Paint::new(color4f(Some(f), Rgba::WHITE), None);
-                    p.set_anti_alias(true);
-                    draw(&p);
+                match &s.fill {
+                    Some(Fill::Color(f)) => {
+                        let mut p = Paint::new(color4f(Some(f), Rgba::WHITE), None);
+                        p.set_anti_alias(true);
+                        draw(&p);
+                    }
+                    Some(Fill::Gradient(g)) => {
+                        let mut p = Paint::default();
+                        p.set_anti_alias(true);
+                        p.set_shader(gradient_shader(g));
+                        draw(&p);
+                    }
+                    None => {}
                 }
                 if let Some(st) = &s.stroke
                     && st.width > 0.0
@@ -820,7 +840,9 @@ impl Painter {
                     let sampling = SamplingOptions::new(skia_safe::FilterMode::Linear, skia_safe::MipmapMode::None);
                     canvas.draw_image_rect_with_sampling_options(&r, None, dst, sampling, &p);
                 } else {
-                    let sampling = SamplingOptions::new(skia_safe::FilterMode::Linear, skia_safe::MipmapMode::Linear);
+                    let unfiltered = matches!(&l.content, Content::Image(i) if i.resample == Resample::Unfiltered);
+                    let mip = if unfiltered { skia_safe::MipmapMode::None } else { skia_safe::MipmapMode::Linear };
+                    let sampling = SamplingOptions::new(skia_safe::FilterMode::Linear, mip);
                     canvas.draw_image_rect_with_sampling_options(
                         &img,
                         Some((&src, skia_safe::canvas::SrcRectConstraint::Strict)),

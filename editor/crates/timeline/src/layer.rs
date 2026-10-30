@@ -229,6 +229,8 @@ pub enum Resample {
     #[default]
     Bilinear,
     Lanczos,
+    /// Bilinear from the full-size source, without pre-shrinking or mip levels (OpenCV's `INTER_LINEAR` warps).
+    Unfiltered,
 }
 
 impl Resample {
@@ -372,9 +374,26 @@ pub struct Shape {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub fill: Option<String>,
+    pub fill: Option<Fill>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stroke: Option<Stroke>,
+}
+
+/// A shape's fill: a color, or a linear gradient in the layer's own pixels.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum Fill {
+    Color(String),
+    Gradient(Gradient),
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Gradient {
+    /// `[x0, y0, x1, y1]`: where the first and the last color are.
+    pub linear: [f64; 4],
+    pub colors: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stops: Option<Vec<f64>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

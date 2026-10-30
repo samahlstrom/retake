@@ -183,7 +183,9 @@ Content by type:
   `hinting`, `subpixel` and `metrics` (below).
 - **shape**: `shape` (`rect`, `ellipse` or `path`), `size` `[w, h]`, `radius` (rect corners), `path` (SVG path data
   in the layer's own pixels, for `path`; `size` then defaults to the path's right and bottom extent), `fill`,
-  `stroke`.
+  `stroke`. `fill` is a color or a linear gradient, `{"linear": [x0, y0, x1, y1], "colors": ["#f0895b", "#8fb5a3"],
+  "stops": [0, 1]}`: from the first color at (x0, y0) to the last at (x1, y1), in the layer's own pixels, held at the
+  end colors beyond them (`stops` default to even spacing).
 - **image**: `asset`, optional `size` `[w, h]` (one of them may be `null` to keep the aspect), `resample` (below).
 - **video**: `asset`; `in` (the source time at composition time 0, default 0) or `sync: {src, to}` (source time `src`
   plays at anchor `to`); `fit` (`contain` (default), `cover`, `stretch` or `none`: how the cropped source fits the
@@ -260,6 +262,10 @@ with a Lanczos-3 filter to its 2D-scaled size (the size `scale` gives, before ro
 images like Pillow's `Image.LANCZOS` resize; footage in the decode pipe with ffmpeg's Lanczos scaler, cropped first
 when the crop doesn't change over the unit (so a cropped card is decoded at exactly its size and not resampled
 twice). Placed on whole pixels and not rotated, the resized pixels are copied as they are.
+
+`unfiltered` samples the source at its full size bilinearly through the transform, with no pre-shrinking and no mip
+levels: what OpenCV's `INTER_LINEAR` warps (`warpAffine`, `warpPerspective`) do. It aliases where the layer shrinks
+by more than 2×; use it to match pictures made that way.
 
 ### Text rendering
 

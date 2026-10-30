@@ -170,6 +170,21 @@ fn half(src: &[u8], w: u32, h: u32) -> (Vec<u8>, u32, u32) {
 /// pixels; `m` maps source pixels to destination pixels; `opacity` scales alpha. Outside the crop the source is
 /// transparent, so edges are anti-aliased by the bilinear filter.
 pub fn draw_image(dst: &mut Frame, src: &[u8], sw: u32, sh: u32, crop: [f64; 4], m: &Affine, opacity: f64) {
+    draw_image_with(dst, src, sw, sh, crop, m, opacity, true)
+}
+
+/// [`draw_image`], with mip levels where it shrinks (`mips`) or plain bilinear from the source.
+#[allow(clippy::too_many_arguments)]
+pub fn draw_image_with(
+    dst: &mut Frame,
+    src: &[u8],
+    sw: u32,
+    sh: u32,
+    crop: [f64; 4],
+    m: &Affine,
+    opacity: f64,
+    mips: bool,
+) {
     let opacity = opacity.clamp(0.0, 1.0);
     if opacity <= 0.0 || crop[2] <= 0.0 || crop[3] <= 0.0 {
         return;
@@ -200,7 +215,7 @@ pub fn draw_image(dst: &mut Frame, src: &[u8], sw: u32, sh: u32, crop: [f64; 4],
     let scale = m.det().abs().sqrt();
     let mut level: (std::borrow::Cow<[u8]>, u32, u32) = (std::borrow::Cow::Borrowed(src), sw, sh);
     let mut k = 1.0f64;
-    while scale * k < 0.5 && level.1 > 1 && level.2 > 1 {
+    while mips && scale * k < 0.5 && level.1 > 1 && level.2 > 1 {
         let (b, w, h) = half(&level.0, level.1, level.2);
         level = (std::borrow::Cow::Owned(b), w, h);
         k *= 2.0;
@@ -322,8 +337,24 @@ impl<'a> Mips<'a> {
 /// (trilinear), and edges anti-aliased against transparency like [`draw_image`]. An affine `h` goes to
 /// [`draw_image`].
 pub fn warp_image(dst: &mut Frame, src: &[u8], sw: u32, sh: u32, crop: [f64; 4], h: &Proj, opacity: f64) {
+    warp_image_with(dst, src, sw, sh, crop, h, opacity, true)
+}
+
+/// [`warp_image`], with mip levels where it shrinks (`mips`) or plain bilinear from the source (OpenCV's
+/// `INTER_LINEAR` warps).
+#[allow(clippy::too_many_arguments)]
+pub fn warp_image_with(
+    dst: &mut Frame,
+    src: &[u8],
+    sw: u32,
+    sh: u32,
+    crop: [f64; 4],
+    h: &Proj,
+    opacity: f64,
+    mips: bool,
+) {
     if let Some(a) = h.affine() {
-        return draw_image(dst, src, sw, sh, crop, &a, opacity);
+        return draw_image_with(dst, src, sw, sh, crop, &a, opacity, mips);
     }
     let opacity = opacity.clamp(0.0, 1.0);
     if opacity <= 0.0 || crop[2] <= 0.0 || crop[3] <= 0.0 {
@@ -350,7 +381,7 @@ pub fn warp_image(dst: &mut Frame, src: &[u8], sw: u32, sh: u32, crop: [f64; 4],
     };
     let corners = [(x0 as f64, y0 as f64), (x1 as f64, y0 as f64), (x0 as f64, y1 as f64), (x1 as f64, y1 as f64)];
     let max_foot = corners.iter().map(|&(x, y)| foot(x, y)).fold(1.0f64, f64::max);
-    let max_level = if max_foot > 2.0 { (max_foot / 2.0).log2().ceil() as usize + 1 } else { 0 };
+    let max_level = if mips && max_foot > 2.0 { (max_foot / 2.0).log2().ceil() as usize + 1 } else { 0 };
     let mips = Mips::new(src, sw, sh, max_level.min(12));
     let top = mips.levels.len() - 1;
     let op = opacity as f32;
