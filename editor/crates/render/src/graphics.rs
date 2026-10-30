@@ -365,6 +365,9 @@ pub fn filter_frame(src: &Frame, blur: f64, shadow: Option<&Shadow>, k: f64) -> 
     Ok(f)
 }
 
+/// A laid-out text layer: its paragraphs (stroke first), their offset, and the content box.
+type LaidOut = (Vec<Paragraph>, (f32, f32), f64, f64);
+
 /// What a layer draws, in its content box.
 enum Body {
     /// Paragraphs (stroke first) and their offset in the box.
@@ -643,7 +646,7 @@ impl Painter {
         t: &Text,
         time: f64,
         props: &Value,
-    ) -> Result<(Vec<Paragraph>, (f32, f32), f64, f64), EditError> {
+    ) -> Result<LaidOut, EditError> {
         let mut s = match &t.text {
             TextValue::Str(s) => s.clone(),
             TextValue::Expr { expr } => {
