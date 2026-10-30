@@ -62,6 +62,28 @@ func TestParse(t *testing.T) {
 					t.Errorf("%+v", c)
 				}
 			}},
+		{name: "transcribe table", in: "[transcribe]\nengine = \"whisper.cpp\"\nmodel = \"small\"\ndevice = \"cpu\"\n" +
+			"command = \"fw --model x\"\nwhisper_cli = \"/opt/w/whisper-cli\"\n",
+			check: func(t *testing.T, c Config) {
+				tr := c.Transcribe
+				if *tr.Engine != "whisper.cpp" || *tr.Model != "small" || *tr.Device != "cpu" || *tr.Command != "fw --model x" ||
+					*tr.WhisperCLI != "/opt/w/whisper-cli" {
+					t.Errorf("%+v", tr)
+				}
+			}},
+		{name: "transcribe unset", in: "", check: func(t *testing.T, c Config) {
+			if c.Transcribe != (Transcribe{}) {
+				t.Errorf("%+v", c.Transcribe)
+			}
+		}},
+		{name: "unknown transcribe key warns with its table", in: "[transcribe]\nbeam_size = 5\n", warnings: 1,
+			check: func(t *testing.T, c Config) {
+				if c.Transcribe.Model != nil {
+					t.Errorf("%+v", c.Transcribe)
+				}
+			}},
+		{name: "bad engine", in: "[transcribe]\nengine = \"vosk\"", wantErr: "transcribe.engine"},
+		{name: "bad device", in: "[transcribe]\ndevice = \"gpu\"", wantErr: "transcribe.device"},
 		{name: "wrong type", in: `port = "8777"`, wantErr: "port"},
 		{name: "bad toml", in: `name = `, wantErr: "expected"},
 		{name: "port out of range", in: `port = 70000`, wantErr: "out of range"},
@@ -80,6 +102,9 @@ func TestParse(t *testing.T) {
 			}
 			if len(warnings) != tc.warnings {
 				t.Errorf("warnings = %v", warnings)
+			}
+			if tc.name == "unknown transcribe key warns with its table" && warnings[0] != `unknown key "transcribe.beam_size"` {
+				t.Errorf("warning = %q", warnings[0])
 			}
 			tc.check(t, c)
 		})

@@ -143,6 +143,8 @@ func Main(ctx context.Context, args []string, env Env) int {
 		return mcpCmd(ctx, args[1:], env)
 	case "watch":
 		return watchCmd(ctx, args[1:], env)
+	case "transcribe":
+		return transcribeCmd(ctx, args[1:], env)
 	case "version", "--version":
 		_, _ = fmt.Fprintf(env.Stdout, "retake %s\n", Version())
 		return ExitOK

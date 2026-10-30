@@ -14,6 +14,7 @@ import (
 	"github.com/samahlstrom/retake/internal/jobs"
 	"github.com/samahlstrom/retake/internal/notes"
 	"github.com/samahlstrom/retake/internal/project"
+	"github.com/samahlstrom/retake/internal/transcribe"
 )
 
 // ErrNoTranscriber is the transcribe jobs' error while no transcriber is connected in Engines.
@@ -84,7 +85,22 @@ func runFromResult(label string, res *notes.Result) project.Run {
 	return run
 }
 
-// transcriber returns the transcriber cfg selects, or why there is none.
-func transcriber(config.Config) (jobs.TakeTranscriber, error) {
-	return nil, ErrNoTranscriber
+// transcriber returns the transcriber cfg selects, or why there is none. whisper.cpp not being installed is fatal
+// (retrying can't fix it) and carries the install hint the sidebar shows.
+func transcriber(cfg config.Config) (jobs.TakeTranscriber, error) {
+	t, err := transcribe.FromConfig(cfg)
+	if errors.Is(err, transcribe.ErrNoWhisper) {
+		return nil, jobs.Fatal(jobs.Hinted(err, "Run scripts/install-whisper.sh, or set [transcribe] command in config.toml."))
+	}
+	if err != nil {
+		return nil, err
+	}
+	return takeTranscriber{t}, nil
+}
+
+// takeTranscriber transcribes every audio file of a take that transcript.json doesn't have yet.
+type takeTranscriber struct{ t transcribe.Transcriber }
+
+func (a takeTranscriber) Take(ctx context.Context, takeDir string) error {
+	return transcribe.Take(ctx, takeDir, a.t, transcribe.TakeOptions{})
 }

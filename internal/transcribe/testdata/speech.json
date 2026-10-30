@@ -1,0 +1,40 @@
+[
+ {
+  "file": "seg_01.webm",
+  "voice": "en-us+m3",
+  "phrases": [
+   {
+    "text": "Throw out everything I said about this clip.",
+    "start": 0.6,
+    "end": 4.171
+   }
+  ]
+ },
+ {
+  "file": "seg_02.ogg",
+  "voice": "en-us+klatt4",
+  "phrases": [
+   {
+    "text": "Actually, add that back.",
+    "start": 0.6,
+    "end": 2.954
+   }
+  ]
+ },
+ {
+  "file": "gaps.webm",
+  "voice": "en-us+m3",
+  "phrases": [
+   {
+    "text": "Cut the intro and zoom in on the map.",
+    "start": 1.0,
+    "end": 4.215
+   },
+   {
+    "text": "Make the caption bigger here.",
+    "start": 7.215,
+    "end": 9.658
+   }
+  ]
+ }
+]
