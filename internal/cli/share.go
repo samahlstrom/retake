@@ -463,7 +463,7 @@ func (s *share) print(link, host string, row project.Token) {
 		_, _ = fmt.Fprintln(w, string(b))
 		return
 	}
-	_, _ = fmt.Fprintf(w, "retake: sharing %s with a %s link%s, %s\n", s.given, row.Role, labelText(row),
+	_, _ = fmt.Fprintf(w, "retake: sharing %s with %s %s link%s, %s\n", s.given, article(string(row.Role)), row.Role, labelText(row),
 		untilText(row))
 	_, _ = fmt.Fprintf(w, "  link   %s\n", link)
 	if !s.a.noQR {
@@ -687,4 +687,12 @@ func tokenRevokeCmd(args []string, env Env, cmd string) int {
 	}
 	_, _ = fmt.Fprintf(env.Stdout, "revoked #%d (%s%s): it stops working now\n", t.ID, t.Role, labelText(t))
 	return ExitOK
+}
+
+// article is "an" before a vowel sound (an approver), else "a" (a viewer, a reviewer).
+func article(word string) string {
+	if word != "" && strings.ContainsRune("aeiou", rune(word[0])) {
+		return "an"
+	}
+	return "a"
 }
