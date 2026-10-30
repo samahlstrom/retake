@@ -43,7 +43,7 @@ A version object:
 | GET/HEAD | `/assets/*` and other static files | The page's static files (new server only; the legacy page is a single file). |
 | GET/HEAD | `/video` | The current version's file. |
 | GET/HEAD | `/video/<label>` | That version's file. 404 `{"error":"no such version"}` if unknown. |
-| GET/HEAD | `/video/<label>/<file>` | New: a file beside an `.m3u8` version's playlist (its segments). Only plain names inside that folder, never `..`. |
+| GET/HEAD | `/video/<label>/<file>` | New, for `.m3u8` versions: the playlist itself (by its file name) or any file beside it, such as segments and init files. Only plain names inside that folder, never `..` or subfolders. The page loads `/video/<label>/<playlist name>`, so relative segment URLs resolve inside that folder. |
 | GET | `/api/ping` | `{"ok": true}` |
 | GET | `/api/info` | The current version object, plus `versions` (the re-scanned family), `stem`, `review_dir`, `sessions` and `history` (both for the current version). |
 | GET | `/api/history?v=<label>` | `{"label": "...", "history": [...]}`. 404 if the label is unknown. |
