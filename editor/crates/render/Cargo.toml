@@ -1,0 +1,19 @@
+[package]
+name = "retake-render"
+description = "Retake editor: compositor, Skia graphics, QuickJS expressions, ffmpeg I/O, cache and audio mix"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+retake-timeline.workspace = true
+anyhow.workspace = true
+blake3.workspace = true
+lz4_flex.workspace = true
+rayon.workspace = true
+rquickjs.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+skia-safe.workspace = true
+thiserror.workspace = true

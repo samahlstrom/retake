@@ -1,0 +1,19 @@
+[package]
+name = "retake-edit"
+description = "Retake editor CLI: validate, resolve, patch, plan, render, frames, manifest, resolve-note"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "retake-edit"
+path = "src/main.rs"
+
+[dependencies]
+retake-timeline.workspace = true
+retake-render.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true

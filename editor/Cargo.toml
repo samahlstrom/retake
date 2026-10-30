@@ -1,0 +1,33 @@
+[workspace]
+resolver = "3"
+members = ["crates/timeline", "crates/render", "crates/retake-edit"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+publish = false
+
+[workspace.dependencies]
+retake-timeline = { path = "crates/timeline" }
+retake-render = { path = "crates/render" }
+anyhow = "1.0.104"
+blake3 = "1.8.7"
+clap = { version = "4.6.7", features = ["derive"] }
+jsonschema = { version = "0.60.2", default-features = false }
+lz4_flex = "0.14.0"
+rayon = "1.12.0"
+rquickjs = "0.14.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1.0.154", features = ["preserve_order"] }
+skia-safe = { version = "0.156.0", features = ["textlayout"] }
+strsim = "0.11.1"
+thiserror = "2.0.21"
+
+[profile.dev]
+# The compositor and the audio mixer are per-pixel and per-sample loops: unoptimized they are 20-50x slower, which
+# makes the integration test crawl. Our own code stays debuggable; dependencies get full optimization.
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
