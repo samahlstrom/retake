@@ -8,7 +8,8 @@
 #   --prefix DIR  install into DIR (default: $XDG_DATA_HOME/retake/whisper.cpp, i.e. ~/.local/share/retake/whisper.cpp)
 #   --jobs N      parallel compile jobs (default: the number of CPUs)
 #   --keep-build  keep the source and build folders (in $XDG_CACHE_HOME/retake/build/)
-# env: CUDACXX or CUDA_HOME point at a CUDA toolkit that isn't on $PATH.
+# env: CUDACXX or CUDA_HOME point at a CUDA toolkit that isn't on $PATH. CUDAFLAGS adds nvcc flags, e.g.
+#      CUDAFLAGS=-allow-unsupported-compiler when the host gcc is newer than the toolkit knows.
 #
 # The result is <prefix>/bin/whisper-cli, one self-contained binary (plus the CUDA runtime libraries for a CUDA
 # build), and <prefix>/BUILD, which records the release and the backend. retake finds it there when whisper-cli isn't
@@ -35,7 +36,7 @@ while [ $# -gt 0 ]; do
     --jobs) [ $# -ge 2 ] || die "--jobs needs a number"; jobs="$2"; shift ;;
     --jobs=*) jobs="${1#--jobs=}" ;;
     --keep-build) keep=1 ;;
-    -h|--help) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) die "unknown option $1 (see --help)" ;;
   esac
   shift
