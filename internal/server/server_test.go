@@ -382,14 +382,14 @@ func TestInfoAndHistory(t *testing.T) {
 	if r.code != 200 || r.header.Get("Cache-Control") != "no-store" {
 		t.Fatalf("info: %d", r.code)
 	}
-	// Key order matches the legacy server: the current version's fields, then the rest.
+	// Key order matches the legacy server: the current version's fields, then the rest; then role (spec/team.md).
 	wantKeys := []string{"label", "n", "path", "name", "current", "duration", "fps", "width", "height",
-		"versions", "stem", "review_dir", "sessions", "history"}
+		"versions", "stem", "review_dir", "sessions", "history", "role"}
 	if got := keyOrder(t, r.body); strings.Join(got, ",") != strings.Join(wantKeys, ",") {
 		t.Errorf("keys = %v\nwant %v", got, wantKeys)
 	}
 	m := r.json(t)
-	if m["label"] != "v6" || m["current"] != true || m["stem"] != "clip_v6" ||
+	if m["label"] != "v6" || m["current"] != true || m["stem"] != "clip_v6" || m["role"] != "owner" ||
 		m["review_dir"] != filepath.Join(f.root, "v6", "clip_v6.review") || m["duration"] != 10.0 {
 		t.Errorf("info = %v", m)
 	}
@@ -798,16 +798,19 @@ func TestHostHeaderRebinding(t *testing.T) {
 	}
 }
 
-// --allow-host: a tunnel's hostname is answered on every route, and https://<host> may write; other hosts still can't.
+// --allow-host: a tunnel's hostname is answered on every route (with a token, spec/team.md), and https://<host> may
+// write; other hosts still can't.
 func TestAllowHostForTunnels(t *testing.T) {
 	f := newFixture(t)
 	h := start(t, Options{Video: f.video, AllowHosts: []string{"Abc.TryCloudflare.com"}})
+	tok := makeToken(t, h, "reviewer", "", 0)
 	do := func(method, path, host, origin string) int {
 		req, err := http.NewRequest(method, h.url+path, strings.NewReader("{}"))
 		if err != nil {
 			t.Fatal(err)
 		}
 		req.Host = host
+		req.Header.Set("Authorization", "Bearer "+tok)
 		if origin != "" {
 			req.Header.Set("Origin", origin)
 		}
