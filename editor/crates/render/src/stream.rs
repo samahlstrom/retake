@@ -1,11 +1,13 @@
 //! Streamed renders (spec/bridge.md, "Streaming"): units render in timeline order on `jobs` threads while the audio
 //! mixes on its own, and each unit is published into a growing HLS EVENT playlist as soon as it and every unit before
-//! it are done. Segments are MPEG-TS cut from the units' encoded segments without re-encoding; the audio is the one
-//! AAC encode of the whole mix, its frames handed out to the units they start in, so there are no seams in it.
+//! it are done. Segments are fragmented MP4 remuxed from the units' encoded segments without re-encoding, on the
+//! stream's clock (crate::fmp4); the audio is the one AAC encode of the whole mix, its frames handed out to the units
+//! they start in, so there are no seams in it.
 
 use crate::engine::{Engine, RunSpec, UnitPlan};
 use crate::expr::Js;
 use crate::ffmpeg;
+use crate::fmp4::Fragmented;
 use crate::graphics::Painter;
 use crate::pipeline::{self, AudioOut, RenderReport, StreamStats, unit_name};
 use crate::unit;
@@ -18,8 +20,6 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-/// Every timestamp in the segments is the output time plus this, so the B-frames' decode times at 0 stay positive.
-pub const TS_OFFSET: f64 = 10.0;
 /// Segments are about this long (whole GOPs)...
 pub const TARGET_S: f64 = 4.0;
 /// ...and a unit is cut while more than this much of it remains, so segments run up to 6 s.
@@ -66,27 +66,41 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
     std::fs::rename(&tmp, path).with_context(|| format!("replacing {}", path.display()))
 }
 
+/// A line of the playlist: the init segment the segments after it need, a segment and its duration, or the mark
+/// (a comment) that the units before it are published, so a stopped render can resume after them.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Entry {
+    Map(String),
+    Segment(String, f64),
+    Unit(usize),
+}
+
 /// An HLS EVENT playlist that only grows at its end.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Playlist {
     pub target: u32,
-    pub segments: Vec<(String, f64)>,
+    pub entries: Vec<Entry>,
     pub ended: bool,
 }
 
 impl Playlist {
     pub fn new(target: u32) -> Playlist {
-        Playlist { target, segments: vec![], ended: false }
+        Playlist { target, entries: vec![], ended: false }
     }
 
     pub fn text(&self) -> String {
+        // Version 7: fMP4 segments with EXT-X-MAP.
         let mut s = format!(
-            "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-PLAYLIST-TYPE:EVENT\n#EXT-X-TARGETDURATION:{}\n#EXT-X-MEDIA-SEQUENCE:0\n\
+            "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-PLAYLIST-TYPE:EVENT\n#EXT-X-TARGETDURATION:{}\n#EXT-X-MEDIA-SEQUENCE:0\n\
              #EXT-X-INDEPENDENT-SEGMENTS\n#EXT-X-START:TIME-OFFSET=0\n",
             self.target
         );
-        for (name, d) in &self.segments {
-            s.push_str(&format!("#EXTINF:{d:.6},\n{name}\n"));
+        for e in &self.entries {
+            match e {
+                Entry::Map(uri) => s.push_str(&format!("#EXT-X-MAP:URI=\"{uri}\"\n")),
+                Entry::Segment(name, d) => s.push_str(&format!("#EXTINF:{d:.6},\n{name}\n")),
+                Entry::Unit(n) => s.push_str(&format!("# unit {n}\n")),
+            }
         }
         if self.ended {
             s.push_str("#EXT-X-ENDLIST\n");
@@ -94,9 +108,57 @@ impl Playlist {
         s
     }
 
+    /// Reads a playlist this module wrote, up to its last unit mark (a render stopped there): the playlist and how
+    /// many units it has published. None for anything else.
+    pub fn parse(text: &str) -> Option<(Playlist, usize)> {
+        let mut pl = Playlist::new(0);
+        let (mut kept, mut units, mut dur) = (0, 0, None);
+        for line in text.lines() {
+            if let Some(t) = line.strip_prefix("#EXT-X-TARGETDURATION:") {
+                pl.target = t.trim().parse().ok()?;
+            } else if let Some(uri) = line.strip_prefix("#EXT-X-MAP:URI=\"") {
+                pl.entries.push(Entry::Map(uri.strip_suffix('"')?.to_string()));
+            } else if let Some(d) = line.strip_prefix("#EXTINF:") {
+                dur = Some(d.trim_end_matches(',').parse::<f64>().ok()?);
+            } else if let Some(n) = line.strip_prefix("# unit ") {
+                units = n.trim().parse().ok()?;
+                pl.entries.push(Entry::Unit(units));
+                kept = pl.entries.len();
+            } else if line == "#EXT-X-ENDLIST" {
+                pl.ended = true;
+            } else if !line.is_empty() && !line.starts_with('#') {
+                pl.entries.push(Entry::Segment(line.to_string(), dur.take()?));
+            }
+        }
+        if pl.ended || !text.starts_with("#EXTM3U") {
+            return None;
+        }
+        pl.entries.truncate(kept);
+        Some((pl, units))
+    }
+
+    fn durations(&self) -> impl Iterator<Item = f64> + '_ {
+        self.entries.iter().filter_map(|e| match e {
+            Entry::Segment(_, d) => Some(*d),
+            _ => None,
+        })
+    }
+
+    /// The files it names.
+    pub fn files(&self) -> impl Iterator<Item = &str> + '_ {
+        self.entries.iter().filter_map(|e| match e {
+            Entry::Segment(name, _) | Entry::Map(name) => Some(name.as_str()),
+            Entry::Unit(_) => None,
+        })
+    }
+
+    pub fn segments(&self) -> usize {
+        self.durations().count()
+    }
+
     /// Playable seconds so far.
     pub fn seconds(&self) -> f64 {
-        round6(self.segments.iter().map(|s| s.1).sum())
+        round6(self.durations().sum())
     }
 
     pub fn write(&self, path: &Path) -> Result<()> {
@@ -176,7 +238,6 @@ pub fn render_stream(e: &Engine, o: &StreamOptions) -> Result<RenderReport> {
     }
     let dir = o.playlist.parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(Path::new(".")).to_path_buf();
     std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
-    let stem = o.playlist.file_stem().context("the playlist has no name")?.to_string_lossy().into_owned();
     e.store.clean_tmp();
     let mut timings = BTreeMap::new();
     let (plans, _) = pipeline::plan(e)?;
@@ -189,10 +250,16 @@ pub fn render_stream(e: &Engine, o: &StreamOptions) -> Result<RenderReport> {
     let target = ((longest as f64 / fps as f64) - 1e-6).ceil().max(1.0) as u32;
     let frames: i64 = plans.iter().map(|p| p.span.frames()).sum();
     let reused = plans.iter().filter(|p| p.cached).count();
+    // A render that was stopped: its playlist up to its last unit mark stays, files and all, and publishing goes on
+    // after it. Anything else starts over.
+    let (mut pl, published, mut inits) = match resume(&o.playlist, target, n) {
+        Some(r) => r,
+        None => (Playlist::new(target), 0, Inits::default()),
+    };
     (o.progress)(json!({
         "progress": "plan", "units": n, "reused": reused, "segments": layout.iter().map(Vec::len).sum::<usize>(),
         "duration": round6(frames as f64 / fps as f64), "fps": fps, "size": [e.canvas.w, e.canvas.h],
-        "target": target,
+        "target": target, "published": published,
     }));
 
     // Graphics runs the missing units need, for the fonts each painter loads and for the report.
@@ -252,9 +319,8 @@ pub fn render_stream(e: &Engine, o: &StreamOptions) -> Result<RenderReport> {
         Ok(())
     };
 
-    let mut pl = Playlist::new(target);
     let mut first_s: Option<f64> = None;
-    let published = std::thread::scope(|sc| -> Result<()> {
+    let outcome = std::thread::scope(|sc| -> Result<()> {
         sc.spawn(|| match stream_audio(e, &plans) {
             Ok(a) => {
                 let _ = audio.set(a);
@@ -276,7 +342,11 @@ pub fn render_stream(e: &Engine, o: &StreamOptions) -> Result<RenderReport> {
                         fail(err.context(format!("unit {}", unit_name(p))));
                         return;
                     }
-                    let delay = o.unit_delay.get(i).or(o.unit_delay.last()).copied().unwrap_or_default();
+                    // (Units published before a stop take no time: their segments are there.)
+                    let delay = match i < published {
+                        true => Duration::ZERO,
+                        false => o.unit_delay.get(i).or(o.unit_delay.last()).copied().unwrap_or_default(),
+                    };
                     if let Some(rest) = delay.checked_sub(t.elapsed()) {
                         std::thread::sleep(rest);
                     }
@@ -291,7 +361,7 @@ pub fn render_stream(e: &Engine, o: &StreamOptions) -> Result<RenderReport> {
             });
         }
         let res = (|| -> Result<()> {
-            for i in 0..n {
+            for i in published..n {
                 let mut b = board.lock().unwrap();
                 loop {
                     if let Some(err) = b.error.take() {
@@ -304,14 +374,15 @@ pub fn render_stream(e: &Engine, o: &StreamOptions) -> Result<RenderReport> {
                 }
                 drop(b);
                 let au = audio.get().unwrap();
-                let segs = publish_unit(e, &plans, i, &layout[i], au, &dir, &stem, pl.segments.len())
+                let entries = publish_unit(e, &plans, i, &layout[i], au, &dir, pl.segments(), &mut inits)
                     .with_context(|| format!("publishing unit {}", unit_name(&plans[i])))?;
-                pl.segments.extend(segs);
+                pl.entries.extend(entries);
+                pl.entries.push(Entry::Unit(i + 1));
                 pl.write(&o.playlist)?;
                 let el = since(start);
                 first_s.get_or_insert(el);
                 (o.progress)(json!({
-                    "progress": "publish", "done": i + 1, "total": n, "segments": pl.segments.len(),
+                    "progress": "publish", "done": i + 1, "total": n, "segments": pl.segments(),
                     "seconds": pl.seconds(), "elapsed": el,
                 }));
             }
@@ -322,11 +393,11 @@ pub fn render_stream(e: &Engine, o: &StreamOptions) -> Result<RenderReport> {
         }
         res
     });
-    published?;
+    outcome?;
     pl.ended = true;
     pl.write(&o.playlist)?;
     let done_s = since(start);
-    (o.progress)(json!({"progress": "end", "segments": pl.segments.len(), "seconds": pl.seconds(), "elapsed": done_s}));
+    (o.progress)(json!({"progress": "end", "segments": pl.segments(), "seconds": pl.seconds(), "elapsed": done_s}));
     timings.insert("first_segment".to_string(), first_s.unwrap_or(done_s));
     timings.insert("stream".to_string(), done_s);
     let missing: Vec<&UnitPlan> = plans.iter().filter(|p| !p.cached).collect();
@@ -367,7 +438,7 @@ pub fn render_stream(e: &Engine, o: &StreamOptions) -> Result<RenderReport> {
         timings,
         stream: Some(StreamStats {
             playlist: o.playlist.clone(),
-            segments: pl.segments.len(),
+            segments: pl.segments(),
             first_s: first_s.unwrap_or(done_s),
             done_s,
         }),
@@ -375,8 +446,37 @@ pub fn render_stream(e: &Engine, o: &StreamOptions) -> Result<RenderReport> {
     })
 }
 
-/// Cuts unit `i` into its segments in `dir` (named `seg_NNNNN.ts` from `seq` on) with its share of the audio, and
-/// returns their names and durations.
+/// The init segments written so far: the last one's bytes (units share theirs as long as the encoder settings do),
+/// and how many.
+#[derive(Default)]
+struct Inits {
+    last: Option<Vec<u8>>,
+    count: usize,
+}
+
+/// Picks up a stopped render: the playlist at `path` up to its last unit mark, when it was planned like this one
+/// (`target`, at most `units` units) and every file it names is there; with the init segments it used.
+fn resume(path: &Path, target: u32, units: usize) -> Option<(Playlist, usize, Inits)> {
+    let (pl, published) = Playlist::parse(&std::fs::read_to_string(path).ok()?)?;
+    let dir = path.parent()?;
+    if pl.target != target || published == 0 || published > units || !pl.files().all(|f| dir.join(f).is_file()) {
+        return None;
+    }
+    let maps: Vec<&str> =
+        pl.entries.iter().filter_map(|e| if let Entry::Map(m) = e { Some(m.as_str()) } else { None }).collect();
+    let last = std::fs::read(dir.join(maps.last()?)).ok()?;
+    let inits = Inits { last: Some(last), count: maps.len() };
+    Some((pl, published, inits))
+}
+
+/// `x · num / den`, rounded, in integers when the division is exact (it is for the usual rates and timescales).
+fn rescale(x: i64, num: i64, den: i64) -> i64 {
+    (x * num + den / 2).div_euclid(den)
+}
+
+/// Remuxes unit `i` with its share of the audio into fMP4 fragments on the stream's clock, and writes them in `dir` as
+/// its segments (`seg_NNNNN.m4s` from `seq` on, cut where its plan says), after its init segment when that differs
+/// from the one before. Returns the playlist entries.
 #[allow(clippy::too_many_arguments)]
 fn publish_unit(
     e: &Engine,
@@ -385,9 +485,9 @@ fn publish_unit(
     cuts: &[[i64; 2]],
     au: &StreamAudio,
     dir: &Path,
-    stem: &str,
     seq: usize,
-) -> Result<Vec<(String, f64)>> {
+    inits: &mut Inits,
+) -> Result<Vec<Entry>> {
     let p = &plans[i];
     let idx = e.store.get_index("unit", &p.key).ok_or_else(|| anyhow!("unit {} wasn't stored", unit_name(p)))?;
     let video = e.store.blob_path(idx["blob"].as_str().context("the unit's segment")?);
@@ -397,43 +497,52 @@ fn publish_unit(
     let s0 = f0 * sr / fps;
     let s1 = if i + 1 == plans.len() { i64::MAX } else { f1 * sr / fps };
     let (bytes, first) = au.adts.slice(s0, s1);
-    let t0 = f0 as f64 / fps as f64;
-    let tag = format!(".{stem}-{}-{i}", std::process::id());
-    let slice = dir.join(format!("{tag}.aac"));
-    let list = dir.join(format!("{tag}.csv"));
-    let cleanup = || {
-        let _ = std::fs::remove_file(&slice);
-        let _ = std::fs::remove_file(&list);
-    };
-    let audio = match first {
-        Some(s) => {
+    let (slice, tmp) = (e.store.tmp_path("aac"), e.store.tmp_path("mp4"));
+    let made = (|| {
+        if first.is_some() {
             std::fs::write(&slice, &bytes)?;
-            Some((slice.as_path(), s as f64 / sr as f64 - t0))
         }
-        None => None,
-    };
-    let rel: Vec<f64> = cuts.iter().skip(1).map(|c| c[0] as f64 / fps as f64).collect();
-    let made = ffmpeg::hls_unit(&video, audio, TS_OFFSET + t0, &rel, &dir.join(format!("{tag}-%03d.ts")), &list);
-    cleanup();
-    let made = made?;
-    // The planned durations are exact (whole frames); ffmpeg's list says where it really cut. They agree unless the
-    // keyframes weren't where the encoder settings put them, and then ffmpeg's cuts are the truth.
-    let planned: Vec<f64> = cuts.iter().map(|c| (c[1] - c[0]) as f64 / fps as f64).collect();
-    let mut prev = TS_OFFSET + t0;
-    let actual: Vec<f64> = made
+        ffmpeg::fragment(&video, first.map(|_| slice.as_path()), &tmp)?;
+        Fragmented::parse(std::fs::read(&tmp)?)
+    })();
+    let _ = std::fs::remove_file(&slice);
+    let _ = std::fs::remove_file(&tmp);
+    let mut f = made?;
+    f.clear_bitrates()?;
+    let vts = f.tracks.values().find(|t| t.video).context("no video track")?.timescale as i64;
+    // Where each fragment starts in the unit, in frames (ffmpeg starts the unit at decode time 0, keyframes on time).
+    let starts: Vec<i64> = f
+        .fragments
         .iter()
-        .map(|(_, end)| {
-            let d = end - prev;
-            prev = *end;
-            d
-        })
-        .collect();
-    let exact = planned.len() == actual.len() && planned.iter().zip(&actual).all(|(a, b)| (a - b).abs() < 0.002);
+        .map(|x| f.video_start(x).map(|t| rescale(t as i64, fps, vts)))
+        .collect::<Option<_>>()
+        .context("a fragment without video")?;
+    f.retime(|t| {
+        let ts = t.timescale as i64;
+        (if t.video { rescale(f0, ts, fps) } else { rescale(first.unwrap_or(s0), ts, sr) }) as u64
+    })?;
+
     let mut out = vec![];
-    for (k, (file, _)) in made.iter().enumerate() {
-        let name = format!("seg_{:05}.ts", seq + k);
-        std::fs::rename(file, dir.join(&name)).with_context(|| format!("naming {name}"))?;
-        out.push((name, if exact { planned[k] } else { actual[k] }));
+    let init = &f.data[f.init.clone()];
+    if inits.last.as_deref() != Some(init) {
+        let name = format!("init_{:05}.mp4", inits.count);
+        write_atomic(&dir.join(&name), init)?;
+        inits.last = Some(init.to_vec());
+        inits.count += 1;
+        out.push(Entry::Map(name));
+    }
+    // A segment begins at each planned cut that a fragment starts on (all of them, unless the keyframes weren't where
+    // the encoder settings put them: then a segment runs on to the next one that is). Durations come from the
+    // fragments' starts, which are exact frames.
+    let begins: Vec<usize> = (0..starts.len()).filter(|&k| k == 0 || cuts.iter().any(|c| c[0] == starts[k])).collect();
+    for (n, &k) in begins.iter().enumerate() {
+        let end = begins.get(n + 1).copied().unwrap_or(starts.len());
+        let a = f.fragments[k].bytes.start;
+        let b = f.fragments[end - 1].bytes.end;
+        let frames = starts.get(end).copied().unwrap_or(f1 - f0) - starts[k];
+        let name = format!("seg_{:05}.m4s", seq + n);
+        write_atomic(&dir.join(&name), &f.data[a..b])?;
+        out.push(Entry::Segment(name, frames as f64 / fps as f64));
     }
     Ok(out)
 }
@@ -460,22 +569,30 @@ mod tests {
     }
 
     #[test]
-    fn the_playlist_grows_at_its_end_and_ends() {
+    fn the_playlist_grows_at_its_end_ends_and_reads_back_to_its_last_unit() {
         let mut pl = Playlist::new(6);
         let empty = pl.text();
-        assert!(empty.starts_with("#EXTM3U\n"));
+        assert!(empty.starts_with("#EXTM3U\n#EXT-X-VERSION:7\n"));
         assert!(empty.contains("#EXT-X-PLAYLIST-TYPE:EVENT\n") && empty.contains("#EXT-X-TARGETDURATION:6\n"));
         assert!(empty.contains("#EXT-X-START:TIME-OFFSET=0\n") && !empty.contains("ENDLIST"));
-        pl.segments.push(("seg_00000.ts".into(), 4.0));
+        pl.entries.extend([Entry::Map("init_00000.mp4".into()), Entry::Segment("seg_00000.m4s".into(), 4.0)]);
+        pl.entries.push(Entry::Unit(1));
         let one = pl.text();
         assert!(one.starts_with(&empty), "only grows at its end");
-        pl.segments.push(("seg_00001.ts".into(), 2.533333));
+        assert!(one.ends_with("#EXT-X-MAP:URI=\"init_00000.mp4\"\n#EXTINF:4.000000,\nseg_00000.m4s\n# unit 1\n"));
+        pl.entries.extend([Entry::Segment("seg_00001.m4s".into(), 2.533333), Entry::Unit(2)]);
         let two = pl.text();
         assert!(two.starts_with(&one));
-        assert!(two.ends_with("#EXTINF:2.533333,\nseg_00001.ts\n"));
-        assert_eq!(pl.seconds(), 6.533333);
+        assert_eq!((pl.segments(), pl.seconds()), (2, 6.533333));
+        assert_eq!(pl.files().collect::<Vec<_>>(), ["init_00000.mp4", "seg_00000.m4s", "seg_00001.m4s"]);
+        assert_eq!(Playlist::parse(&two), Some((pl.clone(), 2)), "a stopped render reads back whole");
+        // A unit cut off mid-way (it can't be: the playlist is replaced whole, but still) is dropped.
+        let cut = format!("{two}#EXTINF:4.000000,\nseg_00002.m4s\n");
+        assert_eq!(Playlist::parse(&cut).map(|p| p.1), Some(2));
         pl.ended = true;
         assert!(pl.text().starts_with(&two) && pl.text().ends_with("#EXT-X-ENDLIST\n"));
+        assert_eq!(Playlist::parse(&pl.text()), None, "an ended playlist doesn't resume");
+        assert_eq!(Playlist::parse("not a playlist"), None);
     }
 
     #[test]

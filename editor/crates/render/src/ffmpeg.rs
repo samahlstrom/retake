@@ -415,58 +415,30 @@ pub fn to_adts(m4a: &Path, out: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Cuts one unit's segment into MPEG-TS segments for HLS, without re-encoding: at `cuts` (seconds from the unit's
-/// start, on its keyframes), with the AAC frames of `audio` (raw ADTS, its first frame `lead` seconds after the
-/// unit's start), every timestamp shifted by `offset` seconds. `pattern` is the output path with `%03d`. Returns the
-/// files written, in order, with the time each one ends at (on the shifted clock).
-pub fn hls_unit(
-    video: &Path,
-    audio: Option<(&Path, f64)>,
-    offset: f64,
-    cuts: &[f64],
-    pattern: &Path,
-    list: &Path,
-) -> Result<Vec<(std::path::PathBuf, f64)>> {
+/// Remuxes one unit's segment, with the AAC frames of `audio` (raw ADTS), into a fragmented MP4 for HLS without
+/// re-encoding: a fragment at every keyframe, signed composition offsets, no edit lists (crate::fmp4 then puts its
+/// times on the stream's clock). The moov waits for the first fragment (`delay_moov`), so the audio's
+/// AudioSpecificConfig, which only the first ADTS frame gives, is in it: players need it for the codec string.
+pub fn fragment(video: &Path, audio: Option<&Path>, out: &Path) -> Result<()> {
     let mut cmd = Command::new(ffmpeg_bin());
     cmd.args(["-nostdin", "-v", "error", "-y", "-i"]).arg(video);
-    if let Some((a, lead)) = audio {
-        cmd.args(["-itsoffset", &format!("{lead:.6}"), "-f", "aac", "-i"]).arg(a);
+    if let Some(a) = audio {
+        cmd.args(["-f", "aac", "-i"]).arg(a);
     }
     cmd.args(["-map", "0:v:0"]);
     if audio.is_some() {
-        cmd.args(["-map", "1:a:0"]);
+        cmd.args(["-map", "1:a:0", "-bsf:a", "aac_adtstoasc"]);
     }
-    // No mux delay: the timestamps are exactly the output time plus `offset`, in every unit's run alike.
-    cmd.args(["-c", "copy", "-output_ts_offset", &format!("{offset:.6}"), "-muxdelay", "0", "-muxpreload", "0"])
-        .args(["-fflags", "+bitexact", "-map_metadata", "-1", "-f", "segment", "-segment_format", "mpegts"]);
-    if cuts.is_empty() {
-        cmd.args(["-segment_time", "86400"]);
-    } else {
-        // Relative to the unit's first timestamp.
-        let times: Vec<String> = cuts.iter().map(|c| format!("{c:.6}")).collect();
-        cmd.args(["-segment_times", &times.join(",")]);
-    }
-    cmd.args(["-segment_list"])
-        .arg(list)
-        .args(["-segment_list_type", "csv", "-reset_timestamps", "0", "-segment_start_number", "0"])
-        .arg(pattern);
-    run(&mut cmd, "cutting HLS segments")?;
-    let dir = pattern.parent().unwrap_or(Path::new("."));
-    let text = std::fs::read_to_string(list).context("the segment list")?;
-    let mut out = vec![];
-    for line in text.lines().filter(|l| !l.trim().is_empty()) {
-        // name,start,end (the name is quoted only when it has a comma, which ours never do)
-        let mut cols = line.rsplitn(3, ',');
-        let end: f64 = cols.next().and_then(|x| x.trim().parse().ok()).context("segment list end")?;
-        let _start = cols.next();
-        let name = cols.next().context("segment list name")?.trim_matches('"');
-        let file = Path::new(name).file_name().map(|n| dir.join(n)).context("segment list name")?;
-        out.push((file, end));
-    }
-    if out.is_empty() {
-        bail!("ffmpeg wrote no HLS segments for {}", video.display());
-    }
-    Ok(out)
+    cmd.args([
+        "-c",
+        "copy",
+        "-movflags",
+        "+frag_keyframe+empty_moov+delay_moov+default_base_moof+negative_cts_offsets+skip_trailer",
+    ])
+    .args(["-use_editlist", "0", "-fflags", "+bitexact", "-map_metadata", "-1", "-f", "mp4"])
+    .arg(out);
+    run(&mut cmd, "fragmenting a unit for HLS")?;
+    Ok(())
 }
 
 /// Counts the video frames in a file (decodes it).

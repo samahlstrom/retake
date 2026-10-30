@@ -117,7 +117,7 @@ fn streamed_render() {
     let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("stream");
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("patches")).unwrap();
-    for f in ["timeline.json", "vo.words.json", "patches/01-note-pop.json"] {
+    for f in ["timeline.json", "vo.words.json", "patches/01-note-pop.json", "patches/02-trim-vo.json"] {
         std::fs::copy(demo_src().join(f), dir.join(f)).unwrap();
     }
     let st = Command::new("bash")
@@ -164,7 +164,7 @@ fn streamed_render() {
     let (segs, ended, target) = parse(&text);
     assert!(ended);
     assert_eq!(rep["stream"]["segments"].as_u64().unwrap() as usize, segs.len());
-    let names: Vec<String> = (0..segs.len()).map(|i| format!("seg_{i:05}.ts")).collect();
+    let names: Vec<String> = (0..segs.len()).map(|i| format!("seg_{i:05}.m4s")).collect();
     assert_eq!(segs.iter().map(|s| s.0.clone()).collect::<Vec<_>>(), names, "in order, numbered");
     assert!(segs.iter().all(|s| s.1.round() as u32 <= target), "TARGETDURATION covers every segment");
     for (name, _) in &segs {
@@ -227,7 +227,68 @@ fn streamed_render() {
     let first = lines2.iter().find(|l| l["progress"] == "publish").unwrap();
     assert!(first["elapsed"].as_f64().unwrap() < rep2["stream"]["done_s"].as_f64().unwrap() + 1e-9);
     assert!(dir.join("v2/demo_v2.manifest.json").is_file());
-    assert!(parse(&std::fs::read_to_string(dir.join("v2/demo_v2.m3u8")).unwrap()).1);
+    let whole = std::fs::read_to_string(dir.join("v2/demo_v2.m3u8")).unwrap();
+    assert!(parse(&whole).1);
+    assert_eq!(whole.matches("#EXT-X-MAP").count(), 1, "units encoded alike share one init segment:\n{whole}");
+    // The init segment says what the audio is (players build the codec string, mp4a.40.2, from it).
+    let probe_me = dir.join("init-and-first.mp4");
+    let bytes =
+        [std::fs::read(dir.join("v2/init_00000.mp4")).unwrap(), std::fs::read(dir.join("v2/seg_00000.m4s")).unwrap()];
+    std::fs::write(&probe_me, bytes.concat()).unwrap();
+    let out = Command::new("ffprobe")
+        .args(["-v", "error", "-show_entries", "stream=codec_name,profile", "-of", "csv=p=0"])
+        .arg(&probe_me)
+        .output()
+        .unwrap();
+    let streams = String::from_utf8_lossy(&out.stdout);
+    assert!(streams.contains("aac,LC") && streams.contains("h264,"), "{streams}");
+
+    // Stopped after two units (killed, as the server stops a render nobody watches), then started again: it resumes
+    // after them, and the result is the very playlist and segments a render without a stop wrote.
+    let v2b = dir.join("v2b/demo_v2.m3u8");
+    let mut child = Command::new(BIN)
+        .arg("render")
+        .arg(&tl)
+        .arg("--hls")
+        .arg(&v2b)
+        .args(["--scale", "0.25", "--jobs", "1", "--progress", "--json"])
+        .env("RETAKE_EDIT_TEST_UNIT_DELAY_MS", "0,0,60000")
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut errs = BufReader::new(child.stderr.take().unwrap()).lines();
+    let mut publishes = 0;
+    while publishes < 2 {
+        let l = errs.next().expect("a progress line").unwrap();
+        publishes += l.contains("\"publish\"") as usize;
+    }
+    child.kill().unwrap();
+    child.wait().unwrap();
+    let stopped = std::fs::read_to_string(&v2b).unwrap();
+    assert!(stopped.ends_with("# unit 2\n") && !stopped.contains("ENDLIST"), "{stopped}");
+    let (rep3, lines3) = stream(&tl, &v2b, &[], "", |_| {});
+    assert_eq!(lines3[0]["published"], 2, "{:?}", lines3[0]);
+    let done: Vec<u64> =
+        lines3.iter().filter(|l| l["progress"] == "publish").map(|l| l["done"].as_u64().unwrap()).collect();
+    assert_eq!(done, vec![3, 4, 5, 6], "it publishes on from the third unit");
+    assert_eq!(rep3["stream"]["segments"], rep2["stream"]["segments"]);
+    assert_eq!(std::fs::read_to_string(&v2b).unwrap(), whole, "the same playlist as without the stop");
+    for (name, _) in parse(&whole).0 {
+        let (a, b) =
+            (std::fs::read(dir.join("v2").join(&name)).unwrap(), std::fs::read(dir.join("v2b").join(&name)).unwrap());
+        assert!(a == b, "{name} is the same bytes");
+    }
+
+    // A snapshot of the timeline renders as the timeline did when it was taken, wherever it is kept.
+    let snap = dir.join("v2c/demo_v2.timeline.json");
+    std::fs::create_dir_all(snap.parent().unwrap()).unwrap();
+    std::fs::copy(&tl, &snap).unwrap();
+    let st = Command::new(BIN).args(["patch", "apply"]).arg(&tl).arg(dir.join("patches/02-trim-vo.json")).status();
+    assert!(st.unwrap().success(), "the timeline moves on");
+    let (rep4, _) = stream(&tl, &dir.join("v2c/demo_v2.m3u8"), &["--doc", snap.to_str().unwrap()], "", |_| {});
+    assert_eq!(rep4["reused"], 6, "the snapshot's units are all cached: {rep4:#}");
+    assert_eq!(std::fs::read_to_string(dir.join("v2c/demo_v2.m3u8")).unwrap(), whole);
 
     // A stream covers the whole timeline.
     let out = Command::new(BIN)

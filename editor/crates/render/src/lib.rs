@@ -8,6 +8,7 @@ pub mod dsp;
 pub mod engine;
 pub mod expr;
 pub mod ffmpeg;
+pub mod fmp4;
 pub mod graphics;
 pub mod lint;
 pub mod pipeline;

@@ -45,11 +45,23 @@ struct RenderArgs {
     /// Cache directory (default: `.retake/cache` next to the timeline).
     #[arg(long)]
     cache: Option<PathBuf>,
+    /// Work on this timeline document (a snapshot) instead of the file's own, as if it were the timeline file: its
+    /// media, components, lockfile and cache resolve from the timeline's folder.
+    #[arg(long)]
+    doc: Option<PathBuf>,
 }
 
 impl RenderArgs {
     fn options(&self) -> Options {
         Options { draft: self.draft, scale: self.scale, range: self.range, jobs: self.jobs, cache: self.cache.clone() }
+    }
+
+    fn engine(&self, timeline: &Path) -> Result<Engine> {
+        let Some(doc) = &self.doc else { return Engine::open(timeline, self.options()) };
+        retake_render::init();
+        let text = std::fs::read_to_string(doc).with_context(|| format!("reading {}", doc.display()))?;
+        let v: Value = serde_json::from_str(&text).with_context(|| format!("{} isn't valid JSON", doc.display()))?;
+        Engine::from_project(Project::from_doc(timeline, v)?, self.options())
     }
 }
 
@@ -451,7 +463,7 @@ fn run(cmd: Cmd) -> Result<(bool, Value, String)> {
             Ok((c.json, json!({"applied": !dry_run, "patch": a.entry}), human))
         }
         Cmd::Plan { timeline, r, c } => {
-            let e = Engine::open(&timeline, r.options())?;
+            let e = r.engine(&timeline)?;
             let (_, rep) = pipeline::plan(&e)?;
             let mut lines = vec![format!(
                 "{} rev {}: {} units, {} cached, {} to render ({} frames, {} graphics runs), audio {}, ~{:.1} s",
@@ -480,7 +492,7 @@ fn run(cmd: Cmd) -> Result<(bool, Value, String)> {
             Ok((c.json, serde_json::to_value(&rep)?, lines.join("\n")))
         }
         Cmd::Render { timeline, out, hls, progress, r, c } => {
-            let e = Engine::open(&timeline, r.options())?;
+            let e = r.engine(&timeline)?;
             let (rep, shown) = match hls {
                 Some(playlist) => {
                     // A test hook: every unit takes at least this long, so a test can watch the playlist grow. A list
@@ -527,7 +539,7 @@ fn run(cmd: Cmd) -> Result<(bool, Value, String)> {
             Ok((c.json, serde_json::to_value(&rep)?, human))
         }
         Cmd::Frames { timeline, times, out, r, c } => {
-            let e = Engine::open(&timeline, r.options())?;
+            let e = r.engine(&timeline)?;
             let dir = out.unwrap_or_else(|| e.project.work_dir().join("frames"));
             let shots = pipeline::stills(&e, &times, &dir)?;
             let human = shots.iter().map(|(t, p)| format!("{t:>8.3}  {}", p.display())).collect::<Vec<_>>().join("\n");
@@ -535,7 +547,7 @@ fn run(cmd: Cmd) -> Result<(bool, Value, String)> {
             Ok((c.json, json!({"frames": v}), human))
         }
         Cmd::Manifest { timeline, out, r, c } => {
-            let e = Engine::open(&timeline, r.options())?;
+            let e = r.engine(&timeline)?;
             let rep = pipeline::render(&e, None)?;
             let text = serde_json::to_string_pretty(&rep.manifest)?;
             if let Some(o) = &out {
