@@ -15,10 +15,10 @@ API all build against it. Change it here first.
 
   | Table | Holds |
   |---|---|
-  | `notes` | `id` (the project-wide number, #1, #2, …), `key` (stable, unique), `version`, `take`, `seg`, `t0`, `t1`, `text`, `author`, `status`, `answered_in`, `change`, `created`, `updated` |
-  | `threads` | `id`, `note` (nullable), `version`, `t`, `kind` (`question` or `answer`), `by` (`agent` or the author name), `text`, `options` (JSON list of version labels), `created` |
+  | `notes` | `id` (the project-wide number, #1, #2, …), `key` (stable, unique), `version`, `take`, `seg`, `t0`, `t1`, `text`, `author`, `status`, `answered_in`, `change`, `detail` (JSON from the notes engine: `strokes`, `snapshot`), `created`, `updated` |
+  | `threads` | `id`, `note` (nullable), `version`, `t`, `kind` (`question` or `answer`), `by` (`agent` or the author name), `text`, `options` (JSON list of version labels), `answer_to` (an answer's question), `key` (an answer's note key), `created` |
   | `versions` | `label`, `path`, `sha256`, `parent`, `by`, `created`, `changelog` (JSON `[{note, summary}]`) |
-  | `jobs` | `id`, `kind`, `args`, `state` (`queued`, `running`, `done`, `failed`), `attempts`, `error`, `created`, `updated` |
+  | `jobs` | `id`, `kind`, `args`, `state` (`queued`, `running`, `done`, `failed`), `attempts`, `error`, `hint` (a failure's one-line fix), `created`, `updated` |
   | `events` | `seq` (monotonic), `kind`, `data`, `created`. This feeds SSE and `notes_wait` cursors. |
 
 - **Note keys.** A note key is `<take>/<seg>/<n>`, where n is the comment's index within that segment from the notes
@@ -38,13 +38,17 @@ API all build against it. Change it here first.
 - `answered → open` when the reviewer reopens it.
 - `open → retracted` when the engine flags a retraction ("scrap that") that covers it.
 - `retracted → open` on a reinstatement.
+- A key the engine no longer produces retracts its note only when it is `open`; `question`, `answered` and
+  `accepted` notes keep their state.
 
 **Push rule.** `version_push` is rejected with a list of the offending note ids unless every note that is `open` on
-the parent version is either in the changelog or asked about in the same push.
+the parent version (recorded on it, or carried over to it by `inherit.json` inside its ranges) is either in the
+changelog or asked about in the same push.
 
 ## What the sidebar shows (server-computed)
 
-`GET /api/notes?v=<label>` returns `{version, newest: bool, items: [...]}`.
+`GET /api/notes?v=<label>` returns `{version, newest: bool, items: [...], jobs: [...]}`. `jobs` lists the version's jobs
+that aren't done (`{id, kind, state, attempts, error?, hint?, take?}`), so a page that loads after a failure sees it.
 
 - **On the newest version:** only threads of `kind: question` that have no answer yet (time, text, options, the note
   they're about), plus notes recorded on this version in takes newer than its push. Nothing that's answered.
@@ -121,10 +125,11 @@ Every command has `--json`. `retake mcp <video>` serves the same tools over stdi
 | `notes_list` | `retake notes list <video> [--status open] [--version vN]` | Notes with text, times, author, strokes (shape, color, box), images, the snapshot path and the answers. |
 | `note_ask` | `retake ask <video> <note> "text" [--option v8a ...]` | Asks a question about a note. |
 | `note_set` | `retake note <video> <id> --status S [--in vN] [--change "..."]` | Changes one note. |
-| `version_push` | `retake push <video> <file> --parent vN --change ID="summary"... --ask ID="question"...` | Copies or moves the file into the family as the next `v<N>`, or takes `--label`. Records sha256, parent and changelog, enforces the push rule, and emits a `version` event. |
+| `version_push` | `retake push <video> <file> --parent vN --change ID="summary"... --ask ID="question"...` | Copies or moves the file into the family as the next `v<N>`, or takes `--label vN` (labels are `v<N>`: the page finds versions by the `_v<N>` in their names). Records sha256, parent and changelog, enforces the push rule, and emits a `version` event. |
 | `versions_list` | `retake versions <video>` | Versions, parents, changelogs. |
 
-There is no approve tool. Approving is a human action.
+`notes_list` also returns the current `cursor` for `notes_wait`; `notes_wait` from cursor 0 returns every open note at
+once. There is no approve tool. Approving is a human action.
 
 `retake notes build <video>` runs the notes engine by hand, like legacy `review notes`. `retake watch <video> --exec
 "<cmd>"` runs `<cmd>` (through the shell, with `RETAKE_VIDEO`, `RETAKE_PROJECT` and `RETAKE_SINCE` set) every time new

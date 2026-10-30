@@ -162,7 +162,8 @@ func MkdirTake(dir string) error {
 }
 
 // SaveData writes a take's JSON files from a /data request body into dir:
-// session.json (the client's session plus fields), segments.json, events.json, strokes.json and voice.json.
+// session.json (the client's session plus fields), segments.json, events.json, strokes.json, voice.json and (take
+// format v1.1, spec/notes.md) images.json.
 // Each is written atomically. Missing or empty values become [] or {}, as in the legacy player. The body is
 // checked before anything is written, so a bad body (ErrBadJSON) creates no folder.
 func SaveData(dir string, body []byte, sf ServerFields) error {
@@ -212,7 +213,7 @@ func SaveData(dir string, body []byte, sf ServerFields) error {
 		return err
 	}
 	for _, f := range []struct{ key, empty string }{
-		{"segments", "[]"}, {"events", "[]"}, {"strokes", "[]"}, {"voice", "{}"},
+		{"segments", "[]"}, {"events", "[]"}, {"strokes", "[]"}, {"voice", "{}"}, {"images", "[]"},
 	} {
 		raw, ok := data.Get(f.key)
 		if !ok || !jsonx.Truthy(raw) {

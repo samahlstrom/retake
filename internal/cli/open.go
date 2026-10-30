@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/samahlstrom/retake/internal/app"
 	"github.com/samahlstrom/retake/internal/config"
 	"github.com/samahlstrom/retake/internal/family"
 	"github.com/samahlstrom/retake/internal/jsonx"
@@ -215,7 +216,8 @@ func openCmd(ctx context.Context, args []string, env Env) int {
 		_, _ = io.WriteString(env.Stdout, usage)
 		return ExitOK
 	}
-	st := config.Resolve(loadConfig(env), config.Flags{Port: a.port, IdleExit: a.idleExit, NoOpen: a.noOpen})
+	cfg := loadConfig(env)
+	st := config.Resolve(cfg, config.Flags{Port: a.port, IdleExit: a.idleExit, NoOpen: a.noOpen})
 
 	video := absPath(a.video, env.Getenv)
 	if !isFile(video) {
@@ -267,10 +269,14 @@ func openCmd(ctx context.Context, args []string, env Env) int {
 	if author == "" {
 		author = osUser(env.Getenv)
 	}
+	engines := app.Engines(cfg)
+	if env.Engines != nil {
+		engines = env.Engines(cfg)
+	}
 	srv := server.New(server.Options{
 		Video: video, Explicit: explicit, Port: port, UI: page, Author: author, Prober: prober,
 		IdleExit: idleDuration(st.IdleExit), CheckEvery: env.CheckEvery, Clock: env.Clock,
-		Log: env.Stderr, Verbose: a.verbose, AllowHosts: a.allow,
+		Log: env.Stderr, Verbose: a.verbose, AllowHosts: a.allow, Jobs: &engines,
 	})
 
 	url := fmt.Sprintf("http://127.0.0.1:%d/", port)
@@ -284,6 +290,9 @@ func openCmd(ctx context.Context, args []string, env Env) int {
 		env.Ready(url)
 	}
 	idle, err := srv.Serve(ctx, ln)
+	if cerr := srv.Close(); cerr != nil {
+		_, _ = fmt.Fprintf(env.Stderr, "retake: closing the project store: %v\n", cerr)
+	}
 	switch {
 	case err != nil:
 		_, _ = fmt.Fprintf(env.Stderr, "retake: %v\n", err)

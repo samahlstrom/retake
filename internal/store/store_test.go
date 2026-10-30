@@ -81,7 +81,7 @@ func TestSaveDataWritesEveryFile(t *testing.T) {
 	body := `{"session":{"format":3,"version":"stale","session":"2026-10-29_20-48-01","created":1730000000000,` +
 		`"video":{"duration":40},"display":{"show_within":1.5}},"segments":[{"id":"S1","t_start":0.5,"t_end":3,"note":"é"}],` +
 		`"events":[{"session_t":0,"video_t":1.25,"event":"start"}],"strokes":[{"id":1,"points":[[0.1,0.2]]}],` +
-		`"voice":{"bin":0.25,"bins":[[4,0.5]]}}`
+		`"voice":{"bin":0.25,"bins":[[4,0.5]]},"images":[{"id":2,"file":"img_01.png","box":[0,0,1,1]}]}`
 	if err := SaveData(dir, []byte(body), fields()); err != nil {
 		t.Fatal(err)
 	}
@@ -132,6 +132,7 @@ func TestSaveDataWritesEveryFile(t *testing.T) {
 		"events.json":   "[\n {\n  \"session_t\": 0,\n  \"video_t\": 1.25,\n  \"event\": \"start\"\n }\n]",
 		"strokes.json":  "[\n {\n  \"id\": 1,\n  \"points\": [\n   [\n    0.1,\n    0.2\n   ]\n  ]\n }\n]",
 		"voice.json":    "{\n \"bin\": 0.25,\n \"bins\": [\n  [\n   4,\n   0.5\n  ]\n ]\n}",
+		"images.json":   "[\n {\n  \"id\": 2,\n  \"file\": \"img_01.png\",\n  \"box\": [\n   0,\n   0,\n   1,\n   1\n  ]\n }\n]",
 	} {
 		if got := readFile(t, filepath.Join(dir, name)); got != want {
 			t.Errorf("%s:\n%s\nwant:\n%s", name, got, want)
@@ -159,7 +160,8 @@ func TestSaveDataDefaults(t *testing.T) {
 			if err := SaveData(dir, []byte(tc.body), sf); err != nil {
 				t.Fatal(err)
 			}
-			for name, want := range map[string]string{"segments.json": "[]", "events.json": "[]", "strokes.json": "[]", "voice.json": "{}"} {
+			for name, want := range map[string]string{"segments.json": "[]", "events.json": "[]", "strokes.json": "[]", "voice.json": "{}",
+				"images.json": "[]"} {
 				if got := readFile(t, filepath.Join(dir, name)); got != want {
 					t.Errorf("%s = %q, want %q", name, got, want)
 				}

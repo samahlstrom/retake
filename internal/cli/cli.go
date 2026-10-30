@@ -11,7 +11,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/samahlstrom/retake/internal/config"
 	"github.com/samahlstrom/retake/internal/family"
+	"github.com/samahlstrom/retake/internal/jobs"
 	"github.com/samahlstrom/retake/internal/server"
 )
 
@@ -35,6 +37,9 @@ type Env struct {
 	Prober         family.Prober          // nil = ffprobe
 	Clock          server.Clock           // nil = the real clock
 	CheckEvery     time.Duration          // idle watchdog period; 0 = 10 s
+	Stdin          io.Reader              // retake mcp reads its requests here; nil = os.Stdin
+	// Engines returns the notes engine and the transcriber for the jobs and `retake notes build`; nil = app.Engines.
+	Engines func(config.Config) jobs.Engines
 }
 
 func (e Env) withDefaults() Env {
@@ -43,6 +48,9 @@ func (e Env) withDefaults() Env {
 	}
 	if e.Stderr == nil {
 		e.Stderr = os.Stderr
+	}
+	if e.Stdin == nil {
+		e.Stdin = os.Stdin
 	}
 	if e.Getenv == nil {
 		e.Getenv = os.Getenv
@@ -64,6 +72,27 @@ usage:
       turn the takes into <stem>.review/notes.md, notes.json and snaps/ (reads transcript.json; never transcribes)
   retake version
       print the version
+
+the agent loop (spec/notes.md; <video> is any version of the family, and every command takes --json):
+  retake notes list <video> [--status S]... [--version vN]
+      the notes: text, times, author, strokes, images, threads; and a cursor for notes wait
+  retake notes wait <video> [--since CURSOR] [--timeout S]
+      block until notes turn open or answers arrive after the cursor (0: from the start; timeout 0: no limit)
+  retake notes sync <video>
+      transcribe the takes that need it, run the notes engine for <video>'s version, and sync the notes
+  retake ask <video> <note> "question" [--option vN]... [--version vN]
+      ask the reviewer about a note (note 0: about a version as a whole)
+  retake note <video> <id> --status answered --in vN --change "what changed"
+      mark a note answered by a version that's already in the family
+  retake push <video> <file> [--parent vN] [--label vN] [--change ID="summary"]... [--ask ID="question"]... [--move]
+      put <file> in the family as the next v<N>. Every note open on the parent must be in --change or --ask
+  retake versions <video>
+      the versions, their parents and changelogs
+  retake mcp <video>
+      serve the same tools over MCP on stdin and stdout
+  retake watch <video> --exec CMD [--since CURSOR] [--debounce S]
+      run CMD through the shell whenever notes or answers land (one at a time), with RETAKE_VIDEO,
+      RETAKE_PROJECT and RETAKE_SINCE set; Ctrl+C stops
 
 open:
   --versions F...   the family is exactly <video> plus these files (default: detect *_vN files)
@@ -97,7 +126,23 @@ func Main(ctx context.Context, args []string, env Env) int {
 	case "sessions":
 		return sessionsCmd(args[1:], env)
 	case "notes":
-		return notesCmd(ctx, args[1:], env)
+		// notes list|wait|sync: the agent operations (internal/agent); notes build and help: the engine by hand.
+		if len(args) < 2 || (args[1] != "list" && args[1] != "wait" && args[1] != "sync") {
+			return notesCmd(ctx, args[1:], env)
+		}
+		return notesAgentCmd(ctx, args[1:], env)
+	case "ask":
+		return askCmd(ctx, args[1:], env)
+	case "note":
+		return noteCmd(ctx, args[1:], env)
+	case "push":
+		return pushCmd(ctx, args[1:], env)
+	case "versions":
+		return versionsCmd(ctx, args[1:], env)
+	case "mcp":
+		return mcpCmd(ctx, args[1:], env)
+	case "watch":
+		return watchCmd(ctx, args[1:], env)
 	case "version", "--version":
 		_, _ = fmt.Fprintf(env.Stdout, "retake %s\n", Version())
 		return ExitOK
