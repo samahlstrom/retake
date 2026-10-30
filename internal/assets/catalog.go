@@ -321,7 +321,7 @@ func (d *db) findBrand(ctx context.Context, name string) (row, error) {
 		return row{}, err
 	}
 	if !found {
-		return row{}, errorf(CodeNotFound, "no asset brand:%s (installed kits: retake assets kit list)", name)
+		return row{}, errorf(CodeNotFound, "no asset brand:%s (see retake assets search --scope brand)", name)
 	}
 	return best, nil
 }

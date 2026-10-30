@@ -99,7 +99,7 @@ func specimen(path string) ([]byte, error) {
 	if head == "" {
 		head = filepath.Base(path)
 	}
-	header := fmt.Sprintf("%s  ·  %d glyphs  ·  %s", head, m.Glyphs, filepath.Base(path))
+	header := fmt.Sprintf("%s  ·  %d glyphs", head, m.Glyphs)
 	if face := uiFace(18); face != nil {
 		drawText(img, face, pad, pad+16, header, grey)
 	}

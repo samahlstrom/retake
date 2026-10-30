@@ -97,7 +97,7 @@ Every asset gets previews at import, stored as blobs. A multimodal agent asks fo
 
 | Kind | Previews |
 |---|---|
-| Video | `contact_sheet`: one tile every `every_s` seconds (from 0.25 s to 20 min, so a sheet has at most 120 tiles), made with ffmpeg's `tile` filter from frames grabbed by seeking, each tile with its timecode burned in. `strip` per span: 6 frames evenly over the span, with timecodes. |
+| Video | `contact_sheet`: one tile every `every_s` seconds (a step from 0.25 s to 20 min giving about 2√duration tiles, 12 to 120: a 12 s clip gets one a second, two hours one every 2 minutes; `--every` overrides), made with ffmpeg's `tile` filter from frames grabbed by seeking, each tile with its timecode burned in. `strip` per span: 6 frames evenly over the span, with timecodes. |
 | Audio | `waveform`: peak and RMS per column, time ticks, and the loudness (integrated LUFS, loudness range, peak) from ffmpeg's `ebur128`. |
 | Image | `thumbnail`: at most 512 px on the long side. |
 | Font | `specimen`: the family and style, the alphabet, digits and a sample line at five sizes, drawn with the font itself. |
@@ -373,7 +373,7 @@ Every command takes `--project DIR` and `--json`. Exit codes: 0 ok, 1 the operat
 | `retake assets preview <id> [--kind K] [--at T]... [--span sp:N]` | Preview files (made if missing): `contact_sheet`, `strip`, `waveform`, `thumbnail`, `specimen`, or frames at times. |
 | `retake assets span find [--type T]... [--where SQL] [--near ID@T \| DOMAIN@T] [--window S] [--asset ID] [--limit N]` | Spans. |
 | `retake assets span add <id> <t0> <t1> [--type T] [--label L] [--data JSON] [--confidence C]` | Adds a span (`source_of_label: manual`). |
-| `retake assets set <id> [--title T] [--tags a,b] [--add-tag T]... [--rm-tag T]... [--caption C] [--license S] [--credit C] [--license-source U] [--content-id-risk R]` | Edits an entry: the only way to change a license. |
+| `retake assets set <id> [--title T] [--tags a,b] [--add-tag T]... [--rm-tag T]... [--caption C] [--license S] [--credit C] [--license-source U] [--content-id-risk R] [--license-note N]` | Edits an entry: the only way to change a license. |
 | `retake assets resolve <id>...` | Above. |
 | `retake assets rehash <id>...` | Hashes metadata-only assets now. |
 | `retake assets license-report <file>` | Above. |
@@ -397,7 +397,7 @@ Served by `retake mcp <video>` (with the review tools of `spec/notes.md`) and `r
 | `asset_preview(id, kind?, at?, span?)` | Preview files, returned as images too (up to 4 per call). |
 | `span_find(type?, where?, near?, window?, asset?, limit?)` | Spans. |
 | `span_add(asset, t0, t1, type?, label?, data?, confidence?)` | Adds a span (`source_of_label: agent`). |
-| `asset_import(paths, scope?, tags?, title?, via?, args?, transcribe?)` | Imports; always `review-only` unless a plug-in record says otherwise. |
+| `asset_import(paths, scope?, tags?, title?, caption?, via?, args?, transcribe?, in_place?)` | Imports; always `review-only` unless a plug-in record says otherwise. |
 | `plugin_query(plugin, tool, args?)` | Runs a plug-in tool. |
 | `license_report(path)` | The license report of a timeline or manifest. |
 | `<plugin>_<tool>` | Each plug-in tool, with its own input schema. |
