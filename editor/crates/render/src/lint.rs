@@ -35,6 +35,10 @@ pub fn overlay_boxes(e: &Engine) -> Result<HashMap<String, [f64; 4]>> {
         let len = (o.to - o.from).max(frame);
         let mut acc: Option<[f64; 4]> = None;
         for t in [(len * 0.5).min(0.5), len * 0.5, (len - frame).max(0.0)] {
+            for l in layers.iter().filter(|l| l.is_raster()) {
+                let k = (t * e.fps() as f64).round() as i64;
+                painter.raster_frame(l, "lint", &o.comp.props, &e.canvas, e.fps(), k, k + 1).map_err(|x| anyhow!(x))?;
+            }
             let px = painter.render(&layers, &o.comp.props, (w, h), s, comp, t).map_err(|x| anyhow!(x))?;
             if let Some(b) = alpha_bbox(&px, w, h) {
                 let b = [b[0] as f64 / s, b[1] as f64 / s, b[2] as f64 / s, b[3] as f64 / s];

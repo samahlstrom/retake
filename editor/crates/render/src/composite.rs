@@ -1,7 +1,9 @@
 //! The compositor: premultiplied RGBA frames, affine transforms with sub-pixel bilinear sampling (box-filtered mip
 //! levels when shrinking), crop, opacity and alpha "over". Rows run in parallel.
 
+use crate::transform::Proj;
 use rayon::prelude::*;
+use retake_timeline::layer::Blend;
 
 /// A premultiplied RGBA8 frame.
 #[derive(Clone, Debug, PartialEq)]
@@ -131,14 +133,16 @@ impl Affine {
         let (a, b, c, d) = (self.d / det, -self.b / det, -self.c / det, self.a / det);
         Some(Affine { a, b, c, d, e: -(a * self.e + c * self.f), f: -(b * self.e + d * self.f) })
     }
-    /// True for an integer translation with no scale or rotation.
+    /// True for an integer translation with no scale or rotation (up to float rounding: a scale of `w / cw` times
+    /// `cw / w` is 1).
     pub fn is_integer_translation(&self) -> bool {
-        self.a == 1.0
-            && self.d == 1.0
-            && self.b == 0.0
-            && self.c == 0.0
-            && self.e.fract() == 0.0
-            && self.f.fract() == 0.0
+        let near = |x: f64, y: f64| (x - y).abs() < 1e-7;
+        near(self.a, 1.0)
+            && near(self.d, 1.0)
+            && near(self.b, 0.0)
+            && near(self.c, 0.0)
+            && near(self.e, self.e.round())
+            && near(self.f, self.f.round())
     }
 }
 
@@ -166,13 +170,28 @@ fn half(src: &[u8], w: u32, h: u32) -> (Vec<u8>, u32, u32) {
 /// pixels; `m` maps source pixels to destination pixels; `opacity` scales alpha. Outside the crop the source is
 /// transparent, so edges are anti-aliased by the bilinear filter.
 pub fn draw_image(dst: &mut Frame, src: &[u8], sw: u32, sh: u32, crop: [f64; 4], m: &Affine, opacity: f64) {
+    draw_image_with(dst, src, sw, sh, crop, m, opacity, true)
+}
+
+/// [`draw_image`], with mip levels where it shrinks (`mips`) or plain bilinear from the source.
+#[allow(clippy::too_many_arguments)]
+pub fn draw_image_with(
+    dst: &mut Frame,
+    src: &[u8],
+    sw: u32,
+    sh: u32,
+    crop: [f64; 4],
+    m: &Affine,
+    opacity: f64,
+    mips: bool,
+) {
     let opacity = opacity.clamp(0.0, 1.0);
     if opacity <= 0.0 || crop[2] <= 0.0 || crop[3] <= 0.0 {
         return;
     }
     // Fast path: an exact, whole-frame-aligned copy.
     if opacity >= 1.0 && m.is_integer_translation() && crop == [0.0, 0.0, sw as f64, sh as f64] {
-        dst.over_patch(src, m.e as i32, m.f as i32, sw, sh);
+        dst.over_patch(src, m.e.round() as i32, m.f.round() as i32, sw, sh);
         return;
     }
     let Some(inv) = m.invert() else { return };
@@ -196,7 +215,7 @@ pub fn draw_image(dst: &mut Frame, src: &[u8], sw: u32, sh: u32, crop: [f64; 4],
     let scale = m.det().abs().sqrt();
     let mut level: (std::borrow::Cow<[u8]>, u32, u32) = (std::borrow::Cow::Borrowed(src), sw, sh);
     let mut k = 1.0f64;
-    while scale * k < 0.5 && level.1 > 1 && level.2 > 1 {
+    while mips && scale * k < 0.5 && level.1 > 1 && level.2 > 1 {
         let (b, w, h) = half(&level.0, level.1, level.2);
         level = (std::borrow::Cow::Owned(b), w, h);
         k *= 2.0;
@@ -258,6 +277,259 @@ pub fn draw_image(dst: &mut Frame, src: &[u8], sw: u32, sh: u32, crop: [f64; 4],
             }
         }
     });
+}
+
+/// Mip levels of a premultiplied image, built on demand: level `k` is the image halved `k` times.
+struct Mips<'a> {
+    levels: Vec<(std::borrow::Cow<'a, [u8]>, u32, u32)>,
+}
+
+impl<'a> Mips<'a> {
+    fn new(src: &'a [u8], w: u32, h: u32, max_level: usize) -> Mips<'a> {
+        let mut levels = vec![(std::borrow::Cow::Borrowed(src), w, h)];
+        while levels.len() <= max_level {
+            let next = {
+                let l = levels.last().expect("level 0");
+                if l.1 <= 1 || l.2 <= 1 {
+                    break;
+                }
+                half(&l.0, l.1, l.2)
+            };
+            levels.push((std::borrow::Cow::Owned(next.0), next.1, next.2));
+        }
+        Mips { levels }
+    }
+
+    /// Bilinear sample at level `k`, at continuous base-level coordinates (u, v); texels whose centers fall outside
+    /// the crop (base-level pixels) are transparent.
+    fn sample(&self, k: usize, u: f64, v: f64, crop: [f64; 4], (sw, sh): (u32, u32)) -> [f32; 4] {
+        let (buf, lw, lh) = (&self.levels[k].0, self.levels[k].1 as i64, self.levels[k].2 as i64);
+        let (kx, ky) = (sw as f64 / lw as f64, sh as f64 / lh as f64);
+        let (cx0, cy0, cx1, cy1) = (crop[0] / kx, crop[1] / ky, (crop[0] + crop[2]) / kx, (crop[1] + crop[3]) / ky);
+        let (fx, fy) = (u / kx - 0.5, v / ky - 0.5);
+        let (ix, iy) = (fx.floor(), fy.floor());
+        let (tx, ty) = ((fx - ix) as f32, (fy - iy) as f32);
+        let (ix, iy) = (ix as i64, iy as i64);
+        let mut acc = [0f32; 4];
+        for (dy, wy) in [(0i64, 1.0 - ty), (1, ty)] {
+            for (dx, wx) in [(0i64, 1.0 - tx), (1, tx)] {
+                let w = wx * wy;
+                if w == 0.0 {
+                    continue;
+                }
+                let (sx, sy) = (ix + dx, iy + dy);
+                let (cxf, cyf) = (sx as f64 + 0.5, sy as f64 + 0.5);
+                if sx < 0 || sy < 0 || sx >= lw || sy >= lh || cxf < cx0 || cyf < cy0 || cxf > cx1 || cyf > cy1 {
+                    continue;
+                }
+                let s = &buf[((sy * lw + sx) * 4) as usize..][..4];
+                for c in 0..4 {
+                    acc[c] += s[c] as f32 * w;
+                }
+            }
+        }
+        acc
+    }
+}
+
+/// Draws `src` through a projective map `h` (source pixels → destination pixels): a corner pin or a layer turned in
+/// 3D. Bilinear, with box-filtered mip levels blended by the local footprint where the map shrinks the source
+/// (trilinear), and edges anti-aliased against transparency like [`draw_image`]. An affine `h` goes to
+/// [`draw_image`].
+pub fn warp_image(dst: &mut Frame, src: &[u8], sw: u32, sh: u32, crop: [f64; 4], h: &Proj, opacity: f64) {
+    warp_image_with(dst, src, sw, sh, crop, h, opacity, true)
+}
+
+/// [`warp_image`], with mip levels where it shrinks (`mips`) or plain bilinear from the source (OpenCV's
+/// `INTER_LINEAR` warps).
+#[allow(clippy::too_many_arguments)]
+pub fn warp_image_with(
+    dst: &mut Frame,
+    src: &[u8],
+    sw: u32,
+    sh: u32,
+    crop: [f64; 4],
+    h: &Proj,
+    opacity: f64,
+    mips: bool,
+) {
+    if let Some(a) = h.affine() {
+        return draw_image_with(dst, src, sw, sh, crop, &a, opacity, mips);
+    }
+    let opacity = opacity.clamp(0.0, 1.0);
+    if opacity <= 0.0 || crop[2] <= 0.0 || crop[3] <= 0.0 {
+        return;
+    }
+    let Some(inv) = h.invert() else { return };
+    let Some(b) = h.bbox(crop, dst.w as f64, dst.h as f64) else { return };
+    let (x0, y0) = ((b[0].floor() as i64 - 1).max(0), (b[1].floor() as i64 - 1).max(0));
+    let (x1, y1) =
+        (((b[0] + b[2]).ceil() as i64 + 1).min(dst.w as i64), ((b[1] + b[3]).ceil() as i64 + 1).min(dst.h as i64));
+    if x1 <= x0 || y1 <= y0 {
+        return;
+    }
+    // The most the map shrinks the source anywhere on the quad: how many mip levels it may need.
+    let foot = |x: f64, y: f64| -> f64 {
+        let p = |x: f64, y: f64| inv.apply(x, y);
+        match (p(x, y), p(x + 1.0, y), p(x, y + 1.0)) {
+            (Some(a), Some(bx), Some(by)) => {
+                let det = ((bx.0 - a.0) * (by.1 - a.1) - (bx.1 - a.1) * (by.0 - a.0)).abs();
+                det.sqrt()
+            }
+            _ => 1.0,
+        }
+    };
+    let corners = [(x0 as f64, y0 as f64), (x1 as f64, y0 as f64), (x0 as f64, y1 as f64), (x1 as f64, y1 as f64)];
+    let max_foot = corners.iter().map(|&(x, y)| foot(x, y)).fold(1.0f64, f64::max);
+    let max_level = if mips && max_foot > 2.0 { (max_foot / 2.0).log2().ceil() as usize + 1 } else { 0 };
+    let mips = Mips::new(src, sw, sh, max_level.min(12));
+    let top = mips.levels.len() - 1;
+    let op = opacity as f32;
+    let stride = (dst.w * 4) as usize;
+    let ptr = SendPtr(dst.px.as_mut_ptr());
+    let (cx0, cy0, cx1, cy1) = (crop[0], crop[1], crop[0] + crop[2], crop[1] + crop[3]);
+    (y0..y1).into_par_iter().for_each(|y| {
+        let p = &ptr;
+        // SAFETY: one row per task; rows don't overlap.
+        let row = unsafe { std::slice::from_raw_parts_mut(p.0.add(y as usize * stride), stride) };
+        for x in x0..x1 {
+            let (xf, yf) = (x as f64 + 0.5, y as f64 + 0.5);
+            let Some((u, v)) = inv.apply(xf, yf) else { continue };
+            if u < cx0 - 1.0 || v < cy0 - 1.0 || u > cx1 + 1.0 || v > cy1 + 1.0 {
+                continue;
+            }
+            // Level of detail: bilinear alone up to a 2× shrink (the affine path's rule), then blended between the two
+            // mip levels around log2(footprint / 2).
+            let lod = if top == 0 { 0.0 } else { (foot(xf, yf) / 2.0).max(1e-9).log2().clamp(0.0, top as f64) };
+            let acc = if lod <= 0.0 {
+                mips.sample(0, u, v, crop, (sw, sh))
+            } else {
+                let k = (lod.floor() as usize).min(top);
+                let f = (lod - k as f64) as f32;
+                let a = mips.sample(k, u, v, crop, (sw, sh));
+                if f <= 0.0 || k == top {
+                    a
+                } else {
+                    let b = mips.sample(k + 1, u, v, crop, (sw, sh));
+                    [0, 1, 2, 3].map(|c| a[c] * (1.0 - f) + b[c] * f)
+                }
+            };
+            let sa = acc[3] * op;
+            if sa <= 0.0 {
+                continue;
+            }
+            let ia = 1.0 - sa / 255.0;
+            let d = &mut row[x as usize * 4..][..4];
+            for c in 0..4 {
+                let v = acc[c] * op + d[c] as f32 * ia;
+                d[c] = v.round().clamp(0.0, 255.0) as u8;
+            }
+        }
+    });
+}
+
+/// Combines premultiplied source values `s` with destination `d` (both 0–255) in a blend mode (W3C separable modes,
+/// as Skia computes them).
+#[inline]
+pub fn blend_px(d: &mut [u8], s: [f32; 4], mode: Blend) {
+    let n = |x: f32| x / 255.0;
+    let (sa, da) = (n(s[3]), n(d[3] as f32));
+    let mut out = [0f32; 4];
+    for c in 0..3 {
+        let (sc, dc) = (n(s[c]), n(d[c] as f32));
+        out[c] = match mode {
+            Blend::Normal => sc + dc * (1.0 - sa),
+            Blend::Add => (sc + dc).min(1.0),
+            Blend::Screen => sc + dc - sc * dc,
+            Blend::Multiply => sc * (1.0 - da) + dc * (1.0 - sa) + sc * dc,
+            Blend::Overlay => {
+                let b = if 2.0 * dc <= da { 2.0 * sc * dc } else { sa * da - 2.0 * (da - dc) * (sa - sc) };
+                b + sc * (1.0 - da) + dc * (1.0 - sa)
+            }
+            Blend::Lighten => sc + dc - (sc * da).min(dc * sa),
+            Blend::Darken => sc + dc - (sc * da).max(dc * sa),
+        };
+    }
+    out[3] = if mode == Blend::Add { (sa + da).min(1.0) } else { sa + da - sa * da };
+    for c in 0..4 {
+        d[c] = (out[c] * 255.0).round().clamp(0.0, 255.0) as u8;
+    }
+}
+
+impl Frame {
+    /// Composites a premultiplied patch (`pw` × `ph`) at (x0, y0) in a blend mode, clipped; `normal` is
+    /// [`Frame::over_patch`].
+    pub fn blend_patch(&mut self, patch: &[u8], x0: i32, y0: i32, pw: u32, ph: u32, mode: Blend) {
+        if mode == Blend::Normal {
+            return self.over_patch(patch, x0, y0, pw, ph);
+        }
+        let (fw, fh) = (self.w as i32, self.h as i32);
+        let (xs, xe) = (x0.max(0), (x0 + pw as i32).min(fw));
+        if xe <= xs {
+            return;
+        }
+        let stride = (self.w * 4) as usize;
+        let ptr = SendPtr(self.px.as_mut_ptr());
+        (y0.max(0)..(y0 + ph as i32).min(fh)).into_par_iter().for_each(|y| {
+            let p = &ptr;
+            // SAFETY: each row index is visited once, so the row slices don't overlap.
+            let row = unsafe { std::slice::from_raw_parts_mut(p.0.add(y as usize * stride), stride) };
+            let sy = (y - y0) as usize;
+            for x in xs..xe {
+                let s = &patch[(sy * pw as usize + (x - x0) as usize) * 4..][..4];
+                if s[3] == 0 && (mode != Blend::Add || s[..3] == [0, 0, 0]) {
+                    continue;
+                }
+                blend_px(&mut row[x as usize * 4..][..4], [s[0] as f32, s[1] as f32, s[2] as f32, s[3] as f32], mode);
+            }
+        });
+    }
+
+    /// Composites a whole frame of the same size in a blend mode, only inside `bbox` ([x, y, w, h], output pixels).
+    pub fn blend_frame(&mut self, src: &Frame, bbox: [u32; 4], mode: Blend) {
+        let patch = crop_px(&src.px, src.w, bbox);
+        self.blend_patch(&patch, bbox[0] as i32, bbox[1] as i32, bbox[2], bbox[3], mode);
+    }
+
+    /// Multiplies every channel by a coverage value (0–255) per pixel of `cov`, placed at `cov.x`, `cov.y`; pixels
+    /// outside the coverage's box become transparent.
+    pub fn apply_coverage(&mut self, cov: &Coverage) {
+        let (w, h) = (self.w as i64, self.h as i64);
+        self.px.par_chunks_mut((w * 4) as usize).enumerate().for_each(|(y, row)| {
+            let cy = y as i64 - cov.y as i64;
+            for x in 0..w {
+                let cx = x - cov.x as i64;
+                let a = if cy >= 0 && cx >= 0 && cy < cov.h as i64 && cx < cov.w as i64 {
+                    cov.a[(cy * cov.w as i64 + cx) as usize] as u32
+                } else {
+                    0
+                };
+                if a == 255 {
+                    continue;
+                }
+                let d = &mut row[(x * 4) as usize..][..4];
+                for v in d.iter_mut() {
+                    *v = ((*v as u32 * a + 127) / 255) as u8;
+                }
+            }
+        });
+        let _ = h;
+    }
+
+    /// The bounding box of the non-transparent pixels.
+    pub fn bbox(&self) -> Option<[u32; 4]> {
+        alpha_bbox(&self.px, self.w, self.h)
+    }
+}
+
+/// An 8-bit coverage mask (a rasterized layer mask or a track matte) over a box of the frame.
+#[derive(Clone, Debug)]
+pub struct Coverage {
+    pub x: u32,
+    pub y: u32,
+    pub w: u32,
+    pub h: u32,
+    pub a: Vec<u8>,
 }
 
 /// Bounding box [x, y, w, h] of the non-transparent pixels of a premultiplied frame, if any.

@@ -22,6 +22,12 @@ pub struct Layer {
     pub blur: Option<Prop>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shadow: Option<Shadow>,
+    #[serde(default, skip_serializing_if = "Blend::is_normal")]
+    pub blend: Blend,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mask: Option<Mask>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub matte: Option<Matte>,
 }
 
 impl Layer {
@@ -30,6 +36,22 @@ impl Layer {
     }
     pub fn is_video(&self) -> bool {
         matches!(self.content, Content::Video(_))
+    }
+    /// True when the layer or anything inside it (a group's children) is footage.
+    pub fn has_video(&self) -> bool {
+        match &self.content {
+            Content::Video(_) => true,
+            Content::Group(g) => g.layers.iter().any(Layer::has_video),
+            _ => false,
+        }
+    }
+    /// True when the layer is turned in 3D or corner-pinned (a projective transform).
+    pub fn is_projective(&self) -> bool {
+        let t = &self.transform;
+        t.corners.is_some() || t.rotation_x.is_some() || t.rotation_y.is_some()
+    }
+    pub fn is_raster(&self) -> bool {
+        matches!(self.content, Content::Raster(_))
     }
 }
 
@@ -40,6 +62,31 @@ pub enum Content {
     Shape(Shape),
     Image(Image),
     Video(Video),
+    Group(Group),
+    Raster(Raster),
+}
+
+/// Frames drawn by a component's program (spec/components.md, "Backends"). Only expansion makes one.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Raster {
+    /// The component, `<name>@<version>`.
+    pub component: String,
+    /// The component's design canvas.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub canvas: Option<[u32; 2]>,
+    pub backend: RasterBackend,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RasterBackend {
+    pub command: Vec<String>,
+    /// The package folder: the program's working directory, and where a relative program path resolves.
+    pub dir: String,
+    /// The package hash (it covers the program's bytes).
+    pub hash: String,
+    /// Seconds one request may take (default 60).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout: Option<f64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -53,7 +100,178 @@ pub struct Transform {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rotation: Option<Prop>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rotation_x: Option<Prop>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rotation_y: Option<Prop>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub perspective: Option<Prop>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub corners: Option<Prop>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub opacity: Option<Prop>,
+}
+
+impl Transform {
+    /// Every prop of the transform, for state signatures and static checks.
+    pub fn props(&self) -> [&Option<Prop>; 8] {
+        [
+            &self.position,
+            &self.scale,
+            &self.rotation,
+            &self.rotation_x,
+            &self.rotation_y,
+            &self.perspective,
+            &self.corners,
+            &self.opacity,
+        ]
+    }
+}
+
+/// How a layer combines with what's under it (spec/timeline.md, "Blend modes").
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, Hash)]
+#[serde(rename_all = "lowercase")]
+pub enum Blend {
+    #[default]
+    Normal,
+    Add,
+    Screen,
+    Multiply,
+    Overlay,
+    Lighten,
+    Darken,
+}
+
+impl Blend {
+    pub fn is_normal(&self) -> bool {
+        *self == Blend::Normal
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum MaskShape {
+    #[default]
+    Rect,
+    Ellipse,
+    Path,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum StrokeAlign {
+    #[default]
+    Inside,
+    Center,
+    Outside,
+}
+
+/// An outline along a mask's edge.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MaskStroke {
+    pub color: String,
+    pub width: f64,
+    #[serde(default)]
+    pub align: StrokeAlign,
+}
+
+/// A shape that cuts a layer out, in its content box's pixels (spec/timeline.md, "Masks and mattes").
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct Mask {
+    #[serde(default)]
+    pub shape: MaskShape,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rect: Option<Prop>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub radius: Option<Prop>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub feather: Option<Prop>,
+    #[serde(default)]
+    pub invert: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stroke: Option<MaskStroke>,
+}
+
+impl Mask {
+    pub fn props(&self) -> [&Option<Prop>; 3] {
+        [&self.rect, &self.radius, &self.feather]
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, Hash)]
+#[serde(rename_all = "kebab-case")]
+pub enum MatteMode {
+    #[default]
+    Alpha,
+    AlphaInverted,
+    Luma,
+    LumaInverted,
+}
+
+/// A track matte: another layer of the same list, drawn only as this layer's matte.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Matte {
+    pub layer: String,
+    #[serde(default)]
+    pub mode: MatteMode,
+}
+
+/// A group of layers drawn as one picture (an opacity group). Its content box is the composition frame.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Group {
+    pub layers: Vec<Layer>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum Resample {
+    #[default]
+    Bilinear,
+    Lanczos,
+    /// Bilinear from the full-size source, without pre-shrinking or mip levels (OpenCV's `INTER_LINEAR` warps).
+    Unfiltered,
+}
+
+impl Resample {
+    pub fn is_default(&self) -> bool {
+        *self == Resample::Bilinear
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum Hinting {
+    #[default]
+    None,
+    Slight,
+    Normal,
+    Full,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum Metrics {
+    #[default]
+    Skia,
+    Pillow,
+}
+
+/// One box or several (`delogo`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum Boxes {
+    One([f64; 4]),
+    Many(Vec<[f64; 4]>),
+}
+
+impl Boxes {
+    pub fn list(&self) -> Vec<[f64; 4]> {
+        match self {
+            Boxes::One(b) => vec![*b],
+            Boxes::Many(v) => v.clone(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -113,6 +331,12 @@ pub struct Text {
     pub uppercase: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub highlight: Option<Highlight>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hinting: Option<Hinting>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subpixel: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metrics: Option<Metrics>,
 }
 
 /// Words `[a, b)` of a text layer drawn in another fill (a karaoke caption's current word, an emphasized word).
@@ -135,18 +359,41 @@ impl Text {
 pub enum ShapeKind {
     Rect,
     Ellipse,
+    Path,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Shape {
     pub shape: ShapeKind,
-    pub size: [f64; 2],
+    /// The content box. A path defaults to its right and bottom extent (the renderer measures it).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size: Option<[f64; 2]>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub radius: Option<f64>,
+    /// SVG path data, for `shape: "path"`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub fill: Option<String>,
+    pub path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill: Option<Fill>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stroke: Option<Stroke>,
+}
+
+/// A shape's fill: a color, or a linear gradient in the layer's own pixels.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum Fill {
+    Color(String),
+    Gradient(Gradient),
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Gradient {
+    /// `[x0, y0, x1, y1]`: where the first and the last color are.
+    pub linear: [f64; 4],
+    pub colors: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stops: Option<Vec<f64>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -154,6 +401,8 @@ pub struct Image {
     pub asset: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub size: Option<[Option<f64>; 2]>,
+    #[serde(default, skip_serializing_if = "Resample::is_default")]
+    pub resample: Resample,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -190,6 +439,10 @@ pub struct Video {
     pub clock: Clock,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub audio: Option<AudioOpts>,
+    #[serde(default, skip_serializing_if = "Resample::is_default")]
+    pub resample: Resample,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delogo: Option<Boxes>,
 }
 
 /// Parses a resolved layer value (anchors already replaced by numbers).

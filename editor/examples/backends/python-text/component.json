@@ -1,0 +1,34 @@
+{
+  "schema": "retake-component/0.1",
+  "name": "python-text",
+  "version": "1.0.0",
+  "title": "Python text badge",
+  "description": "A word in a rounded badge that slides up and fades in, drawn by a small Python program instead of layers: the example of a component backend (spec/components.md, \"Backends\"). Standard library only; it uses Pillow for the letters when asked and installed.",
+  "license": "CC0-1.0",
+  "authors": ["Retake contributors"],
+  "tags": ["text", "badge", "backend", "python", "example"],
+  "category": "pop",
+  "use_as": ["overlay"],
+  "canvas": [1920, 1080],
+  "duration": 1.5,
+  "props": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["text"],
+    "properties": {
+      "text": { "type": "string", "minLength": 1, "maxLength": 24, "description": "The word or two, shown upper-cased: A-Z, 0-9, space and .,!?-:'%+/" },
+      "color": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$", "default": "#ffd23f", "description": "Letter color, #rrggbb." },
+      "fill": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$", "default": "#1b1d24", "description": "Badge color, #rrggbb." },
+      "size": { "type": "number", "minimum": 14, "maximum": 400, "default": 112, "description": "Letter height in pixels of the 1920x1080 design canvas." },
+      "y": { "type": "number", "default": 860, "description": "Vertical center of the badge, design pixels." },
+      "enter": { "type": "number", "minimum": 0, "maximum": 3, "default": 0.3, "description": "Seconds the badge takes to slide up 40 design pixels and fade in; 0 just appears." },
+      "pillow": { "type": "boolean", "default": false, "description": "Draw the letters with Pillow's default font when Pillow is installed (else the built-in 5x7 pixel font)." }
+    }
+  },
+  "backend": { "command": ["python3", "draw.py"], "timeout": 60 },
+  "examples": [
+    { "name": "one word", "props": { "text": "FASTER" } },
+    { "name": "cyan, high", "props": { "text": "NEW: 2X", "color": "#5ee0ff", "y": 220, "size": 84 } }
+  ],
+  "changelog": [ { "version": "1.0.0", "changes": "First version." } ]
+}

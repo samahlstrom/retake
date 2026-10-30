@@ -79,6 +79,20 @@ pub struct Example {
     pub description: Option<String>,
 }
 
+/// A component's program (spec/components.md, "Backends").
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct Backend {
+    /// The argv; a first element with a `/` is a path in the package.
+    pub command: Vec<String>,
+    /// Seconds one request may take (default 60).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout: Option<f64>,
+}
+
+/// The longest a backend request may be allowed to take, in seconds.
+pub const BACKEND_MAX_TIMEOUT: f64 = 3600.0;
+
 /// A `component.json`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -115,6 +129,9 @@ pub struct Component {
     pub background: Option<Value>,
     #[serde(default)]
     pub layers: Vec<Value>,
+    /// Instead of `layers`: a program that draws the frames ("Backends").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backend: Option<Backend>,
     #[serde(default)]
     pub examples: Vec<Example>,
     #[serde(default)]
@@ -330,7 +347,63 @@ pub fn check_component(c: &Component) -> Result<(), EditError> {
             return bad(format!("layers/{i}: every layer needs an id, unique in the component"));
         }
     }
+    if let Some(p) = raster_layers(&Value::Array(c.layers.clone()), "/layers").first() {
+        return Err(raster_source_error(p));
+    }
+    if let Some(b) = &c.backend {
+        if !c.layers.is_empty() {
+            return bad("a component has layers or a backend, not both".into());
+        }
+        if b.command.is_empty() || b.command.iter().any(|a| a.is_empty()) {
+            return bad("backend.command is the argv to run, e.g. [\"python3\", \"draw.py\"]".into());
+        }
+        if let Some(t) = b.timeout
+            && !(t > 0.0 && t <= BACKEND_MAX_TIMEOUT)
+        {
+            return bad(format!("backend.timeout {t}: seconds, more than 0 and at most {BACKEND_MAX_TIMEOUT}"));
+        }
+        let prog = &b.command[0];
+        if prog.contains('/') && (Path::new(prog).is_absolute() || prog.split('/').any(|s| s == "..")) {
+            return bad(format!("backend.command `{prog}`: a program path must stay inside the package"));
+        }
+    }
     Ok(())
+}
+
+/// Pointers of the `raster` layers in `v` (any object with `"type": "raster"` in a `layers` list, at any depth but
+/// under `meta` and `props`).
+pub fn raster_layers(v: &Value, ptr: &str) -> Vec<String> {
+    fn walk(v: &Value, ptr: &str, in_layers: bool, out: &mut Vec<String>) {
+        match v {
+            Value::Object(m) => {
+                if in_layers && m.get("type").and_then(Value::as_str) == Some("raster") {
+                    out.push(ptr.to_string());
+                }
+                for (k, c) in m {
+                    if k == "meta" || k == "props" {
+                        continue;
+                    }
+                    walk(c, &format!("{ptr}/{}", ptr_escape(k)), false, out);
+                }
+            }
+            Value::Array(a) => {
+                let layers = ptr.ends_with("/layers");
+                for (i, c) in a.iter().enumerate() {
+                    walk(c, &format!("{ptr}/{i}"), layers, out);
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut out = vec![];
+    walk(v, ptr, false, &mut out);
+    out
+}
+
+fn raster_source_error(ptr: &str) -> EditError {
+    EditError::new("raster_source", "a raster layer only comes from a component backend; this one is written by hand")
+        .at(ptr)
+        .hint("draw it with a backend component (spec/components.md, \"Backends\") and use that component instead")
 }
 
 /// Reads a kit folder.
@@ -924,6 +997,80 @@ fn scale_field(m: &mut Map<String, Value>, k: &str, f: f64) {
     }
 }
 
+/// Maps a prop of `[x0, y0, x1, y1, …]` points (corners) like positions.
+fn map_points(p: &mut Value, f: &Fit) {
+    let map = |v: &mut Value| {
+        if let Value::Array(a) = v {
+            for (i, x) in a.iter_mut().enumerate() {
+                if let Some(n) = x.as_f64() {
+                    *x = json!(n * f.k + if i % 2 == 0 { f.ox } else { f.oy });
+                }
+            }
+        }
+    };
+    match p {
+        Value::Object(m) => {
+            if let Some(Value::String(e)) = m.get("expr").cloned() {
+                m.insert(
+                    "expr".into(),
+                    json!(format!(
+                        "((p) => p.map((x, i) => x * {k} + (i % 2 ? {oy} : {ox})))(({e}\n))",
+                        k = num(f.k),
+                        ox = num(f.ox),
+                        oy = num(f.oy)
+                    )),
+                );
+            } else if let Some(Value::Array(keys)) = m.get_mut("keys") {
+                for key in keys {
+                    if let Some(v) = key.get_mut("v") {
+                        map(v);
+                    }
+                }
+            }
+        }
+        other => map(other),
+    }
+}
+
+/// Scales a mask's sizes by `k`; a group's mask is in frame pixels, so its rect is mapped like a position.
+fn fit_mask(m: &mut Map<String, Value>, f: &Fit, frame: bool) {
+    let Some(Value::Object(mask)) = m.get_mut("mask") else { return };
+    if let Some(r) = mask.get_mut("rect") {
+        if frame {
+            let map = |v: &mut Value| {
+                if let Value::Array(a) = v
+                    && a.len() == 4
+                {
+                    let n: Vec<f64> = a.iter().map(|x| x.as_f64().unwrap_or(0.0)).collect();
+                    *v = json!([n[0] * f.k + f.ox, n[1] * f.k + f.oy, n[2] * f.k, n[3] * f.k]);
+                }
+            };
+            match r {
+                Value::Object(o) => {
+                    if let Some(Value::Array(keys)) = o.get_mut("keys") {
+                        for key in keys {
+                            if let Some(v) = key.get_mut("v") {
+                                map(v);
+                            }
+                        }
+                    }
+                }
+                other => map(other),
+            }
+        } else {
+            scale_prop(r, f.k);
+        }
+    }
+    for key in ["radius", "feather"] {
+        if let Some(p) = mask.get_mut(key) {
+            scale_prop(p, f.k);
+        }
+    }
+    if let Some(Value::Object(s)) = mask.get_mut("stroke") {
+        scale_field(s, "width", f.k);
+    }
+}
+
 /// Fits one expanded layer into the timeline's canvas (spec/components.md, "Fitting the canvas").
 pub fn fit_layer(l: &mut Value, f: &Fit) {
     let Some(m) = l.as_object_mut() else { return };
@@ -937,12 +1084,39 @@ pub fn fit_layer(l: &mut Value, f: &Fit) {
             }
             None => {}
         }
+        if let Some(c) = t.get_mut("corners") {
+            map_points(c, f);
+        }
+        if let Some(p) = t.get_mut("perspective") {
+            scale_prop(p, f.k);
+        }
+    }
+    let path_shape = ty == "shape" && m.get("shape").and_then(Value::as_str) == Some("path");
+    let image_scaled = ty == "image" && !m.contains_key("size");
+    let video_unscaled = ty == "video" && m.get("fit").and_then(Value::as_str) == Some("none");
+    if !(path_shape || image_scaled || video_unscaled) {
+        fit_mask(m, f, ty == "group");
+    }
+    if ty == "group"
+        && let Some(Value::Array(children)) = m.get_mut("layers")
+    {
+        for c in children {
+            fit_layer(c, f);
+        }
     }
     if ty == "video" {
         return;
     }
     let k = f.k;
+    if path_shape {
+        // A path is in the layer's own pixels: scale the whole layer instead.
+        if let Some(Value::Object(t)) = m.get_mut("transform") {
+            let s = t.entry("scale").or_insert_with(|| json!(1.0));
+            scale_prop(s, k);
+        }
+    }
     match ty.as_str() {
+        "shape" if path_shape => {}
         "text" => {
             if !m.contains_key("size") {
                 m.insert("size".into(), json!(crate::layer::Text::DEFAULT_SIZE));
@@ -958,6 +1132,9 @@ pub fn fit_layer(l: &mut Value, f: &Fit) {
             scale_field(m, "radius", k);
             if let Some(Value::Object(s)) = m.get_mut("stroke") {
                 scale_field(s, "width", k);
+            }
+            if let Some(Value::Object(g)) = m.get_mut("fill") {
+                scale_field(g, "linear", k);
             }
         }
         "image" => {
@@ -1007,6 +1184,9 @@ pub struct Expansion {
     pub doc: Value,
     pub uses: Vec<UseInfo>,
     pub kits: Vec<KitInfo>,
+    /// `kits` entries that aren't kit packages (`plugin:deadlock`, a bare name, a `brand:` kit not installed here):
+    /// recorded as written and ignored by expansion.
+    pub recorded: Vec<String>,
     /// The lock after pinning (equal to the one given unless the mode pins).
     pub lock: Lock,
 }
@@ -1283,6 +1463,16 @@ impl Expander<'_> {
         let mut ev = self.ev.take();
         let mut errs = vec![];
         let mut layers = vec![];
+        if let Some(b) = &c.backend {
+            // One layer draws the whole composition; the program gets the props, the output size and the design
+            // canvas, so nothing is fitted here.
+            let mut backend = json!({"command": b.command, "dir": pkg.dir.to_string_lossy(), "hash": pkg.hash});
+            if let Some(t) = b.timeout {
+                backend["timeout"] = json!(t);
+            }
+            layers.push(json!({"id": format!("{id}/raster"), "type": "raster", "component": reference,
+                               "canvas": c.canvas(), "backend": backend}));
+        }
         for (i, l) in c.layers.iter().enumerate() {
             if let Some(mut nl) = subst(l, &sc, &format!("{ptr}/layers/{i}"), &mut ev, &mut errs) {
                 if let Some(local) = nl.get("id").and_then(Value::as_str) {
@@ -1295,7 +1485,7 @@ impl Expander<'_> {
         self.ev = ev;
         self.errs.extend(errs);
         let fit = Fit::new(c.canvas(), self.canvas);
-        if !fit.is_identity() {
+        if !fit.is_identity() && c.backend.is_none() {
             for l in &mut layers {
                 fit_layer(l, &fit);
             }
@@ -1320,6 +1510,27 @@ impl Expander<'_> {
             dir: pkg.dir.clone(),
         });
     }
+}
+
+/// A `kits` entry that names a kit package: `<name>@<version>` (found in the component folders, else an error) or
+/// `brand:<name>@<version>` (a catalog kit, loaded when its folder is found). Anything else, another scheme such as
+/// `plugin:` or an entry without a version, isn't a kit package.
+struct KitRef {
+    catalog: bool,
+    name: String,
+    version: String,
+}
+
+fn kit_ref(entry: &str) -> Option<KitRef> {
+    let (catalog, bare) = match entry.strip_prefix("brand:") {
+        Some(b) => (true, b),
+        None => (false, entry),
+    };
+    let (name, version) = bare.split_once('@')?;
+    if name.is_empty() || version.is_empty() || name.contains(':') {
+        return None;
+    }
+    Some(KitRef { catalog, name: name.to_string(), version: version.to_string() })
 }
 
 /// Expands a timeline document: kits loaded and locked, `kit:` tokens replaced, component uses turned into layers.
@@ -1366,23 +1577,25 @@ pub fn expand_with_roots(
         .and_then(Value::as_array)
         .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
         .unwrap_or_default();
+    let mut recorded = vec![];
     for (i, entry) in entries.iter().enumerate() {
         let ptr = format!("/kits/{i}");
-        let catalog = entry.starts_with("brand:");
-        let bare = entry.strip_prefix("brand:").unwrap_or(entry);
-        let Some((name, version)) = bare.split_once('@').map(|(a, b)| (a.to_string(), b.to_string())) else {
-            if !catalog {
-                x.errs.push(EditError::new("kit_ref", format!("kit `{entry}` isn't <name>@<version>")).at(ptr));
-            }
+        let Some(KitRef { catalog, name, version }) = kit_ref(entry) else {
+            // A plug-in or another reference that isn't a kit package: kept in the document and ignored here
+            // (timeline/0.1 recorded every entry before kits were loaded, so those timelines still open).
+            recorded.push(entry.clone());
             continue;
         };
         let Some(dir) = find_package(&x.roots, &name, &version, "kit.json") else {
-            if !catalog {
+            if catalog {
+                recorded.push(entry.clone());
+            } else {
+                let bare = format!("{name}@{version}");
                 let all = available(&x.roots, "kit.json");
                 x.errs.push(
                     EditError::new("kit_not_found", format!("kit {bare} isn't in the component folders"))
                         .at(ptr)
-                        .suggest(close_matches(bare, all.iter().map(|(r, _)| r.as_str()), 3))
+                        .suggest(close_matches(&bare, all.iter().map(|(r, _)| r.as_str()), 3))
                         .hint("add it with `retake lib add <kit>`"),
                 );
             }
@@ -1401,6 +1614,10 @@ pub fn expand_with_roots(
             }
             Err(e) => x.errs.push(e.at(ptr)),
         }
+    }
+    // Raster layers come only from backends: opening a timeline must never run a program it names itself.
+    for p in raster_layers(&doc, "") {
+        x.errs.push(raster_source_error(&p));
     }
     // Tokens everywhere but in the props of uses.
     {
@@ -1459,7 +1676,7 @@ pub fn expand_with_roots(
         e.dedup();
         return Err(e);
     }
-    Ok(Expansion { doc, uses: x.uses, kits, lock: x.lock })
+    Ok(Expansion { doc, uses: x.uses, kits, recorded, lock: x.lock })
 }
 
 #[cfg(test)]
@@ -1557,6 +1774,31 @@ mod tests {
         fit_layer(&mut vid, &f);
         assert_eq!(vid["transform"]["scale"], json!(0.3), "video only moves");
         assert_eq!(vid["transform"]["position"], json!([640.0, 360.0]));
+    }
+
+    #[test]
+    fn fit_maps_corners_masks_paths_and_groups() {
+        let f = Fit::new([1920, 1080], [1080, 1920]);
+        let mut l = json!({"id": "a", "type": "shape", "shape": "rect", "size": [100, 40],
+            "mask": {"rect": [0, 0, 100, 40], "radius": 8, "stroke": {"color": "#fff", "width": 4}},
+            "transform": {"corners": [0, 0, 100, 0, 100, 40, 0, 40], "perspective": 1000}});
+        fit_layer(&mut l, &f);
+        assert_eq!(l["transform"]["corners"], json!([0.0, 656.25, 56.25, 656.25, 56.25, 678.75, 0.0, 678.75]));
+        assert_eq!(l["transform"]["perspective"], json!(562.5));
+        assert_eq!(l["mask"]["rect"], json!([0.0, 0.0, 56.25, 22.5]), "a mask is in content pixels: scaled");
+        assert_eq!(l["mask"]["radius"], json!(4.5));
+        assert_eq!(l["mask"]["stroke"]["width"], json!(2.25));
+        // A path scales the whole layer; a group's children are fitted and its mask is in frame pixels.
+        let mut p = json!({"id": "p", "type": "shape", "shape": "path", "path": "M0 0 L10 0 L10 10 Z"});
+        fit_layer(&mut p, &f);
+        assert_eq!(p["transform"]["scale"], json!(0.5625));
+        let mut g = json!({"id": "g", "type": "group", "mask": {"rect": [960, 0, 960, 1080]},
+            "layers": [{"id": "g/s", "type": "shape", "shape": "rect", "size": [100, 100],
+                        "transform": {"position": [0, 0]}}]});
+        fit_layer(&mut g, &f);
+        assert_eq!(g["mask"]["rect"], json!([540.0, 656.25, 540.0, 607.5]));
+        assert_eq!(g["layers"][0]["size"], json!([56.25, 56.25]));
+        assert_eq!(g["layers"][0]["transform"]["position"], json!([0.0, 656.25]));
     }
 
     #[test]

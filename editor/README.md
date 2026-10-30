@@ -56,6 +56,11 @@ timeline uses one where layers would go, `{"use": "pop-text@1.0.0", "props": {�
 (QuickJS, registered by `retake_render::init`), and the fit from the design canvas to the timeline's. A `Project`
 keeps both documents: `src` (what patches change and what is saved) and `doc` (the expansion, what renders).
 
+A component may draw with a program instead of layers (`backend: {command}`, spec/components.md "Backends"): its use
+expands into one `raster` layer, and `crates/render/src/backend.rs` runs the program once per graphics run over the
+`retake-raster/1` protocol (a JSON request on stdin, framed straight-alpha RGBA on stdout, a cleared environment and
+a timeout). `examples/backends/python-text/` is a standard-library Python example; the package hash pins the program.
+
 The renderer only sees the expansion, so the layer and unit keys hash it: a changed component re-renders exactly
 the elements whose expansion changed (`crates/render/tests/components.rs`). `lint` (`crates/timeline/src/lint.rs`)
 evaluates the kits' rules over the resolved elements; `crates/render/src/lint.rs` measures each overlay's drawn box
@@ -66,6 +71,33 @@ is in `library/`.
 Every command takes `--json` and prints `{"ok": true, …}` or `{"ok": false, "errors": [{code, message, path, hint,
 suggestions}]}`. Renders go to `.retake/renders/` next to the timeline unless `-o` says otherwise; the manifest is
 written next to the video.
+
+## Picture: warps, blend modes, masks, mattes, groups
+
+Every layer goes through one projective transform (`crates/render/src/transform.rs`): the 2D one, or a CSS-style 3D
+turn (`rotation_x`, `rotation_y`, `perspective`), or a corner pin (`corners`). Skia draws graphics through it; the
+compositor (`composite.rs`, `warp_image`) samples footage through it bilinearly from one decode per layer, with
+trilinear mip levels where it shrinks (`resample: unfiltered` skips them, like OpenCV's warps). Layers blend in seven
+W3C modes, carry a mask (rect, ellipse or SVG path; feather, invert, an outline on its edge) or a track matte, and
+group into opacity groups. In the engine (`engine.rs`) a graphics layer that blends in another mode than `normal`,
+has a matte or is one becomes its own run and an item with `Fx`, since the compositor applies modes and mattes
+against what's under it; a group of graphics only is drawn by Skia inside its run (children blend within it); a
+group with footage is an `Item::Group`, composited into its own picture first. Every item has a `slot` for its
+decode state and its manifest boxes. `resample: lanczos` resizes images with a Pillow-exact Lanczos-3
+(`resample.rs`) and decodes footage with ffmpeg's Lanczos scaler, cropped in the pipe when the crop is constant
+(`unit.rs`, `decode_plan`); `delogo` runs first in that pipe. `crates/render/tests/picture.rs` checks each against an
+independent reference (ffmpeg's `perspective`, `crop,scale` and `delogo`, the W3C formulas) or its other path, and
+`tests/pillow.rs` text placement and Lanczos against Pillow (skipped without it; `RETAKE_PILLOW_PYTHON`).
+
+## Audio
+
+The mix (`crates/render/src/audio.rs`) sums the spine, video layers' sound and audio elements in one pass per render
+range: each picks its audio stream (`stream`; mono plays at unity in both channels), gets its gain (a constant, or
+keys and expressions evaluated per output frame), its fades (with a curve) and its ducking (under the VO's speech,
+or under inserts and spine items with attack and release). `crates/render/src/dsp.rs` has the BS.1770-4 meter, the
+low-pass and the 4× oversampled true-peak limiter of the master bus. Loudness targets (an element's `loudness`, the
+master's) are measured on the whole timeline's mix and cached in the store's `levels` index, so a `--range` render
+uses the same gains as the full render and a second render doesn't measure again.
 
 ## The demo
 

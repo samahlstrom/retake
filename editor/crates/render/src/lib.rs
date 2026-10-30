@@ -2,7 +2,9 @@
 //! a content-addressed cache with two keys (layer and unit), a one-pass audio mix, and the render manifest.
 
 pub mod audio;
+pub mod backend;
 pub mod composite;
+pub mod dsp;
 pub mod engine;
 pub mod expr;
 pub mod ffmpeg;
@@ -11,6 +13,7 @@ pub mod lint;
 pub mod pipeline;
 pub mod preview;
 pub mod proxy;
+pub mod resample;
 pub mod store;
 pub mod transform;
 pub mod unit;

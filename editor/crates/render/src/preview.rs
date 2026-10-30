@@ -225,7 +225,7 @@ fn label(p: &mut Painter, canvas: &skia_safe::Canvas, text: &str, xy: (f64, f64)
         "fill": fill, "align": "left", "line_height": 1.0, "transform": {"anchor": [0, 0.5], "position": [xy.0, xy.1]}}))
     .map_err(|e| anyhow!(e))?;
     // The comp size only matters for layers without a position; labels always have one.
-    p.draw_layer(canvas, &l, 0.0, &json!({}), (1.0, 1.0)).map_err(|x| anyhow!(x))
+    p.draw_layer(canvas, &l, 0.0, &json!({}), (1.0, 1.0), retake_timeline::layer::Blend::Normal).map_err(|x| anyhow!(x))
 }
 
 /// One example's row in the sheet: its name, description, duration and the tiles (time, pixels).

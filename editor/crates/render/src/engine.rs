@@ -1,14 +1,14 @@
 //! Opening a timeline for rendering and planning it: assets probed and hashed, units described hermetically, and the
 //! two cache keys (layer and unit) computed.
 
-use crate::audio::{AUDIO_VERSION, AudioPlan, Clip};
-use crate::ffmpeg::{self, EncodeSettings, MediaInfo};
+use crate::audio::{AUDIO_VERSION, AudioPlan, Clip, DuckPlan, GainCurve, Loudness, MasterPlan};
+use crate::ffmpeg::{self, EncodeSettings, MediaInfo, StreamSel};
 use crate::graphics::{DISPLAY_FONT, DISPLAY_WEIGHT, FontData, GRAPHICS_VERSION, ImageData, Resources};
 use crate::store::{Store, hex_of};
 use anyhow::{Context, Result};
 use retake_timeline::keyframe::Prop;
-use retake_timeline::layer::{Clock, Content, Layer, TextValue};
-use retake_timeline::model::{Rgba, SpineKind};
+use retake_timeline::layer::{Blend, Clock, Content, Layer, MatteMode, TextValue};
+use retake_timeline::model::{Ducks, Rgba, SpineKind, Under, gain_prop};
 use retake_timeline::resolve::{Comp, UnitKind, UnitSpan};
 use retake_timeline::{EditError, Errors, Project, Resolved, canonical_json};
 use serde::Serialize;
@@ -18,8 +18,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 /// Part of every unit key: bump when compositing code changes pixels. compositor/2: graphics split into static and
-/// animated runs, and video decoded at its displayed size.
-pub const ENGINE_VERSION: &str = "retake-render/0.1 compositor/2";
+/// animated runs, and video decoded at its displayed size. compositor/3: projective warps, blend modes, masks,
+/// mattes, groups, Lanczos decodes cropped in the pipe, delogo.
+pub const ENGINE_VERSION: &str = "retake-render/0.1 compositor/3";
 
 #[derive(Debug, Clone)]
 pub struct Options {
@@ -82,8 +83,26 @@ pub struct Src {
     pub asset: String,
 }
 
+/// How an item combines with what's under it: its blend mode and track matte (both applied by the compositor).
+#[derive(Debug, Clone, Serialize, Default)]
+pub struct Fx {
+    #[serde(skip_serializing_if = "Blend::is_normal")]
+    pub blend: Blend,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub matte: Option<Box<Item>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub matte_mode: Option<MatteMode>,
+}
+
+impl Fx {
+    pub fn is_plain(&self) -> bool {
+        self.blend == Blend::Normal && self.matte.is_none()
+    }
+}
+
 /// One thing the compositor draws in a unit. `active` is the unit-frame range where it shows; `k0` is the
-/// composition frame at unit frame 0.
+/// composition frame at unit frame 0. `slot` numbers every item of the unit (nested and mattes included) for the
+/// compositor's per-item state and the manifest's boxes; it isn't part of the key.
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "kind", rename_all = "lowercase")]
 #[allow(clippy::large_enum_variant)] // a handful per unit
@@ -91,11 +110,17 @@ pub enum Item {
     Fill {
         color: [u8; 4],
         active: [i64; 2],
+        #[serde(skip)]
+        slot: usize,
     },
     Graphics {
         key: String,
         k0: i64,
         active: [i64; 2],
+        #[serde(flatten)]
+        fx: Fx,
+        #[serde(skip)]
+        slot: usize,
     },
     Video {
         layer: Value,
@@ -106,17 +131,75 @@ pub enum Item {
         /// For `clock: timeline`: output seconds at unit frame 0 (an absolute-time input, so it's in the key).
         #[serde(skip_serializing_if = "Option::is_none")]
         t_out0: Option<f64>,
+        #[serde(flatten)]
+        fx: Fx,
         #[serde(skip)]
         typed: Box<Layer>,
+        #[serde(skip)]
+        slot: usize,
+    },
+    /// A group with footage in it: its children are drawn into the group's own picture, which is then transformed,
+    /// masked, faded and blended as one layer.
+    Group {
+        /// The group layer without its children (they are `items`).
+        layer: Value,
+        props: Value,
+        k0: i64,
+        active: [i64; 2],
+        items: Vec<Item>,
+        #[serde(flatten)]
+        fx: Fx,
+        #[serde(skip)]
+        typed: Box<Layer>,
+        #[serde(skip)]
+        slot: usize,
     },
 }
 
 impl Item {
     pub fn active(&self) -> [i64; 2] {
         match self {
-            Item::Fill { active, .. } | Item::Graphics { active, .. } | Item::Video { active, .. } => *active,
+            Item::Fill { active, .. }
+            | Item::Graphics { active, .. }
+            | Item::Video { active, .. }
+            | Item::Group { active, .. } => *active,
         }
     }
+
+    pub fn slot(&self) -> usize {
+        match self {
+            Item::Fill { slot, .. }
+            | Item::Graphics { slot, .. }
+            | Item::Video { slot, .. }
+            | Item::Group { slot, .. } => *slot,
+        }
+    }
+
+    pub fn fx(&self) -> Option<&Fx> {
+        match self {
+            Item::Fill { .. } => None,
+            Item::Graphics { fx, .. } | Item::Video { fx, .. } | Item::Group { fx, .. } => Some(fx),
+        }
+    }
+
+    /// This item and everything inside it (a group's items, mattes), depth first.
+    pub fn walk(&self) -> Vec<&Item> {
+        let mut out = vec![self];
+        if let Some(m) = self.fx().and_then(|f| f.matte.as_deref()) {
+            out.extend(m.walk());
+        }
+        if let Item::Group { items, .. } = self {
+            for c in items {
+                out.extend(c.walk());
+            }
+        }
+        out
+    }
+}
+
+/// Every item of a list, nested ones and mattes included, depth first.
+pub fn walk_items(items: &[Item]) -> Vec<&Item> {
+    items.iter().flat_map(Item::walk).collect()
 }
 
 /// The fully resolved description of a unit: the only input the compositor gets. Its hash is the unit key.
@@ -162,6 +245,23 @@ pub struct RunSpec {
     pub still: bool,
 }
 
+/// A list of resolved layers (a composition's or a group's), with their JSON (what keys hash) and pointers.
+struct List<'a> {
+    js: &'a [Value],
+    ls: &'a [Layer],
+    ptrs: &'a [String],
+    props: &'a Value,
+}
+
+/// Where a composition's items sit in the unit.
+struct Placement<'a> {
+    owner: &'a Owner,
+    k0: i64,
+    active: [i64; 2],
+    f0: i64,
+    ptr: &'a str,
+}
+
 fn prop_static(p: &Option<Prop>) -> bool {
     p.as_ref().is_none_or(|p| p.is_static())
 }
@@ -175,16 +275,22 @@ pub fn layer_is_static(l: &Layer, a: f64, b: f64) -> bool {
         Content::Text(t) => {
             !matches!(t.text, TextValue::Expr { .. }) && t.highlight.as_ref().is_none_or(|h| h.words.is_static())
         }
+        // A backend's frames may change on any frame (identical ones are skipped and stored once).
+        Content::Raster(_) => false,
+        _ => true,
+    };
+    let mask_static = l.mask.as_ref().is_none_or(|m| m.props().iter().all(|p| prop_static(p)));
+    let children_static = match &l.content {
+        Content::Group(g) => g.layers.iter().all(|c| layer_is_static(c, a, b)),
         _ => true,
     };
     edges_outside
         && text_static
-        && prop_static(&tr.position)
-        && prop_static(&tr.scale)
-        && prop_static(&tr.rotation)
-        && prop_static(&tr.opacity)
+        && tr.props().iter().all(|p| prop_static(p))
         && prop_static(&l.crop)
         && prop_static(&l.blur)
+        && mask_static
+        && children_static
 }
 
 /// True when a layer shows on no frame of composition seconds [a, b).
@@ -217,15 +323,121 @@ fn even(x: f64) -> u32 {
     ((x / 2.0).round() as u32 * 2).max(2)
 }
 
-/// A layer's JSON as hashed: no id (renaming doesn't re-render), no meta, no audio (sound isn't pixels).
+/// A layer's JSON as hashed: no id (renaming doesn't re-render), no meta, no audio (sound isn't pixels), and no
+/// backend folder (a raster layer's package hash stands for its program; moving the project doesn't re-render).
 fn key_json(v: &Value) -> Value {
     let mut v = v.clone();
     if let Some(o) = v.as_object_mut() {
         o.remove("id");
         o.remove("meta");
         o.remove("audio");
+        if let Some(b) = o.get_mut("backend").and_then(Value::as_object_mut) {
+            b.remove("dir");
+        }
     }
     v
+}
+
+/// Every `stream` an element asks for must exist in its asset (`audio_stream` errors list the streams there are).
+fn check_streams(project: &Project, res: &Resolved, assets: &BTreeMap<String, Asset>) -> Result<()> {
+    let mut errs = vec![];
+    let mut check = |asset: &str, stream: Option<u32>, ptr: String| {
+        let (Some(n), Some(a)) = (stream, assets.get(asset)) else { return };
+        if n as usize >= a.info.audio_streams.len() {
+            errs.push(
+                EditError::new(
+                    "audio_stream",
+                    format!("asset `{asset}` has no audio stream {n} ({})", a.info.describe_audio()),
+                )
+                .at(ptr)
+                .hint(match a.info.audio_streams.len() {
+                    0 => "the file has no sound: drop `stream`".to_string(),
+                    k => format!("streams count from 0: use 0 to {}", k - 1),
+                }),
+            );
+        }
+    };
+    for (i, s) in project.tl.spine.iter().enumerate() {
+        check(&s.asset, s.audio.as_ref().and_then(|a| a.stream), format!("/spine/{i}/audio/stream"));
+    }
+    for (i, a) in project.tl.audio.iter().enumerate() {
+        check(&a.asset, a.stream, format!("/audio/{i}/stream"));
+    }
+    let mut comps: Vec<&Comp> = res.shots.iter().map(|s| &s.comp).collect();
+    comps.extend(res.overlays.iter().map(|o| &o.comp));
+    comps.extend(res.spine.iter().filter_map(|s| s.comp.as_ref()));
+    for c in comps {
+        for (li, l) in c.layers.iter().enumerate() {
+            if let Content::Video(v) = &l.content {
+                check(&v.asset, v.audio.as_ref().and_then(|a| a.stream), format!("{}/layers/{li}/audio/stream", c.ptr));
+            }
+        }
+    }
+    if errs.is_empty() { Ok(()) } else { Err(Errors(errs).into()) }
+}
+
+/// Measures what a plan's loudness targets need: each group's integrated loudness (its clips end to end, as
+/// decoded), then, with those levels, the whole mix's for the master. `{"groups": {group: dB}, "master_gain_db"}`.
+fn compute_levels(full: &AudioPlan) -> Result<Value> {
+    let mut groups: BTreeMap<String, (f64, Vec<&Clip>)> = BTreeMap::new();
+    for c in &full.clips {
+        if let Some(l) = &c.loudness {
+            groups.entry(l.group.clone()).or_insert_with(|| (l.target, vec![])).1.push(c);
+        }
+    }
+    let to_target = |target: f64, measured: f64| {
+        if measured.is_finite() { (target - measured).clamp(-60.0, 60.0) } else { 0.0 }
+    };
+    let mut out = serde_json::Map::new();
+    for (g, (target, cs)) in groups {
+        let m = crate::audio::measure(&cs, full.sr)?;
+        out.insert(g, json!(to_target(target, m)));
+    }
+    let mut levels = json!({"groups": out, "master_gain_db": null});
+    if let Some(t) = full.master.as_ref().and_then(|m| m.loudness) {
+        let mut leveled = full.clone();
+        apply_levels(&mut leveled, &levels);
+        let raw = crate::audio::mix_raw(&leveled)?;
+        let mut g = to_target(t, crate::dsp::integrated_lufs(&raw, full.sr));
+        // The low-pass and the limiter take a little loudness away (more the harder it limits): measure the bus's
+        // output once and correct for it.
+        if let Some(m) = &mut leveled.master
+            && (m.true_peak.is_some() || m.lowpass.is_some())
+        {
+            m.gain_db = Some(g);
+            let out = crate::audio::finish(raw, &leveled).pcm;
+            g = (g + to_target(t, crate::dsp::integrated_lufs(&out, full.sr))).clamp(-60.0, 60.0);
+        }
+        levels["master_gain_db"] = json!(g);
+    }
+    Ok(levels)
+}
+
+fn apply_levels(ap: &mut AudioPlan, levels: &Value) {
+    for c in &mut ap.clips {
+        if let Some(l) = &mut c.loudness {
+            l.level_db = Some(levels["groups"][&l.group].as_f64().unwrap_or(0.0));
+        }
+    }
+    if let Some(m) = &mut ap.master {
+        m.gain_db = levels["master_gain_db"].as_f64();
+    }
+}
+
+/// The stream an element plays, with its channel count.
+fn stream_sel(a: &Asset, stream: Option<u32>) -> StreamSel {
+    let index = stream.unwrap_or(0);
+    let channels = a.info.audio_streams.get(index as usize).map(|s| s.channels).unwrap_or(2);
+    StreamSel { index, channels }
+}
+
+/// A resolved `gain_db`: a constant folds into the clip's gain, keys and expressions become a curve.
+fn gain_parts(p: Option<&Prop>, t0: f64, props: &Value) -> (f64, Option<GainCurve>) {
+    match p {
+        None => (0.0, None),
+        Some(Prop::Const(v)) => (v.to_vec().first().copied().unwrap_or(0.0), None),
+        Some(p) => (0.0, Some(GainCurve { prop: p.clone(), t0, props: props.clone() })),
+    }
 }
 
 impl Engine {
@@ -258,7 +470,7 @@ impl Engine {
         comps.extend(res.overlays.iter().map(|o| &o.comp));
         comps.extend(res.spine.iter().filter_map(|s| s.comp.as_ref()));
         for c in &comps {
-            for l in &c.layers {
+            for l in crate::graphics::all_layers(&c.layers) {
                 match &l.content {
                     Content::Video(v) => {
                         used.insert(v.asset.clone());
@@ -274,11 +486,12 @@ impl Engine {
         for id in &used {
             let p = project.asset_path(id)?;
             let hash = store.asset_hash(&p)?;
-            let info = match store.get_index("probe", &hash).and_then(|v| serde_json::from_value(v).ok()) {
+            // probe2: probes that list the audio streams (older ones under "probe" don't).
+            let info = match store.get_index("probe2", &hash).and_then(|v| serde_json::from_value(v).ok()) {
                 Some(i) => i,
                 None => {
                     let i = ffmpeg::probe(&p).with_context(|| format!("asset {id}"))?;
-                    store.set_index("probe", &hash, &serde_json::to_value(&i)?)?;
+                    store.set_index("probe2", &hash, &serde_json::to_value(&i)?)?;
                     i
                 }
             };
@@ -305,6 +518,7 @@ impl Engine {
             resources.images.insert(id.clone(), ImageData { bytes: Arc::new(bytes), hash });
         }
         store.save_asset_hashes()?;
+        check_streams(&project, &res, &assets)?;
         Ok(Engine { project, res, store, opts, canvas, encode, assets, resources: Arc::new(resources) })
     }
 
@@ -331,8 +545,8 @@ impl Engine {
                 (format!("{n}@{w}"), h)
             })
             .collect();
-        let images: BTreeMap<String, String> = typed
-            .iter()
+        let images: BTreeMap<String, String> = crate::graphics::all_layers(typed)
+            .into_iter()
             .filter_map(|l| match &l.content {
                 Content::Image(i) => Some((
                     i.asset.clone(),
@@ -372,14 +586,33 @@ impl Engine {
         runs: &mut Vec<RunSpec>,
     ) -> Result<()> {
         if let Some(bg) = &comp.background {
-            items.push(Item::Fill { color: Rgba::parse(bg).unwrap_or(Rgba::BLACK).0, active });
+            items.push(Item::Fill { color: Rgba::parse(bg).unwrap_or(Rgba::BLACK).0, active, slot: owners.len() });
             owners.push(owner.clone());
         }
-        let range = [k0 + active[0], k0 + active[1]];
+        let ptrs: Vec<String> = (0..comp.layers.len()).map(|i| format!("{}/layers/{i}", comp.ptr)).collect();
+        let list = List { js: &comp.layers_json, ls: &comp.layers, ptrs: &ptrs, props: &comp.props };
+        let at = Placement { owner, k0, active, f0, ptr: &comp.ptr };
+        self.list_items(&list, &at, items, owners, runs)
+    }
+
+    /// Items for a list of layers (a composition's, or a group's children). Consecutive plain graphics layers
+    /// become runs; footage, groups with footage, and layers that blend in another mode or have a track matte are
+    /// items of their own (the compositor applies modes and mattes). Matte layers are drawn only as mattes.
+    fn list_items(
+        &self,
+        list: &List,
+        at: &Placement,
+        items: &mut Vec<Item>,
+        owners: &mut Vec<Owner>,
+        runs: &mut Vec<RunSpec>,
+    ) -> Result<()> {
+        let range = [at.k0 + at.active[0], at.k0 + at.active[1]];
         let (ra, rb) = (range[0] as f64 / self.fps() as f64, range[1] as f64 / self.fps() as f64);
+        let mattes: BTreeSet<&str> =
+            list.ls.iter().filter_map(|l| l.matte.as_ref().map(|m| m.layer.as_str())).collect();
         let mut pending: Vec<(Value, Layer)> = vec![];
-        // Consecutive graphics layers become runs; a static stretch and an animated stretch are separate runs, so a
-        // static card under a ticking clock is drawn once (draw order is kept: runs composite in layer order).
+        // A static stretch and an animated stretch are separate runs, so a static card under a ticking clock is drawn
+        // once (draw order is kept: runs composite in layer order).
         let flush = |pending: &mut Vec<(Value, Layer)>,
                      items: &mut Vec<Item>,
                      owners: &mut Vec<Owner>,
@@ -388,53 +621,137 @@ impl Engine {
             let mut groups: Vec<(bool, Vec<(Value, Layer)>)> = vec![];
             for (j, l) in all {
                 let still = layer_is_static(&l, ra, rb);
+                // A raster layer is a run of its own: its backend draws the run's frames in one request.
+                let alone = l.is_raster() || groups.last().is_some_and(|(_, g)| g.iter().any(|(_, x)| x.is_raster()));
                 match groups.last_mut() {
-                    Some((s, g)) if *s == still => g.push((j, l)),
+                    Some((s, g)) if *s == still && !alone => g.push((j, l)),
                     _ => groups.push((still, vec![(j, l)])),
                 }
             }
             for (still, g) in groups {
                 let (js, ls): (Vec<Value>, Vec<Layer>) = g.into_iter().unzip();
-                let key = self.run_key(&js, &ls, &comp.props, range, still);
-                runs.push(RunSpec { key: key.clone(), layers: ls, props: comp.props.clone(), range, still });
-                items.push(Item::Graphics { key, k0, active });
-                owners.push(owner.clone());
+                let key = self.run_key(&js, &ls, list.props, range, still);
+                runs.push(RunSpec { key: key.clone(), layers: ls, props: list.props.clone(), range, still });
+                items.push(Item::Graphics { key, k0: at.k0, active: at.active, fx: Fx::default(), slot: owners.len() });
+                owners.push(at.owner.clone());
             }
         };
-        for (li, (j, l)) in comp.layers_json.iter().zip(&comp.layers).enumerate() {
-            match &l.content {
-                Content::Video(v) => {
-                    flush(&mut pending, items, owners, runs);
-                    let a = self.assets.get(&v.asset).with_context(|| format!("asset {}", v.asset))?;
-                    let size = a.info.size.ok_or_else(|| {
-                        EditError::new("asset_not_video", format!("asset `{}` has no video stream", v.asset))
-                            .at(comp.ptr.clone())
-                    })?;
-                    let t_out0 = (v.clock == Clock::Timeline).then(|| f0 as f64 / self.fps() as f64);
-                    items.push(Item::Video {
-                        layer: key_json(j),
-                        src: Src {
-                            hash: a.hash.clone(),
-                            size,
-                            duration: a.info.duration,
-                            proxy: a.proxy.as_ref().map(|(_, h)| h.clone()),
-                            path: a.proxy.as_ref().map(|(p, _)| p.clone()).unwrap_or_else(|| a.path.clone()),
-                            asset: a.id.clone(),
-                        },
-                        props: comp.props.clone(),
-                        k0,
-                        active,
-                        t_out0,
-                        typed: Box::new(l.clone()),
-                    });
-                    let lptr = format!("{}/layers/{li}", comp.ptr);
-                    owners.push(Owner { layer: Some((l.id.clone(), lptr)), ..owner.clone() });
-                }
-                _ => pending.push((j.clone(), l.clone())),
+        for (i, l) in list.ls.iter().enumerate() {
+            if mattes.contains(l.id.as_str()) {
+                continue;
             }
+            let special = l.has_video() || !l.blend.is_normal() || l.matte.is_some();
+            if !special {
+                pending.push((list.js[i].clone(), l.clone()));
+                continue;
+            }
+            flush(&mut pending, items, owners, runs);
+            if !l.has_video() && layer_never_visible(l, ra, rb) {
+                continue;
+            }
+            let mut item = self.layer_item(list, i, at, owners, runs, false)?;
+            let mut fx = Fx { blend: l.blend, ..Fx::default() };
+            if let Some(m) = &l.matte
+                && let Some(mi) = list.ls.iter().position(|x| x.id == m.layer)
+            {
+                fx.matte = Some(Box::new(self.layer_item(list, mi, at, owners, runs, true)?));
+                fx.matte_mode = Some(m.mode);
+            }
+            if let Item::Graphics { fx: f, .. } | Item::Video { fx: f, .. } | Item::Group { fx: f, .. } = &mut item {
+                *f = fx;
+            }
+            items.push(item);
         }
         flush(&mut pending, items, owners, runs);
         Ok(())
+    }
+
+    /// One layer as an item of its own: a one-layer graphics run, footage, or a group with footage. A matte's owner
+    /// entry is marked `matte` (it isn't on screen).
+    fn layer_item(
+        &self,
+        list: &List,
+        i: usize,
+        at: &Placement,
+        owners: &mut Vec<Owner>,
+        runs: &mut Vec<RunSpec>,
+        matte: bool,
+    ) -> Result<Item> {
+        let (j, l) = (&list.js[i], &list.ls[i]);
+        let range = [at.k0 + at.active[0], at.k0 + at.active[1]];
+        let (ra, rb) = (range[0] as f64 / self.fps() as f64, range[1] as f64 / self.fps() as f64);
+        let slot = owners.len();
+        let lptr = list.ptrs[i].clone();
+        let mut ow = match (matte, &l.content) {
+            (true, _) => Owner { kind: "matte".into(), ..at.owner.clone() },
+            (false, Content::Video(_)) => Owner { layer: Some((l.id.clone(), lptr.clone())), ..at.owner.clone() },
+            _ => at.owner.clone(),
+        };
+        if matte {
+            ow.layer = None;
+        }
+        owners.push(ow);
+        Ok(match &l.content {
+            Content::Video(v) => {
+                let a = self.assets.get(&v.asset).with_context(|| format!("asset {}", v.asset))?;
+                let size = a.info.size.ok_or_else(|| {
+                    EditError::new("asset_not_video", format!("asset `{}` has no video stream", v.asset))
+                        .at(at.ptr.to_string())
+                })?;
+                let t_out0 = (v.clock == Clock::Timeline).then(|| at.f0 as f64 / self.fps() as f64);
+                Item::Video {
+                    layer: key_json(j),
+                    src: Src {
+                        hash: a.hash.clone(),
+                        size,
+                        duration: a.info.duration,
+                        proxy: a.proxy.as_ref().map(|(_, h)| h.clone()),
+                        path: a.proxy.as_ref().map(|(p, _)| p.clone()).unwrap_or_else(|| a.path.clone()),
+                        asset: a.id.clone(),
+                    },
+                    props: list.props.clone(),
+                    k0: at.k0,
+                    active: at.active,
+                    t_out0,
+                    fx: Fx::default(),
+                    typed: Box::new(l.clone()),
+                    slot,
+                }
+            }
+            Content::Group(g) if l.has_video() => {
+                let cj: Vec<Value> = j.get("layers").and_then(Value::as_array).cloned().unwrap_or_default();
+                let cp: Vec<String> = (0..g.layers.len()).map(|k| format!("{lptr}/layers/{k}")).collect();
+                let child = List { js: &cj, ls: &g.layers, ptrs: &cp, props: list.props };
+                let mut nested = vec![];
+                self.list_items(&child, at, &mut nested, owners, runs)?;
+                let mut layer = key_json(j);
+                if let Some(o) = layer.as_object_mut() {
+                    o.remove("layers");
+                }
+                Item::Group {
+                    layer,
+                    props: list.props.clone(),
+                    k0: at.k0,
+                    active: at.active,
+                    items: nested,
+                    fx: Fx::default(),
+                    typed: Box::new(l.clone()),
+                    slot,
+                }
+            }
+            _ => {
+                let still = layer_is_static(l, ra, rb);
+                let key = self.run_key(std::slice::from_ref(j), std::slice::from_ref(l), list.props, range, still);
+                runs.push(RunSpec {
+                    key: key.clone(),
+                    layers: vec![l.clone()],
+                    props: list.props.clone(),
+                    range,
+                    still,
+                });
+                Item::Graphics { key, k0: at.k0, active: at.active, fx: Fx::default(), slot }
+            }
+        })
     }
 
     /// Describes one unit hermetically and computes its key.
@@ -445,7 +762,7 @@ impl Engine {
         let mut owners = vec![];
         let mut runs = vec![];
         let bg = self.project.tl.format.background.as_deref().and_then(Rgba::parse).unwrap_or(Rgba::BLACK).0;
-        items.push(Item::Fill { color: [bg[0], bg[1], bg[2], 255], active: [0, n] });
+        items.push(Item::Fill { color: [bg[0], bg[1], bg[2], 255], active: [0, n], slot: 0 });
         owners.push(Owner {
             element: String::new(),
             kind: "background".into(),
@@ -523,6 +840,10 @@ impl Engine {
         let s = |t: f64| (t * sr as f64).round() as i64;
         let mut clips = vec![];
         let has_audio = |id: &str| self.assets.get(id).filter(|a| a.info.audio);
+        let none = json!({});
+        let loud = |target: Option<f64>, group: &str| {
+            target.map(|t| Loudness { target: t, group: group.to_string(), level_db: None })
+        };
         for (i, sp) in self.res.spine.iter().enumerate() {
             let item = &self.project.tl.spine[i];
             let opts = item.audio.clone().unwrap_or_default();
@@ -530,6 +851,7 @@ impl Engine {
             if opts.mute {
                 continue;
             }
+            let (gain_db, gain) = gain_parts(sp.gain.as_ref(), 0.0, &none);
             clips.push(Clip {
                 role: if sp.kind == SpineKind::Insert { "insert" } else { "vo" }.into(),
                 hash: a.hash.clone(),
@@ -538,16 +860,21 @@ impl Engine {
                 src_in: sp.src_in,
                 at: s(sp.start),
                 len: s(sp.end) - s(sp.start),
-                gain_db: opts.gain_db,
+                stream: stream_sel(a, opts.stream),
+                gain_db,
+                gain,
                 fade_in: opts.fade_in,
                 fade_out: opts.fade_out,
+                fade_curve: opts.fade_curve,
                 looping: false,
-                duck_db: None,
+                duck: vec![],
+                loudness: loud(opts.loudness, &sp.id),
             });
         }
         for u in units {
-            for (it, ow) in u.desc.items.iter().zip(&u.owners) {
-                let Item::Video { typed, src, k0, active, t_out0, .. } = it else { continue };
+            for it in walk_items(&u.desc.items) {
+                let ow = &u.owners[it.slot()];
+                let Item::Video { typed, src, props, k0, active, t_out0, .. } = it else { continue };
                 let Content::Video(v) = &typed.content else { continue };
                 let Some(opts) = v.audio.clone().filter(|o| !o.mute) else { continue };
                 // The source's own sound (a draft may decode the picture from a proxy, which has none).
@@ -556,6 +883,9 @@ impl Engine {
                     Some(t) => v.in_ + t + active[0] as f64 / fps as f64,
                     None => v.in_ + (k0 + active[0]) as f64 / fps as f64,
                 };
+                // The layer's gain keys are in composition seconds.
+                let prop = gain_prop(opts.gain_db.as_ref()).ok().flatten();
+                let (gain_db, gain) = gain_parts(prop.as_ref(), (k0 + active[0]) as f64 / fps as f64, props);
                 clips.push(Clip {
                     role: "layer".into(),
                     hash: src.hash.clone(),
@@ -564,17 +894,22 @@ impl Engine {
                     src_in: t0.max(0.0),
                     at: (u.span.f0 + active[0]) * spf,
                     len: (active[1] - active[0]) * spf,
-                    gain_db: opts.gain_db,
+                    stream: stream_sel(asset, opts.stream),
+                    gain_db,
+                    gain,
                     fade_in: opts.fade_in,
                     fade_out: opts.fade_out,
+                    fade_curve: opts.fade_curve,
                     looping: v.loop_,
-                    duck_db: None,
+                    duck: self.duck_plans(opts.duck.as_ref()),
+                    loudness: loud(opts.loudness, &format!("{}#{}", ow.element, typed.id)),
                 });
             }
         }
         for (i, sp) in self.res.audio.iter().enumerate() {
             let el = &self.project.tl.audio[i];
             let Some(a) = has_audio(&el.asset) else { continue };
+            let (gain_db, gain) = gain_parts(sp.gain.as_ref(), 0.0, &none);
             clips.push(Clip {
                 role: "audio".into(),
                 hash: a.hash.clone(),
@@ -583,14 +918,87 @@ impl Engine {
                 src_in: el.in_,
                 at: s(sp.from),
                 len: s(sp.to) - s(sp.from),
-                gain_db: el.gain_db,
+                stream: stream_sel(a, el.stream),
+                gain_db,
+                gain,
                 fade_in: el.fade_in,
                 fade_out: el.fade_out,
+                fade_curve: el.fade_curve,
                 looping: el.loop_,
-                duck_db: el.duck.as_ref().map(|d| d.db),
+                duck: self.duck_plans(el.duck.as_ref()),
+                loudness: loud(el.loudness, &sp.id),
             });
         }
-        AudioPlan { v: AUDIO_VERSION, sr, fps, start, len: end - start, clips }
+        let master = self.project.tl.master.as_ref().filter(|m| m.is_active()).map(|m| MasterPlan {
+            loudness: m.loudness,
+            gain_db: None,
+            lowpass: m.lowpass,
+            true_peak: m.true_peak,
+        });
+        AudioPlan { v: AUDIO_VERSION, sr, fps, start, len: end - start, clips, master }
+    }
+
+    /// Ducking rules as mixed: span rules get their spans in output samples.
+    fn duck_plans(&self, d: Option<&Ducks>) -> Vec<DuckPlan> {
+        let Some(d) = d else { return vec![] };
+        let sr = self.project.tl.format.sample_rate as f64;
+        let s = |t: f64| (t * sr).round() as i64;
+        d.rules()
+            .into_iter()
+            .map(|r| {
+                let spans: Option<Vec<[i64; 2]>> = match &r.under {
+                    Under::Named(n) if n == "inserts" => Some(
+                        self.res
+                            .spine
+                            .iter()
+                            .filter(|x| x.kind == SpineKind::Insert)
+                            .map(|x| [s(x.start), s(x.end)])
+                            .collect(),
+                    ),
+                    Under::Named(_) => None,
+                    Under::Ids(ids) => Some(
+                        self.res.spine.iter().filter(|x| ids.contains(&x.id)).map(|x| [s(x.start), s(x.end)]).collect(),
+                    ),
+                };
+                match spans {
+                    None => DuckPlan::Vo { db: r.db, release: r.release.unwrap_or(0.35) },
+                    Some(spans) => DuckPlan::Spans {
+                        db: r.db,
+                        spans,
+                        attack: r.attack.unwrap_or(0.35),
+                        release: r.release.unwrap_or(0.35),
+                    },
+                }
+            })
+            .collect()
+    }
+
+    /// Fills in the measured levels of a plan (clips' loudness targets, the master's loudness gain), measured on the
+    /// whole timeline's mix and cached, so a range render uses the levels of the full one. With `compute` false it
+    /// only looks in the cache, and returns false when they aren't there yet.
+    pub fn audio_levels(&self, ap: &mut AudioPlan, compute: bool) -> Result<bool> {
+        if !ap.needs_levels() {
+            return Ok(true);
+        }
+        let spf = (ap.sr / ap.fps) as i64;
+        let full = if ap.start == 0 && ap.len == self.res.frames * spf {
+            ap.clone()
+        } else {
+            let all: Vec<UnitPlan> = self.res.units.iter().map(|u| self.plan_unit(u)).collect::<Result<_>>()?;
+            self.audio_plan(&all)
+        };
+        let key = hex_of(canonical_json(&json!({"v": "levels/1", "plan": full})).as_bytes());
+        let levels = match self.store.get_index("levels", &key) {
+            Some(v) => v,
+            None if !compute => return Ok(false),
+            None => {
+                let v = compute_levels(&full)?;
+                self.store.set_index("levels", &key, &v)?;
+                v
+            }
+        };
+        apply_levels(ap, &levels);
+        Ok(true)
     }
 
     pub fn audio_key(plan: &AudioPlan) -> String {

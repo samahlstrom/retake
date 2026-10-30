@@ -56,6 +56,13 @@
    - static registries (`retake lib add|search|pack`), edit recipes without media, and the agent tools;
    - a starter library of ten CC0 components and a kit (`library/`).
    - Left: publishing a registry somewhere (owner's call), Lottie leaves, the web preview of a component (CanvasKit).
+7. Closing the pilot's gaps. Done (slice 4): perspective and corner pins, blend modes, opacity groups, masks and track
+   mattes, Lanczos and unfiltered resampling, delogo, Pillow-like text metrics, `expr_lib`, audio streams, loudness
+   targets and a master bus, and external raster backends (`retake-raster/1`) so existing drawing code (Pillow
+   scripts) can be a component.
+   - Left: continuous clocks for inserts and overlays (owner's call: frame grid or exact times), repeaters and asset
+     facts in components (`$each`, image sizes and text widths at expansion), span proxies, the catalog resolving
+     `proj:` ids and registering derived assets, smaller manifests, glyph advances that match Pillow exactly.
 
 ## Before publishing
 Done:

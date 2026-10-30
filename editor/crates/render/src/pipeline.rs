@@ -1,7 +1,7 @@
 //! The render pipeline: plan → render missing graphics runs → render missing units → mix audio → package → manifest.
 
 use crate::audio::{self, range_hash};
-use crate::engine::{Engine, Item, RunSpec, UnitPlan};
+use crate::engine::{Engine, Item, RunSpec, UnitPlan, walk_items};
 use crate::expr::Js;
 use crate::ffmpeg;
 use crate::graphics::Painter;
@@ -147,7 +147,8 @@ pub fn plan(e: &Engine) -> Result<(Vec<UnitPlan>, PlanReport)> {
     let mpx = e.canvas.w as f64 * e.canvas.h as f64 / 1e6;
     let par = e.opts.jobs.clamp(1, misses.len().max(1)) as f64;
     let estimate_s = (frames_to_render as f64 * mpx * ms_per_mpx(e) / 1000.0 / par * 10.0).round() / 10.0;
-    let audio_cached = e.store.get_index("audio", &Engine::audio_key(&e.audio_plan(&plans))).is_some();
+    let mut ap = e.audio_plan(&plans);
+    let audio_cached = e.audio_levels(&mut ap, false)? && e.store.get_index("audio", &Engine::audio_key(&ap)).is_some();
     let range = [units.first().map(|u| u.t[0]).unwrap_or(0.0), units.last().map(|u| u.t[1]).unwrap_or(0.0)];
     let report = PlanReport {
         timeline: TimelineRef { id: e.project.tl.id.clone(), rev: e.project.tl.rev, hash: e.timeline_hash() },
@@ -260,7 +261,9 @@ pub fn render(e: &Engine, out: Option<&Path>) -> Result<RenderReport> {
     tick("units", &mut timings);
 
     // Audio: one mix for the whole range, cached by its plan.
-    let ap = e.audio_plan(&plans);
+    let mut ap = e.audio_plan(&plans);
+    // Loudness targets measure the whole timeline's mix (cached), so a range sounds as it will in the full render.
+    e.audio_levels(&mut ap, true)?;
     let akey = Engine::audio_key(&ap);
     let (aac, digests, audio_reused) = match e.store.get_index("audio", &akey) {
         Some(v) if v["aac"].as_str().is_some_and(|h| e.store.has_blob(h)) => {
@@ -406,8 +409,10 @@ fn build_manifest(e: &Engine, plans: &[UnitPlan], indexes: &[Value], digests: &[
         let mut elements: Vec<Element> = vec![];
         let mut order: Vec<String> = vec![];
         let mut per: BTreeMap<String, ElementAcc> = BTreeMap::new();
-        for (k, (it, ow)) in p.desc.items.iter().zip(&p.owners).enumerate() {
-            if ow.kind == "background" {
+        for it in walk_items(&p.desc.items) {
+            let k = it.slot();
+            let Some(ow) = p.owners.get(k) else { continue };
+            if ow.kind == "background" || ow.kind == "matte" {
                 continue;
             }
             let fr = tracks.get(k).map(|t| expand(t, n)).unwrap_or_else(|| vec![None; n as usize]);

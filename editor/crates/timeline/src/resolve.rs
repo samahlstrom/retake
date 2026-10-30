@@ -5,8 +5,9 @@
 
 use crate::anchor::{self, AnchorKind};
 use crate::error::{EditError, close_matches, ptr_escape};
+use crate::keyframe::Prop;
 use crate::layer::{Content, Layer, parse_layer};
-use crate::model::{SpineKind, Timeline};
+use crate::model::{Ducks, SpineKind, Timeline, Under, gain_prop};
 use crate::project::{Project, unknown_asset};
 use crate::words::{self, Word};
 use serde::Serialize;
@@ -30,6 +31,9 @@ pub struct SpineSpan {
     pub src_out: f64,
     #[serde(skip)]
     pub comp: Option<Comp>,
+    /// `audio.gain_db` with key times in seconds from the item's start.
+    #[serde(skip)]
+    pub gain: Option<Prop>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -63,6 +67,9 @@ pub struct AudioSpan {
     pub ptr: String,
     pub from: f64,
     pub to: f64,
+    /// `gain_db` with key times in seconds from `from`.
+    #[serde(skip)]
+    pub gain: Option<Prop>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -234,6 +241,60 @@ struct Resolver<'a> {
     shot_order: Vec<(usize, usize)>,
     end: Option<Result<f64, EditError>>,
     inserts: Vec<(f64, f64)>,
+    /// The `expr_lib` of the composition being resolved (the timeline's, then its own).
+    lib: String,
+}
+
+/// Wraps every expression of a resolved layer in its library: `(() => { lib; return (expr); })()`. A group's
+/// children were wrapped when they were resolved; `meta` and `props` aren't expressions.
+pub fn wrap_exprs(v: &mut Value, lib: &str) {
+    match v {
+        Value::Object(m) => {
+            for (k, c) in m.iter_mut() {
+                match (k.as_str(), &mut *c) {
+                    ("layers" | "meta" | "props", _) => {}
+                    ("expr", Value::String(e)) => *e = format!("(() => {{\n{lib}\nreturn ({e}\n);\n}})()"),
+                    _ => wrap_exprs(c, lib),
+                }
+            }
+        }
+        Value::Array(a) => {
+            for c in a {
+                wrap_exprs(c, lib);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Track mattes name a layer of the same list that isn't the layer itself and has no matte of its own.
+fn check_mattes(layers: &[Layer], ptrs: &[String], errs: &mut Vec<EditError>) {
+    for (l, ptr) in layers.iter().zip(ptrs) {
+        if let Some(m) = &l.matte {
+            match layers.iter().find(|x| x.id == m.layer) {
+                None => errs.push(
+                    EditError::new("matte_unknown", format!("layer {}: no layer `{}` in the same list", l.id, m.layer))
+                        .at(format!("{ptr}/matte/layer"))
+                        .suggest(close_matches(&m.layer, layers.iter().map(|x| x.id.as_str()), 3))
+                        .hint("a track matte is another layer of the same composition or group"),
+                ),
+                Some(x) if x.id == l.id => errs.push(
+                    EditError::new("matte_self", format!("layer {} can't be its own matte", l.id))
+                        .at(format!("{ptr}/matte/layer")),
+                ),
+                Some(x) if x.matte.is_some() => errs.push(
+                    EditError::new("matte_chain", format!("matte layer {} has a matte of its own", x.id))
+                        .at(format!("{ptr}/matte/layer"))
+                        .hint("a matte layer can't be matted; group it instead"),
+                ),
+                Some(_) => {}
+            }
+        }
+        if let Content::Group(g) = &l.content {
+            let cp: Vec<String> = (0..g.layers.len()).map(|i| format!("{ptr}/layers/{i}")).collect();
+            check_mattes(&g.layers, &cp, errs);
+        }
+    }
 }
 
 impl<'a> Resolver<'a> {
@@ -277,6 +338,7 @@ impl<'a> Resolver<'a> {
                 src_in: s.in_,
                 src_out: s.in_ + d,
                 comp: None,
+                gain: None,
             };
             if s.kind == SpineKind::Insert {
                 inserts.push((span.start, span.end));
@@ -295,6 +357,7 @@ impl<'a> Resolver<'a> {
             shot_order,
             end: None,
             inserts,
+            lib: String::new(),
         }
     }
 
@@ -545,14 +608,22 @@ impl<'a> Resolver<'a> {
             }
         }
         // (field path inside the layer, expected component counts)
-        let props: [(&[&str], &[usize]); 7] = [
+        let props: [(&[&str], &[usize]); 15] = [
             (&["transform", "position"], &[2]),
             (&["transform", "scale"], &[1, 2]),
             (&["transform", "rotation"], &[1]),
+            (&["transform", "rotation_x"], &[1]),
+            (&["transform", "rotation_y"], &[1]),
+            (&["transform", "perspective"], &[1]),
+            (&["transform", "corners"], &[8]),
             (&["transform", "opacity"], &[1]),
             (&["crop"], &[4]),
             (&["blur"], &[1]),
             (&["highlight", "words"], &[2]),
+            (&["mask", "rect"], &[4]),
+            (&["mask", "radius"], &[1]),
+            (&["mask", "feather"], &[1]),
+            (&["audio", "gain_db"], &[1]),
         ];
         for (path, dims) in props {
             let pptr = format!("{ptr}/{}", path.join("/"));
@@ -578,8 +649,42 @@ impl<'a> Resolver<'a> {
                 Err(e) => errs.push(e),
             }
         }
+        if let Some(Value::Object(tr)) = obj.get("transform")
+            && tr.contains_key("corners")
+        {
+            let clash: Vec<&str> =
+                ["anchor", "position", "scale", "rotation", "rotation_x", "rotation_y", "perspective"]
+                    .into_iter()
+                    .filter(|k| tr.contains_key(*k))
+                    .collect();
+            if !clash.is_empty() {
+                errs.push(
+                    EditError::new(
+                        "transform_conflict",
+                        format!("`corners` places the layer by itself; it can't be combined with {}", clash.join(", ")),
+                    )
+                    .at(format!("{ptr}/transform"))
+                    .hint("remove those props, or drop `corners` and use position, scale and rotation_x / rotation_y"),
+                );
+            }
+        }
+        // A group's children: the same clock, the same rules.
+        if obj.get("type").and_then(Value::as_str) == Some("group")
+            && let Some(Value::Array(children)) = obj.get("layers").cloned()
+        {
+            let mut out = vec![];
+            for (i, c) in children.iter().enumerate() {
+                if let Some((j, _)) = self.resolve_layer(c, &format!("{ptr}/layers/{i}"), t0, pausing, errs) {
+                    out.push(j);
+                }
+            }
+            obj.insert("layers".into(), Value::Array(out));
+        }
         if errs.len() > before {
             return None;
+        }
+        if !self.lib.is_empty() {
+            wrap_exprs(&mut l, &self.lib);
         }
         match parse_layer(&l) {
             Ok(typed) => {
@@ -668,11 +773,65 @@ impl<'a> Resolver<'a> {
         }
     }
 
+    /// A `gain_db` (number or prop) with anchors in its keys turned into seconds from `t0` (no pause for inserts:
+    /// sound elements run through them).
+    fn gain(&mut self, v: Option<&Value>, ptr: &str, t0: f64, errs: &mut Vec<EditError>) -> Option<Prop> {
+        let mut v = v?.clone();
+        let before = errs.len();
+        self.resolve_prop(&mut v, ptr, &[1], t0, false, errs);
+        if errs.len() > before {
+            return None;
+        }
+        match gain_prop(Some(&v)) {
+            Ok(p) => p,
+            Err(e) => {
+                errs.push(EditError::new("prop_shape", e).at(ptr));
+                None
+            }
+        }
+    }
+
+    /// `under` must be "vo", "inserts" or spine item ids.
+    fn check_duck(&self, d: &Ducks, ptr: &str, errs: &mut Vec<EditError>) {
+        let rules = d.rules();
+        for (k, r) in rules.iter().enumerate() {
+            let rp = if matches!(d, Ducks::Many(_)) { format!("{ptr}/{k}/under") } else { format!("{ptr}/under") };
+            match &r.under {
+                Under::Named(n) if n == "vo" || n == "inserts" => {}
+                Under::Named(n) => errs.push(
+                    EditError::new("duck_under", format!("duck under `{n}`: use \"vo\", \"inserts\" or spine ids"))
+                        .at(rp),
+                ),
+                Under::Ids(ids) => {
+                    for id in ids {
+                        if !self.tl.spine.iter().any(|s| &s.id == id) {
+                            let all: Vec<&str> = self.tl.spine.iter().map(|s| s.id.as_str()).collect();
+                            errs.push(
+                                EditError::new("duck_under", format!("duck under `{id}`: no spine item has that id"))
+                                    .at(rp.clone())
+                                    .suggest(close_matches(id, all, 3))
+                                    .hint("duck under spine item ids, \"inserts\" or \"vo\""),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     fn check_layer_refs(&self, l: &Layer, ptr: &str, errs: &mut Vec<EditError>) {
         match &l.content {
             Content::Video(v) => {
                 if !self.tl.assets.contains_key(&v.asset) {
                     errs.push(unknown_asset(self.p, &v.asset).at(format!("{ptr}/asset")));
+                }
+                if let Some(a) = &v.audio {
+                    if let Some(d) = &a.duck {
+                        self.check_duck(d, &format!("{ptr}/audio/duck"), errs);
+                    }
+                    if let Err(e) = gain_prop(a.gain_db.as_ref()) {
+                        errs.push(EditError::new("prop_shape", e).at(format!("{ptr}/audio/gain_db")));
+                    }
                 }
             }
             Content::Image(i) => {
@@ -693,7 +852,12 @@ impl<'a> Resolver<'a> {
                     );
                 }
             }
-            Content::Shape(_) => {}
+            Content::Shape(_) | Content::Raster(_) => {}
+            Content::Group(g) => {
+                for (i, c) in g.layers.iter().enumerate() {
+                    self.check_layer_refs(c, &format!("{ptr}/layers/{i}"), errs);
+                }
+            }
         }
     }
 
@@ -706,14 +870,22 @@ impl<'a> Resolver<'a> {
             errs.push(EditError::new("color", format!("bad color {bg}")).at(format!("{ptr}/background")));
         }
         let layers = pic.get("layers").and_then(Value::as_array).cloned().unwrap_or_default();
+        let libs: Vec<&str> =
+            [self.tl.expr_lib.as_deref(), pic.get("expr_lib").and_then(Value::as_str)].into_iter().flatten().collect();
+        self.lib = libs.join("\n");
         let mut lj = vec![];
         let mut lt = vec![];
+        let mut ptrs = vec![];
         for (i, l) in layers.iter().enumerate() {
-            if let Some((j, t)) = self.resolve_layer(l, &format!("{ptr}/layers/{i}"), t0, pausing, errs) {
+            let lp = format!("{ptr}/layers/{i}");
+            if let Some((j, t)) = self.resolve_layer(l, &lp, t0, pausing, errs) {
                 lj.push(j);
                 lt.push(t);
+                ptrs.push(lp);
             }
         }
+        self.lib.clear();
+        check_mattes(&lt, &ptrs, errs);
         let mut props = pic.get("props").cloned().unwrap_or_else(|| json!({}));
         if let Some(m) = props.as_object_mut() {
             for (k, v) in m.iter_mut() {
@@ -927,7 +1099,11 @@ pub fn resolve(p: &Project) -> Result<Resolved, Vec<EditError>> {
                         .at(format!("/audio/{i}")),
                     );
                 } else {
-                    audio.push(AudioSpan { id: a.id.clone(), ptr: format!("/audio/{i}"), from: f, to: t });
+                    let gain = r.gain(a.gain_db.as_ref(), &format!("/audio/{i}/gain_db"), f, &mut errs);
+                    if let Some(d) = &a.duck {
+                        r.check_duck(d, &format!("/audio/{i}/duck"), &mut errs);
+                    }
+                    audio.push(AudioSpan { id: a.id.clone(), ptr: format!("/audio/{i}"), from: f, to: t, gain });
                 }
             }
             (x, y) => {
@@ -947,9 +1123,12 @@ pub fn resolve(p: &Project) -> Result<Resolved, Vec<EditError>> {
         }
     }
 
-    // Insert pictures.
+    // Insert pictures, and spine items' gain keys.
     let mut spine = r.spine.clone();
     for (i, s) in tl.spine.iter().enumerate() {
+        if let Some(a) = &s.audio {
+            spine[i].gain = r.gain(a.gain_db.as_ref(), &format!("/spine/{i}/audio/gain_db"), spine[i].start, &mut errs);
+        }
         if s.kind != SpineKind::Insert {
             continue;
         }

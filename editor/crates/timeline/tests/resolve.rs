@@ -230,6 +230,62 @@ fn units_are_contiguous_and_cover_the_output() {
 }
 
 #[test]
+fn gain_keys_resolve_on_each_elements_clock_and_duck_targets_are_checked() {
+    let mut d = timeline();
+    let keys = json!({"keys": [{"t": 0, "v": -20}, {"t": "word:b/Everest", "v": 0}]});
+    // Everest is at 3.8 s on the output clock; b starts at 2.1.
+    d["audio"][0]["gain_db"] = keys.clone();
+    d["audio"][0]["duck"] = json!([{"db": -7}, {"db": -96, "under": ["a", "b"], "attack": 0.2}]);
+    d["spine"][1]["audio"] = json!({"gain_db": keys.clone(), "fade_curve": "s-curve", "stream": 1, "loudness": -23});
+    d["scenes"][0]["shots"][0]["picture"]["layers"][0]["audio"] =
+        json!({"gain_db": keys.clone(), "duck": {"db": -6, "under": "inserts"}});
+    d["master"] = json!({"loudness": -18, "true_peak": -2, "lowpass": 16500});
+    let p = project("gain-keys", d.clone());
+    let r = resolve(&p).unwrap();
+    let t1 = |p: &retake_timeline::keyframe::Prop| match p {
+        retake_timeline::keyframe::Prop::Keys { keys, .. } => keys[1].t,
+        _ => panic!("keys"),
+    };
+    assert!(near(t1(r.audio[0].gain.as_ref().unwrap()), 3.8), "from the bed's `from` (0)");
+    assert!(near(t1(r.spine_item("b").unwrap().gain.as_ref().unwrap()), 1.7), "from b's start");
+    assert!(r.spine_item("a").unwrap().gain.is_none());
+    let layer = &r.shot("intro/1").unwrap().comp.layers_json[0];
+    assert_eq!(layer["audio"]["gain_db"]["keys"][1]["t"], json!(3.8), "composition seconds");
+    assert_eq!(p.tl.master.as_ref().unwrap().true_peak, Some(-2.0));
+    // A constant gain stays a number.
+    let mut c = d.clone();
+    c["audio"][0]["gain_db"] = json!(-6);
+    let r = resolve(&project("gain-const", c)).unwrap();
+    assert!(matches!(r.audio[0].gain, Some(retake_timeline::keyframe::Prop::Const(_))));
+    // Ducking under something that isn't a spine item, or a key anchor that doesn't resolve.
+    let mut bad = d.clone();
+    bad["audio"][0]["duck"] = json!({"db": -6, "under": ["pop"]});
+    bad["scenes"][0]["shots"][0]["picture"]["layers"][0]["audio"]["duck"] = json!({"db": -6, "under": ["zz"]});
+    bad["spine"][1]["audio"]["gain_db"]["keys"][1]["t"] = json!("word:b/Everist");
+    let e = resolve(&project("gain-bad", bad)).unwrap_err();
+    let codes: Vec<(&str, &str)> = e.iter().map(|e| (e.code.as_str(), e.path.as_deref().unwrap_or(""))).collect();
+    assert!(codes.contains(&("duck_under", "/audio/0/duck/under")), "{codes:?}");
+    assert!(codes.contains(&("duck_under", "/scenes/0/shots/0/picture/layers/0/audio/duck/under")), "{codes:?}");
+    assert!(codes.contains(&("anchor_word_not_found", "/spine/1/audio/gain_db/keys/1/t")), "{codes:?}");
+    // The schema: a gain out of range, an unknown curve, a duck on a spine item.
+    for (path, v) in [
+        ("/audio/0/gain_db", json!(30)),
+        ("/audio/0/fade_curve", json!("cosine")),
+        ("/spine/1/audio/duck", json!({"db": -6})),
+        ("/audio/0/stream", json!(-1)),
+    ] {
+        let mut s = d.clone();
+        *s.pointer_mut(path.rsplit_once('/').unwrap().0)
+            .unwrap()
+            .as_object_mut()
+            .unwrap()
+            .entry(path.rsplit_once('/').unwrap().1)
+            .or_insert(json!(null)) = v;
+        assert!(!retake_timeline::schema::check_timeline(&s).is_empty(), "{path} should fail the schema");
+    }
+}
+
+#[test]
 fn inserts_cut_shots_and_pause_their_clocks() {
     let mut d = timeline();
     // A 1 s insert after spine item a, in the middle of nothing; and one in the middle of shot intro/2's span.
@@ -329,4 +385,82 @@ fn missing_media_is_reported() {
     d["format"]["sample_rate"] = json!(44100);
     let errs = check_refs(&project("rates", d));
     assert_eq!(errs[0].code, "format_rates");
+}
+
+/// Slice 4's layer constructs: groups resolve their children's anchors on the composition clock, track mattes and
+/// corner pins are checked, and expr_lib wraps every expression.
+#[test]
+fn groups_mattes_corners_and_expr_lib() {
+    let mut d = timeline();
+    d["expr_lib"] = json!("const k = 2;");
+    let pic = &mut d["scenes"][0]["shots"][1]["picture"];
+    pic["expr_lib"] = json!("const j = 3;");
+    pic["layers"] = json!([
+        {"id": "g", "type": "group", "transform": {"opacity": 0.5, "rotation_y": 20, "perspective": 900},
+         "mask": {"radius": 12, "feather": 1, "stroke": {"color": "#fff", "width": 2}}, "blend": "screen",
+         "layers": [
+            {"id": "g/m", "type": "shape", "shape": "path", "path": "M0 0 L10 0 L10 10 Z", "fill": "#fff"},
+            {"id": "g/t", "type": "text", "text": "HI", "from": "word:b/Everest", "hinting": "normal",
+             "subpixel": false, "metrics": "pillow", "matte": {"layer": "g/m", "mode": "luma"},
+             "transform": {"opacity": {"expr": "k * j * t"}}}
+         ]},
+        {"id": "pin", "type": "image", "asset": "proj:clip", "resample": "lanczos",
+         "transform": {"corners": [0, 0, 10, 0, 10, 10, 0, 10]}}
+    ]);
+    let p = project("s4-layers", d.clone());
+    let r = resolve(&p).unwrap_or_else(|e| panic!("{e:?}"));
+    let comp = &r.shots.iter().find(|s| s.id == "intro/2").unwrap().comp;
+    let child = &comp.layers_json[0]["layers"][1];
+    // Everest is at 3.8 s in output time; the shot starts at "Everyone - 0.10" = 2.1 s: 1.7 s on the shot's clock.
+    assert!(near(child["from"].as_f64().unwrap(), 1.7), "{child}");
+    let e = child["transform"]["opacity"]["expr"].as_str().unwrap();
+    assert!(e.contains("const k = 2;") && e.contains("const j = 3;") && e.contains("k * j * t"), "{e}");
+    assert!(e.find("const k").unwrap() < e.find("const j").unwrap(), "the timeline's library comes first");
+    // Errors: corners with a position, a matte that isn't a sibling, a layer matted by itself, a matted matte.
+    let mut bad = d.clone();
+    bad["scenes"][0]["shots"][1]["picture"]["layers"][1]["transform"]["position"] = json!([1, 2]);
+    bad["scenes"][0]["shots"][1]["picture"]["layers"][0]["layers"][1]["matte"]["layer"] = json!("pin");
+    let e = resolve(&project("s4-bad", bad)).unwrap_err();
+    let codes: Vec<&str> = e.iter().map(|x| x.code.as_str()).collect();
+    assert!(codes.contains(&"transform_conflict") && codes.contains(&"matte_unknown"), "{codes:?}");
+    let mut own = d.clone();
+    own["scenes"][0]["shots"][1]["picture"]["layers"][0]["layers"][1]["matte"]["layer"] = json!("g/t");
+    assert_eq!(resolve(&project("s4-self", own)).unwrap_err()[0].code, "matte_self");
+    let mut chain = d.clone();
+    chain["scenes"][0]["shots"][1]["picture"]["layers"][0]["layers"][0]["matte"] = json!({"layer": "g/t"});
+    let e = resolve(&project("s4-chain", chain)).unwrap_err();
+    assert!(e.iter().any(|x| x.code == "matte_chain"), "{e:?}");
+    // The schema refuses unknown blend modes and a corner pin of the wrong length.
+    let mut s = d.clone();
+    s["scenes"][0]["shots"][1]["picture"]["layers"][0]["blend"] = json!("dodge");
+    assert!(Project::from_doc(&scratch("s4-schema").join("timeline.json"), s).is_err());
+    let mut c = d;
+    c["scenes"][0]["shots"][1]["picture"]["layers"][1]["transform"]["corners"] = json!([0, 0, 1, 1]);
+    let e = resolve(&project("s4-corners", c)).unwrap_err();
+    assert_eq!(e[0].code, "prop_shape");
+}
+
+/// Regression (slice 3 broke it): a slice-2 timeline listed plug-ins and other references in `kits`, which 0.1
+/// recorded without loading. They still open, validate and resolve; only kit packages are loaded.
+#[test]
+fn slice2_kits_are_recorded_not_rejected() {
+    let mut d = timeline();
+    d["kits"] = json!(["plugin:deadlock", "deadlock", "plugin:captions@2.1.0", "brand:acme@3"]);
+    let p = project("slice2-kits", d.clone());
+    assert!(validate(&p).is_empty(), "{:?}", validate(&p));
+    assert!(p.kits.is_empty());
+    assert_eq!(p.kits_recorded, vec!["plugin:deadlock", "deadlock", "plugin:captions@2.1.0", "brand:acme@3"]);
+    // Recorded, not dropped: the document keeps them, and the expansion is otherwise unchanged.
+    assert_eq!(p.doc["kits"], d["kits"]);
+    let mut plain = d.clone();
+    plain.as_object_mut().unwrap().remove("kits");
+    let q = project("slice2-nokits", plain);
+    let (a, b) = (resolve(&p).unwrap(), resolve(&q).unwrap());
+    assert_eq!(a.units.len(), b.units.len());
+    assert_eq!(serde_json::to_value(&a.shots).unwrap(), serde_json::to_value(&b.shots).unwrap());
+    // A kit package that isn't installed is still an error (a typo shouldn't pass silently).
+    let mut d = timeline();
+    d["kits"] = json!(["clen@1.0.0"]);
+    let e = Project::from_doc(&scratch("kit-typo").join("timeline.json"), d).unwrap_err();
+    assert_eq!(e.0[0].code, "kit_not_found");
 }

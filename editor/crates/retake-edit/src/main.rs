@@ -613,7 +613,11 @@ fn run(cmd: Cmd) -> Result<(bool, Value, String)> {
         Cmd::Expand { timeline, c } => {
             let p = Project::load(&timeline)?;
             let text = patch::pretty(&p.doc);
-            Ok((c.json, json!({"timeline": p.doc, "uses": p.uses, "kits": p.kits}), text.trim_end().to_string()))
+            Ok((
+                c.json,
+                json!({"timeline": p.doc, "uses": p.uses, "kits": p.kits, "kits_recorded": p.kits_recorded}),
+                text.trim_end().to_string(),
+            ))
         }
     }
 }
