@@ -141,7 +141,12 @@ pub struct Overlay {
     pub background: Option<String>,
     #[serde(default)]
     pub props: Option<Value>,
+    /// After expansion, the layers (a component use has none as written).
+    #[serde(default)]
     pub layers: Vec<Value>,
+    /// The component this overlay uses, `<name>@<version>` (spec/components.md).
+    #[serde(rename = "use", default, skip_serializing_if = "Option::is_none")]
+    pub use_: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

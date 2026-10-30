@@ -209,6 +209,7 @@ func NewServerWith(p *agent.Project, version string, opts Options) *sdk.Server {
 			return nil, res, err
 		})
 	addAssetTools(s, AssetsFor(p.Root), opts.Root)
+	AddLibTools(s, LibOptions{Root: p.Root, Editor: p.Editor, Within: opts.Root})
 	return s
 }
 

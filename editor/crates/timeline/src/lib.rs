@@ -2,9 +2,11 @@
 //! validation, the anchor resolver, units, patches, keyframes and easing, and the render manifest.
 
 pub mod anchor;
+pub mod component;
 pub mod error;
 pub mod keyframe;
 pub mod layer;
+pub mod lint;
 pub mod manifest;
 pub mod model;
 pub mod patch;

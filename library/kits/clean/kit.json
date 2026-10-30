@@ -1,0 +1,50 @@
+{
+  "schema": "retake-kit/0.1",
+  "name": "clean",
+  "version": "1.0.0",
+  "title": "Clean",
+  "description": "A neutral dark kit: off-white type on near-black, one warm yellow accent, Baloo 2 throughout, and house rules for pacing (one pop at a time, room between pops, a budget for punch-ins) and placement (graphics inside the action-safe area, names never over captions).",
+  "license": { "status": "cleared", "spdx": "CC0-1.0", "credit": "" },
+  "tokens": {
+    "color": {
+      "accent": "#ffd23f",
+      "accent2": "#5bc0eb",
+      "text": "#f7f7f2",
+      "muted": "#a3a9b4",
+      "ink": "#101114",
+      "bg": "#15171c",
+      "surface": "#20232b",
+      "plate": "#15171ce6",
+      "danger": "#ff5d5d",
+      "success": "#43d39e"
+    },
+    "font": { "display": "display", "body": "display" },
+    "size": { "title": 128, "heading": 84, "body": 44, "caption": 64, "label": 34 },
+    "safe_area": { "action": [0.035, 0.035, 0.93, 0.93], "title": [0.1, 0.1, 0.8, 0.8] },
+    "caption": { "words_per_line": 4, "size": 64, "highlight": "#ffd23f", "y": 950 },
+    "pacing": { "pop_min_gap": 0.6, "pop_min_read": 0.5, "zooms_per_10s": 2, "callout_min": 1.2 },
+    "motion": { "in": 0.18, "out": 0.14 }
+  },
+  "components": [
+    "title-card@1.0.0",
+    "pop-text@1.0.0",
+    "lower-third@1.0.0",
+    "caption@1.0.0",
+    "pip-frame@1.0.0",
+    "progress-bar@1.0.0",
+    "zoom-punch@1.0.0",
+    "counter@1.0.0",
+    "callout-arrow@1.0.0",
+    "freeze-frame-highlight@1.0.0"
+  ],
+  "rules": [
+    { "id": "one-pop-at-a-time", "rule": "no-overlap", "kind": "pop", "message": "one pop at a time" },
+    { "id": "pop-breathing-room", "rule": "min-gap", "kind": "pop", "seconds": "kit:pacing.pop_min_gap", "severity": "warning", "message": "let each pop land before the next" },
+    { "id": "zoom-budget", "rule": "max-count-per-window", "kind": "zoom", "max": "kit:pacing.zooms_per_10s", "window": 10, "message": "punch-ins stop punching when they're constant" },
+    { "id": "graphics-in-action-safe", "rule": "safe-area", "kind": "overlay", "area": "kit:safe_area.action", "message": "keep graphics inside the action-safe area" },
+    { "id": "names-not-over-captions", "rule": "no-overlap", "kind": "lower-third", "with": "caption", "message": "a name and a caption fight for the same spot" },
+    { "id": "callouts-need-time", "rule": "min-duration", "kind": "callout", "seconds": "kit:pacing.callout_min", "severity": "warning", "message": "the arrow needs time to draw and be read" },
+    { "id": "readable-pops", "rule": "custom", "severity": "warning", "expr": "elements.filter((e) => e.kinds.includes('pop') && e.t[1] - e.t[0] < kit.pacing.pop_min_read).map((e) => ({elements: [e.id], t: e.t, message: `${e.id} shows for ${(e.t[1] - e.t[0]).toFixed(2)} s; a pop needs ${kit.pacing.pop_min_read} s to read`, hint: `end it at ${(e.t[0] + kit.pacing.pop_min_read).toFixed(2)} s or later`}))" }
+  ],
+  "assets": []
+}

@@ -440,6 +440,7 @@ fn build_manifest(e: &Engine, plans: &[UnitPlan], indexes: &[Value], digests: &[
                     }],
                     anchors: BTreeMap::new(),
                     parent: Some(ow.element.clone()),
+                    use_: e.project.use_of(&ow.element).map(|u| u.reference.clone()),
                 });
             }
         }
@@ -474,6 +475,7 @@ fn build_manifest(e: &Engine, plans: &[UnitPlan], indexes: &[Value], digests: &[
                 sources,
                 anchors,
                 parent: None,
+                use_: e.project.use_of(el).map(|u| u.reference.clone()),
             });
         }
         // Audio-only elements: spine items and audio elements that sound in this unit.
@@ -496,6 +498,7 @@ fn build_manifest(e: &Engine, plans: &[UnitPlan], indexes: &[Value], digests: &[
                 }],
                 anchors: BTreeMap::new(),
                 parent: None,
+                use_: None,
             });
         }
         for (i, au) in e.res.audio.iter().enumerate() {
@@ -518,6 +521,7 @@ fn build_manifest(e: &Engine, plans: &[UnitPlan], indexes: &[Value], digests: &[
                 }],
                 anchors: [("from".to_string(), el.from.clone())].into_iter().collect(),
                 parent: None,
+                use_: None,
             });
         }
         elements.sort_by(|a, b| b.z.cmp(&a.z).then(a.kind.cmp(&b.kind)).then(a.id.cmp(&b.id)));

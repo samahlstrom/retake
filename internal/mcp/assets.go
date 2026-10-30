@@ -57,7 +57,8 @@ const (
 	assetPreviewDesc = `Look at an asset. Returns preview images (also as image content you can see) and their ` +
 		`paths: a video's contact sheet (one tile every every_s seconds, timecodes burned in), a span's 6-frame strip ` +
 		`(span: sp:<n>), frames at given times (at: seconds into the asset, up to 24, rendered on demand from the ` +
-		`proxy), an audio file's waveform with its loudness, an image's thumbnail or a font's specimen sheet. Missing ` +
+		`proxy), an audio file's waveform with its loudness, an image's thumbnail, a font's specimen sheet, or a ` +
+		`component's storybook sheet (each example at five moments) and animation. Missing ` +
 		`previews are made now. Use frames to check a moment before cutting to it.`
 	spanFindDesc = `Find spans: labeled moments inside assets (t0/t1 in seconds into the asset, a type, a label, ` +
 		`data, where the label came from and how sure it is). Filter by type (exact, or LIKE patterns with %), by ` +
@@ -88,7 +89,7 @@ const (
 
 type assetSearchIn struct {
 	Q       string   `json:"q,omitempty" jsonschema:"words to find (all of them, as prefixes); empty: filters only"`
-	Kind    []string `json:"kind,omitempty" jsonschema:"only these kinds: video, audio, image, font, other"`
+	Kind    []string `json:"kind,omitempty" jsonschema:"only these kinds: video, audio, image, font, component, other"`
 	Scope   []string `json:"scope,omitempty" jsonschema:"only these scopes: proj, brand, lib"`
 	Tags    []string `json:"tags,omitempty" jsonschema:"only assets that have all of these tags"`
 	License []string `json:"license,omitempty" jsonschema:"only these license statuses: owned, cleared, attribution, review-only, blocked"`
@@ -103,7 +104,7 @@ type assetIDIn struct {
 
 type assetPreviewIn struct {
 	ID   string    `json:"id" jsonschema:"the asset id"`
-	Kind string    `json:"kind,omitempty" jsonschema:"contact_sheet, strip, frames, waveform, thumbnail or specimen (default: the asset's main preview)"`
+	Kind string    `json:"kind,omitempty" jsonschema:"contact_sheet, strip, frames, waveform, thumbnail, specimen, storybook or animation (default: the asset's main preview)"`
 	At   []float64 `json:"at,omitempty" jsonschema:"frames at these times, seconds into the asset"`
 	Span string    `json:"span,omitempty" jsonschema:"a span id (sp:<n>): its 6-frame strip"`
 }

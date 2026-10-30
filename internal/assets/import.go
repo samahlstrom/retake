@@ -154,6 +154,7 @@ func (c *Catalog) Import(ctx context.Context, a ImportArgs) (ImportResult, error
 	}
 	type job struct{ path, name string }
 	var jobs []job
+	var components []string
 	var res ImportResult
 	for _, p := range a.Paths {
 		abs, err := filepath.Abs(p)
@@ -163,6 +164,10 @@ func (c *Catalog) Import(ctx context.Context, a ImportArgs) (ImportResult, error
 		st, err := os.Stat(abs)
 		if err != nil {
 			return res, errorf(CodeNotFound, "no such file or folder: %s", abs)
+		}
+		if st.IsDir() && isComponentDir(abs) { // a component package is one entry (spec/components.md)
+			components = append(components, abs)
+			continue
 		}
 		if !st.IsDir() {
 			name := a.Name
@@ -201,16 +206,19 @@ func (c *Catalog) Import(ctx context.Context, a ImportArgs) (ImportResult, error
 			return res, wrap(err)
 		}
 	}
-	if len(a.Paths) == 1 && len(jobs) == 0 && len(res.Items) == 0 {
+	if len(a.Paths) == 1 && len(jobs) == 0 && len(res.Items) == 0 && len(components) == 0 {
 		return res, errorf(CodeNotFound, "nothing to import in %s", a.Paths[0])
 	}
 	sort.SliceStable(jobs, func(i, j int) bool { return jobs[i].path < jobs[j].path })
-	if len(jobs) == 0 {
+	if len(jobs) == 0 && len(components) == 0 {
 		return res, nil
 	}
 	d, err := c.catalogFor(scope, true)
 	if err != nil {
 		return res, wrap(err)
+	}
+	for _, dir := range components {
+		res.add(c.importComponent(ctx, d, dir, a))
 	}
 	for _, j := range jobs {
 		if err := ctx.Err(); err != nil {

@@ -108,6 +108,23 @@ retake push how-to/v2/how-to_v2.mp4 --render --parent v2             # renders, 
 
 [docs/timeline.md](docs/timeline.md) explains the format and the loop.
 
+## Components and the shared library
+
+Motion graphics and edit styles are code anyone can share: a component is a JSON file with a props schema and layers
+(no After Effects, no MOGRT), a brand kit holds the tokens and the house rules, and a registry is a static
+`index.json`. `library/` has ten CC0 components (titles, pops, lower thirds, karaoke captions, picture-in-picture, a
+progress bar, zoom punches, counters, callouts, freeze-frame highlights) and a kit:
+
+```bash
+scripts/build-registry.sh                                   # library/index.json
+retake lib add pop-text --registry library/index.json      # vendored into components/, pinned in timeline.lock
+retake-edit lint edit/timeline.json                        # "pop overlaps pop at 0:12.3–0:12.5; one pop at a time"
+```
+
+A component change re-renders only the elements that use it, and upgrades are per element. Agents get
+`component_describe` (with the storybook sheet as an image), `lib_search`, `lib_add` and `lint`. See
+[spec/components.md](spec/components.md) and [library/README.md](library/README.md).
+
 ## Sharing
 
 `retake share clip_v6.mp4 --label alex` puts the review behind an HTTPS tunnel (cloudflared, or `--tunnel tailscale`)

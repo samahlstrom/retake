@@ -1,0 +1,66 @@
+{
+  "schema": "retake-component/0.1",
+  "name": "pop-text",
+  "version": "1.0.0",
+  "title": "Pop text",
+  "description": "A word or two that lands over the picture to stress what the voice says: pops (or rises) in, settles, and fades out on the element's end. Big, bold, outlined, readable over any footage. One at a time.",
+  "license": "CC0-1.0",
+  "authors": ["Retake contributors"],
+  "tags": ["text", "emphasis", "pop", "kinetic type"],
+  "category": "pop",
+  "use_as": ["overlay"],
+  "canvas": [1920, 1080],
+  "duration": 1.4,
+  "props": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["text"],
+    "properties": {
+      "text": { "type": "string", "minLength": 1, "maxLength": 48, "description": "The words, shown upper-cased. \\n breaks the line. Keep it to one to three words." },
+      "color": { "type": "string", "default": "kit:color.accent", "description": "Fill color: #rrggbb or a kit token such as kit:color.accent." },
+      "stroke": { "type": "string", "default": "kit:color.ink", "description": "Outline color, drawn outside the letters." },
+      "size": { "type": "number", "minimum": 40, "maximum": 240, "default": 132, "description": "Letter size in pixels of the 1920x1080 design canvas." },
+      "x": { "type": "number", "default": 960, "description": "Horizontal center, design pixels." },
+      "y": { "type": "number", "default": 840, "description": "Vertical center, design pixels. 840 sits in the lower third, clear of captions at 960." },
+      "tilt": { "type": "number", "minimum": -15, "maximum": 15, "default": -3, "description": "Rotation in degrees, clockwise. A small tilt reads as energy." },
+      "enter": { "enum": ["pop", "rise", "cut"], "default": "pop", "description": "pop: scales up from half size with a little overshoot. rise: slides up and fades in. cut: just appears." },
+      "max_width": { "type": "number", "default": 1500, "description": "Lines wrap at spaces beyond this width." }
+    }
+  },
+  "tokens": {
+    "color": { "accent": "#ffd23f", "ink": "#101114", "text": "#f7f7f2" }
+  },
+  "layers": [
+    {
+      "id": "text",
+      "type": "text",
+      "text": "$props.text",
+      "uppercase": true,
+      "size": "$props.size",
+      "line_height": 0.98,
+      "max_width": "$props.max_width",
+      "fill": "$props.color",
+      "stroke": { "color": "$props.stroke", "width": { "$expr": "Math.round(props.size * 0.075)" } },
+      "shadow": { "color": "#00000080", "dx": 0, "dy": 10, "blur": 22 },
+      "transform": {
+        "position": { "$expr": "props.enter === 'rise' ? {keys: [{t: 0, v: [props.x, props.y + 70], ease: 'out-cubic'}, {t: 0.2, v: [props.x, props.y]}]} : [props.x, props.y]" },
+        "rotation": "$props.tilt",
+        "scale": { "$expr": "props.enter === 'pop' ? {keys: [{t: 0, v: 0.45, ease: 'out-back'}, {t: 0.17, v: 1}]} : 1" },
+        "opacity": { "keys": [
+          { "t": 0, "v": { "$expr": "props.enter === 'rise' ? 0 : 1" } },
+          { "t": 0.12, "v": 1 },
+          { "t": "end:$id-0.14", "v": 1, "ease": "in-quad" },
+          { "t": "end:$id", "v": 0 }
+        ] }
+      }
+    }
+  ],
+  "examples": [
+    { "name": "pop", "props": { "text": "Faster" }, "duration": 1.4 },
+    { "name": "rise, two lines", "props": { "text": "No glue\nneeded", "enter": "rise", "color": "kit:color.text", "tilt": 0 }, "duration": 1.4 },
+    { "name": "cut, tilted", "props": { "text": "Wait…", "enter": "cut", "color": "#ff5d5d", "tilt": 5, "size": 160, "y": 540 }, "duration": 1.2 }
+  ],
+  "changelog": [
+    { "version": "1.0.0", "date": "2026-10-30", "changes": "First version: pop, rise and cut entrances, outline and drop shadow, fade out on the element's end." }
+  ]
+}

@@ -122,6 +122,46 @@ CREATE VIRTUAL TABLE assets_fts USING fts5 (id UNINDEXED, title, tags, caption, 
 CREATE VIRTUAL TABLE spans_fts USING fts5 (span UNINDEXED, label, type, data,
 	tokenize = 'unicode61 remove_diacritics 2');
 `,
+	// 2: the component kind (spec/components.md). SQLite can't change a CHECK in place, so the table is rebuilt (its
+	// documented procedure; migrate runs with foreign keys off, so the rebuild cascades nothing).
+	`
+CREATE TABLE assets_new (
+	id              TEXT PRIMARY KEY,
+	scope           TEXT NOT NULL CHECK (scope IN ('project', 'brand', 'lib')),
+	kind            TEXT NOT NULL CHECK (kind IN ('video', 'audio', 'image', 'font', 'component', 'other')),
+	hash            TEXT,
+	size            INTEGER,
+	mtime           INTEGER,
+	locator         TEXT NOT NULL,
+	in_store        INTEGER NOT NULL DEFAULT 0,
+	media           TEXT NOT NULL DEFAULT '{}',
+	proxy           TEXT,
+	title           TEXT NOT NULL DEFAULT '',
+	tags            TEXT NOT NULL DEFAULT '[]',
+	caption         TEXT NOT NULL DEFAULT '',
+	previews        TEXT NOT NULL DEFAULT '{}',
+	license         TEXT NOT NULL DEFAULT 'review-only'
+	                CHECK (license IN ('owned', 'cleared', 'attribution', 'review-only', 'blocked')),
+	credit          TEXT NOT NULL DEFAULT '',
+	license_source  TEXT NOT NULL DEFAULT '',
+	license_note    TEXT NOT NULL DEFAULT '',
+	content_id_risk TEXT NOT NULL DEFAULT '' CHECK (content_id_risk IN ('', 'low', 'medium', 'high')),
+	phash           TEXT NOT NULL DEFAULT '',
+	near            TEXT NOT NULL DEFAULT '[]',
+	provenance      TEXT NOT NULL DEFAULT '{}',
+	plugin          TEXT NOT NULL DEFAULT '',
+	plugin_key      TEXT,
+	meta            TEXT NOT NULL DEFAULT '{}',
+	created         TEXT NOT NULL,
+	updated         TEXT NOT NULL
+);
+INSERT INTO assets_new SELECT * FROM assets;
+DROP TABLE assets;
+ALTER TABLE assets_new RENAME TO assets;
+CREATE UNIQUE INDEX assets_plugin_key ON assets (plugin, plugin_key) WHERE plugin_key IS NOT NULL;
+CREATE INDEX assets_hash ON assets (hash);
+CREATE INDEX assets_kind ON assets (kind, updated);
+`,
 }
 
 // SchemaVersion is the catalog schema version this build writes.

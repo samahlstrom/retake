@@ -35,7 +35,7 @@ down. Colors are `#rgb`, `#rrggbb` or `#rrggbbaa`.
 | `format.fps` | Integer frames per second. Every unit boundary falls on a frame. |
 | `format.sample_rate` | Audio sample rate. Default 48000. It must be a whole number of samples per frame (48000 works for 24, 25, 30, 50, 60 and 120 fps). |
 | `format.background` | What shows where no layer draws. Default `#000000`. |
-| `kits` | Brand kits and plug-ins the timeline uses, e.g. `"brand:acme@3"`. Recorded in 0.1, not loaded yet. |
+| `kits` | Brand kits the timeline uses, e.g. `"clean@1.0.0"`: their tokens (`kit:color.accent`) and house rules (`spec/components.md`). A `"brand:acme@3"` kit is loaded when its folder is found, else only recorded. |
 | `assets` | The media the timeline uses, by asset id (below). |
 | `fonts` | Font names for text layers. `display` is built in (the vendored Baloo 2, weight 800) unless redefined. |
 | `spine` | The master clock (below). At least one item. |
@@ -138,8 +138,9 @@ Resolution is deterministic and errors are typed, with a JSON pointer and a hint
 
 - A **shot** starts at `at` and runs until the next shot starts (in document order across scenes), or to the end.
   Shots must resolve in non-decreasing order. Before the first shot the picture is `format.background`.
-- A shot's `picture` and an **overlay** are both *compositions*: `{background?, props?, layers}`. Layers draw bottom
-  to top. An overlay draws over the shots from `from` to `to`; overlays stack by `z` (default 0), then document order.
+- A shot's `picture` and an **overlay** are both *compositions*: `{background?, props?, layers}`, or a component use
+  `{use, props}` (below). Layers draw bottom to top. An overlay draws over the shots from `from` to `to`; overlays
+  stack by `z` (default 0), then document order.
 - Composition time `t` starts at 0 when the shot or overlay starts, and pauses during inserts.
 
 ## Layers (the After Effects pattern)
@@ -166,8 +167,10 @@ Content by type:
 
 - **text**: `text` (a string, or `{"expr": …}` returning one), `font` (default `display`), `size` (px), `weight`,
   `fill` (default `#ffffff`), `stroke` (`{color, width}`, drawn outside the fill), `align` (`left`, `center`
-  (default), `right`), `line_height` (multiple of the size, default 1.12), `max_width` (wrap at spaces), `uppercase`.
-  `\n` breaks lines. Text is shaped with HarfBuzz, so kerning applies.
+  (default), `right`), `line_height` (multiple of the size, default 1.12), `max_width` (wrap at spaces), `uppercase`,
+  `highlight` (`{words, fill}`: words `[a, b)` of the text, counted from 0 across whitespace-separated words, drawn in
+  `fill`; `words` is a prop, so keyframes or an expression can move it, e.g. a karaoke caption's current word; `[-1,
+  -1]` highlights nothing). `\n` breaks lines. Text is shaped with HarfBuzz, so kerning applies.
 - **shape**: `shape` (`rect` or `ellipse`), `size` `[w, h]`, `radius` (rect corners), `fill`, `stroke`.
 - **image**: `asset`, optional `size` `[w, h]` (one of them may be `null` to keep the aspect).
 - **video**: `asset`; `in` (the source time at composition time 0, default 0) or `sync: {src, to}` (source time `src`
@@ -202,6 +205,14 @@ Content by type:
 `value` (the keyframed or constant value, if any) and `props` (the composition's `props`, read-only). It has no I/O,
 no `Date`, and `Math.random` throws, so the same `t` gives the same result in any order. Each call has a time and
 memory limit. The result must have the prop's type (a number, an array of numbers, or a string for `text`).
+
+## Components and kits
+
+A composition can be a component instead of layers: an overlay `{"id", "use": "pop-text@1.0.0", "from", "to",
+"props"}`, or a picture `{"use": "title-card@1.0.0", "props"}`. The engine expands it into layers before anything
+else, pinned by the lockfile `<stem>.lock`; kit tokens (`"fill": "kit:color.accent"`) are replaced by the kits'
+values. A composition prop `"$words:<spine-id>"` becomes that spine item's words on the composition's clock. See
+`spec/components.md`.
 
 ## Audio
 
@@ -266,5 +277,6 @@ one closed-GOP H.264 segment, and segments concatenate with `-c copy`. Two keys 
   as a `clock: timeline` background's phase), and the layer keys of the graphics on it.
 
 So a ripple that moves a unit without changing what it shows reuses its segment byte for byte, and a ripple that
-changes a unit's length re-encodes it but reuses its cached graphics. See `spec/manifest.md` for what a render
+changes a unit's length re-encodes it but reuses its cached graphics. Both keys hash a component's expansion, never
+its name: a changed component re-renders only the elements whose expansion changed. See `spec/manifest.md` for what a render
 publishes.

@@ -1,0 +1,78 @@
+{
+  "schema": "retake-component/0.1",
+  "name": "counter",
+  "version": "1.0.0",
+  "title": "Counter",
+  "description": "A number that counts from one value to another with an ease-out, then gives a small bump when it lands: a stat, a price, a score, a percentage. The number is an expression, so prefix, suffix, decimals and thousands separators are props. An optional label sits under it.",
+  "license": "CC0-1.0",
+  "authors": ["Retake contributors"],
+  "tags": ["number", "stat", "count up", "data", "kinetic type"],
+  "category": "counter",
+  "use_as": ["overlay"],
+  "canvas": [1920, 1080],
+  "duration": 2.4,
+  "props": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["to"],
+    "properties": {
+      "from": { "type": "number", "default": 0, "description": "The value it starts at." },
+      "to": { "type": "number", "description": "The value it lands on." },
+      "dur": { "type": "number", "minimum": 0.1, "maximum": 10, "default": 1.2, "description": "Seconds the count takes." },
+      "delay": { "type": "number", "minimum": 0, "default": 0.1, "description": "Seconds before it starts counting." },
+      "decimals": { "type": "integer", "minimum": 0, "maximum": 4, "default": 0, "description": "Digits after the point." },
+      "prefix": { "type": "string", "maxLength": 8, "default": "", "description": "Before the number, e.g. $." },
+      "suffix": { "type": "string", "maxLength": 12, "default": "", "description": "After the number, e.g. % or  g." },
+      "separator": { "type": "string", "maxLength": 1, "default": ",", "description": "Thousands separator; empty for none." },
+      "label": { "type": "string", "maxLength": 48, "default": "", "description": "A line under the number. Empty: none." },
+      "size": { "type": "number", "minimum": 40, "maximum": 320, "default": 180, "description": "Number size, design pixels." },
+      "x": { "type": "number", "default": 960, "description": "Center, design pixels." },
+      "y": { "type": "number", "default": 500, "description": "Center of the number, design pixels." },
+      "color": { "type": "string", "default": "kit:color.text", "description": "Number color." },
+      "accent": { "type": "string", "default": "kit:color.accent", "description": "Label color." }
+    }
+  },
+  "tokens": {
+    "color": { "text": "#f7f7f2", "accent": "#ffd23f", "ink": "#101114" }
+  },
+  "layers": [
+    {
+      "id": "number",
+      "type": "text",
+      "text": { "expr": "(() => { const u = Math.max(0, Math.min(1, (t - props.delay) / props.dur)); const e = 1 - Math.pow(1 - u, 3); const v = props.from + (props.to - props.from) * e; const s = Math.abs(v).toFixed(props.decimals); const parts = s.split('.'); const g = props.separator ? parts[0].replace(/\\B(?=(\\d{3})+(?!\\d))/g, props.separator) : parts[0]; return (v < 0 && Number(s) !== 0 ? '-' : '') + props.prefix + g + (parts[1] ? '.' + parts[1] : '') + props.suffix; })()" },
+      "size": "$props.size",
+      "line_height": 1.0,
+      "fill": "$props.color",
+      "stroke": { "color": "kit:color.ink", "width": { "$expr": "Math.round(props.size * 0.04)" } },
+      "shadow": { "color": "#00000080", "dx": 0, "dy": 10, "blur": 24 },
+      "transform": {
+        "position": { "$expr": "[props.x, props.y]" },
+        "scale": { "$expr": "(() => { const end = Math.max(props.delay + props.dur, 0.25); return {keys: [{t: 0, v: 0.85, ease: 'out-cubic'}, {t: 0.22, v: 1}, {t: end, v: 1, ease: 'out-quad'}, {t: end + 0.08, v: 1.07, ease: 'in-out-quad'}, {t: end + 0.24, v: 1}]}; })()" },
+        "opacity": { "keys": [ { "t": 0, "v": 0 }, { "t": 0.15, "v": 1 }, { "t": "end:$id-0.2", "v": 1 }, { "t": "end:$id", "v": 0 } ] }
+      }
+    },
+    {
+      "id": "label",
+      "type": "text",
+      "text": "$props.label",
+      "uppercase": true,
+      "size": { "$expr": "Math.max(28, Math.round(props.size * 0.24))" },
+      "weight": 700,
+      "max_width": 1400,
+      "fill": "$props.accent",
+      "transform": {
+        "anchor": [0.5, 0],
+        "position": { "$expr": "[props.x, props.y + props.size * 0.52]" },
+        "opacity": { "$expr": "({keys: [{t: props.delay + 0.2, v: 0}, {t: props.delay + 0.5, v: 1}, {t: 'end:' + id + '-0.2', v: 1}, {t: 'end:' + id, v: 0}]})" }
+      }
+    }
+  ],
+  "examples": [
+    { "name": "a stat", "props": { "to": 1250000, "label": "views in the first week" }, "duration": 2.4 },
+    { "name": "a percentage", "props": { "from": 12, "to": 87.5, "decimals": 1, "suffix": "%", "label": "less waste", "dur": 1.6 }, "duration": 2.6 },
+    { "name": "a price", "props": { "to": 24.99, "decimals": 2, "prefix": "$", "size": 140, "y": 540, "color": "#ffd23f" }, "duration": 2.0 }
+  ],
+  "changelog": [
+    { "version": "1.0.0", "date": "2026-10-30", "changes": "First version." }
+  ]
+}

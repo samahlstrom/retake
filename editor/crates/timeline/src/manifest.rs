@@ -87,6 +87,9 @@ pub struct Element {
     pub anchors: BTreeMap<String, String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent: Option<String>,
+    /// The component the element was expanded from, `<name>@<version>`.
+    #[serde(rename = "use", default, skip_serializing_if = "Option::is_none")]
+    pub use_: Option<String>,
 }
 
 impl Element {
@@ -234,6 +237,7 @@ mod tests {
             sources: vec![],
             anchors: BTreeMap::new(),
             parent: None,
+            use_: None,
         }
     }
 

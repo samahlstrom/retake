@@ -9,6 +9,9 @@
 >   - The final render happens only on approval.
 >   - Live preview of graphics in the browser comes later, through Skia's WebAssembly build (CanvasKit).
 > - **Solo first.** No real-time co-editing. The agent is the only writer of the timeline, through a patch log.
+> - **Components are JSON, not TypeScript modules** (2026-10-30, slice 3): a props JSON Schema, layers in the
+>   timeline's own model as templates, kit tokens and expressions, pinned by a lockfile (`spec/components.md`). Brand
+>   kits carry tokens and house rules for `retake-edit lint`; registries are static `index.json` files.
 > - **The CLI placeholder `vid` below is now part of `retake`** (`retake edit …`). The engine itself is a separate Rust
 >   binary that the Go CLI calls.
 

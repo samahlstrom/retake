@@ -1,0 +1,73 @@
+{
+  "schema": "retake-component/0.1",
+  "name": "caption",
+  "version": "1.0.0",
+  "title": "Karaoke caption",
+  "description": "Word-timed captions from a words JSON: the voice-over's words grouped into short lines, each line shown while it is spoken, the current word lit in the highlight color. Pass words as \"$words:<spine-id>\" so they follow the VO through every trim, or inline as [{w, s, e}] in seconds on the overlay's clock.",
+  "license": "CC0-1.0",
+  "authors": ["Retake contributors"],
+  "tags": ["captions", "subtitles", "karaoke", "words", "accessibility"],
+  "category": "caption",
+  "use_as": ["overlay"],
+  "canvas": [1920, 1080],
+  "duration": 3.2,
+  "props": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["words"],
+    "properties": {
+      "words": {
+        "description": "\"$words:<spine-id>\" (that spine item's words, timed on this overlay's clock), or a list of {w, s, e}: the word and its start and end in seconds from the overlay's start.",
+        "oneOf": [
+          { "type": "string", "pattern": "^\\$words:" },
+          { "type": "array", "items": { "type": "object", "required": ["w", "s", "e"], "properties": { "w": { "type": "string" }, "s": { "type": "number" }, "e": { "type": "number" } } } }
+        ]
+      },
+      "words_per_line": { "type": "integer", "minimum": 1, "maximum": 12, "default": "kit:caption.words_per_line", "description": "At most this many words on a line." },
+      "gap": { "type": "number", "minimum": 0, "default": 0.6, "description": "A pause longer than this many seconds starts a new line." },
+      "hold": { "type": "number", "minimum": 0, "default": 0.5, "description": "Seconds a line stays up after its last word ends (when no new line starts)." },
+      "size": { "type": "number", "minimum": 24, "maximum": 160, "default": "kit:caption.size", "description": "Letter size, design pixels." },
+      "y": { "type": "number", "default": 950, "description": "Vertical center of the line, design pixels." },
+      "color": { "type": "string", "default": "kit:color.text", "description": "Words not being spoken." },
+      "highlight": { "type": "string", "default": "kit:caption.highlight", "description": "The word being spoken." },
+      "stroke": { "type": "string", "default": "kit:color.ink", "description": "Outline color." },
+      "uppercase": { "type": "boolean", "default": false, "description": "Upper-case every word." },
+      "max_width": { "type": "number", "default": 1600, "description": "A long line wraps at spaces beyond this width." }
+    }
+  },
+  "tokens": {
+    "color": { "text": "#f7f7f2", "ink": "#101114" },
+    "caption": { "words_per_line": 4, "size": 64, "highlight": "#ffd23f" }
+  },
+  "layers": [
+    {
+      "id": "line",
+      "type": "text",
+      "text": { "expr": "(() => { const W = Array.isArray(props.words) ? props.words : []; const L = []; let c = []; for (const w of W) { if (c.length && (c.length >= props.words_per_line || w.s - c[c.length - 1].e > props.gap)) { L.push(c); c = []; } c.push(w); } if (c.length) L.push(c); let k = -1; for (let i = 0; i < L.length; i++) { if (L[i][0].s <= t + 0.04) k = i; } if (k < 0) return ''; const line = L[k]; if (t > line[line.length - 1].e + props.hold) return ''; return line.map((w) => String(w.w).trim()).join(' '); })()" },
+      "highlight": {
+        "words": { "expr": "(() => { const W = Array.isArray(props.words) ? props.words : []; const L = []; let c = []; for (const w of W) { if (c.length && (c.length >= props.words_per_line || w.s - c[c.length - 1].e > props.gap)) { L.push(c); c = []; } c.push(w); } if (c.length) L.push(c); let k = -1; for (let i = 0; i < L.length; i++) { if (L[i][0].s <= t + 0.04) k = i; } if (k < 0) return [-1, -1]; const line = L[k]; let j = -1; for (let i = 0; i < line.length; i++) { if (line[i].s <= t + 0.04) j = i; } return j < 0 || t > line[j].e + 0.25 && j === line.length - 1 ? [-1, -1] : [j, j + 1]; })()" },
+        "fill": "$props.highlight"
+      },
+      "uppercase": "$props.uppercase",
+      "size": "$props.size",
+      "weight": 800,
+      "line_height": 1.05,
+      "max_width": "$props.max_width",
+      "fill": "$props.color",
+      "stroke": { "color": "$props.stroke", "width": { "$expr": "Math.max(3, Math.round(props.size * 0.1))" } },
+      "shadow": { "color": "#00000099", "dx": 0, "dy": 6, "blur": 14 },
+      "transform": { "position": [960, "$props.y"] }
+    }
+  ],
+  "examples": [
+    { "name": "four words a line", "duration": 3.2, "props": { "words": [
+      { "w": "Rinse", "s": 0.1, "e": 0.42 }, { "w": "the", "s": 0.46, "e": 0.56 }, { "w": "filter", "s": 0.6, "e": 1.0 },
+      { "w": "first,", "s": 1.04, "e": 1.4 }, { "w": "then", "s": 1.55, "e": 1.75 }, { "w": "add", "s": 1.8, "e": 2.0 },
+      { "w": "the", "s": 2.04, "e": 2.12 }, { "w": "coffee.", "s": 2.16, "e": 2.6 } ] } },
+    { "name": "big, upper case, two words", "duration": 2.4, "props": { "uppercase": true, "size": 96, "words_per_line": 2, "y": 840, "highlight": "#5bc0eb", "words": [
+      { "w": "Twenty", "s": 0.1, "e": 0.45 }, { "w": "grams", "s": 0.5, "e": 0.9 }, { "w": "of", "s": 1.0, "e": 1.1 }, { "w": "coffee", "s": 1.15, "e": 1.7 } ] } }
+  ],
+  "changelog": [
+    { "version": "1.0.0", "date": "2026-10-30", "changes": "First version: lines by count and pause, the spoken word highlighted." }
+  ]
+}

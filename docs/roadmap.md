@@ -46,11 +46,16 @@
 ## Editor track (after milestone 2)
 1. Timeline schema and anchor resolver. Done (slice 1).
 2. Shot renderer with a content-addressed cache and render manifest. Done (slice 1).
-3. Review bridge.
-4. Asset catalog.
-5. Graphics renderer.
-
-Later: a shared library of graphics, styles and edit recipes.
+3. Review bridge. Done (slice 2).
+4. Asset catalog. Done.
+5. Graphics renderer. Done (slices 1 and 2: Skia layers, keyframes, QuickJS expressions).
+6. A shared library of graphics, styles and edit recipes. Done (slice 3, [spec/components.md](../spec/components.md)):
+   - components as JSON (a props schema, templates, kit tokens, expressions), pinned by a lockfile and expanded into
+     the cache keys, so a component change re-renders only its elements, and upgrades are per element;
+   - brand kits with tokens and house rules that `retake-edit lint` checks; storybook previews;
+   - static registries (`retake lib add|search|pack`), edit recipes without media, and the agent tools;
+   - a starter library of ten CC0 components and a kit (`library/`).
+   - Left: publishing a registry somewhere (owner's call), Lottie leaves, the web preview of a component (CanvasKit).
 
 ## Before publishing
 Done:

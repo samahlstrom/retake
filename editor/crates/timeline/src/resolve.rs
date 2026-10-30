@@ -545,13 +545,14 @@ impl<'a> Resolver<'a> {
             }
         }
         // (field path inside the layer, expected component counts)
-        let props: [(&[&str], &[usize]); 6] = [
+        let props: [(&[&str], &[usize]); 7] = [
             (&["transform", "position"], &[2]),
             (&["transform", "scale"], &[1, 2]),
             (&["transform", "rotation"], &[1]),
             (&["transform", "opacity"], &[1]),
             (&["crop"], &[4]),
             (&["blur"], &[1]),
+            (&["highlight", "words"], &[2]),
         ];
         for (path, dims) in props {
             let pptr = format!("{ptr}/{}", path.join("/"));
@@ -713,14 +714,44 @@ impl<'a> Resolver<'a> {
                 lt.push(t);
             }
         }
-        Comp {
-            owner: owner.into(),
-            ptr: ptr.into(),
-            background,
-            props: pic.get("props").cloned().unwrap_or_else(|| json!({})),
-            layers_json: lj,
-            layers: lt,
+        let mut props = pic.get("props").cloned().unwrap_or_else(|| json!({}));
+        if let Some(m) = props.as_object_mut() {
+            for (k, v) in m.iter_mut() {
+                if let Some(spine) = v.as_str().and_then(|s| s.strip_prefix("$words:")).map(String::from) {
+                    match self.words_prop(&spine, t0, pausing) {
+                        Ok(w) => *v = w,
+                        Err(e) => errs.push(e.at(format!("{ptr}/props/{}", ptr_escape(k)))),
+                    }
+                }
+            }
         }
+        Comp { owner: owner.into(), ptr: ptr.into(), background, props, layers_json: lj, layers: lt }
+    }
+
+    /// A spine item's words on a composition's clock: `[{"w", "s", "e"}]` (spec/components.md, "Words").
+    fn words_prop(&mut self, spine_id: &str, t0: f64, pausing: bool) -> Result<Value, EditError> {
+        let span = match self.elems.get(spine_id) {
+            Some(Elem::Spine(i)) => self.spine[*i].clone(),
+            _ => {
+                let ids: Vec<&str> = self.tl.spine.iter().map(|s| s.id.as_str()).collect();
+                return Err(EditError::new(
+                    "words_spine_unknown",
+                    format!("$words:{spine_id}: no spine item `{spine_id}`"),
+                )
+                .suggest(close_matches(spine_id, ids, 3)));
+            }
+        };
+        let all = self.words_for(&span.asset)?;
+        let out: Vec<Value> = all
+            .iter()
+            .filter(|w| w.mid() >= span.src_in && w.mid() < span.src_out)
+            .map(|w| {
+                let s = self.local(t0, span.start + (w.s - span.src_in), pausing);
+                let e = self.local(t0, span.start + (w.e - span.src_in), pausing);
+                json!({"w": w.text, "s": s, "e": e})
+            })
+            .collect();
+        Ok(Value::Array(out))
     }
 }
 

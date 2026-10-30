@@ -4,6 +4,31 @@ All notable changes are listed here. Versions follow semver once the first relea
 
 ## Unreleased
 
+### Editor slice 3: components, brand kits, house rules and the shared library
+- Components (`spec/components.md`): a `component.json` with a props JSON Schema (descriptions and defaults an agent
+  reads), layers in the timeline's own layer model as templates (`$props`, `$id`, kit tokens, `$expr` computed once),
+  examples and a changelog. A timeline uses one where layers would go, `{"use": "pop-text@1.0.0", "props"}`; it is
+  designed on a 1920x1080 canvas and fits any other.
+- The lockfile, `<stem>.lock`, pins every package to a content hash. Rendering refuses an unlocked or changed package;
+  `retake-edit component lock` pins, `patch apply` pins what a patch starts using, and `retake-edit component upgrade
+  <element|all> --to x.y.z` moves elements one patch at a time. Expansions go into the layer and unit keys, so a
+  component change re-renders only the elements whose expansion changed.
+- Brand kits: tokens (`kit:color.accent`) anywhere in a timeline or a component, and house rules that `retake-edit
+  lint` checks with typed violations: no-overlap, min-gap, max-count-per-window, safe-area (on the boxes the graphics
+  really draw), min/max-duration, and custom JavaScript rules. It exits 1 on errors.
+- `retake-edit component preview`: each example at five moments on a storybook sheet (PNG) and a 2-second WebP. A
+  component imported into the catalog (`retake assets import <dir>`) is an entry of the new kind `component` with
+  those previews (catalog schema version 2).
+- Text `highlight` (words of a text layer in another fill, as a prop) and `"$words:<spine-id>"` props (a spine item's
+  words on a composition's clock), for word-timed karaoke captions. Manifest elements say which component drew them.
+- `retake lib search|add|list|describe|pack|recipe export|lint`, with `--json`: static registries (an `index.json` on
+  any host or in a git checkout), vendoring with hash checks and the license gate, and edit recipes that carry the
+  timeline, its patches and its packages, with placeholders instead of media. MCP: `component_list`,
+  `component_describe` (with the sheet as an image), `lib_search`, `lib_add` and `lint`.
+- `library/`: ten original CC0 components (title-card, pop-text, lower-third, caption, pip-frame, progress-bar,
+  zoom-punch, counter, callout-arrow, freeze-frame-highlight) and the `clean` kit with its house rules;
+  `scripts/build-registry.sh` builds `library/index.json`.
+
 ### Milestone 3b: the team server
 - `retake serve --data DIR` hosts many projects (`spec/server.md`). Each is a version family with its store, served
   at `/p/<project>/` by the same page and API as `retake open`; the page now uses relative URLs.

@@ -1,0 +1,87 @@
+{
+  "schema": "retake-component/0.1",
+  "name": "pip-frame",
+  "version": "1.0.0",
+  "title": "Picture in picture",
+  "description": "A second video in a framed, shadowed box over the picture: a face cam, a reference clip, a before/after. It pops in, plays, and fades out on the element's end. Optional small label above the frame.",
+  "license": "CC0-1.0",
+  "authors": ["Retake contributors"],
+  "tags": ["pip", "picture in picture", "facecam", "inset", "video"],
+  "category": "pip",
+  "use_as": ["overlay"],
+  "canvas": [1920, 1080],
+  "duration": 3.0,
+  "props": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["asset"],
+    "properties": {
+      "asset": { "type": "string", "x-retake-input": "video", "description": "The video asset id (16:9 footage reads best), e.g. proj:facecam." },
+      "in": { "type": "number", "minimum": 0, "default": 0, "description": "Source seconds at the element's start." },
+      "x": { "type": "number", "default": 1500, "description": "Center of the frame, design pixels." },
+      "y": { "type": "number", "default": 300, "description": "Center of the frame, design pixels." },
+      "scale": { "type": "number", "minimum": 0.1, "maximum": 0.8, "default": 0.32, "description": "The video's size as a fraction of the full frame." },
+      "border": { "type": "string", "default": "kit:color.text", "description": "Frame color." },
+      "border_width": { "type": "number", "minimum": 0, "maximum": 40, "default": 8, "description": "Frame thickness, design pixels." },
+      "radius": { "type": "number", "minimum": 0, "default": 14, "description": "Frame corner radius." },
+      "label": { "type": "string", "maxLength": 32, "default": "", "description": "A small label above the frame's left edge. Empty: none." },
+      "accent": { "type": "string", "default": "kit:color.accent", "description": "Label color." },
+      "audio": { "type": "boolean", "default": false, "description": "Mix the video's own sound." }
+    }
+  },
+  "tokens": {
+    "color": { "text": "#f7f7f2", "accent": "#ffd23f" }
+  },
+  "layers": [
+    {
+      "id": "frame",
+      "type": "shape",
+      "shape": "rect",
+      "size": { "$expr": "[1920 * props.scale + 2 * props.border_width, 1080 * props.scale + 2 * props.border_width]" },
+      "radius": "$props.radius",
+      "fill": "$props.border",
+      "shadow": { "color": "#0000008c", "dx": 0, "dy": 14, "blur": 36 },
+      "transform": {
+        "position": { "$expr": "[props.x, props.y]" },
+        "scale": { "keys": [ { "t": 0, "v": 0.82, "ease": "out-back" }, { "t": 0.28, "v": 1 } ] },
+        "opacity": { "keys": [ { "t": 0, "v": 0 }, { "t": 0.14, "v": 1 }, { "t": "end:$id-0.2", "v": 1 }, { "t": "end:$id", "v": 0 } ] }
+      }
+    },
+    {
+      "id": "video",
+      "type": "video",
+      "asset": "$props.asset",
+      "in": "$props.in",
+      "fit": "contain",
+      "audio": { "$expr": "props.audio ? {gain_db: 0, fade_in: 0.1, fade_out: 0.2} : null" },
+      "transform": {
+        "position": { "$expr": "[props.x, props.y]" },
+        "scale": { "$expr": "({keys: [{t: 0, v: props.scale * 0.82, ease: 'out-back'}, {t: 0.28, v: props.scale}]})" },
+        "opacity": { "keys": [ { "t": 0, "v": 0 }, { "t": 0.14, "v": 1 }, { "t": "end:$id-0.2", "v": 1 }, { "t": "end:$id", "v": 0 } ] }
+      }
+    },
+    {
+      "id": "label",
+      "type": "text",
+      "text": "$props.label",
+      "uppercase": true,
+      "size": 30,
+      "align": "left",
+      "fill": "$props.accent",
+      "stroke": { "color": "#101114", "width": 5 },
+      "transform": {
+        "anchor": [0, 1],
+        "position": { "$expr": "[props.x - 960 * props.scale - props.border_width + 4, props.y - 540 * props.scale - props.border_width - 10]" },
+        "opacity": { "keys": [ { "t": 0.2, "v": 0 }, { "t": 0.4, "v": 1 }, { "t": "end:$id-0.2", "v": 1 }, { "t": "end:$id", "v": 0 } ] }
+      }
+    }
+  ],
+  "examples": [
+    { "name": "top right", "props": { "asset": "proj:clip", "label": "Reference" }, "duration": 3.0 },
+    { "name": "bottom left, small", "props": { "asset": "proj:clip", "x": 360, "y": 800, "scale": 0.24, "border": "#ffd23f", "border_width": 6, "radius": 22 }, "duration": 2.5 },
+    { "name": "big, centered", "props": { "asset": "proj:clip", "x": 960, "y": 540, "scale": 0.6, "border_width": 0, "radius": 0 }, "duration": 2.0 }
+  ],
+  "changelog": [
+    { "version": "1.0.0", "date": "2026-10-30", "changes": "First version." }
+  ]
+}

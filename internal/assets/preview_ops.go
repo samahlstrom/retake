@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 )
@@ -89,14 +90,15 @@ func (c *Catalog) Preview(ctx context.Context, a PreviewArgs) (PreviewResult, er
 			kind = PreviewStrip
 		default:
 			kind = map[string]string{KindVideo: PreviewContactSheet, KindAudio: PreviewWaveform,
-				KindImage: PreviewThumbnail, KindFont: PreviewSpecimen}[e.Kind]
+				KindImage: PreviewThumbnail, KindFont: PreviewSpecimen, KindComponent: PreviewStorybook}[e.Kind]
 		}
 	}
 	allowed := map[string][]string{
-		KindVideo: {PreviewContactSheet, PreviewStrip, PreviewFrames, PreviewWaveform},
-		KindAudio: {PreviewWaveform},
-		KindImage: {PreviewThumbnail},
-		KindFont:  {PreviewSpecimen},
+		KindVideo:     {PreviewContactSheet, PreviewStrip, PreviewFrames, PreviewWaveform},
+		KindAudio:     {PreviewWaveform},
+		KindImage:     {PreviewThumbnail},
+		KindFont:      {PreviewSpecimen},
+		KindComponent: componentPreviewKinds,
 	}[e.Kind]
 	if kind == "" || !slices.Contains(allowed, kind) {
 		if len(allowed) == 0 {
@@ -104,6 +106,14 @@ func (c *Catalog) Preview(ctx context.Context, a PreviewArgs) (PreviewResult, er
 		}
 		return PreviewResult{}, errorf(CodeBadRequest, "a %s has previews %s, not %q", e.Kind,
 			strings.Join(allowed, ", "), kind)
+	}
+	if isComponentPreview(kind) {
+		// Made at import (retake-edit component preview); a component's folder is re-imported to make them again.
+		if f, ok := storedPreview(d, e, kind); ok {
+			return PreviewResult{ID: e.ID, Kind: kind, Files: []PreviewFile{f}}, nil
+		}
+		return PreviewResult{}, errorf(CodeNotFound, "%s has no %s preview: run retake-edit component preview on %s "+
+			"and import it again", e.ID, kind, filepath.Dir(e.Blob.Path))
 	}
 	if !e.Blob.Exists {
 		// Stored previews can still be shown; anything new needs the file.
@@ -226,7 +236,8 @@ func (c *Catalog) Preview(ctx context.Context, a PreviewArgs) (PreviewResult, er
 // storedPreview returns an entry's stored preview of a kind if its file is there.
 func storedPreview(d *db, e Entry, kind string) (PreviewFile, bool) {
 	ref := map[string]string{PreviewContactSheet: e.Previews.ContactSheet, PreviewWaveform: e.Previews.Waveform,
-		PreviewThumbnail: e.Previews.Thumbnail, PreviewSpecimen: e.Previews.Specimen}[kind]
+		PreviewThumbnail: e.Previews.Thumbnail, PreviewSpecimen: e.Previews.Specimen,
+		PreviewStorybook: e.Previews.Storybook, PreviewAnimation: e.Previews.Animation}[kind]
 	if ref == "" {
 		return PreviewFile{}, false
 	}

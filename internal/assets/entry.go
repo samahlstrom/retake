@@ -43,6 +43,8 @@ type Previews struct {
 	Loudness     *Loudness         `json:"loudness,omitempty"`
 	Thumbnail    string            `json:"thumbnail,omitempty"`
 	Specimen     string            `json:"specimen,omitempty"`
+	Storybook    string            `json:"storybook,omitempty"` // components: each example at five moments
+	Animation    string            `json:"animation,omitempty"` // components: two seconds, animated WebP
 	Paths        map[string]string `json:"paths,omitempty"`
 }
 
@@ -280,7 +282,7 @@ func (d *db) entry(ctx context.Context, r row) (Entry, error) {
 func (d *db) previewPaths(p Previews) map[string]string {
 	out := map[string]string{}
 	for k, r := range map[string]string{"contact_sheet": p.ContactSheet, "waveform": p.Waveform,
-		"thumbnail": p.Thumbnail, "specimen": p.Specimen} {
+		"thumbnail": p.Thumbnail, "specimen": p.Specimen, "storybook": p.Storybook, "animation": p.Animation} {
 		if r == "" {
 			continue
 		}

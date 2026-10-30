@@ -1,0 +1,101 @@
+{
+  "schema": "retake-component/0.1",
+  "name": "lower-third",
+  "version": "1.0.0",
+  "title": "Lower third",
+  "description": "A name and a role on a plate in the lower left: the accent bar drops in, the plate wipes out from it, the words slide in, and everything fades on the element's end. For introducing a person, a place or a source.",
+  "license": "CC0-1.0",
+  "authors": ["Retake contributors"],
+  "tags": ["name", "title", "identity", "label", "lower third"],
+  "category": "lower-third",
+  "use_as": ["overlay"],
+  "canvas": [1920, 1080],
+  "duration": 3.0,
+  "props": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["name"],
+    "properties": {
+      "name": { "type": "string", "minLength": 1, "maxLength": 36, "description": "The big line: a name." },
+      "role": { "type": "string", "maxLength": 56, "default": "", "description": "The small line under it. Empty: the name alone, centered on the plate." },
+      "x": { "type": "number", "default": 120, "description": "Left edge of the accent bar, design pixels." },
+      "y": { "type": "number", "default": 880, "description": "Vertical center of the plate, design pixels." },
+      "width": { "type": ["number", "null"], "default": null, "description": "Plate width; null estimates it from the text." },
+      "accent": { "type": "string", "default": "kit:color.accent", "description": "The bar's color." },
+      "plate": { "type": "string", "default": "kit:color.plate", "description": "Plate color, usually translucent (#rrggbbaa)." },
+      "color": { "type": "string", "default": "kit:color.text", "description": "Name color." },
+      "muted": { "type": "string", "default": "kit:color.muted", "description": "Role color." }
+    }
+  },
+  "tokens": {
+    "color": { "accent": "#ffd23f", "plate": "#15171ce6", "text": "#f7f7f2", "muted": "#a3a9b4" }
+  },
+  "layers": [
+    {
+      "id": "plate",
+      "type": "shape",
+      "shape": "rect",
+      "size": { "$expr": "[props.width || Math.max(props.name.length * 35, props.role.length * 22) + 100, props.role ? 156 : 116]" },
+      "radius": 6,
+      "fill": "$props.plate",
+      "shadow": { "color": "#00000059", "dx": 0, "dy": 10, "blur": 30 },
+      "transform": {
+        "anchor": [0, 0.5],
+        "position": { "$expr": "[props.x + 14, props.y]" },
+        "scale": { "keys": [ { "t": 0.1, "v": [0, 1], "ease": "out-expo" }, { "t": 0.55, "v": [1, 1] } ] },
+        "opacity": { "keys": [ { "t": "end:$id-0.25", "v": 1, "ease": "in-quad" }, { "t": "end:$id", "v": 0 } ] }
+      }
+    },
+    {
+      "id": "bar",
+      "type": "shape",
+      "shape": "rect",
+      "size": { "$expr": "[12, props.role ? 156 : 116]" },
+      "radius": 3,
+      "fill": "$props.accent",
+      "transform": {
+        "anchor": [0, 0.5],
+        "position": { "$expr": "[props.x, props.y]" },
+        "scale": { "keys": [ { "t": 0, "v": [1, 0], "ease": "out-cubic" }, { "t": 0.18, "v": [1, 1] } ] },
+        "opacity": { "keys": [ { "t": "end:$id-0.25", "v": 1, "ease": "in-quad" }, { "t": "end:$id", "v": 0 } ] }
+      }
+    },
+    {
+      "id": "name",
+      "type": "text",
+      "text": "$props.name",
+      "size": 64,
+      "align": "left",
+      "line_height": 1.0,
+      "fill": "$props.color",
+      "transform": {
+        "anchor": { "$expr": "props.role ? [0, 1] : [0, 0.5]" },
+        "position": { "$expr": "((y) => ({keys: [{t: 0.22, v: [props.x + 22, y], ease: 'out-cubic'}, {t: 0.6, v: [props.x + 50, y]}]}))(props.role ? props.y + 10 : props.y)" },
+        "opacity": { "keys": [ { "t": 0.22, "v": 0 }, { "t": 0.5, "v": 1 }, { "t": "end:$id-0.25", "v": 1, "ease": "in-quad" }, { "t": "end:$id", "v": 0 } ] }
+      }
+    },
+    {
+      "id": "role",
+      "type": "text",
+      "text": "$props.role",
+      "size": 38,
+      "weight": 600,
+      "align": "left",
+      "line_height": 1.0,
+      "fill": "$props.muted",
+      "transform": {
+        "anchor": [0, 0],
+        "position": { "keys": [ { "t": 0.32, "v": [{ "$expr": "props.x + 24" }, { "$expr": "props.y + 16" }], "ease": "out-cubic" }, { "t": 0.7, "v": [{ "$expr": "props.x + 52" }, { "$expr": "props.y + 16" }] } ] },
+        "opacity": { "keys": [ { "t": 0.32, "v": 0 }, { "t": 0.62, "v": 1 }, { "t": "end:$id-0.25", "v": 1, "ease": "in-quad" }, { "t": "end:$id", "v": 0 } ] }
+      }
+    }
+  ],
+  "examples": [
+    { "name": "name and role", "props": { "name": "Ana Lindqvist", "role": "Head roaster, Northside Coffee" }, "duration": 3.0 },
+    { "name": "name only", "props": { "name": "Lisbon, 6:40 a.m." }, "duration": 2.5 },
+    { "name": "custom colors", "props": { "name": "Dr. Kofi Mensah", "role": "Materials scientist", "accent": "#5bc0eb", "plate": "#0d1b2acc" }, "duration": 3.0 }
+  ],
+  "changelog": [
+    { "version": "1.0.0", "date": "2026-10-30", "changes": "First version." }
+  ]
+}

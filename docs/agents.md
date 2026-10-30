@@ -121,6 +121,10 @@ Agents that run shell commands can use the CLI instead of MCP. Every command tak
 | `version_push` | `retake push <video> <file> --parent vN --change ID="…"... --ask ID="…"...` | Adds the file to the family as the next `v<N>`, with its changelog. |
 | `version_push` with `render: true` | `retake push <video> --render [--draft] --parent vN ...` | In a timeline project: renders the timeline and pushes that; each patch's `answers` and `summary` become the changelog ([timeline.md](timeline.md#editing-with-the-timeline)). |
 | `versions_list` | `retake versions <video>` | The versions, their parents and changelogs. |
+| `component_list` | `retake lib list` | Components and kits the project can use, which the timeline uses, whether they're locked. |
+| `component_describe` | `retake lib describe <name>` | Props schema, defaults, examples, the storybook sheet, the changelog and a use to patch in. |
+| `lib_search` / `lib_add` | `retake lib search "…"` / `retake lib add <name>` | Finds packages in a registry and the user library; adds one to the project, pinned in the lockfile. |
+| `lint` | `retake lib lint` (`retake-edit lint`) | The timeline against its kits' house rules: typed violations with times and hints. |
 
 Two more commands help outside the loop:
 

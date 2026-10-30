@@ -81,6 +81,7 @@ An **element** is a timeline element live in the unit:
 | `box` | Change points `[t, x, y, w, h]`: each box holds from `t` until the next entry. `w = h = 0` means not on screen. Graphics boxes are the bounds of their drawn pixels; video boxes are the transformed source rectangle. Absent for sound-only elements. |
 | `sources` | `{asset, in, out}`: the source seconds this element plays in the unit. |
 | `anchors` | The element's anchors as written in the timeline (`at`, `from`, `to`). |
+| `use` | The component the element was expanded from, `<name>@<version>` (`spec/components.md`). Its layers' `ptr`s point into the expansion (`retake-edit expand`). |
 
 ## Resolving a note
 
