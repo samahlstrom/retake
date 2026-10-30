@@ -324,4 +324,9 @@ fn missing_media_is_reported() {
     assert_eq!(errs.len(), 1);
     assert_eq!(errs[0].code, "asset_missing");
     assert_eq!(errs[0].path.as_deref(), Some("/assets/proj:gone"));
+    let mut d = timeline();
+    d["format"]["fps"] = json!(24);
+    d["format"]["sample_rate"] = json!(44100);
+    let errs = check_refs(&project("rates", d));
+    assert_eq!(errs[0].code, "format_rates");
 }

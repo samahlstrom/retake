@@ -33,7 +33,7 @@ down. Colors are `#rgb`, `#rrggbb` or `#rrggbbaa`.
 | `rev` | The revision. Each applied patch adds 1. A patch must name the revision it was written against. |
 | `format.size` | Output `[width, height]`, even numbers. |
 | `format.fps` | Integer frames per second. Every unit boundary falls on a frame. |
-| `format.sample_rate` | Audio sample rate. Default 48000. |
+| `format.sample_rate` | Audio sample rate. Default 48000. It must be a whole number of samples per frame (48000 works for 24, 25, 30, 50, 60 and 120 fps). |
 | `format.background` | What shows where no layer draws. Default `#000000`. |
 | `kits` | Brand kits and plug-ins the timeline uses, e.g. `"brand:samson@3"`. Recorded in 0.1, not loaded yet. |
 | `assets` | The media the timeline uses, by asset id (below). |

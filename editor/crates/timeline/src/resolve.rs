@@ -790,6 +790,17 @@ pub fn check_refs(p: &Project) -> Vec<EditError> {
     {
         errs.push(EditError::new("color", format!("bad color {bg}")).at("/format/background"));
     }
+    let f = &p.tl.format;
+    if !f.sample_rate.is_multiple_of(f.fps) {
+        errs.push(
+            EditError::new(
+                "format_rates",
+                format!("sample_rate {} isn't a whole number of samples per frame at {} fps", f.sample_rate, f.fps),
+            )
+            .at("/format/sample_rate")
+            .hint("use 48000, which divides by 24, 25, 30, 50, 60 and 120"),
+        );
+    }
     errs
 }
 
