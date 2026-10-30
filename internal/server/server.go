@@ -1,0 +1,488 @@
+// Package server is the local HTTP API of spec/api.md: the review page, the version files with range support,
+// the family/take reads, and the take writes. It is byte-compatible with the legacy Python player, so the legacy
+// page runs against it unchanged.
+package server
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"io/fs"
+	"log"
+	"net"
+	"net/http"
+	"path/filepath"
+	"slices"
+	"strconv"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/samahlstrom/retake/internal/family"
+	"github.com/samahlstrom/retake/internal/jsonx"
+	"github.com/samahlstrom/retake/internal/store"
+	"github.com/samahlstrom/retake/internal/ui"
+)
+
+// DefaultMaxBody is the largest POST body accepted (1 GiB).
+const DefaultMaxBody int64 = 1 << 30
+
+// DefaultCheckEvery is how often the idle watchdog looks at the last contact.
+const DefaultCheckEvery = 10 * time.Second
+
+// Clock tells the time. Tests swap it to drive the idle watchdog.
+type Clock interface{ Now() time.Time }
+
+type realClock struct{}
+
+func (realClock) Now() time.Time { return time.Now() }
+
+// Options configure a Server.
+type Options struct {
+	Video    string   // the opened file: absolute, symlinks resolved
+	Explicit []string // --versions files, absolute and resolved; nil = detect the family from file names
+	Port     int      // the port the page is served on; POSTs must come from this origin
+	MaxBody  int64    // 0 = DefaultMaxBody
+	UI       fs.FS    // the page's files; nil serves ui.NotBuiltHTML
+	Author   string   // written to session.json "author"; "" leaves it out
+	Prober   family.Prober
+
+	IdleExit   time.Duration // exit this long after the last request, once there was one; 0 = never
+	CheckEvery time.Duration // 0 = DefaultCheckEvery
+	Clock      Clock         // nil = the real clock
+
+	Log     io.Writer // request log (with Verbose) and server errors; nil = discard
+	Verbose bool
+}
+
+// Server serves one version family.
+type Server struct {
+	opts    Options
+	origins map[string]bool
+	fam     atomic.Pointer[[]family.Version]
+	writeMu sync.Mutex // serializes every take write
+
+	contactMu sync.Mutex
+	contact   time.Time // zero until the first request
+}
+
+// New returns a Server and scans the family once.
+func New(opts Options) *Server {
+	if opts.MaxBody <= 0 {
+		opts.MaxBody = DefaultMaxBody
+	}
+	if opts.CheckEvery <= 0 {
+		opts.CheckEvery = DefaultCheckEvery
+	}
+	if opts.Clock == nil {
+		opts.Clock = realClock{}
+	}
+	if opts.Log == nil {
+		opts.Log = io.Discard
+	}
+	s := &Server{opts: opts, origins: map[string]bool{
+		fmt.Sprintf("http://127.0.0.1:%d", opts.Port): true,
+		fmt.Sprintf("http://localhost:%d", opts.Port): true,
+	}}
+	s.Rescan()
+	return s
+}
+
+// Rescan detects the family again and returns it. Only GET /api/info rescans; other routes use the last scan.
+func (s *Server) Rescan() []family.Version {
+	f := family.Detect(s.opts.Video, s.opts.Explicit, s.opts.Prober)
+	s.fam.Store(&f)
+	return f
+}
+
+// Family returns the last scanned family.
+func (s *Server) Family() []family.Version { return *s.fam.Load() }
+
+// Current returns the opened file's version.
+func (s *Server) Current() family.Version {
+	for _, v := range s.Family() {
+		if v.Current {
+			return v
+		}
+	}
+	// Detect always keeps the opened file; this is only reached if it vanished from a hand-built family.
+	return family.Version{Label: "current", Path: s.opts.Video, Name: filepath.Base(s.opts.Video), Current: true}
+}
+
+// version finds a version by label; an empty label means the current one.
+func (s *Server) version(label string) (family.Version, bool) {
+	if label == "" {
+		return s.Current(), true
+	}
+	for _, v := range s.Family() {
+		if v.Label == label {
+			return v, true
+		}
+	}
+	return family.Version{}, false
+}
+
+func (s *Server) touch() {
+	s.contactMu.Lock()
+	s.contact = s.opts.Clock.Now()
+	s.contactMu.Unlock()
+}
+
+// Idle reports whether the page has been gone for longer than IdleExit (never before the first request).
+func (s *Server) Idle() bool {
+	if s.opts.IdleExit <= 0 {
+		return false
+	}
+	s.contactMu.Lock()
+	defer s.contactMu.Unlock()
+	return !s.contact.IsZero() && s.opts.Clock.Now().Sub(s.contact) > s.opts.IdleExit
+}
+
+// Serve serves on ln until ctx is done, or until the page has been gone for IdleExit. idle reports which.
+func (s *Server) Serve(ctx context.Context, ln net.Listener) (idle bool, err error) {
+	hs := &http.Server{
+		Handler:           s,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       2 * time.Minute,
+		ErrorLog:          log.New(s.errorLog(), "retake: ", 0),
+	}
+	errc := make(chan error, 1)
+	go func() { errc <- hs.Serve(ln) }()
+	tick := time.NewTicker(s.opts.CheckEvery)
+	defer tick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			shutdown(hs)
+			return false, nil
+		case err := <-errc:
+			if errors.Is(err, http.ErrServerClosed) {
+				err = nil
+			}
+			return false, err
+		case <-tick.C:
+			if s.Idle() {
+				shutdown(hs)
+				return true, nil
+			}
+		}
+	}
+}
+
+func shutdown(hs *http.Server) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := hs.Shutdown(ctx); err != nil {
+		_ = hs.Close() // a video stream still open: cut it
+	}
+}
+
+func (s *Server) errorLog() io.Writer {
+	if s.opts.Verbose {
+		return s.opts.Log
+	}
+	return io.Discard
+}
+
+// ServeHTTP implements http.Handler.
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	s.touch()
+	if s.opts.Verbose {
+		sw := &statusWriter{ResponseWriter: w, code: http.StatusOK}
+		w = sw
+		defer func() {
+			_, _ = fmt.Fprintf(s.opts.Log, "retake: \"%s %s %s\" %d -\n", r.Method, r.RequestURI, r.Proto, sw.code)
+		}()
+	}
+	parts := splitPath(r.URL.Path)
+	switch r.Method {
+	case http.MethodGet, http.MethodHead:
+		s.get(w, r, parts)
+	case http.MethodPost:
+		s.post(w, r, parts)
+	default:
+		s.fail(w, r, http.StatusNotFound, "not found")
+	}
+}
+
+type statusWriter struct {
+	http.ResponseWriter
+	code int
+}
+
+func (w *statusWriter) WriteHeader(code int) {
+	w.code = code
+	w.ResponseWriter.WriteHeader(code)
+}
+
+func (w *statusWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+
+// splitPath splits a URL path into its non-empty segments, like the legacy server ("//video/" is "video").
+func splitPath(p string) []string {
+	var out []string
+	for _, s := range strings.Split(p, "/") {
+		if s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+func is(parts []string, want ...string) bool { return slices.Equal(parts, want) }
+
+// query returns a query parameter like Python's dict(parse_qsl(...)): blank values are dropped and the last wins.
+func query(r *http.Request, key string) string {
+	vals := r.URL.Query()[key]
+	for i := len(vals) - 1; i >= 0; i-- {
+		if vals[i] != "" {
+			return vals[i]
+		}
+	}
+	return ""
+}
+
+func (s *Server) get(w http.ResponseWriter, r *http.Request, parts []string) {
+	switch {
+	case len(parts) == 0 || is(parts, "index.html"):
+		s.page(w, r)
+	case parts[0] == "video" && len(parts) <= 2:
+		label := ""
+		if len(parts) == 2 {
+			label = parts[1]
+		}
+		v, ok := s.version(label)
+		if !ok {
+			s.fail(w, r, http.StatusNotFound, "no such version")
+			return
+		}
+		ctype, ok := family.ContentTypes[strings.ToLower(family.Suffix(v.Name))]
+		if !ok {
+			ctype = "application/octet-stream"
+		}
+		s.serveFile(w, r, v.Path, ctype)
+	case parts[0] == "video" && len(parts) == 3:
+		s.playlistFile(w, r, parts[1], parts[2])
+	case is(parts, "api", "ping"):
+		s.json(w, r, http.StatusOK, map[string]bool{"ok": true})
+	case is(parts, "api", "info"):
+		s.info(w, r)
+	case is(parts, "api", "history"):
+		v, ok := s.version(query(r, "v"))
+		if !ok {
+			s.fail(w, r, http.StatusNotFound, "no such version")
+			return
+		}
+		s.json(w, r, http.StatusOK, historyResponse{Label: v.Label, History: store.History(v.Path)})
+	case is(parts, "favicon.ico"):
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(http.StatusNoContent)
+	case parts[0] == "api" || parts[0] == "video":
+		s.fail(w, r, http.StatusNotFound, "not found")
+	default:
+		s.static(w, r, parts)
+	}
+}
+
+type infoResponse struct {
+	family.Version
+	Versions  []family.Version     `json:"versions"`
+	Stem      string               `json:"stem"`
+	ReviewDir string               `json:"review_dir"`
+	Sessions  []store.Summary      `json:"sessions"`
+	History   []store.HistoryEntry `json:"history"`
+}
+
+type historyResponse struct {
+	Label   string               `json:"label"`
+	History []store.HistoryEntry `json:"history"`
+}
+
+func (s *Server) info(w http.ResponseWriter, r *http.Request) {
+	fam := s.Rescan()
+	cur := s.Current()
+	s.json(w, r, http.StatusOK, infoResponse{
+		Version:   cur,
+		Versions:  fam,
+		Stem:      family.Stem(filepath.Base(cur.Path)),
+		ReviewDir: store.ReviewDir(cur.Path),
+		Sessions:  store.Sessions(cur.Path),
+		History:   store.History(cur.Path),
+	})
+}
+
+func (s *Server) page(w http.ResponseWriter, r *http.Request) {
+	body := []byte(ui.NotBuiltHTML)
+	if s.opts.UI != nil {
+		if b, err := fs.ReadFile(s.opts.UI, "index.html"); err == nil {
+			body = b
+		}
+	}
+	h := w.Header()
+	h.Set("Content-Type", "text/html; charset=utf-8")
+	h.Set("Content-Length", strconv.Itoa(len(body)))
+	h.Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+	if r.Method != http.MethodHead {
+		_, _ = w.Write(body)
+	}
+}
+
+func (s *Server) json(w http.ResponseWriter, r *http.Request, code int, v any) {
+	body, err := jsonx.Marshal(v)
+	if err != nil {
+		code, body = http.StatusInternalServerError, []byte(`{"error": "encoding failed"}`)
+	}
+	h := w.Header()
+	h.Set("Content-Type", "application/json")
+	h.Set("Content-Length", strconv.Itoa(len(body)))
+	h.Set("Cache-Control", "no-store")
+	w.WriteHeader(code)
+	if r.Method != http.MethodHead {
+		_, _ = w.Write(body)
+	}
+}
+
+func (s *Server) fail(w http.ResponseWriter, r *http.Request, code int, msg string) {
+	s.json(w, r, code, map[string]string{"error": msg})
+}
+
+func (s *Server) originOK(r *http.Request) bool {
+	vals := r.Header.Values("Origin")
+	switch len(vals) {
+	case 0:
+		return true
+	case 1:
+		return s.origins[vals[0]]
+	}
+	return false
+}
+
+func (s *Server) post(w http.ResponseWriter, r *http.Request, parts []string) {
+	if !s.originOK(r) {
+		s.fail(w, r, http.StatusForbidden, "bad origin")
+		return
+	}
+	if r.ContentLength > s.opts.MaxBody {
+		s.fail(w, r, http.StatusRequestEntityTooLarge, "body too large")
+		return
+	}
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, s.opts.MaxBody))
+	if err != nil {
+		var tooBig *http.MaxBytesError
+		if errors.As(err, &tooBig) {
+			s.fail(w, r, http.StatusRequestEntityTooLarge, "body too large")
+			return
+		}
+		s.fail(w, r, http.StatusBadRequest, "bad body")
+		return
+	}
+	if len(parts) != 4 || parts[0] != "api" || parts[1] != "session" || !store.ValidTakeID(parts[2]) {
+		s.fail(w, r, http.StatusNotFound, "not found")
+		return
+	}
+	v, ok := s.version(query(r, "v"))
+	if !ok {
+		s.fail(w, r, http.StatusBadRequest, "bad version")
+		return
+	}
+	dir := store.TakeDir(v.Path, parts[2])
+	switch parts[3] {
+	case "data":
+		s.saveData(w, r, v, dir, body)
+	case "audio":
+		s.saveAudio(w, r, dir, body)
+	default:
+		s.fail(w, r, http.StatusNotFound, "not found")
+	}
+}
+
+func (s *Server) serverFields(v family.Version) store.ServerFields {
+	fam := s.Family()
+	refs := make([]store.VersionRef, 0, len(fam))
+	for _, x := range fam {
+		refs = append(refs, store.VersionRef{Label: x.Label, Path: x.Path, Duration: x.Duration})
+	}
+	sf := store.ServerFields{
+		Version:  v.Label,
+		Versions: refs,
+		Video: store.VideoRef{
+			Path: v.Path, Name: v.Name, Duration: v.Duration, FPS: v.FPS, Width: v.Width, Height: v.Height,
+		},
+	}
+	if s.opts.Author != "" {
+		sf.Author = &store.Author{Name: s.opts.Author}
+	}
+	return sf
+}
+
+func (s *Server) saveData(w http.ResponseWriter, r *http.Request, v family.Version, dir string, body []byte) {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	err := store.SaveData(dir, body, s.serverFields(v))
+	switch {
+	case errors.Is(err, store.ErrBadJSON):
+		s.fail(w, r, http.StatusBadRequest, "bad json")
+	case err != nil:
+		_, _ = fmt.Fprintf(s.opts.Log, "retake: saving %s failed: %v\n", dir, err)
+		s.fail(w, r, http.StatusInternalServerError, "save failed")
+	default:
+		s.json(w, r, http.StatusOK, struct {
+			OK  bool   `json:"ok"`
+			Dir string `json:"dir"`
+		}{true, dir})
+	}
+}
+
+func (s *Server) saveAudio(w http.ResponseWriter, r *http.Request, dir string, body []byte) {
+	name := query(r, "name")
+	if !store.ValidSegName(name) {
+		s.fail(w, r, http.StatusBadRequest, "bad name")
+		return
+	}
+	offset, ok := parseOffset(query(r, "offset"))
+	if !ok {
+		s.fail(w, r, http.StatusBadRequest, "bad offset")
+		return
+	}
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	size, err := store.WriteAudio(filepath.Join(dir, name), offset, body)
+	var past *store.OffsetError
+	switch {
+	case errors.As(err, &past):
+		s.json(w, r, http.StatusConflict, struct {
+			Size  int64  `json:"size"`
+			Error string `json:"error"`
+		}{past.Size, "offset past end"})
+	case err != nil:
+		_, _ = fmt.Fprintf(s.opts.Log, "retake: writing %s failed: %v\n", filepath.Join(dir, name), err)
+		s.fail(w, r, http.StatusInternalServerError, "save failed")
+	default:
+		s.json(w, r, http.StatusOK, struct {
+			Size int64 `json:"size"`
+		}{size})
+	}
+}
+
+// parseOffset parses ?offset= like Python's int(): missing is 0, surrounding spaces and a sign are fine. A number
+// too big for int64 is past any file's end, so it maps to the largest offset (409) rather than "bad offset".
+func parseOffset(s string) (int64, bool) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, true
+	}
+	n, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		var ne *strconv.NumError
+		if errors.As(err, &ne) && errors.Is(ne.Err, strconv.ErrRange) {
+			if strings.HasPrefix(s, "-") {
+				return -1, true
+			}
+			return 1<<63 - 1, true
+		}
+		return 0, false
+	}
+	return n, true
+}
