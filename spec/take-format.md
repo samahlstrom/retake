@@ -17,14 +17,15 @@ fields they don't know.
 |---|---|
 | `seg_01.webm`, `seg_02.webm`, … | One Opus audio file per R-on/R-off segment. Each starts at that segment's `t_start`. Extension `webm`, `ogg` or `m4a`, whichever the browser records. |
 | `segments.json` | `[{id, file, mime, version, flip, t_start, t_end, recording, video_start, video_end, video_min, video_max}]`. `id` is `S1`, `S2`, …; `t_*` are `session_t`; `video_*` are `video_t`; `version` is the label shown while recording; `flip` is true if it was the C-flipped partner; `recording` is true while the segment is still open. |
-| `events.json` | `[{session_t, video_t, event, ...}]`. `event` is one of `start`, `rec_start`/`rec_stop` (+`seg`), `play`, `pause`, `seek` (+`from`), `tick`, `draw_start`/`draw_end`, `undo`, `version` (+`shown`, `base`, `flip`). |
+| `events.json` | `[{session_t, video_t, event, ...}]`. `event` is one of `start`, `rec_start`/`rec_stop` (+`seg`), `play`, `pause`, `ended`, `seek` (+`from`), `tick`, `draw_start`/`draw_end` (+`id`, `seg`; `draw_start` also `color`), `undo` (+`id`), `version` (+`shown`, `base`, `flip`). |
 | `strokes.json` | `[{id, seg, version, flip, color, session_t, session_t_end, video_t, video_t_end, paused, points}]`. `points` are `[x, y]`, normalized 0–1 to the video frame (4 decimals). `color` is `red`, `yellow`, `green` or `white`. Undone strokes are left out on save. |
 | `voice.json` | `{bin, bins: [[i, level], ...]}`: voice coverage along the video timeline in bins of `bin` seconds (0.25). Drawn as the blue marks above the timeline. |
 | `session.json` | From the page: `{format: 3, version, session, created, saved, clock, recorded, video: {duration, width, height}, display: {show_within}}`. The server then overwrites `version`, `versions` and `video`, and adds (**new**) `author`. |
 | `transcript.json`, `notes.md`, `notes.json` | Written later by `review notes`, never by the player. |
 
-`spec/take.schema.json` holds JSON Schemas for these files. The end-to-end test validates every take it produces
-against them, and so must any new writer.
+`spec/take.schema.json` holds JSON Schemas for these files: one definition per file under `$defs` (`session`,
+`segments`, `events`, `strokes`, `voice`), plus `dataBody` for the `/data` request body. The end-to-end test validates
+every take it produces against them, and so must any new writer.
 
 ## Rules
 

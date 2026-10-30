@@ -1,0 +1,269 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:retake:spec:take:v1",
+  "title": "Retake take format v1",
+  "description": "JSON Schemas for the files of one take (spec/take-format.md). Validate a file against its definition: #/$defs/session for session.json, #/$defs/segments, #/$defs/events, #/$defs/strokes and #/$defs/voice. #/$defs/dataBody is the body of POST /api/session/<take>/data (spec/api.md). The root validates a whole take as one object. Unknown fields are allowed everywhere: readers ignore what they don't know.",
+  "type": "object",
+  "properties": {
+    "session": { "$ref": "#/$defs/session" },
+    "segments": { "$ref": "#/$defs/segments" },
+    "events": { "$ref": "#/$defs/events" },
+    "strokes": { "$ref": "#/$defs/strokes" },
+    "voice": { "$ref": "#/$defs/voice" }
+  },
+  "required": ["session", "segments", "events", "strokes", "voice"],
+  "$defs": {
+    "session": {
+      "description": "session.json: the page's session object, with version, versions and video set by the server, plus author (new in v1, absent in legacy takes).",
+      "allOf": [{ "$ref": "#/$defs/pageSession" }],
+      "type": "object",
+      "properties": {
+        "version": { "$ref": "#/$defs/label" },
+        "versions": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "properties": {
+              "label": { "$ref": "#/$defs/label" },
+              "path": { "type": "string", "minLength": 1 },
+              "duration": { "type": ["number", "null"], "minimum": 0 }
+            },
+            "required": ["label", "path", "duration"]
+          }
+        },
+        "video": {
+          "description": "The server's probe of the version this take was recorded on.",
+          "type": "object",
+          "properties": {
+            "path": { "type": "string", "minLength": 1 },
+            "name": { "type": "string", "minLength": 1 },
+            "duration": { "type": ["number", "null"], "minimum": 0 },
+            "fps": { "type": "number", "exclusiveMinimum": 0 },
+            "width": { "type": ["integer", "null"], "minimum": 1 },
+            "height": { "type": ["integer", "null"], "minimum": 1 }
+          },
+          "required": ["path", "name", "duration", "fps", "width", "height"]
+        },
+        "author": {
+          "description": "New in v1: who recorded the take (config name, else the OS user).",
+          "type": "object",
+          "properties": { "name": { "type": "string", "minLength": 1 } },
+          "required": ["name"]
+        }
+      },
+      "required": ["versions"]
+    },
+    "pageSession": {
+      "description": "The session object as the page sends it in the /data body.",
+      "type": "object",
+      "properties": {
+        "format": { "description": "The page's take format number. Take format v1 is page format 3.", "const": 3 },
+        "version": { "$ref": "#/$defs/label" },
+        "session": { "$ref": "#/$defs/takeId" },
+        "created": { "$ref": "#/$defs/localTime" },
+        "saved": { "$ref": "#/$defs/localTime" },
+        "clock": { "type": "string" },
+        "recorded": { "description": "Seconds recorded, summed over the segments.", "type": "number", "minimum": 0 },
+        "video": {
+          "type": "object",
+          "properties": {
+            "duration": { "type": ["number", "null"], "minimum": 0 },
+            "width": { "type": ["integer", "null"], "minimum": 0 },
+            "height": { "type": ["integer", "null"], "minimum": 0 }
+          }
+        },
+        "display": {
+          "type": "object",
+          "properties": { "show_within": { "type": "number", "minimum": 0 } }
+        }
+      },
+      "required": ["format", "version", "session", "created", "saved", "recorded", "video"]
+    },
+    "segments": {
+      "description": "segments.json: one entry per R-on/R-off segment, in recording order.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/segment" }
+    },
+    "segment": {
+      "type": "object",
+      "properties": {
+        "id": { "$ref": "#/$defs/segId" },
+        "file": { "description": "The segment's audio file in the take folder.", "type": "string", "pattern": "^seg_\\d{2,3}\\.(webm|ogg|m4a)$" },
+        "mime": { "type": "string" },
+        "version": { "description": "The label shown while recording.", "$ref": "#/$defs/label" },
+        "flip": { "description": "True if it was recorded on the C-flipped partner.", "type": "boolean" },
+        "t_start": { "$ref": "#/$defs/sessionT" },
+        "t_end": { "$ref": "#/$defs/sessionT" },
+        "recording": { "description": "True while the segment is still open.", "type": "boolean" },
+        "video_start": { "$ref": "#/$defs/videoT" },
+        "video_end": { "$ref": "#/$defs/videoT" },
+        "video_min": { "$ref": "#/$defs/videoT" },
+        "video_max": { "$ref": "#/$defs/videoT" }
+      },
+      "required": ["id", "file", "mime", "version", "flip", "t_start", "t_end", "recording", "video_start",
+        "video_end", "video_min", "video_max"]
+    },
+    "events": {
+      "description": "events.json: the event log that maps session_t to video_t.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/event" }
+    },
+    "event": {
+      "type": "object",
+      "properties": {
+        "session_t": { "$ref": "#/$defs/sessionT" },
+        "video_t": { "$ref": "#/$defs/videoT" },
+        "event": {
+          "description": "The event kind. `ended` is logged when playback reaches the end (legacy behavior).",
+          "enum": ["start", "rec_start", "rec_stop", "play", "pause", "seek", "tick", "draw_start", "draw_end", "undo",
+            "version", "ended"]
+        }
+      },
+      "required": ["session_t", "video_t", "event"],
+      "allOf": [
+        {
+          "if": { "properties": { "event": { "const": "start" } } },
+          "then": {
+            "properties": {
+              "playing": { "type": "boolean" },
+              "rate": { "type": "number" },
+              "version": { "$ref": "#/$defs/label" },
+              "base": { "$ref": "#/$defs/label" },
+              "flip": { "type": "boolean" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "event": { "const": "rec_start" } } },
+          "then": {
+            "properties": {
+              "seg": { "$ref": "#/$defs/segId" },
+              "file": { "type": "string" },
+              "playing": { "type": "boolean" },
+              "version": { "$ref": "#/$defs/label" },
+              "flip": { "type": "boolean" }
+            },
+            "required": ["seg"]
+          }
+        },
+        {
+          "if": { "properties": { "event": { "const": "rec_stop" } } },
+          "then": { "properties": { "seg": { "$ref": "#/$defs/segId" } }, "required": ["seg"] }
+        },
+        {
+          "if": { "properties": { "event": { "const": "seek" } } },
+          "then": { "properties": { "from": { "$ref": "#/$defs/videoT" } }, "required": ["from"] }
+        },
+        {
+          "if": { "properties": { "event": { "const": "draw_start" } } },
+          "then": {
+            "properties": {
+              "id": { "$ref": "#/$defs/strokeId" },
+              "seg": { "$ref": "#/$defs/segId" },
+              "color": { "$ref": "#/$defs/color" }
+            },
+            "required": ["id", "seg", "color"]
+          }
+        },
+        {
+          "if": { "properties": { "event": { "const": "draw_end" } } },
+          "then": {
+            "properties": { "id": { "$ref": "#/$defs/strokeId" }, "seg": { "$ref": "#/$defs/segId" } },
+            "required": ["id", "seg"]
+          }
+        },
+        {
+          "if": { "properties": { "event": { "const": "undo" } } },
+          "then": { "properties": { "id": { "$ref": "#/$defs/strokeId" } }, "required": ["id"] }
+        },
+        {
+          "if": { "properties": { "event": { "const": "version" } } },
+          "then": {
+            "properties": {
+              "shown": { "$ref": "#/$defs/label" },
+              "base": { "$ref": "#/$defs/label" },
+              "flip": { "type": "boolean" }
+            },
+            "required": ["shown", "base", "flip"]
+          }
+        }
+      ]
+    },
+    "strokes": {
+      "description": "strokes.json: the pen strokes still standing (undone strokes are left out).",
+      "type": "array",
+      "items": { "$ref": "#/$defs/stroke" }
+    },
+    "stroke": {
+      "type": "object",
+      "properties": {
+        "id": { "$ref": "#/$defs/strokeId" },
+        "seg": { "description": "The segment it was drawn in: the pen only works while recording.", "$ref": "#/$defs/segId" },
+        "version": { "$ref": "#/$defs/label" },
+        "flip": { "type": "boolean" },
+        "color": { "$ref": "#/$defs/color" },
+        "session_t": { "$ref": "#/$defs/sessionT" },
+        "session_t_end": { "$ref": "#/$defs/sessionT" },
+        "video_t": { "description": "Where the stroke is pinned: the playhead when it started.", "$ref": "#/$defs/videoT" },
+        "video_t_end": { "$ref": "#/$defs/videoT" },
+        "paused": { "type": "boolean" },
+        "points": {
+          "description": "[x, y] normalized 0-1 to the video frame, 4 decimals.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "array",
+            "prefixItems": [{ "$ref": "#/$defs/unit" }, { "$ref": "#/$defs/unit" }],
+            "minItems": 2,
+            "maxItems": 2
+          }
+        }
+      },
+      "required": ["id", "seg", "version", "flip", "color", "session_t", "session_t_end", "video_t", "video_t_end",
+        "paused", "points"]
+    },
+    "voice": {
+      "description": "voice.json: voice coverage along the video timeline, as [bin index, seconds of voice] pairs.",
+      "type": "object",
+      "properties": {
+        "bin": { "description": "Bin width in seconds of video (0.25).", "type": "number", "exclusiveMinimum": 0 },
+        "bins": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [{ "type": "integer", "minimum": 0 }, { "type": "number", "minimum": 0 }],
+            "minItems": 2,
+            "maxItems": 2
+          }
+        }
+      },
+      "required": ["bin", "bins"]
+    },
+    "dataBody": {
+      "description": "The body of POST /api/session/<take>/data: what the page's serialize() returns.",
+      "type": "object",
+      "properties": {
+        "session": { "$ref": "#/$defs/pageSession" },
+        "segments": { "$ref": "#/$defs/segments" },
+        "events": { "$ref": "#/$defs/events" },
+        "strokes": { "$ref": "#/$defs/strokes" },
+        "voice": { "$ref": "#/$defs/voice" }
+      },
+      "required": ["session", "segments", "events", "strokes", "voice"]
+    },
+    "label": { "description": "A version label: v<N>, current, or a file stem.", "type": "string", "minLength": 1 },
+    "takeId": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}_\\d{2}-\\d{2}-\\d{2}$" },
+    "localTime": {
+      "description": "Local time with its UTC offset, to the second: 2026-10-29T20:48:05-06:00.",
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?([+-]\\d{2}:\\d{2}|Z)$"
+    },
+    "segId": { "type": "string", "pattern": "^S[1-9]\\d*$" },
+    "strokeId": { "type": "integer", "minimum": 1 },
+    "color": { "enum": ["red", "yellow", "green", "white"] },
+    "sessionT": { "description": "Seconds since the take started (the first R).", "type": "number", "minimum": 0 },
+    "videoT": { "description": "The video's playhead, in seconds.", "type": "number", "minimum": 0 },
+    "unit": { "type": "number", "minimum": 0, "maximum": 1 }
+  }
+}
