@@ -4,6 +4,25 @@ All notable changes are listed here. Versions follow semver once the first relea
 
 ## Unreleased
 
+### Editor slice 4: what the item-shop pilot asked for
+- Perspective: `transform.rotation_x` / `rotation_y` with `perspective` (CSS's model, about the anchor), and corner
+  pins (`transform.corners`), on any layer, keyframable. Footage is decoded once and sampled through the warp
+  (bilinear, trilinear mips, anti-aliased edges).
+- Blend modes (`normal`, `add`, `screen`, `multiply`, `overlay`, `lighten`, `darken`), opacity groups (`type:
+  group`), masks (rect, ellipse or SVG path, feather, invert, an outline on the mask's edge) and alpha or luma track
+  mattes, on graphics and footage alike. SVG path shapes and linear-gradient fills.
+- `resample: lanczos` (Pillow's LANCZOS for images, byte for byte; ffmpeg's Lanczos for footage, cropped in the
+  decode pipe) and `resample: unfiltered` (OpenCV-style bilinear); `delogo` boxes; blur and shadow on footage.
+- Text `hinting`, `subpixel` and `metrics: "pillow"` (anchored like Pillow's `anchor="mm"`, measured in a test).
+- `expr_lib`: JavaScript helpers shared by a timeline's or a composition's expressions.
+- Audio: stream selection (`stream`), mono played at unity in both channels, fade curves, ducking under inserts or
+  spine items with attack and release, gain keyframes and expressions, per-element `loudness` targets, and a master
+  bus (`master: {loudness, true_peak, lowpass}`: BS.1770-4, two passes, a 4× oversampled look-ahead limiter).
+- External raster backends: a component may declare `backend: {command}`; the renderer runs the program over the
+  `retake-raster/1` protocol (a JSON request on stdin, framed RGBA frames back, a timeout, a cleared environment),
+  with the package hash in the layer key. Example: `editor/examples/backends/python-text/`.
+- Fixed: kits entries that aren't kit packages (`plugin:deadlock`) are recorded and ignored again, as in slice 2.
+
 ### Editor slice 3: components, brand kits, house rules and the shared library
 - Components (`spec/components.md`): a `component.json` with a props JSON Schema (descriptions and defaults an agent
   reads), layers in the timeline's own layer model as templates (`$props`, `$id`, kit tokens, `$expr` computed once),

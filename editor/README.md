@@ -72,6 +72,23 @@ Every command takes `--json` and prints `{"ok": true, …}` or `{"ok": false, "e
 suggestions}]}`. Renders go to `.retake/renders/` next to the timeline unless `-o` says otherwise; the manifest is
 written next to the video.
 
+## Picture: warps, blend modes, masks, mattes, groups
+
+Every layer goes through one projective transform (`crates/render/src/transform.rs`): the 2D one, or a CSS-style 3D
+turn (`rotation_x`, `rotation_y`, `perspective`), or a corner pin (`corners`). Skia draws graphics through it; the
+compositor (`composite.rs`, `warp_image`) samples footage through it bilinearly from one decode per layer, with
+trilinear mip levels where it shrinks (`resample: unfiltered` skips them, like OpenCV's warps). Layers blend in seven
+W3C modes, carry a mask (rect, ellipse or SVG path; feather, invert, an outline on its edge) or a track matte, and
+group into opacity groups. In the engine (`engine.rs`) a graphics layer that blends in another mode than `normal`,
+has a matte or is one becomes its own run and an item with `Fx`, since the compositor applies modes and mattes
+against what's under it; a group of graphics only is drawn by Skia inside its run (children blend within it); a
+group with footage is an `Item::Group`, composited into its own picture first. Every item has a `slot` for its
+decode state and its manifest boxes. `resample: lanczos` resizes images with a Pillow-exact Lanczos-3
+(`resample.rs`) and decodes footage with ffmpeg's Lanczos scaler, cropped in the pipe when the crop is constant
+(`unit.rs`, `decode_plan`); `delogo` runs first in that pipe. `crates/render/tests/picture.rs` checks each against an
+independent reference (ffmpeg's `perspective`, `crop,scale` and `delogo`, the W3C formulas) or its other path, and
+`tests/pillow.rs` text placement and Lanczos against Pillow (skipped without it; `RETAKE_PILLOW_PYTHON`).
+
 ## Audio
 
 The mix (`crates/render/src/audio.rs`) sums the spine, video layers' sound and audio elements in one pass per render
