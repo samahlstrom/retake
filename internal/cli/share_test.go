@@ -46,15 +46,7 @@ func fakeCloudflared(t *testing.T, host, tail string) (bin, dir string) {
 
 func pidGone(t *testing.T, dir string) bool {
 	t.Helper()
-	b, err := os.ReadFile(filepath.Join(dir, "pid"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return syscall.Kill(pid, 0) != nil
+	return syscall.Kill(tunnelPID(t, dir), 0) != nil
 }
 
 // runShare starts `retake share` in the background and waits for its link.
@@ -194,7 +186,7 @@ func TestShareStartsAServerAndATunnel(t *testing.T) {
 		_ = res.Body.Close()
 		t.Error("the share's server still answers")
 	}
-	if !strings.Contains(w.stdout.String(), "stopped sharing; token #1 stays valid") {
+	if !strings.Contains(w.stdout.String(), "stopped sharing. Token #1 is still valid (until ") {
 		t.Errorf("stdout: %s", w.stdout)
 	}
 }
@@ -247,6 +239,48 @@ func TestShareAttachesAndKeepsTheServerAlive(t *testing.T) {
 	// Without the share's pings, the server idles out as before.
 	if code := wait(t, openDone); code != ExitOK || !strings.Contains(w.stdout.String(), "page gone, exiting") {
 		t.Errorf("open: %d %s", code, w.stdout)
+	}
+}
+
+func tunnelPID(t *testing.T, dir string) int {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join(dir, "pid"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return pid
+}
+
+// Ctrl+C in a terminal interrupts the whole process group: cloudflared may exit before the share sees its own
+// interrupt. That is a normal stop. A tunnel that dies by itself is not.
+func TestShareTunnelStops(t *testing.T) {
+	w := newWorld(t)
+	bin, dir := fakeCloudflared(t, "ctrl-c-race.trycloudflare.com", "")
+	_, cancel, done := runShare(t, w.environment(nil), w.video, "--port", "0", "--tunnel-bin", bin, "--no-qr")
+	if err := syscall.Kill(tunnelPID(t, dir), syscall.SIGINT); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+	if code := wait(t, done); code != ExitOK || strings.Contains(w.stderr.String(), "tunnel stopped") {
+		t.Errorf("Ctrl+C that reached the tunnel first: %d %s", code, w.stderr)
+	}
+
+	w = newWorld(t)
+	bin, dir = fakeCloudflared(t, "dies-alone.trycloudflare.com", "")
+	_, _, done = runShare(t, w.environment(nil), w.video, "--port", "0", "--tunnel-bin", bin, "--no-qr")
+	if err := syscall.Kill(tunnelPID(t, dir), syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	if code := wait(t, done); code != ExitError || !strings.Contains(w.stderr.String(), "the tunnel stopped") {
+		t.Errorf("a tunnel that died: %d %s", code, w.stderr)
+	}
+	if hosts, _ := storeOf(t, w).Hosts(); len(hosts) != 0 {
+		t.Errorf("the dead tunnel's host is still allowed: %+v", hosts)
 	}
 }
 

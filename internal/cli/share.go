@@ -28,6 +28,9 @@ import (
 // DefaultSharePing is how often a share pings the server it attached to, so its idle exit doesn't end the share.
 const DefaultSharePing = 30 * time.Second
 
+// tunnelGrace is how long a share waits, once its tunnel has exited, for the Ctrl+C that may have stopped both.
+const tunnelGrace = time.Second
+
 // parseExpiry reads --expires: a Go duration (90m, 24h), days (7d), or 0 / never for no expiry.
 func parseExpiry(s string) (time.Duration, error) {
 	s = strings.TrimSpace(strings.ToLower(s))
@@ -393,6 +396,13 @@ wait:
 		case <-ctx.Done():
 			break wait
 		case <-tunDone:
+			// Ctrl+C in a terminal interrupts the tunnel too (it is in our process group), and it may exit first:
+			// that is a normal stop once our own interrupt arrives.
+			select {
+			case <-ctx.Done():
+				break wait
+			case <-time.After(tunnelGrace):
+			}
 			reason = tun.Err()
 			if reason == nil {
 				reason = errors.New("the tunnel stopped")
@@ -427,7 +437,7 @@ wait:
 		return ExitError
 	}
 	if !s.a.asJSON {
-		_, _ = fmt.Fprintf(env.Stdout, "\nretake: stopped sharing; token #%d stays valid (%s) until revoked\n", row.ID,
+		_, _ = fmt.Fprintf(env.Stdout, "\nretake: stopped sharing. Token #%d is still valid (%s); share revoke ends it\n", row.ID,
 			untilText(row))
 	}
 	return ExitOK
