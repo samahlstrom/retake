@@ -315,7 +315,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		sw := &statusWriter{ResponseWriter: w, code: http.StatusOK}
 		w = sw
 		defer func() {
-			_, _ = fmt.Fprintf(s.opts.Log, "retake: \"%s %s %s\" %d -\n", r.Method, r.RequestURI, r.Proto, sw.code)
+			uri := r.RequestURI
+			if strings.HasPrefix(r.URL.Path, "/s/") {
+				uri = "/s/<token>" // a share link's token stays out of the log
+			}
+			_, _ = fmt.Fprintf(s.opts.Log, "retake: \"%s %s %s\" %d -\n", r.Method, uri, r.Proto, sw.code)
 		}()
 	}
 	if shared {

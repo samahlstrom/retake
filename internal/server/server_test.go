@@ -728,10 +728,14 @@ func TestVerboseLog(t *testing.T) {
 	var mu sync.Mutex
 	h := start(t, Options{Video: f.video, Verbose: true, Log: lockedWriter{&mu, &log}})
 	h.get("/api/ping", nil)
+	h.get("/s/rt_secret", nil)
 	mu.Lock()
 	defer mu.Unlock()
 	if !strings.Contains(log.String(), `retake: "GET /api/ping HTTP/1.1" 200 -`) {
 		t.Errorf("log = %q", log.String())
+	}
+	if !strings.Contains(log.String(), `retake: "GET /s/<token> HTTP/1.1" 401 -`) || strings.Contains(log.String(), "rt_secret") {
+		t.Errorf("a share link's token is in the log: %q", log.String())
 	}
 }
 

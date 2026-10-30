@@ -91,6 +91,7 @@ host `h`, from flags or the table. The other POST rules of spec/api.md stay.
   `SameSite=Strict` cookie isn't sent along a cross-site redirect chain. The bounce page's own navigation is
   same-site, so the page then loads with the cookie, and the token leaves the address bar.
 - Invalid: 401 HTML ("This link has expired or was revoked"), counted as a failed attempt.
+- The verbose request log writes a share link as `/s/<token>`, never the token itself.
 - The cookie's path is `/` because the server serves one review at its root. When one server serves several projects
   (milestone 3b), each share cookie is scoped to its project's path.
 
@@ -102,6 +103,8 @@ host `h`, from flags or the table. The other POST rules of spec/api.md stay.
   address. A client with 10 failures in the last minute gets 429 `{"error":"too many attempts"}` with `Retry-After`
   for any request that presents a token, before the token is looked up, until its oldest failure is a minute old.
 - At most 4096 clients are tracked; the stalest is dropped first.
+- Behind a reverse proxy that sends no forwarding header (`--tunnel none`), every client counts as the proxy's
+  address. Tokens can't be guessed (256 bits); the limit only keeps a flood of bad ones off the store.
 
 ## `/api/info`
 
