@@ -4,6 +4,12 @@ All notable changes are listed here. Versions follow semver once the first relea
 
 ## Unreleased
 
+### Scrubbing on iPhone
+- Dragging the timeline now scrubs like a video player: playback pauses for the drag, one seek is in flight at a
+  time (to the latest finger position, a fast keyframe seek where the browser has one), the release does one exact
+  seek, and playback resumes only if it was playing. iOS browsers (Safari's engine) used to keep playing and snap
+  back to where they were when a drag fired more seeks than they could load.
+
 ### Eraser
 - E (or the eraser button next to the pen colors) switches the pen to an eraser. A swipe over any line on screen
   removes the whole line, recording or not, including lines from earlier takes; a fast swipe misses nothing. Z brings

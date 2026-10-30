@@ -31,6 +31,7 @@ import {
   resizeBox,
 } from './images';
 import { ERASE_RADIUS, strokesHit, sweep, undoTarget } from './eraser';
+import { Scrubber } from './scrub';
 import { keyAction, type Action } from './keys';
 import { layoutMode, type LayoutMode } from './layout';
 import { closeMic, MIC_BLOCKED, MIC_BLOCKED_TOUCH, openMic, pickMime, recorderMime, type Mic } from './mic';
@@ -555,9 +556,18 @@ export class Review {
   };
 
   seekTo(t: number): void {
-    const video = this.video,
-      d = video.duration || 0;
-    video.currentTime = clamp(t, 0, d ? d - 0.001 : Math.max(0, t));
+    this.video.currentTime = this.#clampT(t);
+  }
+
+  #clampT(t: number): number {
+    const d = this.video.duration || 0;
+    return clamp(t, 0, d ? d - 0.001 : Math.max(0, t));
+  }
+
+  #scrubber: Scrubber | null = null;
+  /** The timeline drag (lib/scrub.ts): one seek in flight at a time, paused while dragging. */
+  get scrubber(): Scrubber {
+    return (this.#scrubber ??= new Scrubber(this.video));
   }
 
   frameStep(dir: number): void {
@@ -1074,17 +1084,19 @@ export class Review {
     const down = (e: PointerEvent) => {
       this.scrubbing = true;
       el.setPointerCapture(e.pointerId);
-      this.seekTo(this.#tlT(e.clientX));
+      this.scrubber.start(this.#clampT(this.#tlT(e.clientX)));
     };
     const move = (e: PointerEvent) => {
       const r = this.el.tl.getBoundingClientRect();
       this.tip.show = true;
       this.tip.left = clamp(e.clientX - r.left, 24, r.width - 24);
       this.tip.text = fmt(this.#tlT(e.clientX));
-      if (this.scrubbing) this.seekTo(this.#tlT(e.clientX));
+      if (this.scrubbing) this.scrubber.to(this.#clampT(this.#tlT(e.clientX)));
     };
     const up = () => {
+      if (!this.scrubbing) return;
       this.scrubbing = false;
+      this.scrubber.end();
     };
     const leave = () => {
       this.tip.show = false;
