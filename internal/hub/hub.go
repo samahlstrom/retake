@@ -60,7 +60,7 @@ type Hub struct {
 	wg     sync.WaitGroup
 
 	mu        sync.Mutex
-	projects  map[string]*proj
+	projects  map[string]*slot
 	closed    bool
 	closeOnce sync.Once
 	closeErr  error
@@ -89,7 +89,7 @@ func New(opts Options) (*Hub, error) {
 		return nil, err
 	}
 	h := &Hub{opts: opts, st: opts.Stores, public: pub, proxies: proxies, uploads: opts.Stores.Uploads(),
-		secure: pub.Scheme != "http" || pub.Loopback(), projects: map[string]*proj{}}
+		secure: pub.Scheme != "http" || pub.Loopback(), projects: map[string]*slot{}}
 	h.uploads.Now = opts.Now
 	h.uploads.Log = opts.Log
 	h.tokenFails = team.NewLimiter()
@@ -104,8 +104,9 @@ func newLimiter(maxFails int) *team.Limiter {
 	return l
 }
 
-// Start opens every project in the background (downloading the files their workspaces lack, with object storage),
-// records the public URL for the CLI's links, and starts the hourly sweep of expired uploads and sessions.
+// Start opens every project in the background (downloading the files their workspaces lack, with object storage,
+// and starting their job runners), records the public URL for the CLI's links, and starts the hourly sweep of
+// expired uploads and sessions.
 func (h *Hub) Start() {
 	if h.public.Origin != "" {
 		if err := h.st.Accounts.SetSetting(accounts.SettingPublicURL, h.public.Origin); err != nil {
@@ -122,9 +123,12 @@ func (h *Hub) Start() {
 			if h.ctx.Err() != nil {
 				return
 			}
-			if _, err := h.project(p.Name); err != nil {
+			pr, err := h.project(p.Name)
+			if err != nil {
 				h.logf("opening project %s: %v", p.Name, err)
+				continue
 			}
+			pr.server() // starts its job runner: jobs queued before a restart run without waiting for a visit
 		}
 	})
 	h.wg.Go(func() {
@@ -162,15 +166,18 @@ func (h *Hub) Close() error {
 func (h *Hub) close() error {
 	h.mu.Lock()
 	h.closed = true
-	ps := make([]*proj, 0, len(h.projects))
-	for _, p := range h.projects {
-		ps = append(ps, p)
+	slots := make([]*slot, 0, len(h.projects))
+	for _, s := range h.projects {
+		slots = append(slots, s)
 	}
 	h.mu.Unlock()
 	h.cancel()
 	var errs []error
-	for _, p := range ps {
-		errs = append(errs, p.close())
+	for _, s := range slots {
+		<-s.ready
+		if s.p != nil {
+			errs = append(errs, s.p.close())
+		}
 	}
 	h.wg.Wait()
 	return errors.Join(errs...)

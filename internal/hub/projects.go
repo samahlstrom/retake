@@ -40,13 +40,37 @@ func (h *Hub) project(name string) (*proj, error) {
 		return nil, fmt.Errorf("project %s: %w", name, accounts.ErrNotFound)
 	}
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	if h.closed {
+		h.mu.Unlock()
 		return nil, errors.New("the server is stopping")
 	}
-	if p, ok := h.projects[name]; ok {
-		return p, nil
+	if s, ok := h.projects[name]; ok {
+		h.mu.Unlock()
+		<-s.ready // another request is opening it
+		return s.p, s.err
 	}
+	// Open it outside the lock: downloading a project's files must not hold up requests to the others.
+	s := &slot{ready: make(chan struct{})}
+	h.projects[name] = s
+	h.mu.Unlock()
+	s.p, s.err = h.open(name)
+	if s.err != nil {
+		h.mu.Lock()
+		delete(h.projects, name) // try again next time: the project may be added, or the store come back
+		h.mu.Unlock()
+	}
+	close(s.ready)
+	return s.p, s.err
+}
+
+// slot is a project being opened, or open.
+type slot struct {
+	ready chan struct{} // closed once p or err is set
+	p     *proj
+	err   error
+}
+
+func (h *Hub) open(name string) (*proj, error) {
 	row, err := h.st.Accounts.Project(name)
 	if err != nil {
 		return nil, err
@@ -67,7 +91,6 @@ func (h *Hub) project(name string) (*proj, error) {
 		}
 		h.wg.Go(func() { p.pub.run(h.ctx, st, h.opts.SyncEvery) })
 	}
-	h.projects[name] = p
 	return p, nil
 }
 
