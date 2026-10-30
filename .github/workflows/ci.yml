@@ -18,8 +18,10 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
-      - name: Install the toolchain from mise.toml
+      - name: Install Go and golangci-lint from mise.toml
         uses: jdx/mise-action@v5
+        with:
+          install_args: go golangci-lint
       - name: go vet
         run: go vet ./...
       - name: go test -race
@@ -38,8 +40,10 @@ jobs:
         working-directory: web
     steps:
       - uses: actions/checkout@v7
-      - name: Install the toolchain from mise.toml
+      - name: Install node from mise.toml
         uses: jdx/mise-action@v5
+        with:
+          install_args: node
       - run: npm ci
       - run: npm run check
       - run: npm run lint
@@ -52,8 +56,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
-      - name: Install the toolchain from mise.toml
+      - name: Install Go and node from mise.toml
         uses: jdx/mise-action@v5
+        with:
+          install_args: go node
       - name: Install ffmpeg
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - name: Install e2e dependencies
@@ -123,3 +129,141 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: cargo test
         run: cargo test --workspace
+
+  notices:
+    name: THIRD_PARTY_NOTICES.md is current
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Go, node and Rust from mise.toml
+        uses: jdx/mise-action@v5
+        with:
+          install_args: go node rust
+      - name: Fetch what the notices list (Go modules, the page's packages, crates)
+        run: |
+          go mod download
+          npm --prefix web ci
+          cargo fetch --locked --manifest-path editor/Cargo.toml
+      - name: scripts/notices.mjs --check
+        run: node scripts/notices.mjs --check
+
+  quickstart:
+    name: Quickstart (docs/quickstart.md on the sample project)
+    needs: [go, web, editor]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Go, node and Rust from mise.toml
+        uses: jdx/mise-action@v5
+        with:
+          install_args: go node rust
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - name: Cache cargo builds
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: editor
+      - name: Build bin/retake and retake-edit
+        run: |
+          make build
+          cargo build --release --locked -p retake-edit --manifest-path editor/Cargo.toml
+      - name: Install Playwright's Chromium (for the C check)
+        run: |
+          npm --prefix e2e ci
+          cd e2e && npx playwright install --with-deps chromium
+      - name: Run the quickstart without a person
+        run: |
+          CHROMIUM_PATH="$(cd e2e && node -e "console.log(require('@playwright/test').chromium.executablePath())")"
+          export CHROMIUM_PATH
+          examples/sample/run-quickstart.sh
+
+  # Tags only: release archives for inspection. Nothing is published (release.disable in .goreleaser.yaml).
+  editor-release:
+    name: retake-edit ${{ matrix.os }}/${{ matrix.arch }} (tags only)
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [editor]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: ubuntu-24.04, os: linux, arch: amd64, target: x86_64-unknown-linux-gnu }
+          - { runner: ubuntu-24.04-arm, os: linux, arch: arm64, target: aarch64-unknown-linux-gnu }
+          - { runner: macos-14, os: darwin, arch: amd64, target: x86_64-apple-darwin }
+          - { runner: macos-14, os: darwin, arch: arm64, target: aarch64-apple-darwin }
+          - { runner: windows-latest, os: windows, arch: amd64, target: x86_64-pc-windows-msvc }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Rust from mise.toml
+        uses: jdx/mise-action@v5
+        with:
+          install_args: rust
+      - name: Add the target
+        run: rustup target add ${{ matrix.target }}
+      - name: Cache cargo builds
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: editor
+          key: ${{ matrix.target }}
+      - name: cargo build --release
+        working-directory: editor
+        run: cargo build --release --locked -p retake-edit --target ${{ matrix.target }}
+      - name: Package (named like goreleaser's archives, which scripts/install.sh expects)
+        shell: bash
+        env:
+          OS: ${{ matrix.os }}
+          ARCH: ${{ matrix.arch }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          name="retake-edit_${version}_${OS}_${ARCH}"
+          mkdir -p dist-editor stage
+          cp README.md CHANGELOG.md THIRD_PARTY_NOTICES.md stage/
+          if [ "$OS" = windows ]; then
+            cp "editor/target/$TARGET/release/retake-edit.exe" stage/
+            (cd stage && 7z a -tzip "../dist-editor/$name.zip" .)
+          else
+            cp "editor/target/$TARGET/release/retake-edit" stage/
+            if [ "$OS" = darwin ]; then owner=(--uid 0 --gid 0); else owner=(--owner=0 --group=0); fi
+            tar "${owner[@]}" -czf "dist-editor/$name.tar.gz" -C stage .
+          fi
+      - uses: actions/upload-artifact@v7
+        with:
+          name: editor-${{ matrix.os }}-${{ matrix.arch }}
+          path: dist-editor/*
+          retention-days: 14
+
+  release-snapshot:
+    name: Release snapshot (goreleaser, tags only, publishes nothing)
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [go, web, e2e, notices, quickstart, editor-release]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # goreleaser reads the tags
+      - name: Install Go, node and goreleaser from mise.toml
+        uses: jdx/mise-action@v5
+        with:
+          install_args: go node goreleaser
+      - name: The retake-edit archives, for checksums.txt
+        uses: actions/download-artifact@v7
+        with:
+          pattern: editor-*
+          path: dist-editor
+          merge-multiple: true
+      - name: goreleaser release --snapshot
+        run: goreleaser release --snapshot --clean --parallelism 2
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-snapshot
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/checksums.txt
+            dist-editor/*
+          retention-days: 14

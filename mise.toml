@@ -1,6 +1,8 @@
 [tools]
+actionlint = "1.7.12"
 go = "1.27.1"
 golangci-lint = "2.14.0"
 goreleaser = "2.19.0"
 node = "26.7.0"
 rust = { version = "1.99.1", profile = "minimal", components = "clippy,rustfmt" }
+shellcheck = "0.11.0"
