@@ -114,15 +114,15 @@ func (c Component) Ref() string { return c.Name + "@" + c.Version }
 
 // Kit is the part of a kit.json the Go side reads.
 type Kit struct {
-	Schema      string           `json:"schema,omitempty"`
-	Name        string           `json:"name"`
-	Version     string           `json:"version"`
-	Title       string           `json:"title"`
-	Description string           `json:"description"`
-	License     json.RawMessage  `json:"license,omitempty"`
-	Tokens      map[string]any   `json:"tokens,omitempty"`
-	Components  []string         `json:"components,omitempty"`
-	Rules       []map[string]any `json:"rules,omitempty"`
+	Schema      string            `json:"schema,omitempty"`
+	Name        string            `json:"name"`
+	Version     string            `json:"version"`
+	Title       string            `json:"title"`
+	Description string            `json:"description"`
+	License     json.RawMessage   `json:"license,omitempty"`
+	Tokens      map[string]any    `json:"tokens,omitempty"`
+	Components  []string          `json:"components,omitempty"`
+	Rules       []map[string]any  `json:"rules,omitempty"`
 	Assets      []assets.KitAsset `json:"assets,omitempty"`
 }
 

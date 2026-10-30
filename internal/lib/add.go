@@ -180,7 +180,7 @@ func install(ctx context.Context, r *Registry, e Entry, tl string, force bool) (
 	// Previews aren't part of the hash; bring the sheet along when the registry has one.
 	if s := e.Previews["sheet"]; s != "" {
 		if b, err := r.Fetch(ctx, s); err == nil {
-			_ = os.MkdirAll(filepath.Join(tmp, "previews"), 0o755) //nolint:gosec // a project folder
+			_ = os.MkdirAll(filepath.Join(tmp, "previews"), 0o755)                  //nolint:gosec // a project folder
 			_ = os.WriteFile(filepath.Join(tmp, "previews", "sheet.png"), b, 0o644) //nolint:gosec // an image
 		}
 	}
