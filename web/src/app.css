@@ -1,0 +1,357 @@
+/* The review page's look, carried over from the legacy player rule for rule (same ids, colors, sizes and fonts).
+   Kept as one global sheet so the cascade matches the legacy page exactly. */
+:root {
+  --bg: #09090a;
+  --bar: #0e0e10;
+  --hair: rgba(255, 255, 255, 0.07);
+  --text: #ececef;
+  --dim: #85858d;
+  --voice: #5ac8fa;
+  --live: #ff453a;
+}
+* {
+  box-sizing: border-box;
+}
+[hidden] {
+  display: none !important;
+}
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+  user-select: none;
+  font:
+    13px/1.4 Inter,
+    'Adwaita Sans',
+    system-ui,
+    'Noto Sans',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+#stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  background: var(--bg);
+}
+#video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+#freeze {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: none;
+}
+#ink {
+  position: absolute;
+  touch-action: none;
+  cursor: default;
+}
+#ink.pen {
+  cursor: crosshair;
+}
+.float {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: none;
+  white-space: nowrap;
+  padding: 7px 15px;
+  border-radius: 999px;
+  background: rgba(9, 9, 10, 0.72);
+  color: #dcdce1;
+  font-size: 13px;
+  letter-spacing: 0.01em;
+  backdrop-filter: blur(10px);
+  transition: opacity 0.6s ease;
+}
+#hint {
+  bottom: 26px;
+}
+#hint.gone {
+  opacity: 0;
+}
+#hint b {
+  color: #fff;
+  font-weight: 600;
+}
+#toast {
+  top: 22px;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+#toast.show {
+  opacity: 1;
+}
+#fatal {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  text-align: center;
+  color: #d0d0d6;
+  font-size: 14px;
+}
+
+#bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  height: 64px;
+  padding: 0 28px;
+  background: var(--bar);
+  border-top: 1px solid var(--hair);
+  transition: box-shadow 0.2s ease;
+}
+#bar.recording {
+  box-shadow: inset 0 2px 0 var(--live);
+}
+button {
+  font: inherit;
+  color: var(--text);
+  cursor: pointer;
+}
+#play {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  margin-left: -8px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  display: grid;
+  place-items: center;
+}
+#play:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+#play svg {
+  width: 22px;
+  height: 22px;
+}
+#time {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+  min-width: 104px;
+}
+#time .dim {
+  color: var(--dim);
+}
+#timeline {
+  position: relative;
+  flex: 1;
+  height: 40px;
+  cursor: pointer;
+}
+#tl {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+#tip {
+  position: absolute;
+  bottom: 100%;
+  margin-bottom: 8px;
+  transform: translateX(-50%);
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #1b1b1f;
+  color: var(--text);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  display: none;
+}
+#ver {
+  flex: none;
+  position: relative;
+}
+#verBtn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  padding: 6px 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+#verBtn:hover {
+  border-color: rgba(255, 255, 255, 0.32);
+}
+#verBtn.flipped {
+  color: #ffcf6e;
+  border-color: rgba(255, 207, 110, 0.5);
+}
+#verList {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  min-width: 168px;
+  padding: 6px;
+  border-radius: 10px;
+  background: #151518;
+  border: 1px solid var(--hair);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.55);
+  outline: none;
+}
+#verList button {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font-variant-numeric: tabular-nums;
+}
+#verList button:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+#verList button.on {
+  font-weight: 600;
+}
+#verList .d {
+  color: var(--dim);
+  font-weight: 400;
+}
+#colors {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sw {
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  position: relative;
+}
+.sw.on::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.75);
+}
+#voicebox {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-left: 22px;
+  border-left: 1px solid var(--hair);
+}
+#wave {
+  width: 150px;
+  height: 26px;
+  display: block;
+}
+#rec {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 116px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: transparent;
+  font-variant-numeric: tabular-nums;
+}
+#rec .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #55555c;
+  flex: none;
+}
+#rec .k {
+  color: var(--dim);
+  font-size: 12px;
+  margin-left: auto;
+}
+#rec:hover {
+  border-color: rgba(255, 255, 255, 0.32);
+}
+#rec.on {
+  border-color: rgba(255, 69, 58, 0.55);
+  background: rgba(255, 69, 58, 0.12);
+  color: #ff7a70;
+  font-weight: 600;
+}
+#rec.on .dot {
+  background: var(--live);
+}
+#rec.wait .dot {
+  background: #d9a441;
+}
+#done {
+  flex: none;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  padding: 7px 16px;
+  font-weight: 500;
+}
+#done:hover {
+  border-color: rgba(255, 255, 255, 0.32);
+}
+#done.saved {
+  color: var(--dim);
+  border-color: var(--hair);
+}
+@media (min-width: 2200px) {
+  body {
+    font-size: 14.5px;
+  }
+  #bar {
+    height: 76px;
+    padding: 0 40px;
+    gap: 28px;
+  }
+  #play svg {
+    width: 26px;
+    height: 26px;
+  }
+  #time {
+    min-width: 120px;
+  }
+  #wave {
+    width: 190px;
+    height: 30px;
+  }
+  .sw {
+    width: 16px;
+    height: 16px;
+  }
+  .float {
+    font-size: 14.5px;
+  }
+  #rec {
+    min-width: 132px;
+  }
+}
