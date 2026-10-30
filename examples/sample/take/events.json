@@ -1,0 +1,42 @@
+[
+ {
+  "session_t": 0,
+  "video_t": 11,
+  "event": "start",
+  "playing": false,
+  "rate": 1,
+  "version": "v2",
+  "base": "v2",
+  "flip": false
+ },
+ {
+  "session_t": 1,
+  "video_t": 11,
+  "event": "rec_start",
+  "seg": "S1",
+  "playing": false,
+  "version": "v2",
+  "flip": false
+ },
+ {
+  "session_t": 3.2,
+  "video_t": 11,
+  "event": "draw_start",
+  "id": 1,
+  "seg": "S1",
+  "color": "red"
+ },
+ {
+  "session_t": 4,
+  "video_t": 11,
+  "event": "draw_end",
+  "id": 1,
+  "seg": "S1"
+ },
+ {
+  "session_t": 7.171,
+  "video_t": 11,
+  "event": "rec_stop",
+  "seg": "S1"
+ }
+]

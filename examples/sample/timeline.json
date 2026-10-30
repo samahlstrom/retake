@@ -1,0 +1,126 @@
+{
+  "schema": "timeline/0.1",
+  "id": "how-to",
+  "rev": 0,
+  "format": { "size": [1280, 720], "fps": 30, "sample_rate": 48000, "background": "#000000" },
+  "kits": [],
+  "assets": {
+    "proj:vo": { "path": "voice/vo.ogg", "words": "voice/vo.words.json" },
+    "proj:rinse": { "path": "media/rinse.mp4" },
+    "proj:grind": { "path": "media/grind.mp4" },
+    "proj:pour": { "path": "media/pour.mp4" }
+  },
+  "spine": [
+    { "id": "a", "asset": "proj:vo", "in": 0.4, "out": 4.8 },
+    { "id": "b", "asset": "proj:vo", "in": 5.2, "out": 9.62 },
+    { "id": "c", "asset": "proj:vo", "in": 10.0, "out": 14.25 },
+    { "id": "d", "asset": "proj:vo", "in": 14.6, "out": 19.35 },
+    { "id": "e", "asset": "proj:vo", "in": 19.7, "out": 23.45 }
+  ],
+  "scenes": [
+    {
+      "id": "title",
+      "shots": [
+        {
+          "id": "title/card",
+          "at": "start:a",
+          "picture": {
+            "background": "#1b1410",
+            "layers": [
+              { "id": "title/card/name", "type": "text", "text": "POUR-OVER COFFEE", "size": 96, "fill": "#ffffff",
+                "transform": { "position": [640, 320], "scale": { "keys": [
+                  { "t": 0, "v": 0.7, "ease": "out-back" }, { "t": 0.35, "v": 1.0 } ] } } },
+              { "id": "title/card/sub", "type": "text", "text": "in a few simple steps", "size": 40, "fill": "#c8b8a8",
+                "from": "word:a/few-0.10",
+                "transform": { "position": [640, 420], "opacity": { "keys": [
+                  { "t": "word:a/few-0.10", "v": 0 }, { "t": "word:a/few+0.30", "v": 1 } ] } } }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "steps",
+      "shots": [
+        { "id": "steps/rinse", "at": "start:b",
+          "picture": { "layers": [ { "id": "steps/rinse/v", "type": "video", "asset": "proj:rinse", "fit": "cover" } ] } },
+        { "id": "steps/grind", "at": "start:c",
+          "picture": { "layers": [ { "id": "steps/grind/v", "type": "video", "asset": "proj:grind", "fit": "cover" } ] } },
+        { "id": "steps/pour", "at": "start:d",
+          "picture": { "layers": [ { "id": "steps/pour/v", "type": "video", "asset": "proj:pour", "fit": "cover" } ] } }
+      ],
+      "overlays": [
+        {
+          "id": "label/1",
+          "from": "start:b+0.30",
+          "to": "end:b",
+          "z": 1,
+          "layers": [
+            { "id": "label/1/bar", "type": "shape", "shape": "rect", "size": [520, 64], "radius": 10, "fill": "#000000b0",
+              "transform": { "anchor": [0, 0.5], "position": [40, 650] } },
+            { "id": "label/1/text", "type": "text", "text": "STEP 1   RINSE THE FILTER", "size": 30, "align": "left",
+              "transform": { "anchor": [0, 0.5], "position": [64, 650] } }
+          ]
+        },
+        {
+          "id": "label/2",
+          "from": "start:c+0.30",
+          "to": "end:c",
+          "z": 1,
+          "layers": [
+            { "id": "label/2/bar", "type": "shape", "shape": "rect", "size": [520, 64], "radius": 10, "fill": "#000000b0",
+              "transform": { "anchor": [0, 0.5], "position": [40, 650] } },
+            { "id": "label/2/text", "type": "text", "text": "STEP 2   ADD THE COFFEE", "size": 30, "align": "left",
+              "transform": { "anchor": [0, 0.5], "position": [64, 650] } }
+          ]
+        },
+        {
+          "id": "label/3",
+          "from": "start:d+0.30",
+          "to": "end:d",
+          "z": 1,
+          "layers": [
+            { "id": "label/3/bar", "type": "shape", "shape": "rect", "size": [520, 64], "radius": 10, "fill": "#000000b0",
+              "transform": { "anchor": [0, 0.5], "position": [40, 650] } },
+            { "id": "label/3/text", "type": "text", "text": "STEP 3   POUR SLOWLY", "size": 30, "align": "left",
+              "transform": { "anchor": [0, 0.5], "position": [64, 650] } }
+          ]
+        },
+        {
+          "id": "pop/grams",
+          "from": "word:c/Add",
+          "to": "end:c",
+          "z": 2,
+          "layers": [
+            { "id": "pop/grams/text", "type": "text", "text": "20 g", "size": 120, "fill": "#ffd400",
+              "stroke": { "color": "#000000", "width": 8 },
+              "transform": { "position": [1060, 170], "scale": { "keys": [
+                { "t": 0, "v": 1.25, "ease": "out-cubic" }, { "t": 0.09, "v": 1.0 } ] } } }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "outro",
+      "shots": [
+        {
+          "id": "outro/card",
+          "at": "start:e",
+          "picture": {
+            "background": "#1b1410",
+            "layers": [
+              { "id": "outro/card/cup", "type": "shape", "shape": "ellipse", "size": [200, 200], "fill": "#6f4e37",
+                "stroke": { "color": "#f2e6d8", "width": 10 }, "transform": { "position": [640, 290] } },
+              { "id": "outro/card/text", "type": "text", "text": "ENJOY", "size": 110, "fill": "#ffffff",
+                "from": "word:e/enjoy-0.10",
+                "transform": { "position": [640, 500], "scale": { "keys": [
+                  { "t": "word:e/enjoy-0.10", "v": 0.8, "ease": "out-back" }, { "t": "word:e/enjoy+0.25", "v": 1.0 } ] } } }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "audio": [],
+  "end": "end:e+0.60"
+}

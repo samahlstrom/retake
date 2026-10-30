@@ -21,3 +21,6 @@ e2e/playwright-report/
 
 # the owner's private notes (never committed)
 /docs/private/
+
+# scripts/make-sample.sh default output
+/retake-sample/
