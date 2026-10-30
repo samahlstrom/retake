@@ -104,6 +104,9 @@ func byteRange(header string, size int64) (start, end int64, partial, ok bool) {
 
 // serveFile sends a video file with single-range support. Headers match the legacy server's.
 func (s *Server) serveFile(w http.ResponseWriter, r *http.Request, p, ctype string) {
+	if s.opts.Media != nil && s.opts.Media(w, r, p, ctype) {
+		return
+	}
 	f, err := os.Open(p) //nolint:gosec // p is a version file of the family or a plain name beside a playlist
 	if err != nil {
 		s.fail(w, r, http.StatusNotFound, "missing")

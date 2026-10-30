@@ -92,8 +92,8 @@ host `h`, from flags or the table. The other POST rules of spec/api.md stay.
   same-site, so the page then loads with the cookie, and the token leaves the address bar.
 - Invalid: 401 HTML ("This link has expired or was revoked"), counted as a failed attempt.
 - The verbose request log writes a share link as `/s/<token>`, never the token itself.
-- The cookie's path is `/` because the server serves one review at its root. When one server serves several projects
-  (milestone 3b), each share cookie is scoped to its project's path.
+- The cookie's path is `/` because the server serves one review at its root. On the team server, which serves several
+  projects, each share cookie is scoped to its project's path, `/p/<name>/` (spec/server.md).
 
 ## Rate limiting
 
@@ -184,6 +184,10 @@ tailscale = ""     # the tailscale binary; "" = $PATH
 ```
 
 ## Deferred to milestone 3b
+
+Milestone 3b ([server.md](server.md)) does accounts, Postgres and S3 with Docker Compose, uploads, and several
+projects per server with per-project share paths and cookies. What it leaves is listed there, under "Deferred".
+The list as it stood:
 
 - Accounts: people who sign in, instead of a token per link. Per-person sidebars.
 - Postgres and S3 instead of SQLite and the local disk, and Docker Compose.

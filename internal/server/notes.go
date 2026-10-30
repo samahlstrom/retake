@@ -178,7 +178,7 @@ func (s *Server) history(v family.Version) []historyEntry {
 				continue
 			}
 			out[i].Images = append(out[i].Images, historyImage{
-				URL:    "/api/takes/" + e.ID + "/" + img.File + "?v=" + url.QueryEscape(label),
+				URL:    s.opts.BasePath + "/api/takes/" + e.ID + "/" + img.File + "?v=" + url.QueryEscape(label),
 				VideoT: img.VideoT, Box: img.Box,
 			})
 		}
@@ -247,7 +247,7 @@ func (s *Server) sidebar(w http.ResponseWriter, r *http.Request) {
 	}
 	q := project.SidebarQuery{Version: v.Label, Newest: resp.Newest, TakeDir: s.takeDirOf(fam),
 		ImageURL: func(n project.Note, img project.TakeImage) string {
-			return "/api/takes/" + n.Take + "/" + img.File + "?v=" + url.QueryEscape(n.Version)
+			return s.opts.BasePath + "/api/takes/" + n.Take + "/" + img.File + "?v=" + url.QueryEscape(n.Version)
 		}}
 	if resp.Newest {
 		if row, err := st.Version(v.Label); err == nil {

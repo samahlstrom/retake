@@ -131,6 +131,9 @@ type Options struct {
 	Root string
 	// MaxWait caps notes_wait's timeout, and is its default. 0 = DefaultWait, with no cap.
 	MaxWait time.Duration
+	// Files, when set, resolves version_push's file instead of Root: retake serve maps an upload's reference
+	// (upload:<id>) to its file, which the push moves into the family (spec/server.md, "Remote MCP").
+	Files func(file string) (path string, move bool, err error)
 }
 
 // NewServer returns an MCP server with the agent tools of p.
@@ -175,14 +178,21 @@ func NewServerWith(p *agent.Project, version string, opts Options) *sdk.Server {
 		})
 	sdk.AddTool(s, &sdk.Tool{Name: "version_push", Description: pushDesc},
 		func(ctx context.Context, _ *sdk.CallToolRequest, in pushIn) (*sdk.CallToolResult, agent.PushResult, error) {
-			file := in.File
-			if opts.Root != "" && file != "" { // with render, the file comes from the editor
+			file, move := in.File, in.Move
+			switch {
+			case in.Render && file == "": // with render, the file comes from the editor
+			case opts.Files != nil:
+				var err error
+				if file, move, err = opts.Files(file); err != nil {
+					return nil, agent.PushResult{}, err
+				}
+			case opts.Root != "":
 				var err error
 				if file, err = inside(opts.Root, file); err != nil {
 					return nil, agent.PushResult{}, err
 				}
 			}
-			a := agent.PushArgs{File: file, Parent: in.Parent, Label: in.Label, Move: in.Move, Render: in.Render,
+			a := agent.PushArgs{File: file, Parent: in.Parent, Label: in.Label, Move: move, Render: in.Render,
 				Draft: in.Draft}
 			for _, c := range in.Changes {
 				a.Changes = append(a.Changes, project.ChangeEntry{Note: c.Note, Summary: c.Summary})
@@ -237,7 +247,12 @@ func insideFor(what, root, file string) (string, error) {
 // pushed file inside the project root, notes_wait at most RemoteWait. It checks no token and no Host header: the
 // caller (the server's /mcp route) does both.
 func HTTPHandler(p *agent.Project, version string) http.Handler {
-	s := NewServerWith(p, version, Options{Root: p.Root, MaxWait: RemoteWait})
+	return HTTPHandlerWith(p, version, Options{Root: p.Root, MaxWait: RemoteWait})
+}
+
+// HTTPHandlerWith is HTTPHandler with the limits of opts.
+func HTTPHandlerWith(p *agent.Project, version string, opts Options) http.Handler {
+	s := NewServerWith(p, version, opts)
 	return sdk.NewStreamableHTTPHandler(func(*http.Request) *sdk.Server { return s }, &sdk.StreamableHTTPOptions{
 		Stateless: true,
 		// The server answers only its own and its shares' hostnames; the SDK's own check would refuse a tunnel's.

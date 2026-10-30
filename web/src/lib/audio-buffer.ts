@@ -212,7 +212,7 @@ export interface Post {
 }
 
 export const audioUrl = (take: string, version: string | null, file: string, offset: number): string =>
-  `/api/session/${encodeURIComponent(take)}/audio?v=${encodeURIComponent(String(version))}&name=${encodeURIComponent(file)}&offset=${offset}`;
+  `api/session/${encodeURIComponent(take)}/audio?v=${encodeURIComponent(String(version))}&name=${encodeURIComponent(file)}&offset=${offset}`;
 
 export interface RecoverResult {
   /** Files whose buffered bytes are now all on the server. */

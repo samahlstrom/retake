@@ -2,18 +2,15 @@ package project
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"io/fs"
-	"net/url"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
-	_ "modernc.org/sqlite" // the pure-Go SQLite driver, registered as "sqlite"
+	"github.com/samahlstrom/retake/internal/sqldb"
 )
 
 // Dir is the folder under the project root that holds the store.
@@ -31,7 +28,7 @@ const DefaultPoll = 250 * time.Millisecond
 // Store is an open project store. It is safe for concurrent use, and several processes (the server, the CLI, the
 // MCP server) may have the same store open: SQLite's WAL mode and busy timeout serialize their writes.
 type Store struct {
-	db   *sql.DB
+	db   *sqldb.DB
 	root string
 	mu   sync.Mutex // serializes this process's write transactions
 	bell bell       // rung after every committed write that appended events
@@ -58,30 +55,32 @@ func OpenExisting(root string) (*Store, error) {
 	return open(root, migrations)
 }
 
-func dsn(path string) string {
-	p := filepath.ToSlash(path)
-	if !strings.HasPrefix(p, "/") {
-		p = "/" + p // C:/x -> /C:/x, as SQLite URIs want
-	}
-	q := url.Values{}
-	for _, pragma := range []string{"busy_timeout(10000)", "journal_mode(WAL)", "foreign_keys(1)", "synchronous(NORMAL)"} {
-		q.Add("_pragma", pragma)
-	}
-	q.Set("_txlock", "immediate")
-	return (&url.URL{Scheme: "file", Path: p}).String() + "?" + q.Encode()
-}
-
 func open(root string, ms []string) (*Store, error) {
-	db, err := sql.Open("sqlite", dsn(DBPath(root)))
+	db, err := sqldb.OpenSQLite(DBPath(root))
 	if err != nil {
 		return nil, fmt.Errorf("opening the project store: %w", err)
 	}
-	db.SetMaxOpenConns(4)
 	s := &Store{db: db, root: root, Now: time.Now}
 	s.bell.init()
-	if err := migrate(db, ms); err != nil {
+	if err := sqldb.Migrate(context.Background(), db, ms); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("project store %s: %w", DBPath(root), err)
+	}
+	return s, nil
+}
+
+// OpenPostgres opens a project's store in a Postgres schema (spec/server.md, "Storage drivers"), creating the schema
+// and migrating it to the current version. root is the project's workspace: its files, and the job runner's lock.
+func OpenPostgres(ctx context.Context, dsn, schema, root string) (*Store, error) {
+	db, err := sqldb.OpenPostgres(ctx, dsn, schema, sqldb.PoolOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("opening the project store: %w", err)
+	}
+	s := &Store{db: db, root: root, Now: time.Now}
+	s.bell.init()
+	if err := sqldb.Migrate(ctx, db, pgMigrations); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("project store (schema %s): %w", schema, err)
 	}
 	return s, nil
 }
@@ -92,8 +91,19 @@ func (s *Store) Close() error { return s.db.Close() }
 // Root returns the project root.
 func (s *Store) Root() string { return s.root }
 
-// Path returns the database file's path.
-func (s *Store) Path() string { return DBPath(s.root) }
+// Path returns the database file's path; for Postgres, "postgres schema <name>".
+func (s *Store) Path() string {
+	if s.db.Dialect() == sqldb.Postgres {
+		return "postgres schema " + s.db.Schema()
+	}
+	return DBPath(s.root)
+}
+
+// Dialect says which database holds the store.
+func (s *Store) Dialect() sqldb.Dialect { return s.db.Dialect() }
+
+// Ping checks that the store's database answers.
+func (s *Store) Ping(ctx context.Context) error { return s.db.Ping(ctx) }
 
 func (s *Store) poll() time.Duration {
 	if s.Poll > 0 {
@@ -112,7 +122,7 @@ func ParseTime(v string) (time.Time, error) { return time.Parse(timeFormat, v) }
 
 // tx is one write transaction. Events appended through it commit with the change they describe.
 type tx struct {
-	*sql.Tx
+	*sqldb.Tx
 	s      *Store
 	events []pendingEvent
 }
@@ -125,11 +135,12 @@ type pendingEvent struct {
 // emit appends an event when the transaction commits.
 func (t *tx) emit(kind string, data any) { t.events = append(t.events, pendingEvent{kind, data}) }
 
-// write runs fn in a write transaction (BEGIN IMMEDIATE) and appends its events in the same transaction.
+// write runs fn in a write transaction (BEGIN IMMEDIATE on SQLite, the schema's advisory lock on Postgres) and
+// appends its events in the same transaction.
 func (s *Store) write(fn func(t *tx) error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	sqlTx, err := s.db.BeginTx(context.Background(), nil)
+	sqlTx, err := s.db.BeginWrite(context.Background())
 	if err != nil {
 		return err
 	}
@@ -152,8 +163,8 @@ func (s *Store) write(fn func(t *tx) error) error {
 }
 
 // read runs fn in a read transaction, so it sees one consistent snapshot.
-func (s *Store) read(fn func(t *sql.Tx) error) error {
-	sqlTx, err := s.db.BeginTx(context.Background(), &sql.TxOptions{ReadOnly: true})
+func (s *Store) read(fn func(t *sqldb.Tx) error) error {
+	sqlTx, err := s.db.BeginRead(context.Background())
 	if err != nil {
 		return err
 	}

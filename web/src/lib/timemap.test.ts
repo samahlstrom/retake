@@ -42,7 +42,7 @@ describe('TimeMaps', () => {
     expect(await maps.map('v1', 'v2', 13)).toBe(12.7);
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(fetch.mock.calls[0]).toEqual([timemapUrl('v1', 'v2'), expect.anything()]);
-    expect(timemapUrl('v1', 'v 2')).toBe('/api/timemap?from=v1&to=v%202');
+    expect(timemapUrl('v1', 'v 2')).toBe('api/timemap?from=v1&to=v%202');
     // Each direction is its own map.
     await maps.get('v2', 'v1');
     expect(fetch).toHaveBeenCalledTimes(2);

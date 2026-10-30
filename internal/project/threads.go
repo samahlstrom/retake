@@ -192,13 +192,10 @@ func (t *tx) ask(a Ask) (Thread, error) {
 	if tt != nil {
 		tv = *tt
 	}
-	r, err := t.Exec(`INSERT INTO threads (note, version, t, kind, by, text, options, created)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, note, version, tv, KindQuestion, by, text, string(opts), t.s.stamp())
-	if err != nil {
-		return Thread{}, err
-	}
-	id, err := r.LastInsertId()
-	if err != nil {
+	var id int64
+	if err := t.QueryRow(`INSERT INTO threads (note, version, t, kind, by, text, options, created)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`, note, version, tv, KindQuestion, by, text, string(opts),
+		t.s.stamp()).Scan(&id); err != nil {
 		return Thread{}, err
 	}
 	return threadByID(t, id)

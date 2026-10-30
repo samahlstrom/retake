@@ -1,6 +1,8 @@
 # Local HTTP API, v1
 
-This is the contract between the `retake` server (Go) and the review page (Svelte). Milestone 1 keeps it
+This is the contract between the `retake` server (Go) and the review page (Svelte). The team server
+(spec/server.md) serves the same routes under each project's `/p/<name>/`; the page uses relative URLs (`api/info`,
+`video/v3`, `./assets/...`), so one build works at both. Milestone 1 keeps it
 **byte-compatible with the legacy Python player** (`review.py` + `index.html`), so either half can be tested against
 the other: the new page against the old server, and the old page against the new server.
 

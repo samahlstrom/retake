@@ -32,8 +32,9 @@ export function mapTime(segs: readonly Segment[] | null | undefined, t: number):
   return t;
 }
 
+// Relative, like every page URL: the page also runs under /p/<project>/ on `retake serve`.
 export const timemapUrl = (from: string, to: string): string =>
-  `/api/timemap?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+  `api/timemap?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
 
 type Fetch = (url: string, init?: RequestInit) => Promise<Response>;
 

@@ -59,7 +59,7 @@ describe('image buffer', () => {
 
   it('builds the image route', () => {
     expect(imageUrl('2026-10-29_20-41-05', 'v6', 'img_01.png')).toBe(
-      '/api/session/2026-10-29_20-41-05/image?v=v6&name=img_01.png',
+      'api/session/2026-10-29_20-41-05/image?v=v6&name=img_01.png',
     );
   });
 });

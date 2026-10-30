@@ -92,11 +92,11 @@ function setup(opts: { missing?: boolean } = {}) {
 
 describe('notes routes', () => {
   it('builds the spec URLs', () => {
-    expect(notesUrl('v8')).toBe('/api/notes?v=v8');
-    expect(reopenUrl(12)).toBe('/api/notes/12/reopen');
-    expect(doneUrl('2026-10-29_20-41-05', 'v8')).toBe('/api/session/2026-10-29_20-41-05/done?v=v8');
-    expect(eventsUrl(null)).toBe('/api/events');
-    expect(eventsUrl(42)).toBe('/api/events?since=42');
+    expect(notesUrl('v8')).toBe('api/notes?v=v8');
+    expect(reopenUrl(12)).toBe('api/notes/12/reopen');
+    expect(doneUrl('2026-10-29_20-41-05', 'v8')).toBe('api/session/2026-10-29_20-41-05/done?v=v8');
+    expect(eventsUrl(null)).toBe('api/events');
+    expect(eventsUrl(42)).toBe('api/events?since=42');
   });
 
   it('normalize() keeps only items it can place on the timeline', () => {
@@ -125,7 +125,7 @@ describe('Notes', () => {
     await notes.load('v8');
     expect(notes.available).toBe(true);
     expect(notes.res?.version).toBe('v8');
-    expect(FakeES.all.map((e) => e.url)).toEqual(['/api/events']);
+    expect(FakeES.all.map((e) => e.url)).toEqual(['api/events']);
     await notes.load('v7');
     expect(notes.res).toMatchObject({ version: 'v7', newest: false });
     expect(FakeES.all).toHaveLength(1);
@@ -147,7 +147,7 @@ describe('Notes', () => {
     const before = srv.calls.length;
     es.emit('notes', {}, '7');
     await tick();
-    expect(srv.calls.slice(before)).toEqual(['GET /api/notes?v=v8']);
+    expect(srv.calls.slice(before)).toEqual(['GET api/notes?v=v8']);
     es.emit('job', { id: 1, kind: 'transcribe', state: 'running' }, '8');
     expect(notes.job).toEqual({ text: 'Transcribing your take…', error: false, hint: null });
     es.emit('job', {
@@ -178,11 +178,11 @@ describe('Notes', () => {
     expect(es.closed).toBe(true);
     expect(timers).toHaveLength(1);
     timers[0]();
-    expect(FakeES.all[1].url).toBe('/api/events?since=41');
+    expect(FakeES.all[1].url).toBe('api/events?since=41');
     const before = srv.calls.length;
     FakeES.all[1].emit('open');
     await tick();
-    expect(srv.calls.slice(before)).toEqual(['GET /api/notes?v=v8']);
+    expect(srv.calls.slice(before)).toEqual(['GET api/notes?v=v8']);
   });
 
   it(`gives up on the event stream after ${EVENTS_TRIES} closes in a row that never opened`, async () => {
@@ -215,10 +215,10 @@ describe('Notes', () => {
     await notes.load('v7');
     expect(await notes.reopen(3)).toBe(true);
     await tick();
-    expect(srv.calls).toContain('POST /api/notes/3/reopen');
-    expect(srv.calls.at(-1)).toBe('GET /api/notes?v=v7');
+    expect(srv.calls).toContain('POST api/notes/3/reopen');
+    expect(srv.calls.at(-1)).toBe('GET api/notes?v=v7');
     expect(await notes.postDone('2026-10-29_20-41-05', 'v8')).toBe(200);
-    expect(srv.calls).toContain('POST /api/session/2026-10-29_20-41-05/done?v=v8');
+    expect(srv.calls).toContain('POST api/session/2026-10-29_20-41-05/done?v=v8');
   });
 
   it('postDone and reopen survive an unreachable server', async () => {

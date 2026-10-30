@@ -115,6 +115,14 @@ and prints a link with a QR code. A link is a viewer, reviewer (the default) or 
 and `retake share revoke` ends it early. Agents elsewhere use `/mcp` with `retake token create --role agent`. Local use
 needs no token. See [`docs/sharing.md`](docs/sharing.md).
 
+## A team server
+
+`retake serve --data DIR` hosts many projects for a team, at `/p/<project>/`, with the same review page. People
+sign in with one-time links (no passwords) and get a role per project; guests still use share links. The editor
+uploads versions with `retake push --remote` (resumable), and agents use each project's `/mcp`. It runs on SQLite
+and local files, or on Postgres and S3-compatible storage; `deploy/` has a Docker Compose setup with Postgres and
+MinIO and a self-host guide. See [`deploy/README.md`](deploy/README.md) and [`spec/server.md`](spec/server.md).
+
 ## Assets
 
 `retake assets import media/ --license owned` catalogs a project's footage, audio, images and fonts (plus a user
@@ -138,11 +146,12 @@ Until then, build from source as in the quickstart. `retake version` prints the 
 - [docs/quickstart.md](docs/quickstart.md): the whole loop on the sample project, step by step.
 - [docs/agents.md](docs/agents.md): connecting Claude Code, Codex or any MCP client.
 - [docs/config.md](docs/config.md): every config key and environment variable.
+- [deploy/README.md](deploy/README.md): self-hosting the team server with Docker Compose.
 - [docs/timeline.md](docs/timeline.md): the editor's timeline format, as a guide.
 - [docs/releasing.md](docs/releasing.md): versions, release archives, the installer and the license notices.
 - [spec/](spec/): the contracts. [api.md](spec/api.md) (HTTP), [take-format.md](spec/take-format.md),
-  [notes.md](spec/notes.md) (notes, questions, agent API), [timeline.md](spec/timeline.md),
-  [manifest.md](spec/manifest.md).
+  [notes.md](spec/notes.md) (notes, questions, agent API), [team.md](spec/team.md) (sharing),
+  [server.md](spec/server.md) (the team server), [timeline.md](spec/timeline.md), [manifest.md](spec/manifest.md).
 - [CONTRIBUTING.md](CONTRIBUTING.md): development setup and tests.
 - [CHANGELOG.md](CHANGELOG.md).
 

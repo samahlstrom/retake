@@ -1,0 +1,91 @@
+# The retake team server with Postgres (the stores) and MinIO (the media). See deploy/README.md.
+#
+#   docker compose -f deploy/docker-compose.yml up -d --build
+#   docker compose -f deploy/docker-compose.yml exec retake retake user add you@example.com --admin
+#
+# Secrets and the public URL come from the environment or a .env file next to this file (deploy/.env). Change the
+# defaults below before the server faces the internet.
+
+# The project name: volumes are retake_retake-data, retake_pg-data and retake_minio-data; the network retake_default.
+name: retake
+
+services:
+  retake:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      # Only on this machine by default: a reverse proxy (Caddy, deploy/README.md) terminates TLS in front of it.
+      - "${RETAKE_BIND:-127.0.0.1}:${RETAKE_PORT:-8080}:8080"
+    environment:
+      RETAKE_PUBLIC_URL: ${RETAKE_PUBLIC_URL:-http://localhost:8080}
+      # The proxy's address as the container sees it, e.g. the docker bridge (172.16.0.0/12). Only these peers'
+      # X-Forwarded-* headers are believed.
+      RETAKE_TRUSTED_PROXIES: ${RETAKE_TRUSTED_PROXIES:-}
+      RETAKE_DATABASE_URL: postgres://retake:${POSTGRES_PASSWORD:-retake}@postgres:5432/retake?sslmode=disable
+      RETAKE_S3_ENDPOINT: minio:9000
+      RETAKE_S3_BUCKET: ${RETAKE_S3_BUCKET:-retake}
+      RETAKE_S3_ACCESS_KEY: ${MINIO_ROOT_USER:-retake}
+      RETAKE_S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-retake-minio-secret}
+      RETAKE_S3_INSECURE: "1" # MinIO on the compose network, not the internet
+      # Mail sign-in links instead of printing them: smtp://user:password@host:587 (STARTTLS) or smtps://...:465.
+      RETAKE_SMTP_URL: ${RETAKE_SMTP_URL:-}
+      RETAKE_SMTP_FROM: ${RETAKE_SMTP_FROM:-}
+    volumes:
+      # A cache of the media (it is all in MinIO), uploads in progress and the whisper models.
+      - retake-data:/data
+      # [transcribe] and other settings: mount a config.toml.
+      # - ./config.toml:/config/retake/config.toml:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: retake
+      POSTGRES_DB: retake
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-retake}
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "retake", "-d", "retake"]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 5
+
+  minio:
+    # Upstream stopped publishing minio/minio images in 2025. pgsty/minio is a drop-in community build of the same
+    # server (with mc and curl). Point MINIO_IMAGE at another build, or use any S3-compatible store instead.
+    image: ${MINIO_IMAGE:-pgsty/minio:RELEASE.2026-08-04T00-00-00Z}
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      # Change both. retake uses them as its S3 keys (above).
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-retake}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-retake-minio-secret}
+    volumes:
+      - minio-data:/data
+    # No published ports: only retake talks to it, over the compose network.
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 5
+
+volumes:
+  retake-data:
+  pg-data:
+  minio-data:
