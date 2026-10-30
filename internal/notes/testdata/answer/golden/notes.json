@@ -1,0 +1,260 @@
+{
+ "video": {
+  "path": "/videos/clip_v7.mp4",
+  "name": "clip_v7.mp4",
+  "duration": 60.0,
+  "fps": 30.0,
+  "width": 1920,
+  "height": 1080
+ },
+ "version": "v7",
+ "family": [
+  "v6",
+  "v7"
+ ],
+ "window": 2.0,
+ "max_span": 8.0,
+ "generated": "(ignored by the tests)",
+ "rules": [
+  "later statements override earlier ones (higher order = later)",
+  "a retraction voids the comments it refers to: same clip/moment unless Sam names a wider scope",
+  "a reinstatement restores what that retraction voided",
+  "when scope is unclear, ask Sam rather than guess; flags are heuristics, nothing was deleted"
+ ],
+ "clock": "video_t = seconds in the video; session_t = seconds since the take started (segment audio starts at t_start)",
+ "takes": [
+  {
+   "take": "2026-06-06_18-00-00",
+   "version": "v7",
+   "recorded": 8.5,
+   "ranges": null,
+   "inherit_note": null,
+   "models": [
+    "whisper small (cpu)"
+   ],
+   "warnings": [],
+   "small_strokes_dropped": 0
+  }
+ ],
+ "segments": [
+  {
+   "label": "S1",
+   "take": "2026-06-06_18-00-00",
+   "id": "S1",
+   "file": "seg_01.webm",
+   "mime": "audio/webm;codecs=opus",
+   "version": "v7",
+   "flip": false,
+   "t_start": 0.5,
+   "t_end": 3.0,
+   "recording": false,
+   "video_start": 9.0,
+   "video_end": 9.0,
+   "video_min": 9.0,
+   "video_max": 9.0
+  },
+  {
+   "label": "S2",
+   "take": "2026-06-06_18-00-00",
+   "id": "S2",
+   "file": "seg_02.webm",
+   "mime": "audio/webm;codecs=opus",
+   "version": "v7",
+   "flip": false,
+   "t_start": 4.0,
+   "t_end": 8.5,
+   "recording": false,
+   "video_start": 22.0,
+   "video_end": 22.0,
+   "video_min": 22.0,
+   "video_max": 22.0,
+   "answer_to": 12
+  },
+  {
+   "label": "S3",
+   "take": "2026-06-06_18-00-00",
+   "id": "S3",
+   "file": "seg_03.webm",
+   "mime": "audio/webm;codecs=opus",
+   "version": "v7",
+   "flip": false,
+   "t_start": 9.0,
+   "t_end": 10.5,
+   "recording": false,
+   "video_start": 22.0,
+   "video_end": 22.0,
+   "video_min": 22.0,
+   "video_max": 22.0,
+   "answer_to": 13
+  }
+ ],
+ "flags": [],
+ "moments": [
+  {
+   "id": "M1",
+   "start": 9.0,
+   "end": 9.0,
+   "comments": [
+    {
+     "take": "2026-06-06_18-00-00",
+     "seg": "S1",
+     "version": "v7",
+     "flip": false,
+     "pass": 1,
+     "mode": "paused",
+     "anchor": 9.0,
+     "video_t": 9.0,
+     "video_t_end": 9.0,
+     "session_t": 1.0,
+     "session_t_end": 2.48,
+     "text": "The zoom still feels late.",
+     "unclear": false,
+     "moved": null,
+     "audio": false,
+     "speech": [
+      {
+       "text": "The zoom still feels late.",
+       "conf": 0.95,
+       "session_t": 1.0,
+       "session_t_end": 2.48,
+       "video_t": 9.0,
+       "video_t_end": 9.0,
+       "path": null
+      }
+     ],
+     "strokes": [],
+     "order": 1,
+     "moment": "M1",
+     "flag": null
+    }
+   ],
+   "snapshot": null,
+   "snapshot_t": null
+  },
+  {
+   "id": "M2",
+   "start": 22.0,
+   "end": 22.0,
+   "comments": [
+    {
+     "take": "2026-06-06_18-00-00",
+     "seg": "S2",
+     "version": "v7",
+     "flip": false,
+     "pass": 1,
+     "mode": "paused",
+     "anchor": 22.0,
+     "video_t": 22.0,
+     "video_t_end": 22.0,
+     "session_t": 4.5,
+     "session_t_end": 7.98,
+     "text": "Go with the shorter version. And keep the sound effect.",
+     "unclear": false,
+     "moved": null,
+     "audio": true,
+     "speech": [
+      {
+       "text": "Go with the shorter version.",
+       "conf": 0.95,
+       "session_t": 4.5,
+       "session_t_end": 5.98,
+       "video_t": 22.0,
+       "video_t_end": 22.0,
+       "path": null
+      },
+      {
+       "text": "And keep the sound effect.",
+       "conf": 0.95,
+       "session_t": 6.8,
+       "session_t_end": 7.98,
+       "video_t": 22.0,
+       "video_t_end": 22.0,
+       "path": null
+      }
+     ],
+     "strokes": [
+      {
+       "id": 1,
+       "color": "green",
+       "seg": "S2",
+       "video_t": 22.0,
+       "version": "v7",
+       "flip": false,
+       "desc": "green line (0.30,0.30)→(0.60,0.30) heading right",
+       "bbox": [
+        0.3,
+        0.3,
+        0.6,
+        0.3
+       ],
+       "from": [
+        0.3,
+        0.3
+       ],
+       "to": [
+        0.6,
+        0.3
+       ],
+       "shape": "line",
+       "points": [
+        [
+         0.3,
+         0.3
+        ],
+        [
+         0.6,
+         0.3
+        ]
+       ],
+       "n": 1,
+       "session_t": 6.2,
+       "session_t_end": 6.5
+      }
+     ],
+     "order": 2,
+     "moment": "M2",
+     "flag": null
+    },
+    {
+     "take": "2026-06-06_18-00-00",
+     "seg": "S3",
+     "version": "v7",
+     "flip": false,
+     "pass": 1,
+     "mode": "paused",
+     "anchor": 22.0,
+     "video_t": 22.0,
+     "video_t_end": 22.0,
+     "session_t": 9.4,
+     "session_t_end": 9.98,
+     "text": "Yes, cut it.",
+     "unclear": false,
+     "moved": null,
+     "audio": false,
+     "speech": [
+      {
+       "text": "Yes, cut it.",
+       "conf": 0.95,
+       "session_t": 9.4,
+       "session_t_end": 9.98,
+       "video_t": 22.0,
+       "video_t_end": 22.0,
+       "path": null
+      }
+     ],
+     "strokes": [],
+     "order": 3,
+     "moment": "M2",
+     "flag": null
+    }
+   ],
+   "snapshot": null,
+   "snapshot_t": null
+  }
+ ],
+ "chronological": [
+  1,
+  2,
+  3
+ ]
+}

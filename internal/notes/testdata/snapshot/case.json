@@ -1,0 +1,10 @@
+{
+ "target": "clip_v6.mp4",
+ "args": [],
+ "video": {
+  "file": "clip_v6.mp4",
+  "seconds": 6,
+  "size": "320x180",
+  "fps": 10
+ }
+}

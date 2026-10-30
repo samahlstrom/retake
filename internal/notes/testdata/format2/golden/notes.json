@@ -1,0 +1,295 @@
+{
+ "video": {
+  "path": "/videos/clip_v2.mp4",
+  "name": "clip_v2.mp4",
+  "duration": 30,
+  "fps": 29.97,
+  "width": 1280,
+  "height": 720
+ },
+ "version": "v2",
+ "family": [],
+ "window": 2.0,
+ "max_span": 8.0,
+ "generated": "(ignored by the tests)",
+ "rules": [
+  "later statements override earlier ones (higher order = later)",
+  "a retraction voids the comments it refers to: same clip/moment unless Sam names a wider scope",
+  "a reinstatement restores what that retraction voided",
+  "when scope is unclear, ask Sam rather than guess; flags are heuristics, nothing was deleted"
+ ],
+ "clock": "video_t = seconds in the video; session_t = seconds since the take started (segment audio starts at t_start)",
+ "takes": [
+  {
+   "take": "2025-12-01_08-00-00",
+   "version": "v2",
+   "recorded": 9.0,
+   "ranges": null,
+   "inherit_note": null,
+   "models": [
+    "whisper small (cpu)"
+   ],
+   "warnings": [],
+   "small_strokes_dropped": 0
+  }
+ ],
+ "segments": [
+  {
+   "label": "S1",
+   "take": "2025-12-01_08-00-00",
+   "id": "S1",
+   "file": "narration.webm",
+   "t_start": 0.0,
+   "t_end": 9.0
+  }
+ ],
+ "flags": [],
+ "moments": [
+  {
+   "id": "M1",
+   "start": 4.0,
+   "end": 5.58,
+   "comments": [
+    {
+     "take": "2025-12-01_08-00-00",
+     "seg": "S1",
+     "version": "v2",
+     "flip": false,
+     "pass": 1,
+     "mode": "playing",
+     "anchor": 4.0,
+     "video_t": 4.0,
+     "video_t_end": 5.58,
+     "session_t": 1.0,
+     "session_t_end": 2.58,
+     "text": "The first fight is too long.",
+     "unclear": false,
+     "moved": null,
+     "audio": false,
+     "speech": [
+      {
+       "text": "The first fight is too long.",
+       "conf": 0.95,
+       "session_t": 1.0,
+       "session_t_end": 2.58,
+       "video_t": 4.0,
+       "video_t_end": 5.58,
+       "path": null
+      }
+     ],
+     "strokes": [],
+     "order": 1,
+     "moment": "M1",
+     "flag": null
+    }
+   ],
+   "snapshot": null,
+   "snapshot_t": null
+  },
+  {
+   "id": "M2",
+   "start": 7.0,
+   "end": 7.0,
+   "comments": [
+    {
+     "take": "2025-12-01_08-00-00",
+     "seg": "S1",
+     "version": "v2",
+     "flip": false,
+     "pass": 1,
+     "mode": "paused",
+     "anchor": 7.0,
+     "video_t": 7.0,
+     "video_t_end": 7.0,
+     "session_t": 6.0,
+     "session_t_end": 7.18,
+     "text": "Cut it at the kill.",
+     "unclear": false,
+     "moved": null,
+     "audio": false,
+     "speech": [
+      {
+       "text": "Cut it at the kill.",
+       "conf": 0.95,
+       "session_t": 6.0,
+       "session_t_end": 7.18,
+       "video_t": 7.0,
+       "video_t_end": 7.0,
+       "path": null
+      }
+     ],
+     "strokes": [
+      {
+       "id": 1,
+       "color": "red",
+       "seg": "S1",
+       "video_t": 7.0,
+       "version": null,
+       "flip": false,
+       "desc": "red line (0.20,0.20)→(0.80,0.80) heading down-right",
+       "bbox": [
+        0.2,
+        0.2,
+        0.8,
+        0.8
+       ],
+       "from": [
+        0.2,
+        0.2
+       ],
+       "to": [
+        0.8,
+        0.8
+       ],
+       "shape": "line",
+       "points": [
+        [
+         0.2,
+         0.2
+        ],
+        [
+         0.8,
+         0.8
+        ]
+       ],
+       "n": 1,
+       "session_t": 6.5,
+       "session_t_end": 6.5
+      }
+     ],
+     "order": 2,
+     "moment": "M2",
+     "flag": null
+    },
+    {
+     "take": "2025-12-01_08-00-00",
+     "seg": "S9",
+     "version": "v2",
+     "flip": false,
+     "pass": 1,
+     "mode": "paused",
+     "anchor": 7.0,
+     "video_t": 7.0,
+     "video_t_end": 7.0,
+     "session_t": 8.0,
+     "session_t_end": 8.3,
+     "text": "",
+     "unclear": false,
+     "moved": null,
+     "audio": false,
+     "speech": [],
+     "strokes": [
+      {
+       "id": 2,
+       "color": "yellow",
+       "seg": "S9",
+       "video_t": 7.0,
+       "version": null,
+       "flip": false,
+       "desc": "yellow line (0.10,0.50)→(0.10,0.90) heading down",
+       "bbox": [
+        0.1,
+        0.5,
+        0.1,
+        0.9
+       ],
+       "from": [
+        0.1,
+        0.5
+       ],
+       "to": [
+        0.1,
+        0.9
+       ],
+       "shape": "line",
+       "points": [
+        [
+         0.1,
+         0.5
+        ],
+        [
+         0.1,
+         0.9
+        ]
+       ],
+       "n": 2,
+       "session_t": 8.0,
+       "session_t_end": 8.3
+      }
+     ],
+     "order": 3,
+     "moment": "M2",
+     "flag": null
+    },
+    {
+     "take": "2025-12-01_08-00-00",
+     "seg": "no-audio",
+     "version": "v2",
+     "flip": false,
+     "pass": 1,
+     "mode": "paused",
+     "anchor": 7.0,
+     "video_t": 7.0,
+     "video_t_end": 7.0,
+     "session_t": 12.0,
+     "session_t_end": 12.0,
+     "text": "",
+     "unclear": false,
+     "moved": null,
+     "audio": false,
+     "speech": [],
+     "strokes": [
+      {
+       "id": 3,
+       "color": "green",
+       "seg": "no-audio",
+       "video_t": 7.0,
+       "version": null,
+       "flip": false,
+       "desc": "green line (0.90,0.10)→(0.60,0.10) heading left",
+       "bbox": [
+        0.6,
+        0.1,
+        0.9,
+        0.1
+       ],
+       "from": [
+        0.9,
+        0.1
+       ],
+       "to": [
+        0.6,
+        0.1
+       ],
+       "shape": "line",
+       "points": [
+        [
+         0.9,
+         0.1
+        ],
+        [
+         0.6,
+         0.1
+        ]
+       ],
+       "n": 3,
+       "session_t": 12.0,
+       "session_t_end": 12.0
+      }
+     ],
+     "order": 4,
+     "moment": "M2",
+     "flag": null
+    }
+   ],
+   "snapshot": null,
+   "snapshot_t": null
+  }
+ ],
+ "chronological": [
+  1,
+  2,
+  3,
+  4
+ ]
+}

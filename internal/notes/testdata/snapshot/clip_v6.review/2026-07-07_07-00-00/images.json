@@ -1,0 +1,18 @@
+[
+ {
+  "id": 1,
+  "seg": "S1",
+  "version": "v6",
+  "flip": false,
+  "file": "img_01.png",
+  "mime": "image/png",
+  "session_t": 2.7,
+  "video_t": 1.0,
+  "box": [
+   0.05,
+   0.6,
+   0.25,
+   0.3
+  ]
+ }
+]

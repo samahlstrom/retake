@@ -1,0 +1,40 @@
+{
+ "format": 3,
+ "version": "v5",
+ "session": "2026-03-03_15-00-00",
+ "created": "2026-03-03T15-00-00Z",
+ "saved": "2026-03-03T15-00-00Z",
+ "clock": "session_t",
+ "recorded": 13.0,
+ "video": {
+  "path": "/videos/clip_v5.mp4",
+  "name": "clip_v5.mp4",
+  "duration": 60.0,
+  "fps": 30.0,
+  "width": 1920,
+  "height": 1080
+ },
+ "display": {
+  "show_within": 1.5
+ },
+ "versions": [
+  {
+   "label": "v4",
+   "path": "/videos/clip_v4.mp4",
+   "duration": 60.0
+  },
+  {
+   "label": "v5",
+   "path": "/videos/clip_v5.mp4",
+   "duration": 60.0
+  },
+  {
+   "label": "v6",
+   "path": "/videos/clip_v6.mp4",
+   "duration": 60.0
+  }
+ ],
+ "author": {
+  "name": "Tester"
+ }
+}

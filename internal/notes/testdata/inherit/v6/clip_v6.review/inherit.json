@@ -1,0 +1,36 @@
+{
+ "takes": [
+  {
+   "dir": "@ROOT@/v3/clip_v3.review/2026-01-05_09-00-00",
+   "version": "v3",
+   "ranges": [
+    [
+     0,
+     5.0
+    ],
+    [
+     10.0,
+     12.5
+    ]
+   ],
+   "checked": 12,
+   "matched": 7,
+   "note": "recorded on v3; frames identical to v6 for 0:00.0–0:05.0, 0:10.0–0:12.5"
+  },
+  {
+   "dir": "@ROOT@/v4/clip_v4.review/2026-01-08_09-00-00",
+   "version": "v4",
+   "note": "recorded on v4; frames identical to v6 throughout"
+  },
+  {
+   "dir": "@ROOT@/v2/clip_v2.review/2026-01-01_09-00-00",
+   "version": "v2",
+   "ranges": [
+    [
+     0,
+     60
+    ]
+   ]
+  }
+ ]
+}

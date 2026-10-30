@@ -1,0 +1,466 @@
+{
+ "video": {
+  "path": "/videos/clip_v6.mp4",
+  "name": "clip_v6.mp4",
+  "duration": 60.0,
+  "fps": 30.0,
+  "width": 1920,
+  "height": 1080
+ },
+ "version": "v6",
+ "family": [
+  "v3",
+  "v4",
+  "v5",
+  "v6"
+ ],
+ "window": 2.0,
+ "max_span": 8.0,
+ "generated": "(ignored by the tests)",
+ "rules": [
+  "later statements override earlier ones (higher order = later)",
+  "a retraction voids the comments it refers to: same clip/moment unless Sam names a wider scope",
+  "a reinstatement restores what that retraction voided",
+  "when scope is unclear, ask Sam rather than guess; flags are heuristics, nothing was deleted"
+ ],
+ "clock": "video_t = seconds in the video; session_t = seconds since the take started (segment audio starts at t_start)",
+ "takes": [
+  {
+   "take": "2026-01-05_09-00-00 (v3)",
+   "version": "v3",
+   "recorded": 12.0,
+   "ranges": [
+    [
+     0,
+     5.0
+    ],
+    [
+     10.0,
+     12.5
+    ]
+   ],
+   "inherit_note": "recorded on v3; frames identical to v6 for 0:00.0–0:05.0, 0:10.0–0:12.5",
+   "models": [
+    "whisper small (cpu)"
+   ],
+   "warnings": [],
+   "small_strokes_dropped": 0
+  },
+  {
+   "take": "2026-01-08_09-00-00 (v4)",
+   "version": "v4",
+   "recorded": 2.5,
+   "ranges": [
+    [
+     0,
+     1000000000.0
+    ]
+   ],
+   "inherit_note": "recorded on v4; frames identical to v6 throughout",
+   "models": [
+    "whisper small (cpu)"
+   ],
+   "warnings": [],
+   "small_strokes_dropped": 0
+  },
+  {
+   "take": "2026-01-12_09-00-00",
+   "version": "v6",
+   "recorded": 4.5,
+   "ranges": null,
+   "inherit_note": null,
+   "models": [
+    "whisper small (cpu)"
+   ],
+   "warnings": [],
+   "small_strokes_dropped": 0
+  }
+ ],
+ "segments": [
+  {
+   "label": "S1",
+   "take": "2026-01-05_09-00-00 (v3)",
+   "id": "S1",
+   "file": "seg_01.webm",
+   "mime": "audio/webm;codecs=opus",
+   "version": "v3",
+   "flip": false,
+   "t_start": 0.5,
+   "t_end": 3.5,
+   "recording": false,
+   "video_start": 0.0,
+   "video_end": 0.0,
+   "video_min": 0.0,
+   "video_max": 0.0
+  },
+  {
+   "label": "S2",
+   "take": "2026-01-05_09-00-00 (v3)",
+   "id": "S2",
+   "file": "seg_02.webm",
+   "mime": "audio/webm;codecs=opus",
+   "version": "v3",
+   "flip": false,
+   "t_start": 4.5,
+   "t_end": 7.0,
+   "recording": false,
+   "video_start": 8.0,
+   "video_end": 8.0,
+   "video_min": 8.0,
+   "video_max": 8.0
+  },
+  {
+   "label": "S3",
+   "take": "2026-01-05_09-00-00 (v3)",
+   "id": "S3",
+   "file": "seg_03.webm",
+   "mime": "audio/webm;codecs=opus",
+   "version": "v3",
+   "flip": false,
+   "t_start": 8.0,
+   "t_end": 11.5,
+   "recording": false,
+   "video_start": 11.0,
+   "video_end": 11.0,
+   "video_min": 11.0,
+   "video_max": 11.0
+  },
+  {
+   "label": "S4",
+   "take": "2026-01-05_09-00-00 (v3)",
+   "id": "S4",
+   "file": "seg_04.webm",
+   "mime": "audio/webm;codecs=opus",
+   "version": "v3",
+   "flip": false,
+   "t_start": 12.5,
+   "t_end": 15.5,
+   "recording": false,
+   "video_start": 20.0,
+   "video_end": 20.0,
+   "video_min": 20.0,
+   "video_max": 20.0
+  },
+  {
+   "label": "S5",
+   "take": "2026-01-08_09-00-00 (v4)",
+   "id": "S1",
+   "file": "seg_01.webm",
+   "mime": "audio/webm;codecs=opus",
+   "version": "v4",
+   "flip": false,
+   "t_start": 1.0,
+   "t_end": 3.5,
+   "recording": false,
+   "video_start": 30.0,
+   "video_end": 30.0,
+   "video_min": 30.0,
+   "video_max": 30.0
+  },
+  {
+   "label": "S6",
+   "take": "2026-01-12_09-00-00",
+   "id": "S1",
+   "file": "seg_01.webm",
+   "mime": "audio/webm;codecs=opus",
+   "version": "v6",
+   "flip": false,
+   "t_start": 1.0,
+   "t_end": 3.5,
+   "recording": false,
+   "video_start": 4.0,
+   "video_end": 4.0,
+   "video_min": 4.0,
+   "video_max": 4.0
+  },
+  {
+   "label": "S7",
+   "take": "2026-01-12_09-00-00",
+   "id": "S2",
+   "file": "seg_02.webm",
+   "mime": "audio/webm;codecs=opus",
+   "version": "v6",
+   "flip": false,
+   "t_start": 4.5,
+   "t_end": 6.5,
+   "recording": false,
+   "video_start": 11.5,
+   "video_end": 11.5,
+   "video_min": 11.5,
+   "video_max": 11.5
+  }
+ ],
+ "flags": [
+  {
+   "order": 2,
+   "seg": "S3",
+   "moment": "M3",
+   "kind": "retract",
+   "phrase": "Scrap that",
+   "scope": "the comment just before",
+   "refers_to": [
+    1
+   ],
+   "text": "Scrap that. Add a whoosh on the transition."
+  }
+ ],
+ "moments": [
+  {
+   "id": "M1",
+   "start": 0.0,
+   "end": 0.0,
+   "comments": [
+    {
+     "take": "2026-01-05_09-00-00 (v3)",
+     "seg": "S1",
+     "version": "v3",
+     "flip": false,
+     "pass": 1,
+     "mode": "paused",
+     "anchor": 0.0,
+     "video_t": 0.0,
+     "video_t_end": 0.0,
+     "session_t": 1.0,
+     "session_t_end": 3.0,
+     "text": "The intro text is blurry.",
+     "unclear": false,
+     "moved": null,
+     "audio": false,
+     "speech": [
+      {
+       "text": "The intro text is blurry.",
+       "conf": 0.95,
+       "session_t": 1.0,
+       "session_t_end": 2.48,
+       "video_t": 0.0,
+       "video_t_end": 0.0,
+       "path": null
+      }
+     ],
+     "strokes": [
+      {
+       "id": 1,
+       "color": "red",
+       "seg": "S1",
+       "video_t": 0.0,
+       "version": "v3",
+       "flip": false,
+       "desc": "red line (0.30,0.10)→(0.70,0.10) heading right",
+       "bbox": [
+        0.3,
+        0.1,
+        0.7,
+        0.1
+       ],
+       "from": [
+        0.3,
+        0.1
+       ],
+       "to": [
+        0.7,
+        0.1
+       ],
+       "shape": "line",
+       "points": [
+        [
+         0.3,
+         0.1
+        ],
+        [
+         0.7,
+         0.1
+        ]
+       ],
+       "n": 1,
+       "session_t": 2.6,
+       "session_t_end": 3.0
+      }
+     ],
+     "order": 1,
+     "moment": "M1",
+     "flag": null
+    }
+   ],
+   "snapshot": null,
+   "snapshot_t": null
+  },
+  {
+   "id": "M2",
+   "start": 4.0,
+   "end": 4.0,
+   "comments": [
+    {
+     "take": "2026-01-12_09-00-00",
+     "seg": "S6",
+     "version": "v6",
+     "flip": false,
+     "pass": 1,
+     "mode": "paused",
+     "anchor": 4.0,
+     "video_t": 4.0,
+     "video_t_end": 4.0,
+     "session_t": 1.5,
+     "session_t_end": 2.98,
+     "text": "The intro text is still blurry.",
+     "unclear": false,
+     "moved": null,
+     "audio": false,
+     "speech": [
+      {
+       "text": "The intro text is still blurry.",
+       "conf": 0.95,
+       "session_t": 1.5,
+       "session_t_end": 2.98,
+       "video_t": 4.0,
+       "video_t_end": 4.0,
+       "path": null
+      }
+     ],
+     "strokes": [],
+     "order": 4,
+     "moment": "M2",
+     "flag": null
+    }
+   ],
+   "snapshot": null,
+   "snapshot_t": null
+  },
+  {
+   "id": "M3",
+   "start": 11.0,
+   "end": 11.5,
+   "comments": [
+    {
+     "take": "2026-01-05_09-00-00 (v3)",
+     "seg": "S3",
+     "version": "v3",
+     "flip": false,
+     "pass": 1,
+     "mode": "paused",
+     "anchor": 11.0,
+     "video_t": 11.0,
+     "video_t_end": 11.0,
+     "session_t": 8.4,
+     "session_t_end": 10.98,
+     "text": "Scrap that. Add a whoosh on the transition.",
+     "unclear": false,
+     "moved": null,
+     "audio": true,
+     "speech": [
+      {
+       "text": "Scrap that.",
+       "conf": 0.95,
+       "session_t": 8.4,
+       "session_t_end": 8.98,
+       "video_t": 11.0,
+       "video_t_end": 11.0,
+       "path": null
+      },
+      {
+       "text": "Add a whoosh on the transition.",
+       "conf": 0.95,
+       "session_t": 9.4,
+       "session_t_end": 10.98,
+       "video_t": 11.0,
+       "video_t_end": 11.0,
+       "path": null
+      }
+     ],
+     "strokes": [],
+     "order": 2,
+     "moment": "M3",
+     "flag": {
+      "kind": "retract",
+      "phrase": "Scrap that",
+      "scope": "the comment just before",
+      "refers_to": [
+       1
+      ]
+     }
+    },
+    {
+     "take": "2026-01-12_09-00-00",
+     "seg": "S7",
+     "version": "v6",
+     "flip": false,
+     "pass": 1,
+     "mode": "paused",
+     "anchor": 11.5,
+     "video_t": 11.5,
+     "video_t_end": 11.5,
+     "session_t": 5.0,
+     "session_t_end": 5.98,
+     "text": "Nice transition now.",
+     "unclear": false,
+     "moved": null,
+     "audio": false,
+     "speech": [
+      {
+       "text": "Nice transition now.",
+       "conf": 0.95,
+       "session_t": 5.0,
+       "session_t_end": 5.98,
+       "video_t": 11.5,
+       "video_t_end": 11.5,
+       "path": null
+      }
+     ],
+     "strokes": [],
+     "order": 5,
+     "moment": "M3",
+     "flag": null
+    }
+   ],
+   "snapshot": null,
+   "snapshot_t": null
+  },
+  {
+   "id": "M4",
+   "start": 30.0,
+   "end": 30.0,
+   "comments": [
+    {
+     "take": "2026-01-08_09-00-00 (v4)",
+     "seg": "S5",
+     "version": "v4",
+     "flip": false,
+     "pass": 1,
+     "mode": "paused",
+     "anchor": 30.0,
+     "video_t": 30.0,
+     "video_t_end": 30.0,
+     "session_t": 1.5,
+     "session_t_end": 2.98,
+     "text": "Good pacing in this fight.",
+     "unclear": false,
+     "moved": null,
+     "audio": false,
+     "speech": [
+      {
+       "text": "Good pacing in this fight.",
+       "conf": 0.95,
+       "session_t": 1.5,
+       "session_t_end": 2.98,
+       "video_t": 30.0,
+       "video_t_end": 30.0,
+       "path": null
+      }
+     ],
+     "strokes": [],
+     "order": 3,
+     "moment": "M4",
+     "flag": null
+    }
+   ],
+   "snapshot": null,
+   "snapshot_t": null
+  }
+ ],
+ "chronological": [
+  1,
+  2,
+  3,
+  4,
+  5
+ ]
+}

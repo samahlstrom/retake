@@ -1,0 +1,783 @@
+{
+ "video": {
+  "path": "/videos/clip_v6.mp4",
+  "name": "clip_v6.mp4",
+  "duration": 60.0,
+  "fps": 30.0,
+  "width": 1920,
+  "height": 1080
+ },
+ "version": "v6",
+ "family": [
+  "v5",
+  "v6"
+ ],
+ "window": 2.0,
+ "max_span": 8.0,
+ "generated": "(ignored by the tests)",
+ "rules": [
+  "later statements override earlier ones (higher order = later)",
+  "a retraction voids the comments it refers to: same clip/moment unless Sam names a wider scope",
+  "a reinstatement restores what that retraction voided",
+  "when scope is unclear, ask Sam rather than guess; flags are heuristics, nothing was deleted"
+ ],
+ "clock": "video_t = seconds in the video; session_t = seconds since the take started (segment audio starts at t_start)",
+ "takes": [
+  {
+   "take": "2026-01-10_10-00-00",
+   "version": "v6",
+   "recorded": 14.5,
+   "ranges": null,
+   "inherit_note": null,
+   "models": [
+    "whisper small (cpu)"
+   ],
+   "warnings": [],
+   "small_strokes_dropped": 0
+  },
+  {
+   "take": "2026-01-10_11-30-00",
+   "version": "v6",
+   "recorded": 16.0,
+   "ranges": null,
+   "inherit_note": null,
+   "models": [
+    "whisper small (cpu)"
+   ],
+   "warnings": [],
+   "small_strokes_dropped": 0
+  }
+ ],
+ "segments": [
+  {
+   "label": "S1",
+   "take": "2026-01-10_10-00-00",
+   "id": "S1",
+   "file": "seg_01.webm",
+   "mime": "audio/webm;codecs=opus",
+   "version": "v6",
+   "flip": false,
+   "t_start": 0.5,
+   "t_end": 6.0,
+   "recording": false,
+   "video_start": 8.0,
+   "video_end": 10.0,
+   "video_min": 8.0,
+   "video_max": 10.0
+  },
+  {
+   "label": "S2",
+   "take": "2026-01-10_10-00-00",
+   "id": "S2",
+   "file": "seg_02.webm",
+   "mime": "audio/webm;codecs=opus",
+   "version": "v6",
+   "flip": false,
+   "t_start": 11.0,
+   "t_end": 14.5,
+   "recording": false,
+   "video_start": 8.8,
+   "video_end": 8.8,
+   "video_min": 8.8,
+   "video_max": 8.8
+  },
+  {
+   "label": "S3",
+   "take": "2026-01-10_10-00-00",
+   "id": "S3",
+   "file": "seg_03.webm",
+   "mime": "audio/webm;codecs=opus",
+   "version": "v5",
+   "flip": true,
+   "t_start": 18.0,
+   "t_end": 20.5,
+   "recording": false,
+   "video_start": 10.8,
+   "video_end": 10.8,
+   "video_min": 10.8,
+   "video_max": 10.8
+  },
+  {
+   "label": "S4",
+   "take": "2026-01-10_10-00-00",
+   "id": "S4",
+   "file": "seg_04.webm",
+   "mime": "audio/webm;codecs=opus",
+   "version": "v6",
+   "flip": false,
+   "t_start": 22.0,
+   "t_end": 25.0,
+   "recording": false,
+   "video_start": 10.8,
+   "video_end": 10.8,
+   "video_min": 10.8,
+   "video_max": 10.8
+  },
+  {
+   "label": "S5",
+   "take": "2026-01-10_11-30-00",
+   "id": "S1",
+   "file": "seg_01.webm",
+   "mime": "audio/webm;codecs=opus",
+   "version": "v6",
+   "flip": false,
+   "t_start": 1.0,
+   "t_end": 4.0,
+   "recording": false,
+   "video_start": 30.0,
+   "video_end": 30.0,
+   "video_min": 30.0,
+   "video_max": 30.0
+  },
+  {
+   "label": "S6",
+   "take": "2026-01-10_11-30-00",
+   "id": "S2",
+   "file": "seg_02.webm",
+   "mime": "audio/webm;codecs=opus",
+   "version": "v6",
+   "flip": false,
+   "t_start": 6.0,
+   "t_end": 13.5,
+   "recording": false,
+   "video_start": 44.5,
+   "video_end": 48.5,
+   "video_min": 44.5,
+   "video_max": 44.5
+  },
+  {
+   "label": "S7",
+   "take": "2026-01-10_11-30-00",
+   "id": "S3",
+   "file": "seg_03.webm",
+   "mime": "audio/webm;codecs=opus",
+   "version": "v6",
+   "flip": false,
+   "t_start": 16.0,
+   "t_end": 21.5,
+   "recording": false,
+   "video_start": 20.0,
+   "video_end": 20.0,
+   "video_min": 20.0,
+   "video_max": 20.0
+  }
+ ],
+ "flags": [
+  {
+   "order": 3,
+   "seg": "S2",
+   "moment": "M1",
+   "kind": "retract",
+   "phrase": "Throw out",
+   "scope": "everything earlier on this clip",
+   "refers_to": [
+    1,
+    2
+   ],
+   "text": "Throw out everything I said about this clip."
+  },
+  {
+   "order": 5,
+   "seg": "S4",
+   "moment": "M1",
+   "kind": "reinstate",
+   "phrase": "add that back",
+   "scope": "what an earlier retraction threw out",
+   "refers_to": [
+    3
+   ],
+   "restores": [
+    1,
+    2
+   ],
+   "text": "Actually, add that back."
+  },
+  {
+   "order": 6,
+   "seg": "S5",
+   "moment": "M3",
+   "kind": "retract",
+   "phrase": "Scrap that",
+   "scope": "the comment just before",
+   "refers_to": [
+    5
+   ],
+   "text": "The caption is too small. Scrap that."
+  },
+  {
+   "order": 8,
+   "seg": "S6",
+   "moment": "M4",
+   "kind": "retract",
+   "phrase": "Ignore that",
+   "scope": "this clip",
+   "refers_to": [
+    7
+   ],
+   "text": "Ignore that cut comment, it is fine."
+  },
+  {
+   "order": 9,
+   "seg": "S6",
+   "moment": "M4",
+   "kind": "retract",
+   "phrase": "Forget what",
+   "scope": "possibly wider than this clip: ask Sam",
+   "refers_to": [
+    7
+   ],
+   "text": "The header is great. Forget what I said so far."
+  },
+  {
+   "order": 10,
+   "seg": "S7",
+   "moment": "M2",
+   "kind": "reinstate",
+   "phrase": "Never mind, keep",
+   "scope": "what an earlier retraction threw out",
+   "refers_to": [
+    9
+   ],
+   "restores": [
+    7
+   ],
+   "text": "Never mind, keep the zoom. Remove that comment about the header. Restore it."
+  }
+ ],
+ "moments": [
+  {
+   "id": "M1",
+   "start": 8.5,
+   "end": 10.8,
+   "comments": [
+    {
+     "take": "2026-01-10_10-00-00",
+     "seg": "S1",
+     "version": "v6",
+     "flip": false,
+     "pass": 1,
+     "mode": "playing",
+     "anchor": 8.5,
+     "video_t": 8.5,
+     "video_t_end": 9.78,
+     "session_t": 1.5,
+     "session_t_end": 2.78,
+     "text": "Look at the stats.",
+     "unclear": false,
+     "moved": null,
+     "audio": false,
+     "speech": [
+      {
+       "text": "Look at the stats.",
+       "conf": 0.95,
+       "session_t": 1.5,
+       "session_t_end": 2.78,
+       "video_t": 8.5,
+       "video_t_end": 9.78,
+       "path": null
+      }
+     ],
+     "strokes": [],
+     "order": 1,
+     "moment": "M1",
+     "flag": null
+    },
+    {
+     "take": "2026-01-10_10-00-00",
+     "seg": "S1",
+     "version": "v6",
+     "flip": false,
+     "pass": 1,
+     "mode": "paused",
+     "anchor": 10.0,
+     "video_t": 10.0,
+     "video_t_end": 10.0,
+     "session_t": 3.3,
+     "session_t_end": 4.98,
+     "text": "This zoom is too slow.",
+     "unclear": false,
+     "moved": null,
+     "audio": false,
+     "speech": [
+      {
+       "text": "This zoom is too slow.",
+       "conf": 0.95,
+       "session_t": 3.6,
+       "session_t_end": 4.98,
+       "video_t": 10.0,
+       "video_t_end": 10.0,
+       "path": null
+      }
+     ],
+     "strokes": [
+      {
+       "id": 1,
+       "color": "red",
+       "seg": "S1",
+       "video_t": 10.0,
+       "version": "v6",
+       "flip": false,
+       "desc": "red line (0.40,0.40)→(0.60,0.60) heading down-right",
+       "bbox": [
+        0.4,
+        0.4,
+        0.6,
+        0.6
+       ],
+       "from": [
+        0.4,
+        0.4
+       ],
+       "to": [
+        0.6,
+        0.6
+       ],
+       "shape": "line",
+       "points": [
+        [
+         0.4,
+         0.4
+        ],
+        [
+         0.5,
+         0.5
+        ],
+        [
+         0.6,
+         0.6
+        ]
+       ],
+       "n": 1,
+       "session_t": 3.3,
+       "session_t_end": 3.5
+      }
+     ],
+     "order": 2,
+     "moment": "M1",
+     "flag": null
+    },
+    {
+     "take": "2026-01-10_10-00-00",
+     "seg": "S2",
+     "version": "v6",
+     "flip": false,
+     "pass": 2,
+     "mode": "paused",
+     "anchor": 8.8,
+     "video_t": 8.8,
+     "video_t_end": 8.8,
+     "session_t": 11.5,
+     "session_t_end": 13.98,
+     "text": "Throw out everything I said about this clip.",
+     "unclear": false,
+     "moved": null,
+     "audio": false,
+     "speech": [
+      {
+       "text": "Throw out everything I said about this clip.",
+       "conf": 0.95,
+       "session_t": 11.5,
+       "session_t_end": 13.98,
+       "video_t": 8.8,
+       "video_t_end": 8.8,
+       "path": null
+      }
+     ],
+     "strokes": [],
+     "order": 3,
+     "moment": "M1",
+     "flag": {
+      "kind": "retract",
+      "phrase": "Throw out",
+      "scope": "everything earlier on this clip",
+      "refers_to": [
+       1,
+       2
+      ]
+     }
+    },
+    {
+     "take": "2026-01-10_10-00-00",
+     "seg": "S3",
+     "version": "v5",
+     "flip": true,
+     "pass": 2,
+     "mode": "paused",
+     "anchor": 10.8,
+     "video_t": 10.8,
+     "video_t_end": 10.8,
+     "session_t": 18.5,
+     "session_t_end": 19.98,
+     "text": "This was better in v5.",
+     "unclear": false,
+     "moved": null,
+     "audio": false,
+     "speech": [
+      {
+       "text": "This was better in v5.",
+       "conf": 0.95,
+       "session_t": 18.5,
+       "session_t_end": 19.98,
+       "video_t": 10.8,
+       "video_t_end": 10.8,
+       "path": null
+      }
+     ],
+     "strokes": [],
+     "order": 4,
+     "moment": "M1",
+     "flag": null
+    },
+    {
+     "take": "2026-01-10_10-00-00",
+     "seg": "S4",
+     "version": "v6",
+     "flip": false,
+     "pass": 2,
+     "mode": "paused",
+     "anchor": 10.8,
+     "video_t": 10.8,
+     "video_t_end": 10.8,
+     "session_t": 22.5,
+     "session_t_end": 24.4,
+     "text": "Actually, add that back.",
+     "unclear": false,
+     "moved": null,
+     "audio": false,
+     "speech": [
+      {
+       "text": "Actually, add that back.",
+       "conf": 0.95,
+       "session_t": 22.5,
+       "session_t_end": 23.98,
+       "video_t": 10.8,
+       "video_t_end": 10.8,
+       "path": null
+      }
+     ],
+     "strokes": [
+      {
+       "id": 2,
+       "color": "green",
+       "seg": "S4",
+       "video_t": 10.8,
+       "version": "v6",
+       "flip": false,
+       "desc": "green line (0.10,0.20)→(0.30,0.20) heading right",
+       "bbox": [
+        0.1,
+        0.2,
+        0.3,
+        0.2
+       ],
+       "from": [
+        0.1,
+        0.2
+       ],
+       "to": [
+        0.3,
+        0.2
+       ],
+       "shape": "line",
+       "points": [
+        [
+         0.1,
+         0.2
+        ],
+        [
+         0.3,
+         0.2
+        ]
+       ],
+       "n": 2,
+       "session_t": 24.2,
+       "session_t_end": 24.4
+      }
+     ],
+     "order": 5,
+     "moment": "M1",
+     "flag": {
+      "kind": "reinstate",
+      "phrase": "add that back",
+      "scope": "what an earlier retraction threw out",
+      "refers_to": [
+       3
+      ],
+      "restores": [
+       1,
+       2
+      ]
+     }
+    }
+   ],
+   "snapshot": null,
+   "snapshot_t": null
+  },
+  {
+   "id": "M2",
+   "start": 20.0,
+   "end": 20.0,
+   "comments": [
+    {
+     "take": "2026-01-10_11-30-00",
+     "seg": "S7",
+     "version": "v6",
+     "flip": false,
+     "pass": 2,
+     "mode": "paused",
+     "anchor": 20.0,
+     "video_t": 20.0,
+     "video_t_end": 20.0,
+     "session_t": 16.4,
+     "session_t_end": 20.98,
+     "text": "Never mind, keep the zoom. Remove that comment about the header. Restore it.",
+     "unclear": false,
+     "moved": null,
+     "audio": false,
+     "speech": [
+      {
+       "text": "Never mind, keep the zoom.",
+       "conf": 0.95,
+       "session_t": 16.4,
+       "session_t_end": 17.98,
+       "video_t": 20.0,
+       "video_t_end": 20.0,
+       "path": null
+      },
+      {
+       "text": "Remove that comment about the header.",
+       "conf": 0.95,
+       "session_t": 18.4,
+       "session_t_end": 19.98,
+       "video_t": 20.0,
+       "video_t_end": 20.0,
+       "path": null
+      },
+      {
+       "text": "Restore it.",
+       "conf": 0.95,
+       "session_t": 20.4,
+       "session_t_end": 20.98,
+       "video_t": 20.0,
+       "video_t_end": 20.0,
+       "path": null
+      }
+     ],
+     "strokes": [],
+     "order": 10,
+     "moment": "M2",
+     "flag": {
+      "kind": "reinstate",
+      "phrase": "Never mind, keep",
+      "scope": "what an earlier retraction threw out",
+      "refers_to": [
+       9
+      ],
+      "restores": [
+       7
+      ]
+     }
+    }
+   ],
+   "snapshot": null,
+   "snapshot_t": null
+  },
+  {
+   "id": "M3",
+   "start": 30.0,
+   "end": 30.0,
+   "comments": [
+    {
+     "take": "2026-01-10_11-30-00",
+     "seg": "S5",
+     "version": "v6",
+     "flip": false,
+     "pass": 1,
+     "mode": "paused",
+     "anchor": 30.0,
+     "video_t": 30.0,
+     "video_t_end": 30.0,
+     "session_t": 1.4,
+     "session_t_end": 3.58,
+     "text": "The caption is too small. Scrap that.",
+     "unclear": false,
+     "moved": null,
+     "audio": false,
+     "speech": [
+      {
+       "text": "The caption is too small.",
+       "conf": 0.95,
+       "session_t": 1.4,
+       "session_t_end": 2.58,
+       "video_t": 30.0,
+       "video_t_end": 30.0,
+       "path": null
+      },
+      {
+       "text": "Scrap that.",
+       "conf": 0.95,
+       "session_t": 3.0,
+       "session_t_end": 3.58,
+       "video_t": 30.0,
+       "video_t_end": 30.0,
+       "path": null
+      }
+     ],
+     "strokes": [],
+     "order": 6,
+     "moment": "M3",
+     "flag": {
+      "kind": "retract",
+      "phrase": "Scrap that",
+      "scope": "the comment just before",
+      "refers_to": [
+       5
+      ]
+     }
+    }
+   ],
+   "snapshot": null,
+   "snapshot_t": null
+  },
+  {
+   "id": "M4",
+   "start": 44.9,
+   "end": 48.5,
+   "comments": [
+    {
+     "take": "2026-01-10_11-30-00",
+     "seg": "S6",
+     "version": "v6",
+     "flip": false,
+     "pass": 1,
+     "mode": "playing",
+     "anchor": 44.9,
+     "video_t": 44.9,
+     "video_t_end": 46.08,
+     "session_t": 6.4,
+     "session_t_end": 7.58,
+     "text": "The cut here feels late.",
+     "unclear": false,
+     "moved": null,
+     "audio": false,
+     "speech": [
+      {
+       "text": "The cut here feels late.",
+       "conf": 0.95,
+       "session_t": 6.4,
+       "session_t_end": 7.58,
+       "video_t": 44.9,
+       "video_t_end": 46.08,
+       "path": null
+      }
+     ],
+     "strokes": [],
+     "order": 7,
+     "moment": "M4",
+     "flag": null
+    },
+    {
+     "take": "2026-01-10_11-30-00",
+     "seg": "S6",
+     "version": "v6",
+     "flip": false,
+     "pass": 1,
+     "mode": "playing",
+     "anchor": 46.5,
+     "video_t": 46.5,
+     "video_t_end": 48.08,
+     "session_t": 8.0,
+     "session_t_end": 9.58,
+     "text": "Ignore that cut comment, it is fine.",
+     "unclear": false,
+     "moved": null,
+     "audio": false,
+     "speech": [
+      {
+       "text": "Ignore that cut comment, it is fine.",
+       "conf": 0.95,
+       "session_t": 8.0,
+       "session_t_end": 9.58,
+       "video_t": 46.5,
+       "video_t_end": 48.08,
+       "path": null
+      }
+     ],
+     "strokes": [],
+     "order": 8,
+     "moment": "M4",
+     "flag": {
+      "kind": "retract",
+      "phrase": "Ignore that",
+      "scope": "this clip",
+      "refers_to": [
+       7
+      ]
+     }
+    },
+    {
+     "take": "2026-01-10_11-30-00",
+     "seg": "S6",
+     "version": "v6",
+     "flip": false,
+     "pass": 1,
+     "mode": "paused",
+     "anchor": 48.5,
+     "video_t": 48.5,
+     "video_t_end": 48.5,
+     "session_t": 10.4,
+     "session_t_end": 12.98,
+     "text": "The header is great. Forget what I said so far.",
+     "unclear": false,
+     "moved": null,
+     "audio": false,
+     "speech": [
+      {
+       "text": "The header is great.",
+       "conf": 0.95,
+       "session_t": 10.4,
+       "session_t_end": 11.38,
+       "video_t": 48.5,
+       "video_t_end": 48.5,
+       "path": null
+      },
+      {
+       "text": "Forget what I said so far.",
+       "conf": 0.95,
+       "session_t": 11.8,
+       "session_t_end": 12.98,
+       "video_t": 48.5,
+       "video_t_end": 48.5,
+       "path": null
+      }
+     ],
+     "strokes": [],
+     "order": 9,
+     "moment": "M4",
+     "flag": {
+      "kind": "retract",
+      "phrase": "Forget what",
+      "scope": "possibly wider than this clip: ask Sam",
+      "refers_to": [
+       7
+      ]
+     }
+    }
+   ],
+   "snapshot": null,
+   "snapshot_t": null
+  }
+ ],
+ "chronological": [
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8,
+  9,
+  10
+ ]
+}

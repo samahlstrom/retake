@@ -1,0 +1,105 @@
+[
+ {
+  "id": 1,
+  "seg": "S2",
+  "version": "v6",
+  "flip": false,
+  "color": "yellow",
+  "session_t": 11.6,
+  "session_t_end": 12.0,
+  "video_t": 12.5,
+  "video_t_end": 12.5,
+  "paused": true,
+  "points": [
+   [
+    0.2,
+    0.7
+   ],
+   [
+    0.5,
+    0.7
+   ],
+   [
+    0.8,
+    0.71
+   ]
+  ]
+ },
+ {
+  "id": 2,
+  "seg": "S3",
+  "version": "v6",
+  "flip": false,
+  "color": "white",
+  "session_t": 16.5,
+  "session_t_end": 16.9,
+  "video_t": 18.5,
+  "video_t_end": 18.5,
+  "paused": true,
+  "points": [
+   [
+    0.3,
+    0.3
+   ],
+   [
+    0.32,
+    0.5
+   ],
+   [
+    0.3,
+    0.7
+   ]
+  ]
+ },
+ {
+  "id": 3,
+  "seg": "S3",
+  "version": "v6",
+  "flip": false,
+  "color": "red",
+  "session_t": 26.0,
+  "session_t_end": 26.4,
+  "video_t": 35.5,
+  "video_t_end": 36.3,
+  "paused": false,
+  "points": [
+   [
+    0.6,
+    0.2
+   ],
+   [
+    0.7,
+    0.25
+   ],
+   [
+    0.65,
+    0.4
+   ],
+   [
+    0.62,
+    0.35
+   ]
+  ]
+ },
+ {
+  "id": 4,
+  "version": "v6",
+  "flip": false,
+  "color": "red",
+  "session_t": 33.3,
+  "session_t_end": 33.5,
+  "video_t": 23.8,
+  "video_t_end": 24.0,
+  "paused": false,
+  "points": [
+   [
+    0.1,
+    0.1
+   ],
+   [
+    0.4,
+    0.4
+   ]
+  ]
+ }
+]

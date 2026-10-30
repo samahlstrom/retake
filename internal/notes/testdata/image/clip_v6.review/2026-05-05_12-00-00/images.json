@@ -1,0 +1,50 @@
+[
+ {
+  "id": 1,
+  "seg": "S1",
+  "version": "v6",
+  "flip": false,
+  "file": "img_01.png",
+  "mime": "image/png",
+  "session_t": 2.8,
+  "video_t": 14.0,
+  "box": [
+   0.55,
+   0.1,
+   0.3,
+   0.3
+  ]
+ },
+ {
+  "id": 2,
+  "seg": "S2",
+  "version": "v6",
+  "flip": false,
+  "file": "img_02.jpg",
+  "mime": "image/jpeg",
+  "session_t": 7.4,
+  "video_t": 16.9,
+  "box": [
+   0.05,
+   0.05,
+   0.15,
+   0.1
+  ]
+ },
+ {
+  "id": 3,
+  "seg": "S2",
+  "version": "v6",
+  "flip": false,
+  "file": "img_03.webp",
+  "mime": "image/webp",
+  "session_t": 15.0,
+  "video_t": 24.5,
+  "box": [
+   0.4,
+   0.4,
+   0.2,
+   0.2
+  ]
+ }
+]

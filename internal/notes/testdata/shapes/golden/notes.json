@@ -1,0 +1,723 @@
+{
+ "video": {
+  "path": "/videos/clip_v6.mp4",
+  "name": "clip_v6.mp4",
+  "duration": 60.0,
+  "fps": 30.0,
+  "width": 1920,
+  "height": 1080
+ },
+ "version": "v6",
+ "family": [
+  "v5",
+  "v6"
+ ],
+ "window": 2.0,
+ "max_span": 8.0,
+ "generated": "(ignored by the tests)",
+ "rules": [
+  "later statements override earlier ones (higher order = later)",
+  "a retraction voids the comments it refers to: same clip/moment unless Sam names a wider scope",
+  "a reinstatement restores what that retraction voided",
+  "when scope is unclear, ask Sam rather than guess; flags are heuristics, nothing was deleted"
+ ],
+ "clock": "video_t = seconds in the video; session_t = seconds since the take started (segment audio starts at t_start)",
+ "takes": [
+  {
+   "take": "2026-04-04_20-00-00",
+   "version": "v6",
+   "recorded": 9.3,
+   "ranges": null,
+   "inherit_note": null,
+   "models": [
+    "whisper small (cpu)"
+   ],
+   "warnings": [],
+   "small_strokes_dropped": 1
+  }
+ ],
+ "segments": [
+  {
+   "label": "S1",
+   "take": "2026-04-04_20-00-00",
+   "id": "S1",
+   "file": "seg_01.webm",
+   "mime": "audio/webm;codecs=opus",
+   "version": "v6",
+   "flip": false,
+   "t_start": 0.2,
+   "t_end": 5.0,
+   "recording": false,
+   "video_start": 5.0,
+   "video_end": 5.0,
+   "video_min": 5.0,
+   "video_max": 5.0
+  },
+  {
+   "label": "S2",
+   "take": "2026-04-04_20-00-00",
+   "id": "S2",
+   "file": "seg_02.webm",
+   "mime": "audio/webm;codecs=opus",
+   "version": "v6",
+   "flip": false,
+   "t_start": 6.5,
+   "t_end": 11.0,
+   "recording": false,
+   "video_start": 20.5,
+   "video_end": 25.0,
+   "video_min": 20.5,
+   "video_max": 23.2
+  }
+ ],
+ "flags": [
+  {
+   "order": 3,
+   "seg": "S2",
+   "moment": "M3",
+   "kind": "retract",
+   "phrase": "Strike that",
+   "scope": "the comment just before",
+   "refers_to": [
+    2
+   ],
+   "text": "Strike that."
+  }
+ ],
+ "moments": [
+  {
+   "id": "M1",
+   "start": 5.0,
+   "end": 5.0,
+   "comments": [
+    {
+     "take": "2026-04-04_20-00-00",
+     "seg": "S1",
+     "version": "v6",
+     "flip": false,
+     "pass": 1,
+     "mode": "paused",
+     "anchor": 5.0,
+     "video_t": 5.0,
+     "video_t_end": 5.0,
+     "session_t": 0.5,
+     "session_t_end": 4.4,
+     "text": "The music is way too loud here.",
+     "unclear": false,
+     "moved": null,
+     "audio": true,
+     "speech": [
+      {
+       "text": "The music is way too loud here.",
+       "conf": 0.95,
+       "session_t": 2.0,
+       "session_t_end": 3.48,
+       "video_t": 5.0,
+       "video_t_end": 5.0,
+       "path": null
+      }
+     ],
+     "strokes": [
+      {
+       "id": 1,
+       "color": "red",
+       "seg": "S1",
+       "video_t": 5.0,
+       "version": "v6",
+       "flip": false,
+       "desc": "red X at (0.50,0.50)",
+       "bbox": [
+        0.4,
+        0.4,
+        0.6,
+        0.6
+       ],
+       "from": [
+        0.4,
+        0.4
+       ],
+       "to": [
+        0.6,
+        0.6
+       ],
+       "shape": "x",
+       "points": [
+        [
+         0.4,
+         0.4
+        ],
+        [
+         0.5,
+         0.5
+        ],
+        [
+         0.6,
+         0.6
+        ]
+       ],
+       "at": [
+        0.5,
+        0.5
+       ],
+       "n": 1,
+       "session_t": 0.5,
+       "session_t_end": 0.7
+      },
+      {
+       "id": 2,
+       "color": "red",
+       "seg": "S1",
+       "video_t": 5.0,
+       "version": "v6",
+       "flip": false,
+       "desc": "red X at (0.50,0.50)",
+       "bbox": [
+        0.4,
+        0.4,
+        0.6,
+        0.6
+       ],
+       "from": [
+        0.6,
+        0.4
+       ],
+       "to": [
+        0.4,
+        0.6
+       ],
+       "shape": "x",
+       "points": [
+        [
+         0.6,
+         0.4
+        ],
+        [
+         0.5,
+         0.5
+        ],
+        [
+         0.4,
+         0.6
+        ]
+       ],
+       "at": [
+        0.5,
+        0.5
+       ],
+       "n": 2,
+       "session_t": 0.8,
+       "session_t_end": 1.0
+      },
+      {
+       "id": 3,
+       "color": "yellow",
+       "seg": "S1",
+       "video_t": 5.0,
+       "version": "v6",
+       "flip": false,
+       "desc": "yellow arrow (0.20,0.50)→(0.50,0.50) pointing right",
+       "bbox": [
+        0.2,
+        0.47,
+        0.5,
+        0.53
+       ],
+       "from": [
+        0.2,
+        0.5
+       ],
+       "to": [
+        0.5,
+        0.5
+       ],
+       "shape": "arrow",
+       "points": [
+        [
+         0.2,
+         0.5
+        ],
+        [
+         0.23,
+         0.5
+        ],
+        [
+         0.26,
+         0.5
+        ],
+        [
+         0.29,
+         0.5
+        ],
+        [
+         0.32,
+         0.5
+        ],
+        [
+         0.35,
+         0.5
+        ],
+        [
+         0.38,
+         0.5
+        ],
+        [
+         0.41,
+         0.5
+        ],
+        [
+         0.44,
+         0.5
+        ],
+        [
+         0.47,
+         0.5
+        ],
+        [
+         0.5,
+         0.5
+        ],
+        [
+         0.47,
+         0.47
+        ],
+        [
+         0.5,
+         0.5
+        ],
+        [
+         0.47,
+         0.53
+        ]
+       ],
+       "n": 3,
+       "session_t": 1.1,
+       "session_t_end": 1.3
+      },
+      {
+       "id": 4,
+       "color": "green",
+       "seg": "S1",
+       "video_t": 5.0,
+       "version": "v6",
+       "flip": false,
+       "desc": "green circle around (0.65,0.22)–(0.75,0.38)",
+       "bbox": [
+        0.65,
+        0.22,
+        0.75,
+        0.38
+       ],
+       "from": [
+        0.75,
+        0.3
+       ],
+       "to": [
+        0.749,
+        0.317
+       ],
+       "shape": "circle",
+       "points": [
+        [
+         0.75,
+         0.3
+        ],
+        [
+         0.7493,
+         0.3133
+        ],
+        [
+         0.7472,
+         0.3262
+        ],
+        [
+         0.7439,
+         0.3384
+        ],
+        [
+         0.7393,
+         0.3495
+        ],
+        [
+         0.7336,
+         0.3592
+        ],
+        [
+         0.727,
+         0.3673
+        ],
+        [
+         0.7197,
+         0.3736
+        ],
+        [
+         0.7118,
+         0.3778
+        ],
+        [
+         0.7035,
+         0.3798
+        ],
+        [
+         0.6952,
+         0.3796
+        ],
+        [
+         0.687,
+         0.3773
+        ],
+        [
+         0.6792,
+         0.3727
+        ],
+        [
+         0.6719,
+         0.3662
+        ],
+        [
+         0.6655,
+         0.3578
+        ],
+        [
+         0.6599,
+         0.3479
+        ],
+        [
+         0.6555,
+         0.3366
+        ],
+        [
+         0.6524,
+         0.3243
+        ],
+        [
+         0.6505,
+         0.3113
+        ],
+        [
+         0.65,
+         0.298
+        ],
+        [
+         0.6509,
+         0.2848
+        ],
+        [
+         0.6532,
+         0.2719
+        ],
+        [
+         0.6567,
+         0.2599
+        ],
+        [
+         0.6615,
+         0.249
+        ],
+        [
+         0.6673,
+         0.2395
+        ],
+        [
+         0.674,
+         0.2316
+        ],
+        [
+         0.6815,
+         0.2257
+        ],
+        [
+         0.6895,
+         0.2218
+        ],
+        [
+         0.6977,
+         0.2201
+        ],
+        [
+         0.706,
+         0.2206
+        ],
+        [
+         0.7142,
+         0.2233
+        ],
+        [
+         0.7219,
+         0.2281
+        ],
+        [
+         0.7291,
+         0.2349
+        ],
+        [
+         0.7354,
+         0.2436
+        ],
+        [
+         0.7408,
+         0.2537
+        ],
+        [
+         0.745,
+         0.2652
+        ],
+        [
+         0.748,
+         0.2776
+        ],
+        [
+         0.7497,
+         0.2907
+        ],
+        [
+         0.7499,
+         0.304
+        ],
+        [
+         0.7488,
+         0.3172
+        ]
+       ],
+       "n": 4,
+       "session_t": 1.4,
+       "session_t_end": 1.6
+      },
+      {
+       "id": 6,
+       "color": "red",
+       "seg": "S1",
+       "video_t": 5.0,
+       "version": "v6",
+       "flip": false,
+       "desc": "red curve (0.10,0.90)→(0.15,0.55) within (0.10,0.55)–(0.35,0.90)",
+       "bbox": [
+        0.1,
+        0.55,
+        0.35,
+        0.9
+       ],
+       "from": [
+        0.1,
+        0.9
+       ],
+       "to": [
+        0.15,
+        0.55
+       ],
+       "shape": "curve",
+       "points": [
+        [
+         0.1,
+         0.9
+        ],
+        [
+         0.3,
+         0.85
+        ],
+        [
+         0.2,
+         0.7
+        ],
+        [
+         0.35,
+         0.6
+        ],
+        [
+         0.15,
+         0.55
+        ]
+       ],
+       "n": 5,
+       "session_t": 3.6,
+       "session_t_end": 3.8
+      },
+      {
+       "id": 8,
+       "color": "white",
+       "seg": "S1",
+       "video_t": 5.0,
+       "version": "v6",
+       "flip": false,
+       "desc": "white line (0.85,0.10)→(0.85,0.30) heading down",
+       "bbox": [
+        0.85,
+        0.1,
+        0.85,
+        0.3
+       ],
+       "from": [
+        0.85,
+        0.1
+       ],
+       "to": [
+        0.85,
+        0.3
+       ],
+       "shape": "line",
+       "points": [
+        [
+         0.85,
+         0.1
+        ],
+        [
+         0.85,
+         0.3
+        ]
+       ],
+       "n": 6,
+       "session_t": 4.2,
+       "session_t_end": 4.4
+      }
+     ],
+     "order": 1,
+     "moment": "M1",
+     "flag": null,
+     "vo": {
+      "text": "Souls are the currency.",
+      "start": 4.1,
+      "end": 6.0
+     }
+    }
+   ],
+   "snapshot": null,
+   "snapshot_t": null
+  },
+  {
+   "id": "M2",
+   "start": 21.0,
+   "end": 22.98,
+   "comments": [
+    {
+     "take": "2026-04-04_20-00-00",
+     "seg": "S2",
+     "version": "v6",
+     "flip": false,
+     "pass": 1,
+     "mode": "playing",
+     "anchor": 21.0,
+     "video_t": 21.0,
+     "video_t_end": 22.98,
+     "session_t": 7.0,
+     "session_t_end": 9.5,
+     "text": "The voice pauses too long after the hook.",
+     "unclear": false,
+     "moved": null,
+     "audio": true,
+     "speech": [
+      {
+       "text": "The voice pauses too long after the hook.",
+       "conf": 0.95,
+       "session_t": 7.0,
+       "session_t_end": 8.98,
+       "video_t": 21.0,
+       "video_t_end": 22.98,
+       "path": null
+      }
+     ],
+     "strokes": [
+      {
+       "id": 9,
+       "color": "red",
+       "seg": "S2",
+       "video_t": 23.2,
+       "version": "v6",
+       "flip": false,
+       "desc": "red line (0.70,0.60)→(0.50,0.60) heading left",
+       "bbox": [
+        0.5,
+        0.6,
+        0.7,
+        0.6
+       ],
+       "from": [
+        0.7,
+        0.6
+       ],
+       "to": [
+        0.5,
+        0.6
+       ],
+       "shape": "line",
+       "points": [
+        [
+         0.7,
+         0.6
+        ],
+        [
+         0.5,
+         0.6
+        ]
+       ],
+       "n": 7,
+       "session_t": 9.2,
+       "session_t_end": 9.5
+      }
+     ],
+     "order": 2,
+     "moment": "M2",
+     "flag": null,
+     "vo": {
+      "text": "Here's the hook. Watch",
+      "start": 20.2,
+      "end": 24.3
+     }
+    }
+   ],
+   "snapshot": null,
+   "snapshot_t": null
+  },
+  {
+   "id": "M3",
+   "start": 23.8,
+   "end": 24.38,
+   "comments": [
+    {
+     "take": "2026-04-04_20-00-00",
+     "seg": "S2",
+     "version": "v6",
+     "flip": false,
+     "pass": 1,
+     "mode": "playing",
+     "anchor": 23.8,
+     "video_t": 23.8,
+     "video_t_end": 24.38,
+     "session_t": 9.8,
+     "session_t_end": 10.38,
+     "text": "Strike that.",
+     "unclear": false,
+     "moved": null,
+     "audio": false,
+     "speech": [
+      {
+       "text": "Strike that.",
+       "conf": 0.95,
+       "session_t": 9.8,
+       "session_t_end": 10.38,
+       "video_t": 23.8,
+       "video_t_end": 24.38,
+       "path": null
+      }
+     ],
+     "strokes": [],
+     "order": 3,
+     "moment": "M3",
+     "flag": {
+      "kind": "retract",
+      "phrase": "Strike that",
+      "scope": "the comment just before",
+      "refers_to": [
+       2
+      ]
+     }
+    }
+   ],
+   "snapshot": null,
+   "snapshot_t": null
+  }
+ ],
+ "chronological": [
+  1,
+  2,
+  3
+ ]
+}

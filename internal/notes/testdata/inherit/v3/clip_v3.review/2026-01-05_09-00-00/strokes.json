@@ -1,0 +1,46 @@
+[
+ {
+  "id": 1,
+  "seg": "S1",
+  "version": "v3",
+  "flip": false,
+  "color": "red",
+  "session_t": 2.6,
+  "session_t_end": 3.0,
+  "video_t": 0.0,
+  "video_t_end": 0.0,
+  "paused": true,
+  "points": [
+   [
+    0.3,
+    0.1
+   ],
+   [
+    0.7,
+    0.1
+   ]
+  ]
+ },
+ {
+  "id": 2,
+  "seg": "S4",
+  "version": "v3",
+  "flip": false,
+  "color": "white",
+  "session_t": 14.6,
+  "session_t_end": 15.0,
+  "video_t": 20.0,
+  "video_t_end": 20.0,
+  "paused": true,
+  "points": [
+   [
+    0.4,
+    0.8
+   ],
+   [
+    0.6,
+    0.8
+   ]
+  ]
+ }
+]

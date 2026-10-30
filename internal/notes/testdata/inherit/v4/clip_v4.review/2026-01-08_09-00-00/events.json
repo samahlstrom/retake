@@ -1,0 +1,27 @@
+[
+ {
+  "session_t": 0.0,
+  "video_t": 30.0,
+  "event": "start",
+  "playing": false,
+  "rate": 1,
+  "version": "v4",
+  "base": "v4",
+  "flip": false
+ },
+ {
+  "session_t": 1.0,
+  "video_t": 30.0,
+  "event": "rec_start",
+  "seg": "S1",
+  "playing": false,
+  "version": "v4",
+  "flip": false
+ },
+ {
+  "session_t": 3.5,
+  "video_t": 30.0,
+  "event": "rec_stop",
+  "seg": "S1"
+ }
+]

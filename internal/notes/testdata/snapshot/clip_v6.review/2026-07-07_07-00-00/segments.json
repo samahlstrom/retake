@@ -1,0 +1,44 @@
+[
+ {
+  "id": "S1",
+  "file": "seg_01.webm",
+  "mime": "audio/webm;codecs=opus",
+  "version": "v6",
+  "flip": false,
+  "t_start": 0.5,
+  "t_end": 3.0,
+  "recording": false,
+  "video_start": 1.0,
+  "video_end": 1.0,
+  "video_min": 1.0,
+  "video_max": 1.0
+ },
+ {
+  "id": "S2",
+  "file": "seg_02.webm",
+  "mime": "audio/webm;codecs=opus",
+  "version": "v5",
+  "flip": true,
+  "t_start": 3.5,
+  "t_end": 5.5,
+  "recording": false,
+  "video_start": 1.0,
+  "video_end": 1.0,
+  "video_min": 1.0,
+  "video_max": 1.0
+ },
+ {
+  "id": "S3",
+  "file": "seg_03.webm",
+  "mime": "audio/webm;codecs=opus",
+  "version": "v6",
+  "flip": false,
+  "t_start": 6.5,
+  "t_end": 9.0,
+  "recording": false,
+  "video_start": 4.5,
+  "video_end": 4.5,
+  "video_min": 4.5,
+  "video_max": 4.5
+ }
+]

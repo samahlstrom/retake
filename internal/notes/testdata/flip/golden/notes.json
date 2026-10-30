@@ -1,0 +1,337 @@
+{
+ "video": {
+  "path": "/videos/clip_v5.mp4",
+  "name": "clip_v5.mp4",
+  "duration": 60.0,
+  "fps": 30.0,
+  "width": 1920,
+  "height": 1080
+ },
+ "version": "v5",
+ "family": [
+  "v4",
+  "v5",
+  "v6"
+ ],
+ "window": 2.0,
+ "max_span": 8.0,
+ "generated": "(ignored by the tests)",
+ "rules": [
+  "later statements override earlier ones (higher order = later)",
+  "a retraction voids the comments it refers to: same clip/moment unless Sam names a wider scope",
+  "a reinstatement restores what that retraction voided",
+  "when scope is unclear, ask Sam rather than guess; flags are heuristics, nothing was deleted"
+ ],
+ "clock": "video_t = seconds in the video; session_t = seconds since the take started (segment audio starts at t_start)",
+ "takes": [
+  {
+   "take": "2026-03-03_15-00-00",
+   "version": "v5",
+   "recorded": 13.0,
+   "ranges": null,
+   "inherit_note": null,
+   "models": [
+    "whisper small (cpu)"
+   ],
+   "warnings": [],
+   "small_strokes_dropped": 0
+  }
+ ],
+ "segments": [
+  {
+   "label": "S1",
+   "take": "2026-03-03_15-00-00",
+   "id": "S1",
+   "file": "seg_01.webm",
+   "mime": "audio/webm;codecs=opus",
+   "version": "v5",
+   "flip": false,
+   "t_start": 1.0,
+   "t_end": 4.0,
+   "recording": false,
+   "video_start": 12.0,
+   "video_end": 12.0,
+   "video_min": 12.0,
+   "video_max": 12.0
+  },
+  {
+   "label": "S2",
+   "take": "2026-03-03_15-00-00",
+   "id": "S2",
+   "file": "seg_02.webm",
+   "mime": "audio/webm;codecs=opus",
+   "version": "v6",
+   "flip": true,
+   "t_start": 5.0,
+   "t_end": 9.0,
+   "recording": false,
+   "video_start": 12.0,
+   "video_end": 12.0,
+   "video_min": 12.0,
+   "video_max": 12.0
+  },
+  {
+   "label": "S3",
+   "take": "2026-03-03_15-00-00",
+   "id": "S3",
+   "file": "seg_03.webm",
+   "mime": "audio/webm;codecs=opus",
+   "version": "v6",
+   "flip": true,
+   "t_start": 10.0,
+   "t_end": 13.0,
+   "recording": false,
+   "video_start": 12.5,
+   "video_end": 15.5,
+   "video_min": 12.5,
+   "video_max": 12.5
+  },
+  {
+   "label": "S4",
+   "take": "2026-03-03_15-00-00",
+   "id": "S4",
+   "file": "seg_04.webm",
+   "mime": "audio/webm;codecs=opus",
+   "version": "v5",
+   "flip": false,
+   "t_start": 14.5,
+   "t_end": 17.5,
+   "recording": false,
+   "video_start": 16.0,
+   "video_end": 16.0,
+   "video_min": 16.0,
+   "video_max": 16.0
+  }
+ ],
+ "flags": [],
+ "moments": [
+  {
+   "id": "M1",
+   "start": 12.0,
+   "end": 14.98,
+   "comments": [
+    {
+     "take": "2026-03-03_15-00-00",
+     "seg": "S1",
+     "version": "v5",
+     "flip": false,
+     "pass": 1,
+     "mode": "paused",
+     "anchor": 12.0,
+     "video_t": 12.0,
+     "video_t_end": 12.0,
+     "session_t": 1.5,
+     "session_t_end": 3.4,
+     "text": "The hook drags here.",
+     "unclear": false,
+     "moved": null,
+     "audio": false,
+     "speech": [
+      {
+       "text": "The hook drags here.",
+       "conf": 0.95,
+       "session_t": 1.5,
+       "session_t_end": 2.78,
+       "video_t": 12.0,
+       "video_t_end": 12.0,
+       "path": null
+      }
+     ],
+     "strokes": [
+      {
+       "id": 1,
+       "color": "yellow",
+       "seg": "S1",
+       "video_t": 12.0,
+       "version": "v5",
+       "flip": false,
+       "desc": "yellow line (0.20,0.30)→(0.60,0.30) heading right",
+       "bbox": [
+        0.2,
+        0.3,
+        0.6,
+        0.3
+       ],
+       "from": [
+        0.2,
+        0.3
+       ],
+       "to": [
+        0.6,
+        0.3
+       ],
+       "shape": "line",
+       "points": [
+        [
+         0.2,
+         0.3
+        ],
+        [
+         0.6,
+         0.3
+        ]
+       ],
+       "n": 1,
+       "session_t": 3.0,
+       "session_t_end": 3.4
+      }
+     ],
+     "order": 1,
+     "moment": "M1",
+     "flag": null
+    },
+    {
+     "take": "2026-03-03_15-00-00",
+     "seg": "S2",
+     "version": "v6",
+     "flip": true,
+     "pass": 1,
+     "mode": "paused",
+     "anchor": 12.0,
+     "video_t": 12.0,
+     "video_t_end": 12.0,
+     "session_t": 5.5,
+     "session_t_end": 8.6,
+     "text": "The new version fixes it, keep the v6 timing.",
+     "unclear": false,
+     "moved": null,
+     "audio": false,
+     "speech": [
+      {
+       "text": "The new version fixes it, keep the v6 timing.",
+       "conf": 0.95,
+       "session_t": 5.5,
+       "session_t_end": 7.98,
+       "video_t": 12.0,
+       "video_t_end": 12.0,
+       "path": null
+      }
+     ],
+     "strokes": [
+      {
+       "id": 2,
+       "color": "green",
+       "seg": "S2",
+       "video_t": 12.0,
+       "version": "v6",
+       "flip": true,
+       "desc": "green line (0.50,0.50)→(0.52,0.80) heading down",
+       "bbox": [
+        0.5,
+        0.5,
+        0.52,
+        0.8
+       ],
+       "from": [
+        0.5,
+        0.5
+       ],
+       "to": [
+        0.52,
+        0.8
+       ],
+       "shape": "line",
+       "points": [
+        [
+         0.5,
+         0.5
+        ],
+        [
+         0.52,
+         0.8
+        ]
+       ],
+       "n": 2,
+       "session_t": 8.2,
+       "session_t_end": 8.6
+      }
+     ],
+     "order": 2,
+     "moment": "M1",
+     "flag": null
+    },
+    {
+     "take": "2026-03-03_15-00-00",
+     "seg": "S3",
+     "version": "v6",
+     "flip": true,
+     "pass": 1,
+     "mode": "playing",
+     "anchor": 13.0,
+     "video_t": 13.0,
+     "video_t_end": 14.98,
+     "session_t": 10.5,
+     "session_t_end": 12.48,
+     "text": "And the zoom lands better in v6 too.",
+     "unclear": false,
+     "moved": null,
+     "audio": false,
+     "speech": [
+      {
+       "text": "And the zoom lands better in v6 too.",
+       "conf": 0.95,
+       "session_t": 10.5,
+       "session_t_end": 12.48,
+       "video_t": 13.0,
+       "video_t_end": 14.98,
+       "path": null
+      }
+     ],
+     "strokes": [],
+     "order": 3,
+     "moment": "M1",
+     "flag": null
+    }
+   ],
+   "snapshot": null,
+   "snapshot_t": null
+  },
+  {
+   "id": "M2",
+   "start": 16.0,
+   "end": 16.0,
+   "comments": [
+    {
+     "take": "2026-03-03_15-00-00",
+     "seg": "S4",
+     "version": "v5",
+     "flip": false,
+     "pass": 1,
+     "mode": "paused",
+     "anchor": 16.0,
+     "video_t": 16.0,
+     "video_t_end": 16.0,
+     "session_t": 15.0,
+     "session_t_end": 16.98,
+     "text": "Back on v5, the caption overlaps the HUD.",
+     "unclear": false,
+     "moved": null,
+     "audio": false,
+     "speech": [
+      {
+       "text": "Back on v5, the caption overlaps the HUD.",
+       "conf": 0.95,
+       "session_t": 15.0,
+       "session_t_end": 16.98,
+       "video_t": 16.0,
+       "video_t_end": 16.0,
+       "path": null
+      }
+     ],
+     "strokes": [],
+     "order": 4,
+     "moment": "M2",
+     "flag": null
+    }
+   ],
+   "snapshot": null,
+   "snapshot_t": null
+  }
+ ],
+ "chronological": [
+  1,
+  2,
+  3,
+  4
+ ]
+}
