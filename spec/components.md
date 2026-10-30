@@ -188,9 +188,8 @@ of its own), in the package folder, with a cleared environment: only `PATH`, `LA
 removed afterwards. It writes one JSON line on stdin and closes it:
 
 ```json
-{ "protocol": "retake-raster/1", "component": "python-text@1.0.0", "layer": "pop/faster/raster",
-  "props": { "text": "FASTER" }, "size": [1920, 1080], "scale": 1.0, "comp": [1920, 1080], "canvas": [1920, 1080],
-  "fps": 30, "frames": [0, 36] }
+{ "protocol": "retake-raster/1", "component": "python-text@1.0.0", "props": { "text": "FASTER" },
+  "size": [1920, 1080], "scale": 1.0, "comp": [1920, 1080], "canvas": [1920, 1080], "fps": 30, "frames": [0, 36] }
 ```
 
 - `size` is the output frame in pixels (a draft is half the timeline's `comp`, `scale` 0.5); `canvas` is the
@@ -200,7 +199,7 @@ removed afterwards. It writes one JSON line on stdin and closes it:
 - For each frame, in order, the program writes to stdout a JSON header line, then the pixels:
   - `{"box": [x, y, w, h]}` and exactly `w × h × 4` bytes of RGBA with straight (not premultiplied) alpha, rows top to
     bottom, placed at (x, y) in output pixels (it may extend past the frame; that part is clipped);
-  - `{"same": true}`: the previous frame again (nothing follows);
+  - `{"same": true}`: the previous frame again (nothing follows; not on a request's first frame);
   - `{"empty": true}`: nothing drawn.
 - It exits 0 after the last frame. Errors are typed, with the program's stderr (its last lines) in the message:
   `backend_failed` (it couldn't start, or exited non-zero), `backend_timeout` (the request took longer than `timeout`;

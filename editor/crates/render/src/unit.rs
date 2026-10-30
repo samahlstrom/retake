@@ -59,8 +59,13 @@ pub fn render_run(run: &RunSpec, painter: &mut Painter, canvas: &Canvas, fps: u3
     let mut frames: Vec<Value> = Vec::with_capacity(n);
     let mut last: Option<(String, Value)> = None;
     let mut drawn = 0;
+    // A raster layer (alone in its run): one backend request for the whole range, read a frame at a time.
+    let raster = run.layers.iter().find(|l| l.is_raster());
     for k in run.range[0]..run.range[1] {
         let t = k as f64 / fps as f64;
+        if let Some(l) = raster {
+            painter.raster_frame(l, &run.key, &run.props, canvas, fps, k, run.range[1])?;
+        }
         let sig = painter.state(&run.layers, &run.props, t)?;
         if let Some((s, v)) = &last
             && *s == sig
@@ -246,6 +251,11 @@ pub fn compose(
                                 Some(p) => p.clone(),
                                 None => {
                                     let t = if run.still { run.range[0] } else { k } as f64 / fps;
+                                    if let Some(l) = run.layers.iter().find(|l| l.is_raster()) {
+                                        // Frames to the end of what's composed: sequential stills share a request.
+                                        let end = (k0 + to).min(run.range[1]);
+                                        painter.raster_frame(l, key, &run.props, &d.canvas, d.fps, k, end)?;
+                                    }
                                     let px = painter.render(&run.layers, &run.props, (w, h), s, (cw, ch), t)?;
                                     let p = alpha_bbox(&px, w, h).map(|r| (Arc::new(crop_px(&px, w, r)), r));
                                     if run.still {
