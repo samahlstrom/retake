@@ -68,7 +68,7 @@ import type {
   Version,
 } from './types';
 import { mapTime, TimeMaps } from './timemap';
-import { byLabel, flipRefusal, flipTarget, flipToast, landing, stepTarget } from './versions';
+import { byLabel, flipRefusal, flipTarget, flipToast, landing, neighbor, stepTarget } from './versions';
 import { addVoice, drawWave, levelDb, newAcc, newVad, pushBars, vadStep, type WaveBar } from './voice';
 import { clamp, fmt, isoLocal, now, r3, stamp } from './util';
 
@@ -926,6 +926,7 @@ export class Review {
         this.info.versions = info.versions;
         this.versions = info.versions;
       }
+      this.#prefetchMaps();
     } catch {
       /* server gone */
     }
@@ -1010,6 +1011,7 @@ export class Review {
       await seeked;
       this.shown = label;
       void this.notes.load(label); // the sidebar follows the version on screen
+      this.#prefetchMaps();
       if (wasPlaying) await video.play().catch(() => {});
     } catch {
       this.toast.say(`Could not load ${label}`, 3000);
@@ -1019,6 +1021,17 @@ export class Review {
       this.switching = false;
     }
     return true;
+  }
+
+  /** Fetches the time maps from the version on screen to the ones C, [ and ] go to next, so they're here in time. */
+  #prefetchMaps(): void {
+    for (const label of [
+      neighbor(this.versions, this.shown, -1)?.label,
+      neighbor(this.versions, this.shown, 1)?.label,
+      flipTarget(this.versions, this.base, this.flipped)?.label,
+    ]) {
+      if (label) this.maps.peek(this.shown, label);
+    }
   }
 
   /** C: flip between the base and its partner (the next newer version, else the previous one). */
@@ -1040,7 +1053,9 @@ export class Review {
     if (this.switching || (label === this.base && !this.flipped)) return;
     const v = byLabel(this.versions, label);
     if (!v) return;
-    const land = landing(v, this.video.currentTime, await this.maps.get(this.shown, label));
+    // A quick check before a recording is stopped for nothing, with the map if it's here already (it's fetched ahead,
+    // see #prefetchMaps): showVersion, which starts the switch at once, has the last word.
+    const land = landing(v, this.video.currentTime, this.maps.peek(this.shown, label));
     if ('refuse' in land) {
       this.toast.say(land.refuse, 2600);
       return;
@@ -1348,6 +1363,7 @@ export class Review {
     void this.recover().catch(() => {});
     void this.recoverImages().catch(() => {});
     void this.notes.load(this.shown); // no sidebar at all if the server has no notes routes
+    this.#prefetchMaps();
   }
 
   /** Resend images that earlier takes left in the image buffer, like recover() does for audio. */
