@@ -30,7 +30,13 @@ export interface TimelineData {
   takeStrokes: readonly HistoryStroke[];
   /** The playhead knob's radius, px (default 6; the phone layout's is bigger, for the thumb). */
   knob?: number;
+  /** A streamed render still filling in: the seconds rendered so far. The track after it is drawn fainter. */
+  rendered?: number | null;
 }
+
+/** The track's fill before and after what a streamed render has rendered so far. */
+export const TRACK = 'rgba(255,255,255,.14)';
+export const TRACK_PENDING = 'rgba(255,255,255,.05)';
 
 export function drawTimeline(g: CanvasRenderingContext2D, w: number, h: number, x: TimelineData): void {
   g.clearRect(0, 0, w, h);
@@ -56,8 +62,17 @@ export function drawTimeline(g: CanvasRenderingContext2D, w: number, h: number, 
     }
     g.globalAlpha = 1;
   }
-  g.fillStyle = 'rgba(255,255,255,.14)';
-  roundRect(g, x0, y - 2, x1 - x0, 4, 2);
+  if (x.rendered != null) {
+    // a rendering version: the part it has rendered, then the rest, fainter, filling in as it renders
+    const xr = tlX(x.rendered, w, x.xd);
+    g.fillStyle = TRACK_PENDING;
+    roundRect(g, x0, y - 2, x1 - x0, 4, 2);
+    g.fillStyle = TRACK;
+    roundRect(g, x0, y - 2, Math.max(0, xr - x0), 4, 2);
+  } else {
+    g.fillStyle = TRACK;
+    roundRect(g, x0, y - 2, x1 - x0, 4, 2);
+  }
   g.fillStyle = 'rgba(255,255,255,.82)';
   roundRect(g, x0, y - 2, Math.max(0, tlX(x.vt, w, x.xd) - x0), 4, 2);
   if (d) {

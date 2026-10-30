@@ -20,6 +20,7 @@
     onended={review.onEnded}
     onseeking={review.onSeeking}
     onloadedmetadata={review.onLoadedMetadata}
+    ondurationchange={review.onDurationChange}
     onerror={review.onVideoError}
   ></video>
   <canvas id="freeze" bind:this={review.el.freeze} style:display={review.freezeShown ? 'block' : null}></canvas>

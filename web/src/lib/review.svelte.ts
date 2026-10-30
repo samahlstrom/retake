@@ -68,9 +68,23 @@ import type {
   TakeEvent,
   TakeImage,
   Version,
+  VersionEvent,
 } from './types';
 import { mapTime, TimeMaps } from './timemap';
-import { byLabel, flipRefusal, flipTarget, flipToast, landing, neighbor, stepTarget } from './versions';
+import {
+  byLabel,
+  fallbackFor,
+  flipRefusal,
+  flipTarget,
+  flipToast,
+  landing,
+  neighbor,
+  newlyRendering,
+  renderedEnd,
+  renderingToast,
+  stepTarget,
+  withProgress,
+} from './versions';
 import { addVoice, drawWave, levelDb, newAcc, newVad, pushBars, vadStep, type WaveBar } from './voice';
 import { clamp, fmt, isoLocal, now, r3, stamp } from './util';
 
@@ -163,7 +177,7 @@ export class Review {
     return this.role === null || this.role === 'owner' || this.role === 'approver';
   }
   /** The notes sidebar: agent questions on the newest version, resolved notes on older ones. */
-  readonly notes = new Notes({ onVersion: () => void this.refreshFamily() });
+  readonly notes = new Notes({ onVersion: (e) => this.onVersionEvent(e) });
   /** Time maps between versions: switching versions lands on the matching moment (spec/bridge.md). */
   readonly maps = new TimeMaps();
   readonly rows = $derived(
@@ -222,6 +236,12 @@ export class Review {
   /** Where the pointer last was over the video (normalized): a pasted image lands there. */
   lastPointer: Point | null = null;
   #cardSig = '';
+  /** Versions seen rendering on this page (spec/bridge.md, "Streaming"): each is announced once, and keeps its
+   * family duration after it completes (see mediaDuration). */
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- bookkeeping, not state
+  #seenRendering = new Set<string>();
+  /** The family refresh in flight, so a burst of events asks /api/info once. */
+  #refreshing: Promise<void> | null = null;
 
   el = {} as Elements;
   #ictx!: CanvasRenderingContext2D;
@@ -298,7 +318,25 @@ export class Review {
 
   // ---------------------------------------------------------------- take, segments, clocks, event log
   nBins(): number {
-    return binCount(this.video?.duration || this.info.duration || 1);
+    return binCount(this.mediaDuration() || 1);
+  }
+
+  /** The version on screen, from the family. */
+  shownVersion(): Version | undefined {
+    return byLabel(this.versions, this.shown);
+  }
+
+  /**
+   * The length of the version on screen, for the timeline, scrubbing and the voice bins. A streamed render's player
+   * only knows the playlist so far (hls.js: its length, which grows; Safari: Infinity), so a version that is or was
+   * rendering on this page uses the expected (then the final) duration from the family, and the scale never grows.
+   * Otherwise the video's own, else /api/info's.
+   */
+  mediaDuration(): number {
+    const v = this.shownVersion();
+    if (v?.duration && (v.rendering || this.#seenRendering.has(v.label))) return v.duration;
+    const d = this.video?.duration;
+    return (d && isFinite(d) ? d : 0) || this.info.duration || 0;
   }
 
   newTake(): void {
@@ -343,7 +381,7 @@ export class Review {
     return serializeTake(t, {
       now: now(),
       videoTime: v.currentTime,
-      duration: (v.duration || this.info.duration) as number,
+      duration: this.mediaDuration(),
       width: v.videoWidth,
       height: v.videoHeight,
       // eslint-disable-next-line svelte/prefer-svelte-reactivity -- a timestamp, not state
@@ -540,7 +578,7 @@ export class Review {
       this.vad.active = false;
       this.acc = newAcc();
     }
-    if (this.vad.active && video.duration) {
+    if (this.vad.active && this.mediaDuration()) {
       this.take.bins = grow(this.take.bins, this.nBins());
       addVoice(this.take.bins, dt, vt, this.prevVT, !video.paused, video.seeking);
     }
@@ -556,7 +594,13 @@ export class Review {
 
   seekTo(t: number): void {
     const video = this.video,
-      d = video.duration || 0;
+      r = renderedEnd(this.shownVersion());
+    if (r !== null) {
+      // a streamed render: only what it has rendered so far, a little before its edge
+      video.currentTime = clamp(t, 0, Math.max(0, r - 0.1));
+      return;
+    }
+    const d = video.duration || 0;
     video.currentTime = clamp(t, 0, d ? d - 0.001 : Math.max(0, t));
   }
 
@@ -577,6 +621,8 @@ export class Review {
     this.paused = this.video.paused;
   };
   onEnded = (): void => {
+    // A streamed render that's still filling in waits for its next segments; it hasn't ended.
+    if (this.shownVersion()?.rendering) return;
     this.logEv('ended');
   };
   onSeeking = (): void => {
@@ -591,13 +637,27 @@ export class Review {
   };
   onLoadedMetadata = (): void => {
     this.layout();
-    this.durText = fmt(this.video.duration, false);
     const { videoWidth: w, videoHeight: h } = this.video;
     if (w && h) this.aspect = `${w} / ${h}`;
+    this.syncDuration();
+  };
+  /** The video's duration changed (a streamed render's player learns more of the playlist, or its end). */
+  onDurationChange = (): void => {
+    if (this.video.readyState >= 1) this.syncDuration();
+  };
+  /** The duration shown and the voice bins follow mediaDuration. */
+  syncDuration(): void {
+    this.durText = fmt(this.mediaDuration(), false);
     this.take.bins = grow(this.take.bins, this.nBins());
     this.hist.bins = grow(this.hist.bins, this.nBins());
-  };
+  }
   onVideoError = (): void => {
+    const v = this.shownVersion();
+    if (v?.rendering) {
+      // Its render may have just failed (the `failed` event moves the page off it): not a file that won't play.
+      this.toast.say(`Could not play ${v.label} yet`, 3000);
+      return;
+    }
     this.fatal = FATAL(this.info.name);
   };
 
@@ -1044,20 +1104,75 @@ export class Review {
     if (!(await this.notes.reopen(item.id))) this.toast.say("Couldn't reopen that note", 3000);
   };
 
-  /** A `version` event: the family changed (a new version was pushed). */
-  async refreshFamily(): Promise<void> {
-    this.maps.clear(); // a new version brings its own render manifest
+  /**
+   * A `version` event (spec/bridge.md, "Streaming"). `progress` moves a rendering version's chip and coverage in place
+   * (no refetch); anything else (`rendering`, `push`, which also ends a stream, `failed`) reloads the family.
+   */
+  onVersionEvent = (e: VersionEvent): void => {
+    if (e.why === 'progress' && e.label && e.progress) {
+      if (!byLabel(this.versions, e.label)) {
+        if (!this.#refreshing) void this.refreshFamily(); // its arrival is still on the way
+        return;
+      }
+      const vs = withProgress(this.versions, e.label, e.progress);
+      if (vs !== this.versions) this.versions = this.info.versions = vs as Version[];
+      return;
+    }
+    void this.refreshFamily(e);
+  };
+
+  /** The family changed (a version was pushed, or a streamed render appeared, completed or failed). The video on
+   * screen is never reloaded: a completed stream's player sees the playlist's end by itself. */
+  refreshFamily(e: VersionEvent = {}): Promise<void> {
+    // One at a time, in order: the answer for an older event never lands after a newer one (a stale "rendering").
+    const run: Promise<void> = (this.#refreshing ?? Promise.resolve())
+      .then(() => this.#refreshFamily(e))
+      .finally(() => {
+        if (this.#refreshing === run) this.#refreshing = null;
+      });
+    this.#refreshing = run;
+    return run;
+  }
+
+  async #refreshFamily(e: VersionEvent): Promise<void> {
+    this.maps.clear(); // a new version brings its own render manifest (a stream's comes at its end)
+    const before = this.versions;
     try {
       const info = (await (await fetch('api/info')).json()) as Info;
       if (info.versions?.length) {
         this.info.versions = info.versions;
         this.versions = info.versions;
       }
+      if (info.label && info.label === this.info.label) this.info.duration = info.duration;
+      this.#announceRendering();
+      if (this.video?.readyState >= 1) this.syncDuration();
+      if (e.why === 'failed' && e.label) await this.#renderFailed(e.label, before, e.parent);
       this.#prefetchMaps();
     } catch {
       /* server gone */
     }
-    void this.notes.refresh();
+    void this.notes.refresh(); // a completed stream's parent notes now carry over
+  }
+
+  /** Says once that a streamed render has appeared, and how to get to it. */
+  #announceRendering(): void {
+    const fresh = newlyRendering(this.versions, this.#seenRendering);
+    for (const v of fresh) this.#seenRendering.add(v.label);
+    const v = fresh[fresh.length - 1];
+    if (v) this.toast.say(renderingToast(this.versions, this.base, v.label, this.touch), 4000);
+  }
+
+  /** A streamed render failed and left the family: say so, and leave it if it's on screen or the base. */
+  async #renderFailed(label: string, before: readonly Version[], parent?: string): Promise<void> {
+    const gone = byLabel(before, label);
+    if (!gone || byLabel(this.versions, label)) return;
+    if (this.base === label) {
+      const to = fallbackFor(this.versions, gone, parent);
+      if (to) await this.setBase(to.label);
+    } else if (this.shown === label && this.flipped) {
+      await this.flip(); // back to the base
+    }
+    this.toast.say(`${label}'s render failed`, 4000);
   }
 
   async #postDone(t: Take): Promise<void> {
@@ -1067,7 +1182,7 @@ export class Review {
   // ---------------------------------------------------------------- timeline: playhead, where you talked and drew
   #tlT(clientX: number): number {
     const r = this.el.tl.getBoundingClientRect();
-    return tlT(clientX, r.left, r.width, this.video.duration || this.info.duration || 0);
+    return tlT(clientX, r.left, r.width, this.mediaDuration());
   }
 
   attachTimeline = (el: HTMLElement) => {
@@ -1378,9 +1493,11 @@ export class Review {
     }
     const g = tl.getContext('2d') as CanvasRenderingContext2D;
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const md = this.mediaDuration();
     drawTimeline(g, w, h, {
-      d: this.video.duration || 0,
-      xd: this.video.duration || this.info.duration || 1,
+      d: this.video.duration ? md : 0,
+      xd: md || 1,
+      rendered: renderedEnd(this.shownVersion()),
       vt,
       recording: !!this.seg,
       takeBins: this.take.bins,
@@ -1485,6 +1602,8 @@ export class Review {
     document.title = `Review · ${this.info.name}`;
     this.role = this.info.role ?? null;
     this.versions = this.info.versions || [];
+    // Renders already under way when the page opens show their chip; only ones that appear later are announced.
+    for (const v of newlyRendering(this.versions, this.#seenRendering)) this.#seenRendering.add(v.label);
     this.base = this.shown = this.info.label || null;
     this.take.version = this.base;
     this.addHistory(this.info.history);

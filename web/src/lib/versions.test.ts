@@ -3,15 +3,21 @@ import {
   byLabel,
   coverMessage,
   covers,
+  fallbackFor,
   flipPair,
   flipRefusal,
   flipTarget,
   flipToast,
   landing,
   neighbor,
+  newlyRendering,
   partner,
+  renderedEnd,
+  renderingChip,
+  renderingToast,
   stepTarget,
   versionTitle,
+  withProgress,
 } from './versions';
 import { mapTime, type Segment } from './timemap';
 
@@ -135,5 +141,68 @@ describe('the time-mapped flip', () => {
     // A preview that ends early still refuses a moment it doesn't have.
     const preview = { label: 'v2', n: 2, duration: 5 };
     expect(landing(preview, 9, v1ToV2)).toEqual({ refuse: 'v2 only covers 0:00–0:05' });
+  });
+});
+
+// A streamed render (spec/bridge.md, "Streaming"): v8 will run 3:02, 0:41 of it is playable so far.
+const streaming = [
+  { label: 'v6', n: 6, duration: 182 },
+  { label: 'v7', n: 7, duration: 182 },
+  { label: 'v8', n: 8, duration: 182, rendering: true, progress: { done: 12, total: 50, seconds: 41.3 } },
+];
+
+describe('a rendering version', () => {
+  const v8 = streaming[2]!;
+  it('covers only what it has rendered', () => {
+    expect(renderedEnd(v8)).toBe(41.3);
+    expect(renderedEnd(streaming[1])).toBeNull();
+    expect(covers(v8, 41.2)).toBe(true);
+    expect(covers(v8, 41.3)).toBe(false);
+    expect(covers(v8, 90)).toBe(false);
+    expect(covers({ ...v8, progress: undefined }, 0)).toBe(false); // nothing playable yet
+  });
+
+  it('says how far it is', () => {
+    expect(coverMessage(v8)).toBe('v8 is rendering: 0:41 of 3:02 so far');
+    expect(landing(v8, 90, null)).toEqual({ refuse: 'v8 is rendering: 0:41 of 3:02 so far' });
+    expect(landing(v8, 30, null)).toEqual({ t: 30 });
+    expect(flipRefusal(streaming, 'v7', false, 30)).toBeNull();
+    expect(flipRefusal(streaming, 'v7', false, 60)).toBe('v8 is rendering: 0:41 of 3:02 so far');
+    // Back from it to the base is never refused inside the base.
+    expect(flipRefusal(streaming, 'v8', false, 30)).toBeNull();
+  });
+
+  it('shows units done of all in the version list', () => {
+    expect(renderingChip(v8.progress)).toBe('rendering 12/50');
+    expect(renderingChip(undefined)).toBe('rendering');
+  });
+
+  it('takes progress events in place, and only for a rendering version', () => {
+    const p = { done: 13, total: 50, seconds: 44 };
+    const next = withProgress(streaming, 'v8', p);
+    expect(next).not.toBe(streaming);
+    expect(next[2]).toMatchObject({ label: 'v8', progress: p });
+    expect(next[0]).toBe(streaming[0]); // the others stay as they were
+    expect(streaming[2]!.progress?.done).toBe(12); // not mutated
+    expect(withProgress(next, 'v8', { ...p })).toBe(next); // nothing new
+    expect(withProgress(streaming, 'v7', p)).toBe(streaming); // not rendering
+    expect(withProgress(streaming, 'v9', p)).toBe(streaming); // unknown
+  });
+
+  it('is announced once, with the way to get to it', () => {
+    expect(newlyRendering(streaming, new Set()).map((v) => v.label)).toEqual(['v8']);
+    expect(newlyRendering(streaming, new Set(['v8']))).toEqual([]);
+    expect(renderingToast(streaming, 'v7', 'v8', false)).toBe('v8 is rendering, press ] to watch');
+    expect(renderingToast(streaming, 'v6', 'v8', false)).toBe('v8 is rendering, pick it in the version list');
+    expect(renderingToast(streaming, 'v6', 'v8', true)).toBe('v8 is rendering, tap the version to watch');
+  });
+
+  it('falls back to its parent when its render fails', () => {
+    const left = streaming.slice(0, 2);
+    expect(fallbackFor(left, { n: 8 }, 'v6')?.label).toBe('v6');
+    expect(fallbackFor(left, { n: 8 }, 'v9')?.label).toBe('v7'); // parent gone: the version before it
+    expect(fallbackFor(left, { n: 8 })?.label).toBe('v7');
+    expect(fallbackFor(left, { n: 1 })?.label).toBe('v6');
+    expect(fallbackFor([], { n: 8 })).toBeNull();
   });
 });

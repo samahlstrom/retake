@@ -36,6 +36,16 @@ export interface HlsClass {
 
 const loadHlsJs = async (): Promise<HlsClass> => (await import('hls.js')).default as unknown as HlsClass;
 
+/**
+ * hls.js settings. A streamed render's playlist is an EVENT playlist that is still growing (spec/bridge.md,
+ * "Streaming"), which hls.js plays as live: `startPosition: 0` starts it at the beginning instead of near the live
+ * edge, and the defaults left alone never jump to the edge later (no max latency, no catch-up rate) and keep the
+ * duration finite (the playlist's length so far; the page uses the expected one while it renders). At the end of
+ * what's rendered the video waits for the next segments. Safari's own player starts at 0 through the playlist's
+ * `#EXT-X-START:TIME-OFFSET=0`.
+ */
+export const HLS_CONFIG = { enableWorker: true, startPosition: 0 } as const;
+
 type Media = Pick<HTMLVideoElement, 'canPlayType' | 'addEventListener' | 'removeEventListener'> & {
   src: string;
   removeAttribute(name: string): void;
@@ -100,7 +110,7 @@ export class VideoSource {
             video.src = plan.url; // no MSE either: let the element try (and report the error)
             return;
           }
-          const hls = new Hls({ enableWorker: true });
+          const hls = new Hls({ ...HLS_CONFIG });
           this.#hls = hls;
           hls.on(Hls.Events.ERROR, (_e, data) => {
             if (!data.fatal || this.#hls !== hls) return;

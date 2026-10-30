@@ -16,6 +16,26 @@ export interface Version {
   fps: number;
   width: number | null;
   height: number | null;
+  /** A streamed render still filling in (spec/bridge.md, "Streaming"): `duration` etc. are the expected final ones. */
+  rendering?: boolean;
+  progress?: RenderProgress;
+}
+
+/** How far a streamed render is: units published of all, and the seconds playable so far. */
+export interface RenderProgress {
+  done: number;
+  total: number;
+  seconds: number;
+}
+
+/** The data of a `version` event (GET /api/events): `rendering` when a streamed render's first segment is out,
+ * `progress` while it fills in, `push` when a version is pushed (or a stream completes), `failed` when it's gone. */
+export interface VersionEvent {
+  why?: 'push' | 'rendering' | 'progress' | 'failed' | string;
+  label?: string;
+  parent?: string;
+  path?: string;
+  progress?: RenderProgress;
 }
 
 /** A stroke as /api/history (and the timeline) needs it. */
