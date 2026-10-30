@@ -131,7 +131,7 @@ Every command has `--json`. `retake mcp <video>` serves the same tools over stdi
 `notes_list` also returns the current `cursor` for `notes_wait`; `notes_wait` from cursor 0 returns every open note at
 once. There is no approve tool. Approving is a human action.
 
-`retake notes build <video>` runs the notes engine by hand, like legacy `review notes`. `retake watch <video> --exec
+`retake notes build <video>` runs the notes engine by hand, like legacy `review notes`. `retake notes sync <video>` transcribes the takes that need it, runs the engine for that version and syncs the store (what the jobs do after Done). `retake watch <video> --exec
 "<cmd>"` runs `<cmd>` (through the shell, with `RETAKE_VIDEO`, `RETAKE_PROJECT` and `RETAKE_SINCE` set) every time new
 notes or answers land, with debouncing, and never two at once.
 
