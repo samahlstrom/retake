@@ -22,7 +22,7 @@ Design sketch (private): https://claude.ai/artifact/5zwmQevPavMzr7RcPEfpkK
   stream later.
 
 ## Milestones
-1. **Local player at parity.**
+1. **Local player at parity.** Done.
    - The Go server and the Svelte page match the legacy player.
    - Same take format, so `review notes` still reads it.
    - Audio chunks are buffered in IndexedDB until the server confirms them.
@@ -45,6 +45,12 @@ Design sketch (private): https://claude.ai/artifact/5zwmQevPavMzr7RcPEfpkK
 5. Graphics renderer.
 
 Later: a shared library of graphics, styles and edit recipes.
+
+## Before publishing
+- The e2e legacy mode and `scripts/legacy-parity.sh` default to the owner's legacy folder. Make them require an env
+  var.
+- Pick the name and license, then add LICENSE and update go.mod's module path if the name changes.
+- Run CI on GitHub once, since the workflow has only been linted locally.
 
 ## Open decisions (owner)
 - The name. "retake" is a working name.

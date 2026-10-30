@@ -14,8 +14,11 @@ agent turns the notes into the next version and asks when it's unsure. See `docs
 
 ## Commands
 Toolchain versions are pinned in `mise.toml`, so run Go and node through mise: `mise exec -- go test ./...`.
-- `make build`: web build, then the Go binary with the page embedded, into `bin/retake`.
-- `make test`: Go tests and web unit tests. `make lint`: golangci-lint, svelte-check, eslint. `make e2e`: Playwright.
+- `make build`: web build, then the Go binary with the page embedded (`-tags webdist`), into `bin/retake`.
+  `make server` builds without the page (serves a "page not built" stub; use `--ui-dir`).
+- `make test`: Go tests (race) and web unit tests. `make lint`: golangci-lint, svelte-check, eslint, prettier.
+- `make e2e`: Playwright suite (see `e2e/README.md`; `RETAKE_SERVER=legacy` runs it against the legacy player).
+- `make parity`: the legacy player's own e2e driver against this server (local only; skips without legacy files).
 
 ## Non-negotiables
 - **The review UX is sacred.** Pen only, minimal, R to record, and the pen does nothing unless recording. Milestone 1
