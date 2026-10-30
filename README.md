@@ -32,6 +32,13 @@ bin/retake sessions path/to/clip_v2.mp4 --json
 
 Optional config at `~/.config/retake/config.toml`: `name`, `port`, `idle_exit_minutes`, `open_browser`.
 
+## Sharing
+
+`retake share clip_v6.mp4 --label alex` puts the review behind an HTTPS tunnel (cloudflared, or `--tunnel tailscale`)
+and prints a link with a QR code. A link is a viewer, reviewer (the default) or approver; it expires (24 h by default),
+and `retake share revoke` ends it early. Agents elsewhere use `/mcp` with `retake token create --role agent`. Local use
+needs no token. See [`docs/sharing.md`](docs/sharing.md).
+
 ## Develop
 
 ```bash
