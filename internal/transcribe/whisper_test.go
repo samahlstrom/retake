@@ -248,6 +248,27 @@ func TestWhisperFallsBackToCPU(t *testing.T) {
 	}
 }
 
+// A real CUDA run logs "no GPU found" too, for the VAD model, which always runs on the CPU: that's no failure.
+func TestWhisperCUDARunStays(t *testing.T) {
+	cli, argsFile := fakeCLI(t, "")
+	store, custom := fakeStore(t)
+	w, err := newWhisperCPP(WhisperOptions{CLI: cli, Model: custom, Models: store}, true, gpusWith(24000))
+	if err != nil {
+		t.Fatal(err)
+	}
+	wav := filepath.Join(t.TempDir(), "in.wav")
+	writeWAV(t, wav, 1)
+	if _, err := w.Transcribe(context.Background(), wav, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	if w.Name() != "whisper.cpp test (cuda)" {
+		t.Errorf("Name = %q", w.Name())
+	}
+	if r := runs(t, argsFile); len(r) != 1 || slices.Contains(r[0], "-ng") {
+		t.Errorf("runs = %v", r)
+	}
+}
+
 func TestWhisperForcedCUDAFails(t *testing.T) {
 	cli, argsFile := fakeCLI(t, "fail")
 	store, custom := fakeStore(t)

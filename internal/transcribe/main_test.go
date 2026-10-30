@@ -42,6 +42,9 @@ func fakeWhisperCLI(args []string) int {
 			return 1
 		case "none":
 			_, _ = fmt.Fprintln(os.Stderr, "whisper_backend_init_gpu: no GPU found")
+		default: // as a real CUDA build logs it: the model on the GPU, then the VAD model, which never is
+			_, _ = fmt.Fprintln(os.Stderr, "whisper_backend_init_gpu: using CUDA0 backend")
+			_, _ = fmt.Fprintln(os.Stderr, "whisper_backend_init_gpu: no GPU found")
 		}
 	}
 	i := slices.Index(args, "-of")

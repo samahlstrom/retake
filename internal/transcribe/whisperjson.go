@@ -10,13 +10,18 @@ import (
 	"strings"
 )
 
-// cliLog is whisper-cli's stderr as it runs: the VAD table, whether it fell back to the CPU, and the tail for errors.
+// cliLog is whisper-cli's stderr as it runs: the VAD table, whether the model got a GPU, and the tail for errors.
 type cliLog struct {
 	tail
 	line  []byte
 	vad   []vadSegment
-	noGPU bool
+	noGPU bool // "whisper_backend_init_gpu: no GPU found": the model, or the VAD model (which never uses the GPU)
+	gpu   bool // "whisper_backend_init_gpu: using CUDA0 backend": the model is on a GPU
 }
+
+// onCPU reports whether whisper-cli said it found no GPU for the model: only when no context got one, since the VAD
+// context always says so.
+func (c *cliLog) onCPU() bool { return c.noGPU && !c.gpu }
 
 func (c *cliLog) Write(p []byte) (int, error) {
 	_, _ = c.tail.Write(p)
@@ -30,7 +35,11 @@ func (c *cliLog) Write(p []byte) (int, error) {
 		if s, ok := parseVADLine(l); ok {
 			c.vad = append(c.vad, s)
 		}
-		c.noGPU = c.noGPU || bytes.Contains(l, []byte("no GPU found"))
+		if i := bytes.Index(l, []byte("whisper_backend_init_gpu: ")); i >= 0 {
+			msg := l[i+len("whisper_backend_init_gpu: "):]
+			c.noGPU = c.noGPU || bytes.HasPrefix(msg, []byte("no GPU found"))
+			c.gpu = c.gpu || bytes.HasPrefix(msg, []byte("using "))
+		}
 		c.line = c.line[i+1:]
 	}
 	if len(c.line) > tailMax { // a very long line: we only want short ones

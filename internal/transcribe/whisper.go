@@ -202,7 +202,7 @@ func (w *WhisperCPP) run(ctx context.Context, p whisperPlan, wav, tmp string, op
 		}
 		return nil, fmt.Errorf("whisper-cli failed on %s: %w: %s", filepath.Base(wav), err, log.String())
 	}
-	if p.device == DeviceCUDA && log.noGPU {
+	if p.device == DeviceCUDA && log.onCPU() {
 		return nil, errors.New("whisper-cli found no GPU")
 	}
 	data, err := os.ReadFile(out + ".json") //nolint:gosec // our temp folder

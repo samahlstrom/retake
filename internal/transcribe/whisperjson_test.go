@@ -118,8 +118,12 @@ func TestCLILog(t *testing.T) {
 			t.Fatal(n, err)
 		}
 	}
-	if !log.noGPU || len(log.vad) != 2 || log.vad[0] != (vadSegment{1.5, 2, 0, 0.5}) || log.vad[1].origStart != 3 {
-		t.Errorf("log = %+v %v", log.vad, log.noGPU)
+	if !log.onCPU() || len(log.vad) != 2 || log.vad[0] != (vadSegment{1.5, 2, 0, 0.5}) || log.vad[1].origStart != 3 {
+		t.Errorf("log = %+v %v", log.vad, log.onCPU())
+	}
+	_, _ = log.Write([]byte("whisper_backend_init_gpu: using CUDA0 backend\n"))
+	if log.onCPU() {
+		t.Error("a context on CUDA0, yet onCPU")
 	}
 	if len(log.b) > tailMax || !strings.Contains(log.String(), "vad_end: 1.70") {
 		t.Errorf("tail = %q", log.String())
