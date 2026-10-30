@@ -12,3 +12,8 @@ e2e/playwright-report/
 
 # agent worktrees
 /.claude/
+
+# editor (Rust)
+/editor/target/
+/editor/examples/*/media/
+.retake/

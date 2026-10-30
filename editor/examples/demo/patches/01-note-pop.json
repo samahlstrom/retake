@@ -1,0 +1,9 @@
+{
+  "base": 0,
+  "answers": ["v1#3"],
+  "summary": "Pop reads FASTER! in red, as asked",
+  "ops": [
+    { "op": "set", "id": "pop/faster/text", "path": "text", "value": "FASTER!" },
+    { "op": "set", "id": "pop/faster/text", "path": "fill", "value": "#ff3b30" }
+  ]
+}

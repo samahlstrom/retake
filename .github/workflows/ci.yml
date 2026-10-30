@@ -97,3 +97,29 @@ jobs:
             .retake-work/e2e/logs/
           if-no-files-found: ignore
           retention-days: 14
+
+  editor:
+    name: Editor (Rust fmt, clippy, test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: editor
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Rust from mise.toml
+        uses: jdx/mise-action@v5
+        with:
+          install_args: rust
+      - name: Install ffmpeg (the engine runs it as a subprocess; the tests generate their media with it)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - name: Cache cargo builds
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: editor
+      - name: cargo fmt --check
+        run: cargo fmt --check
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: cargo test
+        run: cargo test --workspace

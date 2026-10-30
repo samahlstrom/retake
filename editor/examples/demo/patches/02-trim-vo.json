@@ -1,0 +1,6 @@
+{
+  "base": 1,
+  "answers": ["v1#5"],
+  "summary": "Trim 0.3 s of air after 'generated.' (ripples everything after it)",
+  "ops": [{ "op": "set", "id": "a", "path": "out", "value": 3.8 }]
+}
