@@ -1,0 +1,127 @@
+// Package config reads $XDG_CONFIG_HOME/retake/config.toml (default ~/.config/retake/config.toml). Every key is
+// optional, and command-line flags override the file.
+package config
+
+import (
+	"errors"
+	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"sort"
+
+	"github.com/BurntSushi/toml"
+)
+
+// Config is the file's contents. A nil field wasn't set.
+type Config struct {
+	Name            *string  `toml:"name"`              // author name written into session.json
+	Port            *int     `toml:"port"`              // preferred port (the next free one is used if busy)
+	IdleExitMinutes *float64 `toml:"idle_exit_minutes"` // 0 = never
+	OpenBrowser     *bool    `toml:"open_browser"`
+}
+
+// Path returns the config file's path. getenv is os.Getenv in production.
+func Path(getenv func(string) string) (string, error) {
+	if x := getenv("XDG_CONFIG_HOME"); x != "" && filepath.IsAbs(x) {
+		return filepath.Join(x, "retake", "config.toml"), nil
+	}
+	home := getenv("HOME")
+	if home == "" {
+		h, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("no home folder for the config file: %w", err)
+		}
+		home = h
+	}
+	return filepath.Join(home, ".config", "retake", "config.toml"), nil
+}
+
+// Load reads the config file at path. A missing file is an empty Config. Unknown keys come back as warnings.
+func Load(path string) (Config, []string, error) {
+	var c Config
+	b, err := os.ReadFile(path) //nolint:gosec // the user's own config file
+	if errors.Is(err, fs.ErrNotExist) {
+		return c, nil, nil
+	}
+	if err != nil {
+		return c, nil, err
+	}
+	return Parse(string(b))
+}
+
+// Parse parses config TOML.
+func Parse(s string) (Config, []string, error) {
+	var c Config
+	md, err := toml.Decode(s, &c)
+	if err != nil {
+		return Config{}, nil, err
+	}
+	var warnings []string
+	seen := map[string]bool{}
+	for _, k := range md.Undecoded() {
+		if len(k) == 0 || seen[k[0]] {
+			continue // a table's keys come after the table itself
+		}
+		seen[k[0]] = true
+		warnings = append(warnings, fmt.Sprintf("unknown key %q", k[0]))
+	}
+	sort.Strings(warnings)
+	if c.Port != nil && (*c.Port < 1 || *c.Port > 65535) {
+		return Config{}, warnings, fmt.Errorf("port %d is out of range (1-65535)", *c.Port)
+	}
+	if c.IdleExitMinutes != nil && *c.IdleExitMinutes < 0 {
+		return Config{}, warnings, fmt.Errorf("idle_exit_minutes %g is negative", *c.IdleExitMinutes)
+	}
+	return c, warnings, nil
+}
+
+// Defaults for settings that neither the file nor a flag set.
+const (
+	DefaultPort     = 8777
+	DefaultIdleExit = 15.0
+	PortTries       = 20 // the default port and the next 19 (8777-8796)
+)
+
+// Flags are the command-line values that override the file. A nil field wasn't given.
+type Flags struct {
+	Port     *int
+	IdleExit *float64
+	NoOpen   bool
+}
+
+// Settings are the effective values after defaults, file and flags.
+type Settings struct {
+	Name        string  // author name; "" = use the OS user
+	Port        int     // the port to try first
+	PortStrict  bool    // --port given: that port or exit 2, no fallback
+	IdleExit    float64 // minutes; 0 = never
+	OpenBrowser bool
+}
+
+// Resolve combines defaults, the config file and flags (flags win).
+func Resolve(c Config, f Flags) Settings {
+	s := Settings{Port: DefaultPort, IdleExit: DefaultIdleExit, OpenBrowser: true}
+	if c.Name != nil {
+		s.Name = *c.Name
+	}
+	if c.Port != nil {
+		s.Port = *c.Port
+	}
+	if c.IdleExitMinutes != nil {
+		s.IdleExit = *c.IdleExitMinutes
+	}
+	if c.OpenBrowser != nil {
+		s.OpenBrowser = *c.OpenBrowser
+	}
+	if f.Port != nil {
+		s.Port, s.PortStrict = *f.Port, true
+	}
+	if f.IdleExit != nil {
+		s.IdleExit = *f.IdleExit
+	}
+	if f.NoOpen {
+		s.OpenBrowser = false
+	}
+	return s
+}
