@@ -9,3 +9,6 @@ e2e/playwright-report/
 .retake-work/
 *.tmp
 .DS_Store
+
+# agent worktrees
+/.claude/
