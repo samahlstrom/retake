@@ -309,4 +309,18 @@ mod tests {
         let back: Manifest = serde_json::from_str(&s).unwrap();
         assert_eq!(back, m);
     }
+
+    #[test]
+    fn manifest_and_note_resolution_match_the_schema() {
+        let mut m = manifest();
+        m.timeline.hash = "b3:00ff".into();
+        m.units[0].key = "b3:0a".into();
+        let v = serde_json::to_value(&m).unwrap();
+        assert_eq!(crate::schema::check_manifest(&v), vec![]);
+        let r = serde_json::to_value(resolve_note(&m, 15.0, Some([1400.0, 150.0, 200.0, 100.0]))).unwrap();
+        assert_eq!(crate::schema::check_note_resolution(&r), vec![]);
+        let mut bad = v.clone();
+        bad["units"][0]["elements"][0]["kind"] = serde_json::json!("sprite");
+        assert!(!crate::schema::check_manifest(&bad).is_empty());
+    }
 }

@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:retake:spec:manifest:0.1",
+  "title": "Retake render manifest/0.1",
+  "description": "A render manifest (spec/manifest.md). #/$defs/noteResolution is the output of `retake-edit resolve-note --json` (without the `ok` field). Readers ignore unknown fields.",
+  "type": "object",
+  "required": ["schema", "timeline", "size", "fps", "duration", "frames", "range", "units"],
+  "properties": {
+    "schema": { "const": "manifest/0.1" },
+    "timeline": {
+      "type": "object",
+      "required": ["id", "rev", "hash"],
+      "properties": {
+        "id": { "type": "string" },
+        "rev": { "type": "integer", "minimum": 0 },
+        "hash": { "$ref": "#/$defs/hash" }
+      }
+    },
+    "video": { "type": "string" },
+    "size": { "$ref": "#/$defs/size" },
+    "fps": { "type": "integer", "minimum": 1 },
+    "duration": { "type": "number", "minimum": 0 },
+    "frames": { "type": "integer", "minimum": 0 },
+    "range": { "$ref": "#/$defs/span" },
+    "draft": { "type": "boolean" },
+    "stats": {
+      "type": "object",
+      "required": ["total", "reused", "rendered"],
+      "properties": {
+        "total": { "type": "integer", "minimum": 0 },
+        "reused": { "type": "integer", "minimum": 0 },
+        "rendered": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "units": { "type": "array", "items": { "$ref": "#/$defs/unit" } }
+  },
+  "$defs": {
+    "hash": { "type": "string", "pattern": "^b3:[0-9a-f]+$" },
+    "size": {
+      "type": "array",
+      "prefixItems": [{ "type": "integer", "minimum": 1 }, { "type": "integer", "minimum": 1 }],
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "span": {
+      "type": "array",
+      "prefixItems": [{ "type": "number" }, { "type": "number" }],
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "unit": {
+      "type": "object",
+      "required": ["unit", "key", "kind", "t", "frames", "elements"],
+      "properties": {
+        "unit": { "type": "string", "pattern": "^u[0-9]+$" },
+        "key": { "$ref": "#/$defs/hash" },
+        "kind": { "enum": ["shot", "insert", "gap"] },
+        "scene": { "type": "string" },
+        "shot": { "type": "string" },
+        "t": { "$ref": "#/$defs/span" },
+        "frames": {
+          "type": "array",
+          "prefixItems": [{ "type": "integer", "minimum": 0 }, { "type": "integer", "minimum": 0 }],
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "video_hash": { "$ref": "#/$defs/hash" },
+        "audio_hash": { "$ref": "#/$defs/hash" },
+        "segment": { "type": "string" },
+        "reused": { "type": "boolean" },
+        "elements": { "type": "array", "items": { "$ref": "#/$defs/element" } },
+        "words": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [{ "type": "number" }, { "type": "number" }, { "type": "string" }],
+            "minItems": 3,
+            "maxItems": 3
+          }
+        }
+      }
+    },
+    "box": {
+      "description": "[t, x, y, w, h]: from output second t until the next entry; w = h = 0 means not on screen.",
+      "type": "array",
+      "items": { "type": "number" },
+      "minItems": 5,
+      "maxItems": 5
+    },
+    "source": {
+      "type": "object",
+      "required": ["asset", "in", "out"],
+      "properties": {
+        "asset": { "type": "string" },
+        "in": { "type": "number" },
+        "out": { "type": "number" }
+      }
+    },
+    "element": {
+      "type": "object",
+      "required": ["id", "ptr", "kind", "z", "t"],
+      "properties": {
+        "id": { "type": "string" },
+        "ptr": { "type": "string", "pattern": "^(/.*)?$" },
+        "kind": { "enum": ["shot", "insert", "overlay", "layer", "spine", "audio"] },
+        "z": { "type": "integer" },
+        "t": { "$ref": "#/$defs/span" },
+        "box": { "type": "array", "items": { "$ref": "#/$defs/box" } },
+        "sources": { "type": "array", "items": { "$ref": "#/$defs/source" } },
+        "anchors": { "type": "object", "additionalProperties": { "type": "string" } },
+        "parent": { "type": "string" }
+      }
+    },
+    "noteResolution": {
+      "type": "object",
+      "required": ["t", "unit", "key", "word", "targets"],
+      "properties": {
+        "t": { "type": "number" },
+        "unit": { "type": ["string", "null"] },
+        "key": { "type": ["string", "null"] },
+        "word": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "array",
+              "prefixItems": [{ "type": "number" }, { "type": "number" }, { "type": "string" }],
+              "minItems": 3,
+              "maxItems": 3
+            }
+          ]
+        },
+        "targets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "kind", "ptr", "score", "z"],
+            "properties": {
+              "id": { "type": "string" },
+              "kind": { "type": "string" },
+              "ptr": { "type": "string" },
+              "score": { "type": "number", "minimum": 0, "maximum": 1 },
+              "z": { "type": "integer" },
+              "box": { "type": "array", "items": { "type": "number" }, "minItems": 4, "maxItems": 4 },
+              "parent": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

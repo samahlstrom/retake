@@ -5,14 +5,11 @@ use serde_json::Value;
 use std::sync::OnceLock;
 
 pub const TIMELINE_SCHEMA: &str = include_str!("../../../../spec/timeline.schema.json");
+pub const MANIFEST_SCHEMA: &str = include_str!("../../../../spec/manifest.schema.json");
 
-fn root_schema() -> Value {
-    serde_json::from_str(TIMELINE_SCHEMA).expect("spec/timeline.schema.json is valid JSON")
-}
-
-/// A validator for `#/$defs/<def>` of the timeline schema (or the root when `def` is None).
-fn build(def: Option<&str>) -> jsonschema::Validator {
-    let mut s = root_schema();
+/// A validator for `#/$defs/<def>` of a schema (or its root when `def` is None).
+fn build(schema: &str, def: Option<&str>) -> jsonschema::Validator {
+    let mut s: Value = serde_json::from_str(schema).expect("spec schemas are valid JSON");
     if let Some(d) = def {
         let defs = s["$defs"].clone();
         s = serde_json::json!({
@@ -21,22 +18,40 @@ fn build(def: Option<&str>) -> jsonschema::Validator {
             "$defs": defs,
         });
     }
-    jsonschema::validator_for(&s).expect("spec/timeline.schema.json compiles")
+    jsonschema::validator_for(&s).expect("spec schemas compile")
 }
 
 fn timeline_validator() -> &'static jsonschema::Validator {
     static V: OnceLock<jsonschema::Validator> = OnceLock::new();
-    V.get_or_init(|| build(None))
+    V.get_or_init(|| build(TIMELINE_SCHEMA, None))
 }
 
 fn patch_validator() -> &'static jsonschema::Validator {
     static V: OnceLock<jsonschema::Validator> = OnceLock::new();
-    V.get_or_init(|| build(Some("patch")))
+    V.get_or_init(|| build(TIMELINE_SCHEMA, Some("patch")))
 }
 
 fn log_entry_validator() -> &'static jsonschema::Validator {
     static V: OnceLock<jsonschema::Validator> = OnceLock::new();
-    V.get_or_init(|| build(Some("patchLogEntry")))
+    V.get_or_init(|| build(TIMELINE_SCHEMA, Some("patchLogEntry")))
+}
+
+fn manifest_validator() -> &'static jsonschema::Validator {
+    static V: OnceLock<jsonschema::Validator> = OnceLock::new();
+    V.get_or_init(|| build(MANIFEST_SCHEMA, None))
+}
+
+fn note_validator() -> &'static jsonschema::Validator {
+    static V: OnceLock<jsonschema::Validator> = OnceLock::new();
+    V.get_or_init(|| build(MANIFEST_SCHEMA, Some("noteResolution")))
+}
+
+pub fn check_manifest(doc: &Value) -> Vec<EditError> {
+    collect(manifest_validator(), doc, "manifest")
+}
+
+pub fn check_note_resolution(doc: &Value) -> Vec<EditError> {
+    collect(note_validator(), doc, "note resolution")
 }
 
 fn collect(v: &jsonschema::Validator, doc: &Value, what: &str) -> Vec<EditError> {

@@ -15,7 +15,6 @@ use std::sync::atomic::{AtomicU64, Ordering};
 pub struct Store {
     root: PathBuf,
     asset_hashes: Mutex<BTreeMap<String, Value>>,
-    tmp_seq: AtomicU64,
 }
 
 pub fn hex_of(bytes: &[u8]) -> String {
@@ -31,7 +30,7 @@ impl Store {
             .ok()
             .and_then(|s| serde_json::from_str(&s).ok())
             .unwrap_or_default();
-        Ok(Store { root: root.to_path_buf(), asset_hashes: Mutex::new(asset_hashes), tmp_seq: AtomicU64::new(0) })
+        Ok(Store { root: root.to_path_buf(), asset_hashes: Mutex::new(asset_hashes) })
     }
 
     pub fn root(&self) -> &Path {
@@ -48,7 +47,9 @@ impl Store {
 
     /// A fresh temporary path inside the cache (same filesystem as the blobs, so renames are atomic).
     pub fn tmp_path(&self, ext: &str) -> PathBuf {
-        let n = self.tmp_seq.fetch_add(1, Ordering::Relaxed);
+        // Process-wide, so two stores on the same cache in one process never pick the same name.
+        static SEQ: AtomicU64 = AtomicU64::new(0);
+        let n = SEQ.fetch_add(1, Ordering::Relaxed);
         self.root.join("tmp").join(format!("{}-{n}.{ext}", std::process::id()))
     }
 
@@ -132,11 +133,17 @@ impl Store {
         Ok(())
     }
 
-    /// Removes leftovers of interrupted runs.
+    /// Removes this process's temporary files, and anyone's older than a day (an interrupted run). Another render
+    /// using the same cache at the same time keeps its files.
     pub fn clean_tmp(&self) {
+        let mine = format!("{}-", std::process::id());
+        let day = std::time::Duration::from_secs(86_400);
         if let Ok(rd) = std::fs::read_dir(self.root.join("tmp")) {
             for e in rd.flatten() {
-                let _ = std::fs::remove_file(e.path());
+                let stale = e.metadata().ok().and_then(|m| m.modified().ok()).and_then(|m| m.elapsed().ok());
+                if e.file_name().to_string_lossy().starts_with(&mine) || stale.is_some_and(|a| a > day) {
+                    let _ = std::fs::remove_file(e.path());
+                }
             }
         }
     }
