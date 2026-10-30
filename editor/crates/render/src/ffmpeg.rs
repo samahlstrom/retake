@@ -70,6 +70,38 @@ pub fn probe(path: &Path) -> Result<MediaInfo> {
     Ok(MediaInfo { duration, size, fps, audio })
 }
 
+/// How a video is decoded: the size, an optional crop applied in the pipe (source pixels: x, y, w, h), the scaler,
+/// and boxes `delogo` fills in first.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Decode {
+    pub w: u32,
+    pub h: u32,
+    pub crop: Option<[u32; 4]>,
+    pub lanczos: bool,
+    pub delogo: Vec<[u32; 4]>,
+}
+
+impl Decode {
+    pub fn scaled(w: u32, h: u32) -> Decode {
+        Decode { w, h, crop: None, lanczos: false, delogo: vec![] }
+    }
+
+    /// The ffmpeg filter chain.
+    pub fn filters(&self, fps: u32) -> String {
+        let mut f = vec![format!("fps={fps}")];
+        for b in &self.delogo {
+            f.push(format!("delogo=x={}:y={}:w={}:h={}", b[0], b[1], b[2], b[3]));
+        }
+        if let Some(c) = self.crop {
+            f.push(format!("crop={}:{}:{}:{}", c[2], c[3], c[0], c[1]));
+        }
+        let flags = if self.lanczos { "lanczos" } else { "bicubic+accurate_rnd+full_chroma_int" };
+        f.push(format!("scale={}:{}:flags={flags}", self.w, self.h));
+        f.push("format=rgba".into());
+        f.join(",")
+    }
+}
+
 /// Sequential RGBA frames from a video, at the output fps, starting at `start` seconds. After the end of the file it
 /// repeats the last frame.
 pub struct VideoReader {
@@ -84,6 +116,11 @@ pub struct VideoReader {
 
 impl VideoReader {
     pub fn open(path: &Path, start: f64, fps: u32, w: u32, h: u32, looping: bool) -> Result<VideoReader> {
+        VideoReader::open_with(path, start, fps, &Decode::scaled(w, h), looping)
+    }
+
+    pub fn open_with(path: &Path, start: f64, fps: u32, d: &Decode, looping: bool) -> Result<VideoReader> {
+        let (w, h) = (d.w, d.h);
         let mut cmd = Command::new(ffmpeg_bin());
         cmd.args(["-nostdin", "-v", "error", "-threads", "2"]);
         if looping {
@@ -94,7 +131,7 @@ impl VideoReader {
             "-sn",
             "-dn",
             "-vf",
-            &format!("fps={fps},scale={w}:{h}:flags=bicubic+accurate_rnd+full_chroma_int,format=rgba"),
+            &d.filters(fps),
             "-f",
             "rawvideo",
             "-pix_fmt",

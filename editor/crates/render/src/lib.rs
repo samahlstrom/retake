@@ -11,6 +11,7 @@ pub mod lint;
 pub mod pipeline;
 pub mod preview;
 pub mod proxy;
+pub mod resample;
 pub mod store;
 pub mod transform;
 pub mod unit;

@@ -1,7 +1,7 @@
 //! The render pipeline: plan → render missing graphics runs → render missing units → mix audio → package → manifest.
 
 use crate::audio::{self, range_hash};
-use crate::engine::{Engine, Item, RunSpec, UnitPlan};
+use crate::engine::{Engine, Item, RunSpec, UnitPlan, walk_items};
 use crate::expr::Js;
 use crate::ffmpeg;
 use crate::graphics::Painter;
@@ -406,8 +406,10 @@ fn build_manifest(e: &Engine, plans: &[UnitPlan], indexes: &[Value], digests: &[
         let mut elements: Vec<Element> = vec![];
         let mut order: Vec<String> = vec![];
         let mut per: BTreeMap<String, ElementAcc> = BTreeMap::new();
-        for (k, (it, ow)) in p.desc.items.iter().zip(&p.owners).enumerate() {
-            if ow.kind == "background" {
+        for it in walk_items(&p.desc.items) {
+            let k = it.slot();
+            let Some(ow) = p.owners.get(k) else { continue };
+            if ow.kind == "background" || ow.kind == "matte" {
                 continue;
             }
             let fr = tracks.get(k).map(|t| expand(t, n)).unwrap_or_else(|| vec![None; n as usize]);
