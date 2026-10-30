@@ -45,6 +45,9 @@ linters:
         - name: unreachable-code
         - name: redefines-builtin-id
   exclusions:
+    # npm packages can ship Go files (flatted does); they aren't ours.
+    paths:
+      - node_modules
     presets:
       - std-error-handling
     rules:
@@ -57,6 +60,9 @@ formatters:
   enable:
     - gofmt
     - goimports
+  exclusions:
+    paths:
+      - node_modules
   settings:
     goimports:
       local-prefixes:
