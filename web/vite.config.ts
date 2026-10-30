@@ -67,5 +67,6 @@ export default defineConfig({
   // hls.js (about 580 kB) is its own chunk, loaded only for .m3u8 versions in browsers without native HLS.
   build: { outDir: 'dist', emptyOutDir: true, target: 'es2022', chunkSizeWarningLimit: 700 },
   server: { proxy: { '/api': proxy, '/video': proxy } },
-  test: { include: ['src/**/*.test.ts'], environment: 'node' },
+  // phone.css is read as text by a unit test (its media query must match lib/layout.ts).
+  test: { include: ['src/**/*.test.ts'], environment: 'node', css: { include: [/phone\.css/] } },
 });

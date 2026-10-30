@@ -25,4 +25,8 @@ export const TL_PAD = 8;
 export const KEEPALIVE_MAX = 60000;
 
 export const HINT_DRAW = 'Press R to record before drawing';
+/** The phone layout's wording: there is no R key, the record button is ●. */
+export const HINT_DRAW_TOUCH = 'Tap ● to record before drawing';
+export const MSG_SAVED = 'Saved. Press R to start a new take.';
+export const MSG_SAVED_TOUCH = 'Saved. Tap ● to start a new take.';
 export const MSG_SAVE_FAILED = 'Could not save. Is the review server still running?';

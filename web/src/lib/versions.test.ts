@@ -3,6 +3,8 @@ import {
   byLabel,
   coverMessage,
   covers,
+  flipPair,
+  flipRefusal,
   flipTarget,
   flipToast,
   neighbor,
@@ -75,5 +77,25 @@ describe('labels', () => {
     expect(versionTitle(fam, 'v6', 'v6', false)).toBe('Version v6. [ and ] step, C flips to v7');
     expect(versionTitle(fam, 'v6', 'v7', true)).toBe('Comparing: showing v7. C goes back to v6.');
     expect(versionTitle([fam[0]], 'v5', 'v5', false)).toBe('Version v5. [ and ] step');
+  });
+});
+
+describe('the flip button', () => {
+  it('toggles between the base and its partner', () => {
+    expect(flipPair(fam, 'v6')).toEqual(['v6', 'v7']);
+    expect(flipPair(fam, 'v7')).toEqual(['v7', 'v6']); // the newest compares with the previous one
+    expect(flipPair(fam, 'v5')).toEqual(['v5', 'v6']);
+    expect(flipPair([fam[1]], 'v6')).toBeNull();
+    expect(flipPair(fam, null)).toBeNull();
+  });
+
+  it('is refused exactly when C is, with the same toast', () => {
+    expect(flipRefusal(fam, 'v6', false, 5)).toBeNull();
+    expect(flipRefusal(fam, 'v6', false, 9.9)).toBeNull();
+    expect(flipRefusal(fam, 'v6', false, 9.97)).toBe('v7 only covers 0:00–0:10'); // within 0.05 s of its end
+    expect(flipRefusal(fam, 'v6', false, 12)).toBe('v7 only covers 0:00–0:10');
+    expect(flipRefusal(fam, 'v6', true, 9)).toBeNull(); // back to the base always works inside it
+    expect(flipRefusal(fam, 'v7', false, 30)).toBeNull(); // v7's partner v6 covers 0:30
+    expect(flipRefusal([fam[1]], 'v6', false, 5)).toBe('Only one version');
   });
 });

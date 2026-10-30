@@ -1,6 +1,7 @@
 <script lang="ts">
   import Stage from './components/Stage.svelte';
   import Bar from './components/Bar.svelte';
+  import PhoneControls from './components/PhoneControls.svelte';
   import type { Review } from './lib/review.svelte';
 
   let { review }: { review: Review } = $props();
@@ -10,4 +11,8 @@
 <svelte:document onmousedown={review.onDocMousedown} />
 
 <Stage {review} />
-<Bar {review} />
+{#if review.layoutMode === 'desktop'}
+  <Bar {review} />
+{:else}
+  <PhoneControls {review} />
+{/if}

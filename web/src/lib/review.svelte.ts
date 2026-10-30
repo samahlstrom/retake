@@ -5,7 +5,10 @@ import { memoryChunkStore, openChunkStore, recoverPending, type ChunkStore } fro
 import {
   AUTOSAVE_MS,
   HINT_DRAW,
+  HINT_DRAW_TOUCH,
   MSG_SAVE_FAILED,
+  MSG_SAVED,
+  MSG_SAVED_TOUCH,
   PING_MS,
   SEEK,
   TICK_MS,
@@ -13,7 +16,8 @@ import {
   COLOR_KEYS,
 } from './constants';
 import { keyAction, type Action } from './keys';
-import { closeMic, MIC_BLOCKED, openMic, pickMime, recorderMime, type Mic } from './mic';
+import { layoutMode, type LayoutMode } from './layout';
+import { closeMic, MIC_BLOCKED, MIC_BLOCKED_TOUCH, openMic, pickMime, recorderMime, type Mic } from './mic';
 import { addPoint, fitFrame, isClick, renderInk } from './pen';
 import { Saver } from './saver';
 import { VideoSource } from './source';
@@ -42,7 +46,7 @@ import type {
   TakeEvent,
   Version,
 } from './types';
-import { byLabel, coverMessage, covers, flipTarget, flipToast, stepTarget } from './versions';
+import { byLabel, coverMessage, covers, flipRefusal, flipTarget, flipToast, stepTarget } from './versions';
 import { addVoice, drawWave, levelDb, newAcc, newVad, pushBars, vadStep, type WaveBar } from './voice';
 import { clamp, fmt, isoLocal, now, r3, stamp } from './util';
 
@@ -93,6 +97,17 @@ export class Review {
   freezeShown = $state(false);
   tip = $state<{ show: boolean; left: number | null; text: string }>({ show: false, left: null, text: '' });
   readonly toast = new Toast();
+  /** Desktop (the bar), or the phone layout in portrait or landscape. The prerendered page is desktop. */
+  layoutMode = $state<LayoutMode>('desktop');
+  /** The video's aspect ratio (CSS), for the phone layout's stage. */
+  aspect = $state('16 / 9');
+  /** What C would say if it were refused now, else null: the phone layout's flip button shows it disabled. */
+  flipBlocked = $state<string | null>(null);
+
+  /** The phone layout: touch wording (tap ●) instead of keys. */
+  get touch(): boolean {
+    return this.layoutMode !== 'desktop';
+  }
 
   // ---------------------------------------------------------------- hot state (plain, read by the frame loop)
   info: Info = { name: '', path: '', duration: 0, fps: 30, history: [] };
@@ -122,6 +137,9 @@ export class Review {
   /** The audio buffer. Memory until IndexedDB has opened (every chunk waits for `#storeReady`). */
   #store: ChunkStore = memoryChunkStore();
   #storeReady: Promise<ChunkStore> = Promise.resolve(this.#store);
+  /** Phone layout, while recording: the screen stays on (iOS locks after 30 s without a touch, and the mic with it). */
+  #awake = false;
+  #wakeLock: WakeLockSentinel | null = null;
   /** Takes started on this page: the saver owns their uploads, so recovery leaves them alone. */
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- bookkeeping, nothing renders it
   readonly #ownTakes = new Set<string>();
@@ -293,7 +311,7 @@ export class Review {
       this.mic = await openMic();
       return true;
     } catch {
-      this.toast.say(MIC_BLOCKED, 7000);
+      this.toast.say(this.touch ? MIC_BLOCKED_TOUCH : MIC_BLOCKED, 7000);
       return false;
     }
   }
@@ -334,6 +352,7 @@ export class Review {
       s.p0 = now();
       t.segments.push(s);
       this.seg = s;
+      this.#keepAwake(true);
       this.bars = [];
       this.recElapsed = fmt(0, false);
       this.logEv(
@@ -360,6 +379,7 @@ export class Review {
       t = this.take;
     if (!s) return null;
     this.seg = null;
+    this.#keepAwake(false);
     s.p1 = now();
     s.v1 = this.video.currentTime;
     this.logEv('rec_stop', { seg: s.id }, t);
@@ -370,6 +390,22 @@ export class Review {
     void s.stopped.then(() => this.save(t));
     return s.stopped;
   };
+
+  #keepAwake(on: boolean): void {
+    this.#awake = on && this.touch;
+    if (this.#awake && !this.#wakeLock && 'wakeLock' in navigator) {
+      navigator.wakeLock.request('screen').then(
+        (lock) => {
+          if (this.#awake && !this.#wakeLock) this.#wakeLock = lock;
+          else void lock.release().catch(() => {});
+        },
+        () => {}, // not allowed (low power mode, say): the screen may sleep
+      );
+    } else if (!this.#awake && this.#wakeLock) {
+      void this.#wakeLock.release().catch(() => {});
+      this.#wakeLock = null;
+    }
+  }
 
   toggleRec = (): void => {
     if (this.seg) this.stopRec();
@@ -443,6 +479,8 @@ export class Review {
   onLoadedMetadata = (): void => {
     this.layout();
     this.durText = fmt(this.video.duration, false);
+    const { videoWidth: w, videoHeight: h } = this.video;
+    if (w && h) this.aspect = `${w} / ${h}`;
     this.take.bins = grow(this.take.bins, this.nBins());
     this.hist.bins = grow(this.hist.bins, this.nBins());
   };
@@ -485,13 +523,17 @@ export class Review {
       if (e.button !== 0 || this.drawing) return;
       if (!s) {
         if (!this.drawHintShown) {
-          this.toast.say(HINT_DRAW, 2600);
+          this.toast.say(this.touch ? HINT_DRAW_TOUCH : HINT_DRAW, 2600);
           this.drawHintShown = true;
         }
         return;
       }
       e.preventDefault();
-      ink.setPointerCapture(e.pointerId);
+      try {
+        ink.setPointerCapture(e.pointerId);
+      } catch {
+        /* the pointer is already gone: the stroke still ends on its pointerup */
+      }
       this.drawing = {
         id: 0,
         seg: s.id,
@@ -575,11 +617,13 @@ export class Review {
     el.addEventListener('pointerdown', down);
     el.addEventListener('pointermove', move);
     el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', up);
     el.addEventListener('pointerleave', leave);
     return () => {
       el.removeEventListener('pointerdown', down);
       el.removeEventListener('pointermove', move);
       el.removeEventListener('pointerup', up);
+      el.removeEventListener('pointercancel', up);
       el.removeEventListener('pointerleave', leave);
     };
   };
@@ -701,6 +745,28 @@ export class Review {
   }
 
   // ---------------------------------------------------------------- chrome
+  /**
+   * Pick the layout now and whenever the window or the pointer changes (a phone turning). The choice goes on <html> as
+   * data-layout too, for the phone styles and for app.css, which keeps a phone's prerendered page hidden until then.
+   */
+  watchLayout(): void {
+    const coarse = matchMedia('(pointer: coarse)');
+    const pick = () => {
+      this.layoutMode = layoutMode({ width: innerWidth, height: innerHeight, coarse: coarse.matches });
+      document.documentElement.dataset.layout = this.layoutMode;
+      document.documentElement.toggleAttribute('data-phone', this.touch);
+    };
+    pick();
+    addEventListener('resize', pick);
+    coarse.addEventListener('change', pick);
+    // Safari's pinch gestures: the phone layout never zooms (the pen and the controls are sized for a finger).
+    const noZoom = (e: Event) => {
+      if (this.touch) e.preventDefault();
+    };
+    document.addEventListener('gesturestart', noZoom);
+    document.addEventListener('gesturechange', noZoom);
+  }
+
   setColor = (c: PenColor): void => {
     this.penColor = c;
   };
@@ -718,7 +784,7 @@ export class Review {
     if (t.saveErr) this.#unsaved.add(t);
     this.closeMic();
     this.doneSaved = true;
-    this.toast.say(t.saveErr ? MSG_SAVE_FAILED : 'Saved. Press R to start a new take.', 4000);
+    this.toast.say(t.saveErr ? MSG_SAVE_FAILED : this.touch ? MSG_SAVED_TOUCH : MSG_SAVED, 4000);
   };
 
   run(act: Action): void {
@@ -790,8 +856,9 @@ export class Review {
 
   // ---------------------------------------------------------------- frame loop and timers
   #drawTimeline(vt: number): void {
-    const tl = this.el.tl,
-      dpr = devicePixelRatio || 1,
+    const tl = this.el.tl;
+    if (!tl) return; // between two layouts
+    const dpr = devicePixelRatio || 1,
       w = tl.clientWidth,
       h = tl.clientHeight;
     if (tl.width !== Math.round(w * dpr) || tl.height !== Math.round(h * dpr)) {
@@ -809,12 +876,14 @@ export class Review {
       histBins: this.hist.bins,
       histStrokes: this.hist.strokes,
       takeStrokes: this.take.strokes,
+      knob: this.touch ? 8 : undefined,
     });
   }
 
   #drawWave(): void {
-    const wave = this.el.wave,
-      dpr = devicePixelRatio || 1,
+    const wave = this.el.wave;
+    if (!wave) return; // between two layouts
+    const dpr = devicePixelRatio || 1,
       w = wave.clientWidth,
       h = wave.clientHeight;
     if (wave.width !== Math.round(w * dpr)) {
@@ -850,6 +919,7 @@ export class Review {
     );
     this.#drawTimeline(vt);
     this.#drawWave();
+    if (this.touch) this.flipBlocked = flipRefusal(this.versions, this.base, this.flipped, vt);
     this.curText = fmt(vt);
     if (this.seg) this.recElapsed = fmt(t - this.seg.p0, false);
     requestAnimationFrame(this.loop);
