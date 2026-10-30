@@ -29,8 +29,17 @@ export const MIC_WAV = join(MEDIA, 'mic.wav');
 export const CONFIG_HOME = join(WORK, 'config');
 export const AUTHOR = 'E2E Reviewer';
 
-/** HTTP ports for the servers under test, one per spec file, and the crash test's proxy (all inside 8831-8839). */
-export const PORTS = { scenario: 8831, crash: 8832, hls: 8833, crashProxy: 8834 } as const;
+/**
+ * HTTP ports for the servers under test, one per spec file, and the crash test's proxy: a block of five from
+ * RETAKE_E2E_PORT (default 8831, so 8831-8835).
+ */
+const PORT_BASE = Number(process.env.RETAKE_E2E_PORT ?? 8831);
+if (!Number.isInteger(PORT_BASE) || PORT_BASE < 1024 || PORT_BASE > 65530) {
+  throw new Error(`RETAKE_E2E_PORT must be a port number (1024-65530), not "${process.env.RETAKE_E2E_PORT}"`);
+}
+export const PORTS = {
+  scenario: PORT_BASE, crash: PORT_BASE + 1, hls: PORT_BASE + 2, crashProxy: PORT_BASE + 3, mobile: PORT_BASE + 4,
+} as const;
 
 /** Keep the scratch data even when everything passes. */
 export const KEEP = !!process.env.RETAKE_E2E_KEEP;

@@ -24,9 +24,11 @@ Run it through mise (`mise exec -- npm test`) to use the pinned node. Needs `ffm
 | `CHROMIUM_PATH` | `/usr/lib/chromium/chromium` if it exists, else Playwright's Chromium | The browser. CI points it at Playwright's Chromium. |
 | `RETAKE_E2E_WORK` | `<repo>/.retake-work/e2e` | Scratch root: media, version families, takes, server logs. It is wiped at the start of a run and deleted after a passing run. A failing run keeps it. The suite only deletes a folder that has its `.retake-e2e` marker. |
 | `RETAKE_E2E_KEEP` | unset | Set it to keep the scratch data after a passing run too. |
+| `RETAKE_E2E_PORT` | `8831` | The first of the suite's five ports (see below). Move the block when those ports are taken. |
 
-Ports: the servers use 8831–8834 (scenario 8831, crash safety 8832 behind a proxy on 8834, HLS 8833). The browser
-talks to Playwright over a pipe, so it opens no devtools port. Each server is started for its spec file, waited on
+Ports: the servers use 8831–8835 (scenario 8831, crash safety 8832 behind a proxy on 8834, HLS 8833, phone layout
+8835), or the same block from `RETAKE_E2E_PORT`. The browser talks to Playwright over a pipe, so it opens no devtools
+port. Each server is started for its spec file, waited on
 through `/api/ping`, and always stopped. Its log is in `<work>/logs/`.
 
 ## Fixtures (`lib/fixtures.ts`)
@@ -95,3 +97,24 @@ checks. It runs against both servers.
 - v8 is detected from its own folder.
 - C flips mp4 → m3u8 at the same time, and the playlist plays (currentTime advances, readyState ≥ 2).
 - C flips back, `]` steps to the m3u8 keeping the time and play state, and `[` steps back.
+
+**`05-mobile`** (new only): the phone layout, in Chromium's mobile emulation (`isMobile`, `hasTouch`, a coarse
+pointer), driven by taps and real touch drags (CDP touch events). There is no WebKit project yet: Playwright's
+WebKit build needs Ubuntu's libicu74, libxml2 and libflite1, and doesn't launch on hosts without them (Arch, say).
+- At 390x844 portrait and 844x390 landscape:
+  - The page is in the phone layout and fits: no horizontal overflow, nothing scrolls.
+  - Record, Done, flip, undo, play, the version chip and the pen colors are visible, inside the viewport and at
+    least 44 px. The timeline is at least 44 px tall and wide. The video is full width (portrait) or nearly the full
+    height (landscape).
+  - The touch hint shows until the first record. A drag before recording draws nothing and shows "Tap ● to record
+    before drawing". Drags neither scroll nor zoom the page.
+  - Tapping Record opens a segment without moving the video. The pen draws in the tapped color only while
+    recording, and Undo removes the last stroke.
+  - A thumb drag on the timeline scrubs.
+  - The flip button switches to v7 at the same time (within 40 ms) and back. Past the v7 preview's end it shows as
+    disabled, and a tap gets C's refusal toast.
+  - Done saves the take: every file validates against `spec/take.schema.json`, and the audio file is named for its
+    type.
+  - The version list opens by tap, its items are 44 px tall and on screen, and a tap switches the version.
+- iOS Safari's recorder (simulated: only `audio/mp4` is supported, and the recorder reports its type only once
+  started): the segment is mp4 audio saved as `seg_01.m4a`, it decodes, and the take validates.

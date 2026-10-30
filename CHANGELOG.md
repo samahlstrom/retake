@@ -12,6 +12,8 @@ All notable changes are listed here. Versions follow semver once the first relea
   a slim bar with the timeline at the bottom. Safe areas (notch, home bar) are respected. The desktop layout is
   unchanged, pixel for pixel.
 - Safari (iOS included) records AAC in mp4: segments are saved as `seg_NN.m4a`.
+- Tests: an end-to-end spec for the phone layout (19 tests, Chromium mobile emulation with touch input, portrait
+  and landscape, plus Safari's mp4-only recorder). `RETAKE_E2E_PORT` moves the suite's ports.
 
 ### Milestone 1: local player at parity
 - `retake` CLI (Go): `open`, `sessions [--json]`, `version`; config file; flags before or after the video.
