@@ -93,7 +93,10 @@ pub fn probe(path: &Path) -> Result<MediaInfo> {
         .filter(|s| s["codec_type"] == "audio")
         .map(|s| AudioStream {
             channels: s["channels"].as_u64().unwrap_or(2) as u32,
-            title: s["tags"]["title"].as_str().or(s["tags"]["language"].as_str()).map(String::from),
+            title: s["tags"]["title"]
+                .as_str()
+                .or(s["tags"]["language"].as_str().filter(|l| *l != "und"))
+                .map(String::from),
         })
         .collect();
     let duration = v["format"]["duration"].as_str().and_then(|d| d.parse().ok()).unwrap_or(0.0);

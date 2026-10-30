@@ -67,6 +67,16 @@ Every command takes `--json` and prints `{"ok": true, …}` or `{"ok": false, "e
 suggestions}]}`. Renders go to `.retake/renders/` next to the timeline unless `-o` says otherwise; the manifest is
 written next to the video.
 
+## Audio
+
+The mix (`crates/render/src/audio.rs`) sums the spine, video layers' sound and audio elements in one pass per render
+range: each picks its audio stream (`stream`; mono plays at unity in both channels), gets its gain (a constant, or
+keys and expressions evaluated per output frame), its fades (with a curve) and its ducking (under the VO's speech,
+or under inserts and spine items with attack and release). `crates/render/src/dsp.rs` has the BS.1770-4 meter, the
+low-pass and the 4× oversampled true-peak limiter of the master bus. Loudness targets (an element's `loudness`, the
+master's) are measured on the whole timeline's mix and cached in the store's `levels` index, so a `--range` render
+uses the same gains as the full render and a second render doesn't measure again.
+
 ## The demo
 
 ```sh

@@ -288,7 +288,17 @@ fn compute_levels(full: &AudioPlan) -> Result<Value> {
         let mut leveled = full.clone();
         apply_levels(&mut leveled, &levels);
         let raw = crate::audio::mix_raw(&leveled)?;
-        levels["master_gain_db"] = json!(to_target(t, crate::dsp::integrated_lufs(&raw, full.sr)));
+        let mut g = to_target(t, crate::dsp::integrated_lufs(&raw, full.sr));
+        // The low-pass and the limiter take a little loudness away (more the harder it limits): measure the bus's
+        // output once and correct for it.
+        if let Some(m) = &mut leveled.master
+            && (m.true_peak.is_some() || m.lowpass.is_some())
+        {
+            m.gain_db = Some(g);
+            let out = crate::audio::finish(raw, &leveled).pcm;
+            g = (g + to_target(t, crate::dsp::integrated_lufs(&out, full.sr))).clamp(-60.0, 60.0);
+        }
+        levels["master_gain_db"] = json!(g);
     }
     Ok(levels)
 }
