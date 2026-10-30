@@ -73,7 +73,8 @@ func checkAudioName(n string) error {
 // Take transcribes every audio file of a take (AudioFiles) that transcript.json doesn't have yet, and writes
 // transcript.json after each one, atomically. A file is skipped when its entry has the same size, the transcriber's
 // Name() and the same prompt (FileTranscript.Current); an empty file is skipped until it has audio. A file that
-// fails doesn't stop the others: their errors are joined. transcript.json is created even for a take with no audio.
+// fails doesn't stop the others: their errors are joined. A take with no audio still gets a transcript.json, once
+// nothing has failed, so its existence means the take was transcribed.
 func Take(ctx context.Context, takeDir string, t Transcriber, opts TakeOptions) error {
 	names, err := AudioFiles(takeDir)
 	if err != nil {
@@ -83,11 +84,6 @@ func Take(ctx context.Context, takeDir string, t Transcriber, opts TakeOptions) 
 	tr, err := ReadTranscript(path)
 	if err != nil {
 		return err
-	}
-	if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
-		if err := tr.Write(path); err != nil {
-			return err
-		}
 	}
 	prompt := PromptHash(opts.Prompt)
 	take := filepath.Base(takeDir)
@@ -124,7 +120,13 @@ func Take(ctx context.Context, takeDir string, t Transcriber, opts TakeOptions) 
 		logf(opts.Log, "transcribe: %s/%s: %.1f s of audio, %d words, %s, in %.1f s\n", take, name, dur, len(words),
 			model, time.Since(began).Seconds())
 	}
-	return errors.Join(errs...)
+	if len(errs) > 0 {
+		return errors.Join(errs...)
+	}
+	if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) { // nothing to transcribe: say so all the same
+		return tr.Write(path)
+	}
+	return nil
 }
 
 // transcribeFile decodes one file to 16 kHz WAV (which gives its duration) and transcribes that.

@@ -204,8 +204,8 @@ func TestTakeErrors(t *testing.T) {
 	if err == nil || strings.Count(err.Error(), "model exploded") != 2 {
 		t.Errorf("err = %v", err)
 	}
-	if tr, _ := ReadTranscript(filepath.Join(dir, TranscriptFile)); len(tr.Names()) != 0 {
-		t.Errorf("names = %v", tr.Names())
+	if _, err := os.Stat(filepath.Join(dir, TranscriptFile)); !os.IsNotExist(err) {
+		t.Errorf("transcript.json written when every file failed: %v", err)
 	}
 
 	// Cancelled: stops before transcribing.
