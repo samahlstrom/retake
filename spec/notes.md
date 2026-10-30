@@ -49,16 +49,20 @@ the parent version is either in the changelog or asked about in the same push.
 - **On an older version:** that version's notes in their final state. Each has `status`, `text`, `t0`, `t1`, `by`, and
   then `change` and `answered_in` for answered ones, or the question text for asked ones.
 - **Item fields:** `{id, kind: "note"|"question", status, t0, t1, text, by, change?, answered_in?, question?, options?,
-  images?: [{url, box}]}`.
+  images?: [{url, box}]}`. For a question item, `id` is the thread id (what `answer_to` takes), `text` is the
+  question, and an optional `note` is the id of the note it's about.
 
 ## Take format additions (v1.1; readers ignore unknown fields)
 
 - **Images.** `images.json` holds `[{id, seg, version, flip, file, mime, session_t, video_t, box: [x, y, w, h]}]`.
   The box is normalized 0–1 to the frame. Files are named `img_01.png` (or `.jpg`, `.webp`, `.gif`) in the take
   folder. An image can only be added while recording, like the pen. Z undoes the last stroke or image, whichever came
-  last.
+  last: an image's `id` comes from the same counter as stroke ids, so an `undo` event's `id` names either. The `/data`
+  body carries the list as `images` (undone ones left out), and the server writes it to `images.json` like
+  `strokes.json`. `/api/history` entries get `images: [{url, video_t, box}]`, where `url` is the `/api/takes/...` one.
 - **Answers.** A segment recorded to answer a question carries `answer_to: <thread id>` in `segments.json`.
-- **Done.** `session.json` gets `closed: true` when the reviewer presses Done.
+- **Done.** `session.json` gets `closed: true` when the reviewer presses Done. The page also sends it in the `/data`
+  session object of a closed take.
 
 ## HTTP additions
 
@@ -68,7 +72,7 @@ the parent version is either in the changelog or asked about in the same push.
 | POST | `/api/session/<take>/done?v=` | Marks the take closed and queues `transcribe` then `notes` jobs for it. Idempotent. |
 | GET | `/api/notes?v=<label>` | The sidebar items (above). |
 | POST | `/api/notes/<id>/reopen`, `/api/versions/<label>/approve` | Reviewer actions. Origin-checked. |
-| GET | `/api/events?since=<seq>` | Server-sent events: `notes` (the sidebar should refresh), `job` (`{id, kind, state}`), `version` (the family changed). |
+| GET | `/api/events?since=<seq>` | Server-sent events: `notes` (the sidebar should refresh), `job` (`{id, kind, state, error?, hint?}`; a failed job's `hint` is a one-line fix, such as how to set up transcription), `version` (the family changed). |
 | GET | `/api/takes/<take>/<file>?v=` | Serves an image of a take, for the sidebar thumbnails. |
 
 ## Jobs

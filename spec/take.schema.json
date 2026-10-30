@@ -2,14 +2,15 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:retake:spec:take:v1",
   "title": "Retake take format v1",
-  "description": "JSON Schemas for the files of one take (spec/take-format.md). Validate a file against its definition: #/$defs/session for session.json, #/$defs/segments, #/$defs/events, #/$defs/strokes and #/$defs/voice. #/$defs/dataBody is the body of POST /api/session/<take>/data (spec/api.md). The root validates a whole take as one object. Unknown fields are allowed everywhere: readers ignore what they don't know.",
+  "description": "JSON Schemas for the files of one take (spec/take-format.md). Validate a file against its definition: #/$defs/session for session.json, #/$defs/segments, #/$defs/events, #/$defs/strokes and #/$defs/voice, plus #/$defs/images for images.json (take format v1.1, spec/notes.md; absent in older takes). #/$defs/dataBody is the body of POST /api/session/<take>/data (spec/api.md). The root validates a whole take as one object. Unknown fields are allowed everywhere: readers ignore what they don't know.",
   "type": "object",
   "properties": {
     "session": { "$ref": "#/$defs/session" },
     "segments": { "$ref": "#/$defs/segments" },
     "events": { "$ref": "#/$defs/events" },
     "strokes": { "$ref": "#/$defs/strokes" },
-    "voice": { "$ref": "#/$defs/voice" }
+    "voice": { "$ref": "#/$defs/voice" },
+    "images": { "$ref": "#/$defs/images" }
   },
   "required": ["session", "segments", "events", "strokes", "voice"],
   "$defs": {
@@ -76,7 +77,8 @@
         "display": {
           "type": "object",
           "properties": { "show_within": { "type": "number", "minimum": 0 } }
-        }
+        },
+        "closed": { "description": "v1.1: true once the take is finished (Done).", "type": "boolean" }
       },
       "required": ["format", "version", "session", "created", "saved", "recorded", "video"]
     },
@@ -99,7 +101,8 @@
         "video_start": { "$ref": "#/$defs/videoT" },
         "video_end": { "$ref": "#/$defs/videoT" },
         "video_min": { "$ref": "#/$defs/videoT" },
-        "video_max": { "$ref": "#/$defs/videoT" }
+        "video_max": { "$ref": "#/$defs/videoT" },
+        "answer_to": { "description": "v1.1: the question thread this segment answers.", "$ref": "#/$defs/threadId" }
       },
       "required": ["id", "file", "mime", "version", "flip", "t_start", "t_end", "recording", "video_start",
         "video_end", "video_min", "video_max"]
@@ -223,6 +226,32 @@
       "required": ["id", "seg", "version", "flip", "color", "session_t", "session_t_end", "video_t", "video_t_end",
         "paused", "points"]
     },
+    "images": {
+      "description": "images.json (v1.1): the images added while recording that still stand (undone ones are left out).",
+      "type": "array",
+      "items": { "$ref": "#/$defs/image" }
+    },
+    "image": {
+      "type": "object",
+      "properties": {
+        "id": { "description": "From the same counter as stroke ids, so an undo event's id names either.", "$ref": "#/$defs/strokeId" },
+        "seg": { "description": "The segment it was added in: like the pen, images only work while recording.", "$ref": "#/$defs/segId" },
+        "version": { "$ref": "#/$defs/label" },
+        "flip": { "type": "boolean" },
+        "file": { "description": "The image file in the take folder.", "type": "string", "pattern": "^img_\\d{2,3}\\.(png|jpg|webp|gif)$" },
+        "mime": { "enum": ["image/png", "image/jpeg", "image/webp", "image/gif"] },
+        "session_t": { "$ref": "#/$defs/sessionT" },
+        "video_t": { "description": "Where the image is pinned: the playhead when it was added.", "$ref": "#/$defs/videoT" },
+        "box": {
+          "description": "[x, y, w, h] normalized 0-1 to the video frame.",
+          "type": "array",
+          "prefixItems": [{ "$ref": "#/$defs/unit" }, { "$ref": "#/$defs/unit" }, { "$ref": "#/$defs/unit" }, { "$ref": "#/$defs/unit" }],
+          "minItems": 4,
+          "maxItems": 4
+        }
+      },
+      "required": ["id", "seg", "version", "flip", "file", "mime", "session_t", "video_t", "box"]
+    },
     "voice": {
       "description": "voice.json: voice coverage along the video timeline, as [bin index, seconds of voice] pairs.",
       "type": "object",
@@ -248,7 +277,8 @@
         "segments": { "$ref": "#/$defs/segments" },
         "events": { "$ref": "#/$defs/events" },
         "strokes": { "$ref": "#/$defs/strokes" },
-        "voice": { "$ref": "#/$defs/voice" }
+        "voice": { "$ref": "#/$defs/voice" },
+        "images": { "$ref": "#/$defs/images" }
       },
       "required": ["session", "segments", "events", "strokes", "voice"]
     },
@@ -261,6 +291,7 @@
     },
     "segId": { "type": "string", "pattern": "^S[1-9]\\d*$" },
     "strokeId": { "type": "integer", "minimum": 1 },
+    "threadId": { "description": "A question thread's id in the project store (spec/notes.md).", "type": "integer", "minimum": 1 },
     "color": { "enum": ["red", "yellow", "green", "white"] },
     "sessionT": { "description": "Seconds since the take started (the first R).", "type": "number", "minimum": 0 },
     "videoT": { "description": "The video's playhead, in seconds.", "type": "number", "minimum": 0 },

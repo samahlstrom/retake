@@ -1,5 +1,5 @@
 // Validates take files against spec/take.schema.json (JSON Schema 2020-12) with ajv.
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Ajv2020, type ErrorObject, type ValidateFunction } from 'ajv/dist/2020.js';
 import { REPO } from './env.ts';
@@ -7,7 +7,9 @@ import { REPO } from './env.ts';
 export const SCHEMA_PATH = join(REPO, 'spec', 'take.schema.json');
 export const TAKE_FILES = ['session', 'segments', 'events', 'strokes', 'voice'] as const;
 export type TakeFile = (typeof TAKE_FILES)[number];
-export type SchemaDef = TakeFile | 'dataBody' | 'take';
+/** Take format v1.1 files that only some takes have (spec/notes.md). */
+export const OPTIONAL_TAKE_FILES = ['images'] as const;
+export type SchemaDef = TakeFile | (typeof OPTIONAL_TAKE_FILES)[number] | 'dataBody' | 'take';
 
 let compiled: Map<SchemaDef, ValidateFunction> | null = null;
 
@@ -17,7 +19,7 @@ function validators(): Map<SchemaDef, ValidateFunction> {
   const ajv = new Ajv2020({ allErrors: true, strict: true, strictRequired: false });
   ajv.addSchema(schema);
   compiled = new Map();
-  for (const def of [...TAKE_FILES, 'dataBody'] as const) {
+  for (const def of [...TAKE_FILES, ...OPTIONAL_TAKE_FILES, 'dataBody'] as const) {
     compiled.set(def, ajv.getSchema(`${schema.$id}#/$defs/${def}`)!);
   }
   compiled.set('take', ajv.getSchema(schema.$id)!);
@@ -39,11 +41,14 @@ export function assertValid(def: SchemaDef, data: unknown, what: string = def): 
   if (errors.length) throw new Error(`${what} does not match take.schema.json#/$defs/${def}:\n${errors.join('\n')}`);
 }
 
-/** Validates every JSON file of a take folder against its definition. Returns the parsed files. */
-export function validateTakeDir(dir: string): Record<TakeFile, unknown> {
-  const out = {} as Record<TakeFile, unknown>;
-  for (const f of TAKE_FILES) {
-    const data: unknown = JSON.parse(readFileSync(join(dir, `${f}.json`), 'utf8'));
+/** Validates every JSON file of a take folder against its definition (images.json when there is one). Returns the
+ * parsed files. */
+export function validateTakeDir(dir: string): Record<TakeFile, unknown> & { images?: unknown } {
+  const out = {} as Record<TakeFile, unknown> & { images?: unknown };
+  for (const f of [...TAKE_FILES, ...OPTIONAL_TAKE_FILES]) {
+    const path = join(dir, `${f}.json`);
+    if (f === 'images' && !existsSync(path)) continue;
+    const data: unknown = JSON.parse(readFileSync(path, 'utf8'));
     assertValid(f, data, `${dir}/${f}.json`);
     out[f] = data;
   }
