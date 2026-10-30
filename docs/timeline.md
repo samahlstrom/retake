@@ -149,6 +149,25 @@ Any number in a transform (and most others) can be a constant, keyframes, or an 
 - An expression is JavaScript run in a sandbox. It sees `t`, `value` and the composition's `props`, and nothing else:
   the same `t` always gives the same result.
 
+## Components and kits
+
+Instead of writing layers, an overlay or a picture can use a component from the library, by name and exact version:
+
+```json
+{ "id": "pop/faster", "use": "pop-text@1.0.0", "from": "word:b/faster", "to": "word:b/faster+1.20",
+  "props": { "text": "Faster", "color": "kit:color.accent" } }
+```
+
+- `retake lib describe pop-text` shows its props (with descriptions and defaults) and its storybook sheet;
+  `retake lib add pop-text` copies it into `components/` next to the timeline and pins it in `timeline.lock`.
+- `"kits": ["clean@1.0.0"]` brings a kit's tokens (`kit:color.accent`, `kit:size.title`) and its house rules:
+  `retake-edit lint edit/timeline.json` lists what breaks them, with times and a hint.
+- Change a component's look by patching its `props`. A new version of a component is used element by element:
+  `retake-edit component upgrade edit/timeline.json pop/faster --to 1.1.0`. Only those elements render again.
+- `retake-edit expand` prints the timeline with every component expanded into layers.
+
+[spec/components.md](../spec/components.md) has the details, and how to write your own.
+
 ## Audio
 
 ```json

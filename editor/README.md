@@ -38,7 +38,30 @@ retake-edit frames     <timeline.json> 3.5 12.0 [-o dir]   # PNG stills
 retake-edit manifest   <timeline.json>                     # renders what's missing, prints the manifest
 retake-edit resolve-note <manifest.json> 9.0 0.7 0.65 0.1 0.1     # t and a normalized stroke box
 retake-edit proxy      <timeline.json> [proj:footage ...]  # short-GOP draft-size proxies (drafts use them)
+retake-edit expand     <timeline.json>                     # kit tokens replaced, component uses expanded
+retake-edit lint       <timeline.json> [--rules f.json]    # house rules of the timeline's kits; exit 1 on errors
+retake-edit component lock    <timeline.json> [--update name@ver | --update-all]
+retake-edit component upgrade <timeline.json> <element|all> --to 1.1.0 [--component name]
+retake-edit component preview <component dir> [-o dir]     # previews/sheet.png and preview.webp
+retake-edit component hash    <package dir>                # the content hash lockfiles and registries pin
 ```
+
+## Components, kits and lint
+
+A component (`spec/components.md`) is a `component.json`: a props JSON Schema, layers as templates, examples. A
+timeline uses one where layers would go, `{"use": "pop-text@1.0.0", "props": {…}}`, and lists brand kits in
+`"kits"` for their tokens (`kit:color.accent`) and house rules. `crates/timeline/src/component.rs` finds packages
+(`components/` next to the timeline, `$RETAKE_COMPONENT_PATH`, the user library), checks them against the lockfile
+`<stem>.lock`, and expands every use into plain layers before anything resolves: substitution, `$expr` templates
+(QuickJS, registered by `retake_render::init`), and the fit from the design canvas to the timeline's. A `Project`
+keeps both documents: `src` (what patches change and what is saved) and `doc` (the expansion, what renders).
+
+The renderer only sees the expansion, so the layer and unit keys hash it: a changed component re-renders exactly
+the elements whose expansion changed (`crates/render/tests/components.rs`). `lint` (`crates/timeline/src/lint.rs`)
+evaluates the kits' rules over the resolved elements; `crates/render/src/lint.rs` measures each overlay's drawn box
+with Skia for safe-area rules. `component preview` (`crates/render/src/preview.rs`) renders each example through the
+normal pipeline with placeholder footage (an ffmpeg gradient) and composes the sheet with Skia. The starter library
+is in `library/`.
 
 Every command takes `--json` and prints `{"ok": true, …}` or `{"ok": false, "errors": [{code, message, path, hint,
 suggestions}]}`. Renders go to `.retake/renders/` next to the timeline unless `-o` says otherwise; the manifest is

@@ -78,7 +78,7 @@ database.
 
 | Field | Meaning |
 |---|---|
-| `kind` | `video`, `audio`, `image`, `font` or `other`, from the extension and the probe (an `.mp4` without a video stream is `audio`). |
+| `kind` | `video`, `audio`, `image`, `font`, `component` or `other`, from the extension and the probe (an `.mp4` without a video stream is `audio`); a folder with a `component.json` is a `component`. |
 | `blob` | `hash` (null until hashed), `size` in bytes, `locator` (`file://` for in-place files, `blob:<ref>` for stored ones), `path` (where to read it now), `exists`. |
 | `media` | From ffprobe: `duration` (s), `size` `[w, h]`, `fps`, `vfr` (average and nominal rates differ), `codec`, and `audio` streams (`stream` index, `codec`, `channels`, `sample_rate`, `role` from the stream title). Images: `size`. Fonts: `family`, `style`, `glyphs`. |
 | `proxy` | A 540p H.264 copy with a short GOP, for fast frame grabs. Made at import for videos up to 10 minutes that are bigger than 960×540 (`--proxy` / `--no-proxy` override). |
@@ -101,6 +101,7 @@ Every asset gets previews at import, stored as blobs. A multimodal agent asks fo
 | Audio | `waveform`: peak and RMS per column, time ticks, and the loudness (integrated LUFS, loudness range, peak) from ffmpeg's `ebur128`. |
 | Image | `thumbnail`: at most 512 px on the long side. |
 | Font | `specimen`: the family and style, the alphabet, digits and a sample line at five sizes, drawn with the font itself. |
+| Component | `storybook`: each example at five moments (PNG), and `animation`: two seconds of the first example (animated WebP), from `retake-edit component preview` (`spec/components.md`). Without `retake-edit`, the package's committed `previews/sheet.png`. |
 
 - Sheets, strips and frames are JPEG; waveforms and specimens are PNG; a thumbnail keeps PNG when the image has
   transparency.
@@ -180,6 +181,15 @@ hidden files and folders and files of unknown kinds.
 
 The result lists every item: `{path, id, status, kind, hash, duplicate_of?, near?, warnings?}`, `status` being
 `imported`, `duplicate`, `updated` (a plug-in re-index) or `skipped` (with `reason`).
+
+**Components.** A folder holding a `component.json` (`spec/components.md`) imports as one entry of kind `component`,
+`<scope>:components/<name>@<version>`: its `blob` is the `component.json` (referenced in place for a project; for
+`--scope lib` the package is first copied into `<library>/components/<name>@<version>/`, where `retake lib search`
+and the editor look), its `hash` the package hash, its title, tags (plus `component` and the category) and caption
+(the description) from the manifest, its license from the SPDX id (`CC0-1.0`, `MIT`, `Apache-2.0`, the BSDs, `ISC`
+and `OFL-1.1` are `cleared`, `CC-BY-4.0` is `attribution`, anything else `review-only`), and `meta.component` its
+name, version, category, `use_as`, hash and folder. A released version never changes: the same package again is a
+duplicate, another one under the same version is skipped.
 
 ## Search
 
@@ -370,7 +380,7 @@ Every command takes `--project DIR` and `--json`. Exit codes: 0 ok, 1 the operat
 | `retake assets import …` | Above. |
 | `retake assets search "<q>" …` | Above. |
 | `retake assets get <id>` | The entry. |
-| `retake assets preview <id> [--kind K] [--at T]... [--span sp:N]` | Preview files (made if missing): `contact_sheet`, `strip`, `waveform`, `thumbnail`, `specimen`, or frames at times. |
+| `retake assets preview <id> [--kind K] [--at T]... [--span sp:N]` | Preview files (made if missing): `contact_sheet`, `strip`, `waveform`, `thumbnail`, `specimen`, or frames at times; a component's `storybook` and `animation`. |
 | `retake assets span find [--type T]... [--where SQL] [--near ID@T \| DOMAIN@T] [--window S] [--asset ID] [--limit N]` | Spans. |
 | `retake assets span add <id> <t0> <t1> [--type T] [--label L] [--data JSON] [--confidence C]` | Adds a span (`source_of_label: manual`). |
 | `retake assets set <id> [--title T] [--tags a,b] [--add-tag T]... [--rm-tag T]... [--caption C] [--license S] [--credit C] [--license-source U] [--content-id-risk R] [--license-note N]` | Edits an entry: the only way to change a license. |
@@ -407,9 +417,10 @@ Served by `retake mcp <video>` (with the review tools of `spec/notes.md`) and `r
 Tables: `assets` (one row per entry; JSON columns for media, previews, tags, license extras, provenance, meta),
 `spans`, `clocks`, `span_types`, `transcripts` (words as JSON, and their text), `derived` (asset, recipe → blob),
 `hash_cache` (path, size, mtime → hash), `kits`, and the FTS5 tables `assets_fts` and `spans_fts`. `PRAGMA
-user_version` holds the schema version; migrations are forward-only, as in the project store.
+user_version` holds the schema version (2: the `component` kind); migrations are forward-only, as in the project
+store, and run with foreign keys off, each followed by a foreign key check.
 
 ## Later
 
 Embedding search (sqlite-vec, windowed embeddings) as a third fused list; near-duplicate video (frame-pHash
-sequences) and audio (Chromaprint); components and brand kit style sheets as entries; remote catalogs for team mode.
+sequences) and audio (Chromaprint); brand kit style sheets as entries; remote catalogs for team mode.
