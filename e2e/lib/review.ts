@@ -2,13 +2,27 @@
 // `window.__review` test hook (spec/api.md), exactly as the legacy driver tests/e2e_headless.mjs did.
 import type { Page } from '@playwright/test';
 
+/** A sidebar row as the hook's `sidebar` lists it (milestone 2). */
+export interface SidebarRow {
+  key: string; id: number; kind: 'note' | 'question'; mark: 'answered' | 'question' | 'open'; time: string; t0: number;
+  text: string; change: string | null; answeredIn: string | null; see: string | null; question: string | null;
+  answer: number | null; reopen: boolean; options: { label: string; known: boolean; on: boolean }[];
+}
+
 /** The parts of the page's test hook this suite reads. */
 export interface ReviewHook {
-  take: { id: string | null; closed: boolean; saving: unknown; strokes: { undone?: boolean }[] };
+  take: { id: string | null; closed: boolean; saving: unknown; strokes: { undone?: boolean }[];
+    /** Milestone 2 (new page only). */
+    images?: { id: number; file: string; mime: string; video_t: number; box: [number, number, number, number];
+      undone?: boolean; upload: string }[] };
   seg: unknown;
+  /** Milestone 2 (new page only): the sidebar's data and what it shows. */
+  notes?: { available: boolean; version: string | null; newest: boolean; items: { id: number }[];
+    job: { text: string; error: boolean; hint: string | null } | null };
+  sidebar?: { panel: boolean; toggle: boolean; phone: boolean; active: string | null; rows: SidebarRow[] };
   view: { base: string | null; shown: string | null; flipped: boolean; switching: boolean };
   info: { label?: string; name?: string; versions?: { label: string; name: string; duration: number | null }[] };
-  hist: { strokes: unknown[] };
+  hist: { strokes: unknown[]; images?: unknown[] };
   serialize: (take: unknown) => Record<string, unknown>;
   save: (take: unknown) => Promise<unknown>;
 }
