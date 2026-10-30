@@ -380,6 +380,23 @@ func TestRebuild(t *testing.T) {
 	}
 }
 
+func TestVersionOfTake(t *testing.T) {
+	fam := []family.Version{
+		{Label: "v6", Path: filepath.FromSlash("/p/v6/clip_v6.mp4")},
+		{Label: "v7", Path: filepath.FromSlash("/p/v7/clip_v7.mp4")},
+	}
+	for dir, want := range map[string]string{
+		"/p/v6/clip_v6.review/" + take:       "v6",
+		"/p/v7/clip_v7.review/" + take:       "v7",
+		"/p/v7/clip_v7.review/" + take + "/": "v7",
+		"/elsewhere/x.review/" + take:        "",
+	} {
+		if got := VersionOfTake(fam, filepath.FromSlash(dir)); got != want {
+			t.Errorf("VersionOfTake(%s) = %q, want %q", dir, got, want)
+		}
+	}
+}
+
 func TestDefaultBackoff(t *testing.T) {
 	if DefaultBackoff(1) != 2*time.Second || DefaultBackoff(2) != 8*time.Second {
 		t.Fatalf("backoff = %v, %v", DefaultBackoff(1), DefaultBackoff(2))

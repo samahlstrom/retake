@@ -126,6 +126,18 @@ func Notes(ctx context.Context, st *project.Store, v family.Version, fam []famil
 	return st.Sync(run)
 }
 
+// VersionOfTake returns the label of the version a take folder was recorded on: the family member whose
+// <stem>.review folder holds it. "" if none does (the sync then uses the run's version).
+func VersionOfTake(fam []family.Version, takeDir string) string {
+	parent := filepath.Dir(filepath.Clean(takeDir))
+	for _, v := range fam {
+		if family.SamePath(filepath.Clean(store.ReviewDir(v.Path)), parent) {
+			return v.Label
+		}
+	}
+	return ""
+}
+
 // TakeDirs returns the take folders a version's notes read: its own takes, then the ones inherit.json carries
 // over.
 func TakeDirs(v family.Version) []string {

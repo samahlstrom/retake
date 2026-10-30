@@ -24,9 +24,12 @@ type Detail struct {
 
 // Comment is one comment of a notes engine run: the part of the engine's result that a sync needs.
 type Comment struct {
+	// Key is the engine's stable key, <take folder>/<segment id>/<n> with n from 1. A comment carried over to
+	// other versions keeps it. "" = built from Take, Seg and N.
+	Key     string
 	Take    string  // the take id (YYYY-MM-DD_HH-MM-SS)
-	Seg     string  // the segment, as the engine names it (segments.json "id", e.g. "S2")
-	N       int     // the comment's index within that segment
+	Seg     string  // the segment's own id within the take (segments.json "id", e.g. "S2"); images.json uses it too
+	N       int     // the comment's index within that segment (when Key is empty)
 	Version string  // the label of the version the take was recorded on; "" = the run's version
 	T0, T1  float64 // the video time it covers, in seconds
 	Text    string
@@ -39,8 +42,13 @@ type Comment struct {
 	Detail   Detail
 }
 
-// Key returns the comment's stable note key: <take>/<seg>/<n>.
-func (c Comment) Key() string { return fmt.Sprintf("%s/%s/%d", c.Take, c.Seg, c.N) }
+// NoteKey returns the comment's stable note key: Key, else <take>/<seg>/<n>.
+func (c Comment) NoteKey() string {
+	if c.Key != "" {
+		return c.Key
+	}
+	return fmt.Sprintf("%s/%s/%d", c.Take, c.Seg, c.N)
+}
 
 // Run is the result of one notes engine run for a version: every comment of its takes, its inherited ones
 // included.
@@ -249,7 +257,7 @@ func (s *Store) Sync(run Run) (SyncResult, error) {
 			if c.Version == "" {
 				c.Version = run.Version
 			}
-			key := c.Key()
+			key := c.NoteKey()
 			if seen[key] {
 				continue // the engine gave a key twice: the first wins
 			}
@@ -272,8 +280,8 @@ func (s *Store) Sync(run Run) (SyncResult, error) {
 			return err
 		}
 		for _, n := range open {
-			if seen[n.Key] {
-				continue
+			if seen[n.Key] || slices.Contains(res.Reopened, n.ID) {
+				continue // still produced, or its question was just answered
 			}
 			if err := t.setStatus(n.ID, StatusRetracted); err != nil {
 				return err

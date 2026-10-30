@@ -412,6 +412,32 @@ func TestSyncKeepsIDsAndStates(t *testing.T) {
 	}
 }
 
+// The engine's own keys: a comment carried over to v7 keeps the key it has on v6, so it stays one note.
+func TestSyncCarriedKeys(t *testing.T) {
+	s, _ := newStore(t)
+	own := Comment{Key: take1 + "/S1/1", Take: take1, Seg: "S1", Version: "v6", T0: 2, T1: 3, Text: "carried"}
+	if _, err := s.Sync(Run{Version: "v6", Comments: []Comment{own}}); err != nil {
+		t.Fatal(err)
+	}
+	v7 := Comment{Key: take2 + "/S1/1", Take: take2, Seg: "S1", T0: 9, T1: 10, Text: "new on v7"}
+	res, err := s.Sync(Run{Version: "v7", Comments: []Comment{own, v7, own}})
+	if err != nil || !slices.Equal(res.Added, []int64{2}) || len(res.Updated) != 0 {
+		t.Fatalf("v7 run = %+v %v", res, err)
+	}
+	byKey := notesByKey(t, s)
+	if n := byKey[take1+"/S1/1"]; n.ID != 1 || n.Version != "v6" {
+		t.Errorf("carried note = %+v", n)
+	}
+	if n := byKey[take2+"/S1/1"]; n.Version != "v7" {
+		t.Errorf("v7's note = %+v", n)
+	}
+	// v7's next run drops the carried comment (its range changed): v6's note isn't v7's to retract.
+	res, err = s.Sync(Run{Version: "v7", Comments: []Comment{v7}})
+	if err != nil || len(res.Retracted) != 0 {
+		t.Fatalf("v7 run without the carried note = %+v %v", res, err)
+	}
+}
+
 func TestSyncAnswers(t *testing.T) {
 	s, _ := newStore(t)
 	if _, err := s.Sync(Run{Version: "v7", Comments: []Comment{comment(take1, "S1", 0, 4, "swap the clip")}}); err != nil {
