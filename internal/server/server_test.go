@@ -762,3 +762,38 @@ func TestParseOffset(t *testing.T) {
 		}
 	}
 }
+
+// A DNS-rebinding page reaches 127.0.0.1 under its own hostname; every route must refuse it, before counting as
+// contact for the idle timer.
+func TestHostHeaderRebinding(t *testing.T) {
+	f := newFixture(t)
+	h := start(t, Options{Video: f.video})
+	port := h.ts.Listener.Addr().(*net.TCPAddr).Port
+	for _, tc := range []struct {
+		host string
+		want int
+	}{
+		{fmt.Sprintf("127.0.0.1:%d", port), http.StatusOK},
+		{fmt.Sprintf("localhost:%d", port), http.StatusOK},
+		{fmt.Sprintf("LOCALHOST:%d", port), http.StatusOK},
+		{fmt.Sprintf("evil.example:%d", port), http.StatusForbidden},
+		{"127.0.0.1", http.StatusForbidden},
+		{fmt.Sprintf("127.0.0.1:%d", port+1), http.StatusForbidden},
+	} {
+		for _, path := range []string{"/api/ping", "/api/info", "/video"} {
+			req, err := http.NewRequest(http.MethodGet, h.url+path, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			req.Host = tc.host
+			res, err := h.ts.Client().Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_ = res.Body.Close()
+			if res.StatusCode != tc.want {
+				t.Errorf("Host %q %s: got %d, want %d", tc.host, path, res.StatusCode, tc.want)
+			}
+		}
+	}
+}

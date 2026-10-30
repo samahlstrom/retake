@@ -61,6 +61,7 @@ type Options struct {
 type Server struct {
 	opts    Options
 	origins map[string]bool
+	hosts   map[string]bool // Host headers we answer to; anything else is a DNS-rebinding attempt
 	fam     atomic.Pointer[[]family.Version]
 	writeMu sync.Mutex // serializes every take write
 
@@ -85,6 +86,9 @@ func New(opts Options) *Server {
 	s := &Server{opts: opts, origins: map[string]bool{
 		fmt.Sprintf("http://127.0.0.1:%d", opts.Port): true,
 		fmt.Sprintf("http://localhost:%d", opts.Port): true,
+	}, hosts: map[string]bool{
+		fmt.Sprintf("127.0.0.1:%d", opts.Port): true,
+		fmt.Sprintf("localhost:%d", opts.Port): true,
 	}}
 	s.Rescan()
 	return s
@@ -188,6 +192,12 @@ func (s *Server) errorLog() io.Writer {
 
 // ServeHTTP implements http.Handler.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// A page on another site can point its own hostname at 127.0.0.1 (DNS rebinding) and then read our videos and
+	// takes as "same origin". Its requests still carry its hostname, so only answer to our own.
+	if !s.hosts[strings.ToLower(r.Host)] {
+		s.fail(w, r, http.StatusForbidden, "bad host")
+		return
+	}
 	s.touch()
 	if s.opts.Verbose {
 		sw := &statusWriter{ResponseWriter: w, code: http.StatusOK}
