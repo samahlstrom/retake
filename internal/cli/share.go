@@ -463,7 +463,7 @@ func (s *share) print(link, host string, row project.Token) {
 		_, _ = fmt.Fprintln(w, string(b))
 		return
 	}
-	_, _ = fmt.Fprintf(w, "retake: sharing %s with %s %s link%s, %s\n", s.given, article(string(row.Role)), row.Role, labelText(row),
+	_, _ = fmt.Fprintf(w, "retake: sharing %s with %s %s link%s, %s\n", s.given, article(row.Role), row.Role, labelText(row),
 		untilText(row))
 	_, _ = fmt.Fprintf(w, "  link   %s\n", link)
 	if !s.a.noQR {
