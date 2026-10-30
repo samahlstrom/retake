@@ -1,5 +1,6 @@
-// Keyboard: the legacy player's keys, unchanged, plus N (milestone 2) to show or hide the notes sidebar. Handled on
-// window in the capture phase so they work whatever has focus, and nothing else on the page sees them.
+// Keyboard: the legacy player's keys, unchanged, plus N (milestone 2) to show or hide the notes sidebar and E for the
+// eraser. Handled on window in the capture phase so they work whatever has focus, and nothing else on the page sees
+// them.
 
 export type Action =
   | 'save'
@@ -19,7 +20,8 @@ export type Action =
   | 'color3'
   | 'color4'
   | 'fullscreen'
-  | 'notes';
+  | 'notes'
+  | 'eraser';
 
 const PLAIN: Record<string, Action> = {
   ' ': 'togglePlay',
@@ -40,10 +42,11 @@ const PLAIN: Record<string, Action> = {
   '4': 'color4',
   f: 'fullscreen',
   n: 'notes',
+  e: 'eraser',
 };
 
 /** Keys that do nothing on auto-repeat (holding R must not toggle recording on and off). */
-const NO_REPEAT = 'kzrfcn[] ';
+const NO_REPEAT = 'kzrfcne[] ';
 
 export interface KeyLike {
   key: string;

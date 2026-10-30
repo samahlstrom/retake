@@ -18,7 +18,8 @@
     {#if viewOnly}
       <b>View only</b> · <b>Space</b> play · <b>←/→</b> 5 s · <b>C</b> compare version
     {:else}
-      <b>R</b> record · <b>Space</b> play · <b>←/→</b> 5 s · <b>1–4</b> pen color · <b>Z</b> undo · <b>C</b> compare version
+      <b>R</b> record · <b>Space</b> play · <b>←/→</b> 5 s · <b>1–4</b> pen color · <b>E</b> eraser · <b>Z</b> undo ·
+      <b>C</b> compare version
     {/if}
   </div>
 {:else}

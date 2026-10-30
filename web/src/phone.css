@@ -140,6 +140,10 @@ html[data-phone] .sw {
   padding: 9px;
   background-clip: content-box !important;
 }
+html[data-phone] .sw.er svg {
+  width: 22px;
+  height: 22px;
+}
 html[data-phone] .sw.on::after {
   inset: 4px;
   border-width: 2px;

@@ -40,7 +40,12 @@
     </div>
     {#if review.canRecord}
       <div class="prow">
-        <PenColors color={review.penColor} onpick={review.setColor} />
+        <PenColors
+          color={review.penColor}
+          onpick={review.setColor}
+          eraser={review.eraser}
+          onerase={review.toggleEraser}
+        />
         <span class="grow"></span>
         <UndoButton onclick={review.undo} />
       </div>
@@ -58,7 +63,12 @@
 {:else}
   <div id="pleft">
     {#if review.canRecord}
-      <PenColors color={review.penColor} onpick={review.setColor} />
+      <PenColors
+        color={review.penColor}
+        onpick={review.setColor}
+        eraser={review.eraser}
+        onerase={review.toggleEraser}
+      />
       <UndoButton onclick={review.undo} compact />
     {/if}
   </div>

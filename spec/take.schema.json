@@ -118,9 +118,9 @@
         "session_t": { "$ref": "#/$defs/sessionT" },
         "video_t": { "$ref": "#/$defs/videoT" },
         "event": {
-          "description": "The event kind. `ended` is logged when playback reaches the end (legacy behavior).",
+          "description": "The event kind. `ended` is logged when playback reaches the end (legacy behavior). `erase` and `unerase` (v1.2): the eraser removed a stroke, and Z brought it back.",
           "enum": ["start", "rec_start", "rec_stop", "play", "pause", "seek", "tick", "draw_start", "draw_end", "undo",
-            "version", "ended"]
+            "version", "ended", "erase", "unerase"]
         }
       },
       "required": ["session_t", "video_t", "event"],
@@ -178,6 +178,10 @@
         },
         {
           "if": { "properties": { "event": { "const": "undo" } } },
+          "then": { "properties": { "id": { "$ref": "#/$defs/strokeId" } }, "required": ["id"] }
+        },
+        {
+          "if": { "properties": { "event": { "enum": ["erase", "unerase"] } } },
           "then": { "properties": { "id": { "$ref": "#/$defs/strokeId" } }, "required": ["id"] }
         },
         {

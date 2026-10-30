@@ -24,7 +24,8 @@
   ></video>
   <canvas id="freeze" bind:this={review.el.freeze} style:display={review.freezeShown ? 'block' : null}></canvas>
   <ImageLayer {review} />
-  <canvas id="ink" class:pen={!!review.seg} {@attach review.attachInk}></canvas>
+  <canvas id="ink" class:pen={!!review.seg} class:erasing={!!review.seg && review.eraser} {@attach review.attachInk}
+  ></canvas>
   {#if review.layoutMode !== 'portrait'}
     <Hint
       gone={review.hintGone}

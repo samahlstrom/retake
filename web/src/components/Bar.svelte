@@ -19,7 +19,7 @@
   <Timeline {review} />
   <VersionPicker {review} />
   {#if review.canRecord}
-    <PenColors color={review.penColor} onpick={review.setColor} />
+    <PenColors color={review.penColor} onpick={review.setColor} eraser={review.eraser} onerase={review.toggleEraser} />
     <VoiceBox {review} />
   {/if}
 </div>

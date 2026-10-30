@@ -30,6 +30,7 @@ export function newTake(version: string | null, bins: number): Take {
     images: [],
     segments: [],
     nextId: 1,
+    erased: [],
     dirty: false,
     lastSave: 0,
     saving: null,

@@ -85,6 +85,8 @@ export interface Stroke extends HistoryStroke {
   p1?: number;
   video_t_end?: number;
   paused: boolean;
+  /** Removed by the eraser (it is also `undone`, so it is drawn and saved no more); Z can bring it back. */
+  erased?: boolean;
 }
 
 /** An image dropped or pasted onto the video while recording (take format v1.1). */
@@ -148,6 +150,8 @@ export interface Take {
   images: TakeImage[];
   segments: Segment[];
   nextId: number;
+  /** The eraser's erases, oldest first, for Z (lib/eraser.ts). */
+  erased: { id: number; seq: number }[];
   dirty: boolean;
   lastSave: number;
   saving: Promise<void> | null;

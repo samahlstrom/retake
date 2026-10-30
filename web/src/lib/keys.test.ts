@@ -41,6 +41,12 @@ describe('keys', () => {
     expect(keyAction(k('v', { metaKey: true }))).toBeNull();
   });
 
+  it('E switches to the eraser and back (once per press)', () => {
+    expect(keyAction(k('e'))).toEqual({ act: 'eraser', stop: true });
+    expect(keyAction(k('E'))).toEqual({ act: 'eraser', stop: true });
+    expect(keyAction(k('e', { repeat: true }))).toEqual({ act: null, stop: true });
+  });
+
   it('saves on Ctrl/Cmd+S and undoes on Ctrl/Cmd+Z without stopping the event', () => {
     expect(keyAction(k('s', { ctrlKey: true }))).toEqual({ act: 'save', stop: false });
     expect(keyAction(k('S', { metaKey: true }))).toEqual({ act: 'save', stop: false });

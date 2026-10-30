@@ -24,13 +24,13 @@ import {
   HINT_IMAGE,
   imageExt,
   imageName,
-  lastUndoable,
   MSG_IMAGE_BAD,
   MSG_IMAGE_NOFILE,
   placeBox,
   refuseImage,
   resizeBox,
 } from './images';
+import { ERASE_RADIUS, strokesHit, sweep, undoTarget } from './eraser';
 import { keyAction, type Action } from './keys';
 import { layoutMode, type LayoutMode } from './layout';
 import { closeMic, MIC_BLOCKED, MIC_BLOCKED_TOUCH, openMic, pickMime, recorderMime, type Mic } from './mic';
@@ -135,6 +135,8 @@ export class Review {
   starting = $state(false);
   recElapsed = $state('0:00');
   penColor = $state<PenColor>('red');
+  /** The eraser is the tool (E, or its button): a swipe over a line removes it. A pen color brings the pen back. */
+  eraser = $state(false);
   versions = $state.raw<Version[]>([]);
   base = $state<string | null>(null);
   shown = $state<string | null>(null);
@@ -646,6 +648,12 @@ export class Review {
       } catch {
         /* the pointer is already gone: the stroke still ends on its pointerup */
       }
+      if (this.eraser) {
+        this.#erasing = true;
+        this.#eraseLast = null;
+        this.#eraseAt(e);
+        return;
+      }
       this.drawing = {
         id: 0,
         seg: s.id,
@@ -659,12 +667,18 @@ export class Review {
       };
     };
     const move = (e: PointerEvent) => {
+      if (this.#erasing) {
+        const co = e.getCoalescedEvents ? e.getCoalescedEvents() : [];
+        for (const ce of co.length ? co : [e]) this.#eraseAt(ce);
+        return;
+      }
       const st = this.drawing;
       if (!st) return;
       const co = e.getCoalescedEvents ? e.getCoalescedEvents() : [];
       for (const ce of co.length ? co : [e]) addPoint(st.points, this.#norm(ce), this.inkW, this.inkH);
     };
     const up = () => {
+      this.#erasing = false;
       const st = this.drawing,
         t = this.take;
       if (!st) return;
@@ -679,6 +693,7 @@ export class Review {
     };
     const cancel = () => {
       this.drawing = null;
+      this.#erasing = false;
     };
     ink.addEventListener('pointerdown', down);
     ink.addEventListener('pointermove', move);
@@ -692,14 +707,57 @@ export class Review {
     };
   };
 
-  /** Z: undo the last stroke or image, whichever came last (they share one id counter). */
+  /**
+   * Z: undo the last stroke or image, whichever came last (they share one id counter); or, when the last thing done
+   * was an erase, bring that line back.
+   */
   undo = (): void => {
     const t = this.take;
     if (t.closed) return;
-    const last = lastUndoable(t);
-    if (!last) return;
-    last.item.undone = true;
-    this.logEv('undo', { id: last.item.id });
+    const target = undoTarget(t);
+    if (!target) return;
+    if (target.kind === 'unerase') {
+      t.erased.pop();
+      const st = t.strokes.find((x) => x.id === target.mark.id);
+      if (!st) return;
+      st.undone = false;
+      st.erased = false;
+      this.logEv('unerase', { id: st.id });
+      return;
+    }
+    target.item.undone = true;
+    this.logEv('undo', { id: target.item.id });
+  };
+
+  #erasing = false;
+  /** Where the eraser was at the last pointer event of this swipe (normalized), so a fast swipe misses nothing. */
+  #eraseLast: Point | null = null;
+
+  /** The eraser at a pointer position: remove every line of this take it touches that is on screen now. */
+  #eraseAt(e: { clientX: number; clientY: number }): void {
+    const t = this.take;
+    if (t.closed || !this.seg) return;
+    const r = this.touch ? ERASE_RADIUS.touch : ERASE_RADIUS.mouse,
+      p = this.#norm(e),
+      from = this.#eraseLast ?? p;
+    this.#eraseLast = p;
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- a local scratch set, not state
+    const ids = new Set<number>();
+    for (const q of sweep(from, p, this.inkW, this.inkH, r / 2))
+      for (const id of strokesHit(t.strokes, q, this.video.currentTime, this.inkW, this.inkH, r)) ids.add(id);
+    for (const id of ids) {
+      const st = t.strokes.find((x) => x.id === id);
+      if (!st) continue;
+      st.undone = true;
+      st.erased = true;
+      t.erased.push({ id, seq: t.nextId });
+      this.logEv('erase', { id });
+    }
+  }
+
+  /** E or the eraser button: switch between the eraser and the pen. */
+  toggleEraser = (): void => {
+    this.eraser = !this.eraser;
   };
 
   // ---------------------------------------------------------------- images (only while recording, like the pen)
@@ -1165,6 +1223,7 @@ export class Review {
 
   setColor = (c: PenColor): void => {
     this.penColor = c;
+    this.eraser = false;
   };
 
   done = async (): Promise<void> => {
@@ -1232,6 +1291,9 @@ export class Review {
       case 'color3':
       case 'color4':
         this.setColor(COLOR_KEYS[Number(act.slice(5)) - 1]);
+        break;
+      case 'eraser':
+        this.toggleEraser();
         break;
       case 'fullscreen':
         if (document.fullscreenElement) void document.exitFullscreen();
