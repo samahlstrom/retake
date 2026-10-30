@@ -367,8 +367,8 @@ pub fn filter_frame(src: &Frame, blur: f64, shadow: Option<&Shadow>, k: f64) -> 
 
 /// What a layer draws, in its content box.
 enum Body {
-    /// Paragraphs (stroke first) and their vertical offset in the box.
-    Text(Vec<Paragraph>, f32),
+    /// Paragraphs (stroke first) and their offset in the box.
+    Text(Vec<Paragraph>, (f32, f32)),
     Shape(Shape),
     Image(Image, Rect),
     Group(Vec<Layer>),
@@ -586,7 +586,7 @@ impl Painter {
         ts.set_height_override(true);
         ts.set_half_leading(true);
         ts.set_foreground_paint(paint);
-        let hinting = t.hinting.or(pillow.then_some(Hinting::Normal));
+        let hinting = t.hinting.or(pillow.then_some(Hinting::Slight));
         if let Some(h) = hinting {
             ts.set_font_hinting(match h {
                 Hinting::None => FontHinting::None,
@@ -643,7 +643,7 @@ impl Painter {
         t: &Text,
         time: f64,
         props: &Value,
-    ) -> Result<(Vec<Paragraph>, f32, f64, f64), EditError> {
+    ) -> Result<(Vec<Paragraph>, (f32, f32), f64, f64), EditError> {
         let mut s = match &t.text {
             TextValue::Str(s) => s.clone(),
             TextValue::Expr { expr } => {
@@ -678,22 +678,34 @@ impl Painter {
         hp.set_anti_alias(true);
         let p = self.paragraph_hl(t, &s, &fill, w, Some((&ranges, &hp)))?;
         let h = p.height() as f64;
-        let dy = if t.metrics == Some(Metrics::Pillow) { self.pillow_dy(t, &p) } else { 0.0 };
+        let off = if t.metrics == Some(Metrics::Pillow) { self.pillow_offset(t, &p, w, h as f32) } else { (0.0, 0.0) };
         out.push(p);
-        Ok((out, dy, w as f64, h))
+        Ok((out, off, w as f64, h))
     }
 
-    /// Pillow's `anchor="mm"` puts a line's middle between the font's ascender and descender, which FreeType rounds
-    /// to whole pixels (the ascender up, the descender down); Skia centres the unrounded ascent and descent in the
-    /// line box. The difference, per line (the same for every line of one style), moves the paragraph.
-    fn pillow_dy(&self, t: &Text, p: &Paragraph) -> f32 {
+    /// Where Pillow's `ImageDraw.text(…, anchor="mm")` puts the first line, relative to Skia's layout of it in the
+    /// content box. Pillow rounds both anchor offsets to whole pixels (26.6 `PIXEL()`): the horizontal one is half
+    /// the line's advance, the vertical one the middle of the ascender and descender as FreeType sizes them
+    /// (the ascender rounded up, the descender down).
+    fn pillow_offset(&mut self, t: &Text, p: &Paragraph, w: f32, h: f32) -> (f32, f32) {
+        let Some(lm) = p.get_line_metrics().into_iter().next() else { return (0.0, 0.0) };
         let size = t.size.unwrap_or(Text::DEFAULT_SIZE) as f32;
-        let Some(lm) = p.get_line_metrics().into_iter().next() else { return 0.0 };
-        let (asc, desc) = (lm.ascent as f32, lm.descent as f32);
-        let (asc_r, desc_r) = (asc.ceil(), desc.ceil());
-        let _ = size;
-        // Skia's middle is at baseline + (desc - asc) / 2; Pillow's at baseline + (desc_r - asc_r) / 2.
-        ((desc - asc) - (desc_r - asc_r)) / 2.0
+        let fam = family(t.font_name(), self.res.text_weight(t));
+        let tf = self.fonts.find_typefaces(&[fam.as_str()], skia_safe::FontStyle::default()).into_iter().next();
+        let Some(tf) = tf else { return (0.0, 0.0) };
+        let mut font = skia_safe::Font::from_typeface(tf, size);
+        font.set_hinting(FontHinting::None);
+        font.set_linear_metrics(true);
+        let (_, m) = font.metrics();
+        let pixel = |x: f32| (x + 0.5).floor();
+        let (asc_r, desc_r) = ((-m.ascent).ceil(), m.descent.ceil());
+        let baseline = h / 2.0 + pixel((asc_r - desc_r) / 2.0);
+        let dy = baseline - lm.baseline as f32;
+        let dx = match t.align {
+            Align::Center => (w / 2.0 - pixel(lm.width as f32 / 2.0)) - lm.left as f32,
+            _ => 0.0,
+        };
+        (dx, dy)
     }
 
     /// The body and content box of a non-video layer at `t`.
@@ -706,8 +718,8 @@ impl Painter {
     ) -> Result<Option<(Body, f64, f64)>, EditError> {
         Ok(Some(match &l.content {
             Content::Text(tx) => {
-                let (ps, dy, w, h) = self.text(l, tx, t, props)?;
-                (Body::Text(ps, dy), w, h)
+                let (ps, off, w, h) = self.text(l, tx, t, props)?;
+                (Body::Text(ps, off), w, h)
             }
             Content::Shape(s) => {
                 let [w, h] = shape_size(s);
@@ -771,9 +783,9 @@ impl Painter {
         }
         canvas.concat(&sk(&placed.m));
         match body {
-            Body::Text(ps, dy) => {
+            Body::Text(ps, off) => {
                 for p in &ps {
-                    p.paint(canvas, (0.0, dy));
+                    p.paint(canvas, off);
                 }
             }
             Body::Shape(s) => {

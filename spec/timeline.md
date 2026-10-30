@@ -273,7 +273,7 @@ by more than 2×; use it to match pictures made that way.
 |---|---|
 | `hinting` | `none`, `slight`, `normal` or `full`: FreeType's hinting of the outlines. Default: Skia's paragraph default (`slight`, with subpixel positioning). |
 | `subpixel` | `true` (default): glyphs sit at fractions of a pixel. `false` puts each glyph on whole pixels, as FreeType-based tools such as Pillow do. |
-| `metrics` | `skia` (default): each line box is `line_height` × `size` with the font's ascent and descent centred in it (half leading). `pillow`: lines are placed as Pillow's `ImageDraw.text(…, anchor="mm")` places them, centred between the font's ascender and descender rounded to whole pixels as FreeType rounds them, with whole-pixel glyph positions, normal hinting and Pillow's stroke. Use it to match drawings made with Pillow. |
+| `metrics` | `skia` (default): each line box is `line_height` × `size` with the font's ascent and descent centred in it (half leading). `pillow`: the first line is placed as Pillow's `ImageDraw.text(…, anchor="mm")` places it: both anchor offsets rounded to whole pixels as Pillow rounds them (half the advance; the middle of the ascender and descender as FreeType sizes them), glyphs on whole pixels (`subpixel: false`) and `slight` hinting unless set. Use it to match drawings made with Pillow: measured against Pillow 13 (`editor/crates/render/tests/pillow.rs`), lines land within 0.1 px vertically and 1.4 px horizontally (glyph advances still differ slightly). |
 
 ### Props, keyframes and easing
 
