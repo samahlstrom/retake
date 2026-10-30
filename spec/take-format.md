@@ -32,3 +32,16 @@ every take it produces against them, and so must any new writer.
 - A take is append-only while open. Saving rewrites the JSON files atomically, and audio is appended by byte offset.
 - Nothing outside an R-on/R-off segment is recorded: no audio, and no strokes. The pen only works while recording.
 - Nothing is ever deleted by the player.
+
+## Erased lines (v1.2)
+
+The eraser removes any line on screen, recording or not. A line of the take in progress is dropped from that take:
+an `erase` event (+`id`) is logged and the stroke is left out of strokes.json; `unerase` brings it back. Takes are
+never rewritten after the fact, so a line of an earlier take (history) is erased in the version's
+`<stem>.review/erased.json` instead:
+
+```json
+{"erased": [{"take": "2026-10-29_01-05-21", "id": 3, "at": "2026-10-30T11:02:00-06:00", "by": "Sam"}]}
+```
+
+`/api/history` and the notes engine leave those lines out. The take's own files stay as they were.

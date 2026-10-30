@@ -839,3 +839,68 @@ func TestAllowHostForTunnels(t *testing.T) {
 		t.Errorf("other host: %d, want 403", got)
 	}
 }
+
+// The eraser on an earlier take's line: POST /api/erase keeps it in the version's erased.json, and /api/history
+// leaves it out; erased: false brings it back. The take's own files are never touched.
+func TestEraseHistoryLine(t *testing.T) {
+	f := newFixture(t)
+	h := start(t, Options{Video: f.video})
+	take := "2026-03-01_10-00-00"
+	dir := filepath.Join(f.root, "v6", "clip_v6.review", take)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	strokes := `[{"id":1,"video_t":2,"color":"red","points":[[0.1,0.1],[0.2,0.2]]},` +
+		`{"id":2,"video_t":3,"color":"green","points":[[0.3,0.3],[0.4,0.4]]}]`
+	if err := os.WriteFile(filepath.Join(dir, "strokes.json"), []byte(strokes), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ids := func() []float64 {
+		var out []float64
+		for _, e := range h.get("/api/history?v=v6", nil).json(t)["history"].([]any) {
+			for _, s := range e.(map[string]any)["strokes"].([]any) {
+				out = append(out, s.(map[string]any)["id"].(float64))
+			}
+		}
+		return out
+	}
+	if got := ids(); len(got) != 2 {
+		t.Fatalf("history ids before: %v", got)
+	}
+	if r := h.post("/api/erase?v=v6", `{"take":"`+take+`","id":1}`, nil); r.code != 200 {
+		t.Fatalf("erase: %d %s", r.code, r.body)
+	}
+	if got := ids(); len(got) != 1 || got[0] != 2 {
+		t.Fatalf("history after erasing 1: %v", got)
+	}
+	b, err := os.ReadFile(filepath.Join(f.root, "v6", "clip_v6.review", "erased.json"))
+	if err != nil || !strings.Contains(string(b), `"take": "`+take+`"`) {
+		t.Fatalf("erased.json: %s %v", b, err)
+	}
+	if after, _ := os.ReadFile(filepath.Join(dir, "strokes.json")); string(after) != strokes {
+		t.Fatalf("the take's strokes.json changed: %s", after)
+	}
+	if r := h.post("/api/erase?v=v6", `{"take":"`+take+`","id":1,"erased":false}`, nil); r.code != 200 {
+		t.Fatalf("unerase: %d %s", r.code, r.body)
+	}
+	if got := ids(); len(got) != 2 {
+		t.Fatalf("history after bringing 1 back: %v", got)
+	}
+	for _, tc := range []struct {
+		path, body string
+		code       int
+	}{
+		{"/api/erase?v=v6", `{"take":"nope","id":1}`, 400},
+		{"/api/erase?v=v6", `{"take":"` + take + `","id":0}`, 400},
+		{"/api/erase?v=v6", `{"take":"2026-03-01_11-00-00","id":1}`, 404},
+		{"/api/erase?v=v99", `{"take":"` + take + `","id":1}`, 400},
+		{"/api/erase?v=v6", `not json`, 400},
+	} {
+		if r := h.post(tc.path, tc.body, nil); r.code != tc.code {
+			t.Errorf("%s %s: %d, want %d", tc.path, tc.body, r.code, tc.code)
+		}
+	}
+	if r := h.post("/api/erase?v=v6", `{"take":"`+take+`","id":1}`, map[string]string{"Origin": "http://evil.example"}); r.code != 403 {
+		t.Errorf("foreign origin: %d", r.code)
+	}
+}

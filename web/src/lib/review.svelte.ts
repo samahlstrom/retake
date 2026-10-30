@@ -635,6 +635,19 @@ export class Review {
       const s = this.seg,
         video = this.video;
       if (e.button !== 0 || this.drawing) return;
+      if (this.eraser && this.canRecord) {
+        // The eraser works recording or not: it only ever removes.
+        e.preventDefault();
+        try {
+          ink.setPointerCapture(e.pointerId);
+        } catch {
+          /* the pointer is already gone */
+        }
+        this.#erasing = true;
+        this.#eraseLast = null;
+        this.#eraseAt(e);
+        return;
+      }
       if (!s) {
         if (!this.drawHintShown) {
           this.toast.say(!this.canRecord ? VIEW_ONLY : this.touch ? HINT_DRAW_TOUCH : HINT_DRAW, 2600);
@@ -647,12 +660,6 @@ export class Review {
         ink.setPointerCapture(e.pointerId);
       } catch {
         /* the pointer is already gone: the stroke still ends on its pointerup */
-      }
-      if (this.eraser) {
-        this.#erasing = true;
-        this.#eraseLast = null;
-        this.#eraseAt(e);
-        return;
       }
       this.drawing = {
         id: 0,
@@ -713,12 +720,21 @@ export class Review {
    */
   undo = (): void => {
     const t = this.take;
-    if (t.closed) return;
     const target = undoTarget(t);
+    if (t.closed && target?.kind !== 'unerase') return;
     if (!target) return;
     if (target.kind === 'unerase') {
       t.erased.pop();
-      const st = t.strokes.find((x) => x.id === target.mark.id);
+      const { take, id } = target.mark;
+      if (take) {
+        const hs = this.hist.strokes.find((x) => x.take === take && x.id === id);
+        if (hs) {
+          hs.undone = false;
+          void this.#saveErase(hs, false);
+        }
+        return;
+      }
+      const st = t.strokes.find((x) => x.id === id);
       if (!st) return;
       st.undone = false;
       st.erased = false;
@@ -733,25 +749,55 @@ export class Review {
   /** Where the eraser was at the last pointer event of this swipe (normalized), so a fast swipe misses nothing. */
   #eraseLast: Point | null = null;
 
-  /** The eraser at a pointer position: remove every line of this take it touches that is on screen now. */
+  /**
+   * The eraser at a pointer position: remove every line on screen it touches. The take in progress drops its own
+   * lines; a line of an earlier take is erased on the server (erased.json).
+   */
   #eraseAt(e: { clientX: number; clientY: number }): void {
-    const t = this.take;
-    if (t.closed || !this.seg) return;
+    const t = this.take,
+      vt = this.video.currentTime;
     const r = this.touch ? ERASE_RADIUS.touch : ERASE_RADIUS.mouse,
       p = this.#norm(e),
       from = this.#eraseLast ?? p;
     this.#eraseLast = p;
-    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- a local scratch set, not state
-    const ids = new Set<number>();
-    for (const q of sweep(from, p, this.inkW, this.inkH, r / 2))
-      for (const id of strokesHit(t.strokes, q, this.video.currentTime, this.inkW, this.inkH, r)) ids.add(id);
-    for (const id of ids) {
+    const own = t.id && !t.closed ? t.strokes : [];
+    const hist = this.hist.strokes.filter((st) => typeof st.id === 'number' && !!st.take && !st.undone);
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local scratch sets, not state
+    const ownHits = new Set<number>(),
+      // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local scratch sets, not state
+      histHits = new Set<HistoryStroke>();
+    for (const q of sweep(from, p, this.inkW, this.inkH, r / 2)) {
+      for (const id of strokesHit(own, q, vt, this.inkW, this.inkH, r)) ownHits.add(id);
+      for (const st of hist)
+        if (!histHits.has(st) && strokesHit([st as Stroke], q, vt, this.inkW, this.inkH, r).length) histHits.add(st);
+    }
+    for (const id of ownHits) {
       const st = t.strokes.find((x) => x.id === id);
       if (!st) continue;
       st.undone = true;
       st.erased = true;
       t.erased.push({ id, seq: t.nextId });
       this.logEv('erase', { id });
+    }
+    for (const st of histHits) {
+      st.undone = true;
+      t.erased.push({ id: st.id as number, take: st.take, seq: t.nextId });
+      void this.#saveErase(st, true);
+    }
+  }
+
+  /** Erase (or bring back) a line of an earlier take on the server; if that fails, the line comes back on screen. */
+  async #saveErase(st: HistoryStroke, erased: boolean): Promise<void> {
+    try {
+      const r = await fetch(`api/erase?v=${encodeURIComponent(this.shown ?? '')}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ take: st.take, id: st.id, erased }),
+      });
+      if (!r.ok) throw new Error(String(r.status));
+    } catch {
+      st.undone = !erased;
+      this.toast.say(erased ? "Couldn't erase that line" : "Couldn't bring that line back", 3000);
     }
   }
 
@@ -1185,7 +1231,7 @@ export class Review {
   addHistory(list: HistoryEntry[] | undefined): void {
     const hist = this.hist;
     for (const h of list || []) {
-      for (const st of h.strokes || []) hist.strokes.push(st);
+      for (const st of h.strokes || []) hist.strokes.push({ ...st, take: h.id });
       for (const im of h.images || []) if (im && im.url && Array.isArray(im.box)) hist.images.push(im);
       for (const [i, v] of (h.voice && h.voice.bins) || []) {
         if (i >= hist.bins.length) {

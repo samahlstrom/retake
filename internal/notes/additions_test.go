@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"image/png"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -387,5 +388,63 @@ func TestReviewer(t *testing.T) {
 	}
 	if legacyReviewer("ask Sam rather than guess; Sam said", "Ana") != "ask Ana rather than guess; Sam said" {
 		t.Error("legacyReviewer must rewrite only legacy's own phrases")
+	}
+}
+
+// A line erased later with the eraser (the version's erased.json) is left out of the notes, like an undone one.
+func TestErasedLinesLeaveTheNotes(t *testing.T) {
+	strokesIn := func(r *Result) int {
+		n := 0
+		for _, c := range r.Comments {
+			n += len(c.Strokes)
+		}
+		return n
+	}
+	build := func(erased string) *Result {
+		dir := t.TempDir()
+		src := filepath.Join("testdata", "shapes", "clip_v6.review")
+		dst := filepath.Join(dir, "clip_v6.review")
+		if err := os.CopyFS(dst, os.DirFS(src)); err != nil {
+			t.Fatal(err)
+		}
+		if erased != "" {
+			if err := os.WriteFile(filepath.Join(dst, "erased.json"), []byte(erased), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		r, err := Run(context.Background(), dst, Options{NoSnapshots: true, Log: io.Discard})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return r
+	}
+	base := build("")
+	before := strokesIn(base)
+	var ids []string // two strokes that are in the notes
+	for _, c := range base.Comments {
+		for _, s := range c.Strokes {
+			if len(ids) < 2 {
+				ids = append(ids, string(s.ID))
+			}
+		}
+	}
+	if len(ids) < 2 {
+		t.Fatalf("the fixture's notes have %d strokes", before)
+	}
+	after := build(`{"erased":[{"take":"2026-04-04_20-00-00","id":` + ids[0] + `},` +
+		`{"take":"2026-04-04_20-00-00","id":` + ids[1] + `}]}`)
+	if got := strokesIn(after); got != before-2 {
+		t.Fatalf("strokes in the notes: %d after erasing 2 of %d", got, before)
+	}
+	for _, c := range after.Comments {
+		for _, s := range c.Strokes {
+			if id := string(s.ID); id == ids[0] || id == ids[1] {
+				t.Errorf("erased stroke %s is still in the notes", id)
+			}
+		}
+	}
+	// Another take's ids don't count.
+	if got := strokesIn(build(`{"erased":[{"take":"2026-01-01_00-00-00","id":` + ids[0] + `}]}`)); got != before {
+		t.Errorf("an erase of another take changed the notes: %d, want %d", got, before)
 	}
 }

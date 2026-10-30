@@ -238,6 +238,15 @@ func run(ctx context.Context, in input, opts Options) (*Result, error) {
 		}
 		takes = append(takes, t)
 	}
+	// Lines erased on this version (erased.json in its .review folder) are left out, like undone ones.
+	erasedDir := in.out
+	if !strings.HasSuffix(erasedDir, ".review") {
+		erasedDir = filepath.Dir(erasedDir) // a single take's notes: its .review folder is the parent
+	}
+	erased := store.ReadErased(erasedDir)
+	for _, t := range takes {
+		t.erased = erased[t.folder]
+	}
 	for _, x := range in.inherit {
 		t, err := loadTake(x.dir)
 		if err != nil {
@@ -249,6 +258,7 @@ func run(ctx context.Context, in input, opts Options) (*Result, error) {
 			t.version = &v
 		}
 		t.inherited = true
+		t.erased = erased[t.folder]
 		t.rangesRaw = x.ranges
 		if !truthy(x.ranges) {
 			t.rangesRaw = json.RawMessage("[[0, 1000000000.0]]")

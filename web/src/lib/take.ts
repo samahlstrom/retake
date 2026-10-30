@@ -119,7 +119,11 @@ export function archive(
   hist: { strokes: HistoryStroke[]; bins: Float32Array; images?: HistoryImage[] },
   bins: number,
 ): void {
-  for (const st of t.strokes) if (!st.undone) hist.strokes.push(st);
+  for (const st of t.strokes) {
+    if (st.undone) continue;
+    if (t.id) st.take = t.id; // history now: the eraser names it by take and id
+    hist.strokes.push(st);
+  }
   for (const im of t.images) if (!im.undone) hist.images?.push({ url: im.url, video_t: im.video_t, box: im.box });
   hist.bins = grow(hist.bins, bins);
   t.bins.forEach((v, i) => {

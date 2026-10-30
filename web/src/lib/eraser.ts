@@ -1,6 +1,7 @@
-// The eraser (E, or the eraser button): while recording, a swipe over a line of this take removes that whole line.
-// Only lines on screen now can be erased, and only this take's (earlier takes are history). Z brings back the last
-// erased line when the erase came after the last thing drawn.
+// The eraser (E, or the eraser button): a swipe over a line on screen removes that whole line, recording or not. A
+// line of the take in progress is dropped from it (an `erase` event); a line of an earlier take (history) is kept in
+// the version's erased.json on the server, since takes are never rewritten. Z brings back the last erased line when
+// the erase came after the last thing drawn.
 
 import { alphaAt } from './pen';
 import { lastUndoable } from './images';
@@ -10,6 +11,8 @@ import type { Point, Stroke, Take } from './types';
 export interface EraseMark {
   id: number;
   seq: number;
+  /** For a line of an earlier take (history): that take. Its erase is kept on the server (erased.json). */
+  take?: string;
 }
 
 /** How close (CSS px) the eraser must come to a line: a finger is wider than a mouse. */

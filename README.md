@@ -47,7 +47,7 @@ without it. The full walkthrough is in [docs/quickstart.md](docs/quickstart.md).
 | ← / → | Back or forward 5 seconds. |
 | , / . | One frame back or forward. |
 | 1 2 3 4 | Pen color: red, yellow, green, white. |
-| E | Eraser: while recording, swipe over a line to remove it. A pen color (1–4) switches back to the pen. |
+| E | Eraser: swipe over any line on screen to remove it, recording or not. A pen color (1–4) switches back to the pen. |
 | Z (or Ctrl+Z) | Undo the last stroke or image, or bring back the last line you erased. |
 | **C** | Flip to the comparison version at the same moment, and back. |
 | [ / ] | Step to the previous or next version, keeping the time. |

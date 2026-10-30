@@ -24,6 +24,10 @@ export interface HistoryStroke {
   color: string;
   points: Point[];
   undone?: boolean;
+  /** The stroke's id in its take (from /api/history), so the eraser can name it. */
+  id?: number;
+  /** The take it belongs to, for an earlier take's stroke (history). */
+  take?: string;
 }
 
 /** An image of an earlier take, as /api/history lists it (take format v1.1): shown like a stroke near its time. */
@@ -151,7 +155,7 @@ export interface Take {
   segments: Segment[];
   nextId: number;
   /** The eraser's erases, oldest first, for Z (lib/eraser.ts). */
-  erased: { id: number; seq: number }[];
+  erased: { id: number; seq: number; take?: string }[];
   dirty: boolean;
   lastSave: number;
   saving: Promise<void> | null;

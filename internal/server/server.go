@@ -5,6 +5,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -598,6 +600,10 @@ func (s *Server) post(w http.ResponseWriter, r *http.Request, parts []string) {
 		s.fail(w, r, http.StatusBadRequest, "bad body")
 		return
 	}
+	if len(parts) == 2 && parts[0] == "api" && parts[1] == "erase" {
+		s.erase(w, r, body)
+		return
+	}
 	if len(parts) == 4 && parts[0] == "api" && parts[1] == "notes" && parts[3] == "reopen" {
 		s.reopen(w, r, parts[2])
 		return
@@ -727,4 +733,60 @@ func parseOffset(s string) (int64, bool) {
 		return 0, false
 	}
 	return n, true
+}
+
+// erase removes (or, with "erased": false, brings back) one line of a take shown on a version: POST /api/erase?v=
+// with {"take", "id", "erased"}. The take stays as it is; the line goes in the version's erased.json, which history
+// and the notes leave out (spec/take-format.md, "Erased lines").
+func (s *Server) erase(w http.ResponseWriter, r *http.Request, body []byte) {
+	v, ok := s.version(query(r, "v"))
+	if !ok {
+		s.fail(w, r, http.StatusBadRequest, "bad version")
+		return
+	}
+	var in struct {
+		Take   string `json:"take"`
+		ID     int64  `json:"id"`
+		Erased *bool  `json:"erased"`
+	}
+	if err := json.Unmarshal(body, &in); err != nil {
+		s.fail(w, r, http.StatusBadRequest, "bad json")
+		return
+	}
+	if !store.ValidTakeID(in.Take) || in.ID <= 0 {
+		s.fail(w, r, http.StatusBadRequest, "bad line")
+		return
+	}
+	if !shownTake(v.Path, in.Take) {
+		s.fail(w, r, http.StatusNotFound, "no such take on this version")
+		return
+	}
+	by := s.opts.Author
+	if a := accessOf(r); a.author != "" {
+		by = a.author
+	} else if a.token != nil && a.token.Label != "" {
+		by = a.token.Label
+	}
+	on := in.Erased == nil || *in.Erased
+	s.writeMu.Lock()
+	err := store.SetErased(store.ReviewDir(v.Path), in.Take, in.ID, on, by, time.Now())
+	s.writeMu.Unlock()
+	if err != nil {
+		s.fail(w, r, http.StatusInternalServerError, "couldn't save the erase")
+		return
+	}
+	s.json(w, r, http.StatusOK, map[string]any{"ok": true, "take": in.Take, "id": in.ID, "erased": on})
+}
+
+// shownTake reports whether a take folder is one of the version's own or carried over onto it by inherit.json.
+func shownTake(video, take string) bool {
+	if fi, err := os.Stat(store.TakeDir(video, take)); err == nil && fi.IsDir() {
+		return true
+	}
+	for _, x := range store.InheritedTakes(video) {
+		if filepath.Base(x.Dir) == take {
+			return true
+		}
+	}
+	return false
 }

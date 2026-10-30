@@ -92,6 +92,9 @@ func takeComments(t *take, video *jsonx.Object) []*Comment {
 		if !ok || undone[pyKey(st["id"])] {
 			continue
 		}
+		if id, ok := num(st["id"]); ok && t.erased[int64(id)] {
+			continue // erased later, on this version (erased.json)
+		}
 		pts := parsePoints(st["points"])
 		if len(pts) > 0 {
 			minX, minY, maxX, maxY := pts[0][0], pts[0][1], pts[0][0], pts[0][1]

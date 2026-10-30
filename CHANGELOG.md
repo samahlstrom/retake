@@ -5,10 +5,12 @@ All notable changes are listed here. Versions follow semver once the first relea
 ## Unreleased
 
 ### Eraser
-- E (or the eraser button next to the pen colors) switches the pen to an eraser. While recording, a swipe over a line
-  of this take removes the whole line; a fast swipe misses nothing. Z brings back the last erased line. A pen color
-  switches back to the pen. Not recording, it erases nothing, like the pen draws nothing.
-- Take format v1.2: `erase` and `unerase` events (+`id`). Erased strokes are left out of strokes.json.
+- E (or the eraser button next to the pen colors) switches the pen to an eraser. A swipe over any line on screen
+  removes the whole line, recording or not, including lines from earlier takes; a fast swipe misses nothing. Z brings
+  back the last erased line. A pen color switches back to the pen.
+- Take format v1.2: `erase` and `unerase` events (+`id`) for lines of the take in progress; lines of earlier takes go
+  in the version's `erased.json` (new route `POST /api/erase`), which history and the notes leave out. Old takes are
+  never rewritten.
 
 ### Editor slice 4: what the item-shop pilot asked for
 - Perspective: `transform.rotation_x` / `rotation_y` with `perspective` (CSS's model, about the anchor), and corner

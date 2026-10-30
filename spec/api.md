@@ -51,6 +51,7 @@ A version object:
 | GET | `/api/history?v=<label>` | `{"label": "...", "history": [...]}`. 404 if the label is unknown; no `v` means the current version. |
 | POST | `/api/session/<take>/data?v=<label>` | Saves a take's JSON files. See below. |
 | POST | `/api/session/<take>/audio?v=<label>&name=<file>&offset=<n>` | Appends audio bytes to one segment file. See below. |
+| POST | `/api/erase?v=<label>` | The eraser on a line of an earlier take: `{"take", "id", "erased": true\|false}` adds it to (or removes it from) the version's `erased.json` (spec/take-format.md, "Erased lines"). 400 for a bad take id or stroke id, 404 for a take not shown on that version. Same origin and lock rules as `/data`. |
 | GET | `/favicon.ico` | 204 |
 | GET | `/s/<token>` | New in milestone 3a: a share link. Sets the share cookie and bounces to `/` (spec/team.md). |
 | any | `/mcp` | New in milestone 3a: the agent tools over MCP's streamable HTTP transport, for a Bearer `agent` token (spec/team.md). |
@@ -109,7 +110,7 @@ The response is `{"ok": true, "dir": "<take folder>"}`.
     `session.segments` or `session.rec.duration`.
   - `notes` is true when `notes.md` exists in the folder.
 - **`history`**: one entry per earlier take of that version, plus every take carried over by `inherit.json`:
-  `{id, inherited_from, voice: {bin, bins: [[i, v], ...]}, strokes: [{video_t, color, points}]}`.
+  `{id, inherited_from, voice: {bin, bins: [[i, v], ...]}, strokes: [{id, video_t, color, points}]}` (a stroke's `id` when its take has one; lines in the version's `erased.json` are left out).
   - Carried-over takes keep only the strokes whose `video_t` is inside their `ranges`, and only the voice bins whose
     `i * bin` is inside them.
   - `inherit.json` sits in the version's `.review/` folder: `{"takes": [{dir, version, ranges, ...}]}`. Entries whose

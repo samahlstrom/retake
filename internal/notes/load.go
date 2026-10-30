@@ -38,6 +38,7 @@ type take struct {
 	rangesRaw   json.RawMessage
 	inheritNote json.RawMessage
 	inherited   bool
+	erased      map[int64]bool // strokes the eraser removed on this version (erased.json)
 	missing     []Untranscribed
 
 	segMap  map[string]string // pyKey(segment id) -> label (S1..Sn across all takes)

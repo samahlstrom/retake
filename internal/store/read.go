@@ -30,6 +30,7 @@ type HistoryEntry struct {
 
 // HistoryStroke is a stroke reduced to what the page needs to draw it.
 type HistoryStroke struct {
+	ID     json.RawMessage `json:"id,omitempty"` // the stroke's id in its take: what the eraser names
 	VideoT json.RawMessage `json:"video_t"`
 	Color  json.RawMessage `json:"color"`
 	Points json.RawMessage `json:"points"`
@@ -259,19 +260,20 @@ func inRanges(t float64, ranges [][2]float64) bool {
 
 // History returns the strokes and voice coverage of every take of a version, then of every take carried over by
 // inherit.json, so the page can show them on the timeline. Carried-over takes keep only the strokes, and the
-// voice bins, inside their ranges.
+// voice bins, inside their ranges. Lines erased on this version (erased.json) are left out.
 func History(video string) []HistoryEntry {
 	out := []HistoryEntry{}
+	erased := ReadErased(ReviewDir(video))
 	for _, d := range takeDirs(video) {
-		out = append(out, historyEntry(d, null, nil))
+		out = append(out, historyEntry(d, null, nil, erased[filepath.Base(d)]))
 	}
 	for _, x := range InheritedTakes(video) {
-		out = append(out, historyEntry(x.Dir, x.Version, x.Ranges))
+		out = append(out, historyEntry(x.Dir, x.Version, x.Ranges, erased[filepath.Base(x.Dir)]))
 	}
 	return out
 }
 
-func historyEntry(dir string, from json.RawMessage, ranges [][2]float64) HistoryEntry {
+func historyEntry(dir string, from json.RawMessage, ranges [][2]float64, erased map[int64]bool) HistoryEntry {
 	inherited := ranges != nil
 	var strokes []json.RawMessage
 	if raw, ok := readJSON(filepath.Join(dir, "strokes.json")); ok {
@@ -288,6 +290,10 @@ func historyEntry(dir string, from json.RawMessage, ranges [][2]float64) History
 	for _, s := range strokes {
 		o := asObject(s)
 		if o == nil {
+			continue
+		}
+		id := field(o, "id")
+		if n, ok := jsonx.Number(id); ok && erased[int64(n)] {
 			continue
 		}
 		vt := field(o, "video_t")
@@ -308,7 +314,7 @@ func historyEntry(dir string, from json.RawMessage, ranges [][2]float64) History
 		if !jsonx.Truthy(points) {
 			points = json.RawMessage("[]")
 		}
-		out.Strokes = append(out.Strokes, HistoryStroke{VideoT: vt, Color: color, Points: points})
+		out.Strokes = append(out.Strokes, HistoryStroke{ID: id, VideoT: vt, Color: color, Points: points})
 	}
 	return out
 }
