@@ -15,6 +15,7 @@ pub mod preview;
 pub mod proxy;
 pub mod resample;
 pub mod store;
+pub mod stream;
 pub mod transform;
 pub mod unit;
 
