@@ -22,12 +22,18 @@ type Config struct {
 
 	Transcribe Transcribe `toml:"transcribe"`
 	Share      Share      `toml:"share"`
+	Edit       Edit       `toml:"edit"`
 }
 
 // Share is the [share] table (spec/team.md): the tunnel binaries `retake share` runs.
 type Share struct {
 	Cloudflared *string `toml:"cloudflared"` // unset or "" = cloudflared on $PATH
 	Tailscale   *string `toml:"tailscale"`   // unset or "" = tailscale on $PATH
+}
+
+// Edit is the [edit] table (spec/bridge.md): the editor engine that renders timeline projects.
+type Edit struct {
+	RetakeEdit *string `toml:"retake_edit"` // the retake-edit binary; unset = $RETAKE_EDIT, $PATH, editor/target/release
 }
 
 // Transcribe is the [transcribe] table (spec/notes.md, "Config additions"). internal/transcribe reads it.

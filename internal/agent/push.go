@@ -14,19 +14,24 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/samahlstrom/retake/internal/bridge"
 	"github.com/samahlstrom/retake/internal/family"
 	"github.com/samahlstrom/retake/internal/project"
 )
 
 // PushArgs are version_push's arguments.
 type PushArgs struct {
-	File    string                // the new version's video file
+	File    string                // the new version's video file ("" with Render)
 	Parent  string                // the version it was made from; "" = the newest
 	Label   string                // v<N>; "" = the next free number
 	Changes []project.ChangeEntry // what it changes, per note
 	Asks    []project.PushAsk     // questions asked in the same push, per note
 	Move    bool                  // move the file instead of copying it
 	By      string                // who pushed; "" = agent
+	// Render renders the project's timeline at its current revision with retake-edit and pushes that, with its
+	// render manifest, and a changelog made from the patches since the parent (spec/bridge.md).
+	Render bool
+	Draft  bool // with Render: a draft render
 }
 
 // PushResult is version_push's result.
@@ -34,6 +39,9 @@ type PushResult struct {
 	Version   project.VersionRow `json:"version"`
 	Answered  []int64            `json:"answered"`  // notes now answered by this version
 	Questions []int64            `json:"questions"` // the question threads it asked
+	// Render is a rendered push's record: its patches, the unrequested ones, the skipped answers and the units.
+	Render   *bridge.PushRecord `json:"render,omitempty"`
+	Manifest string             `json:"manifest,omitempty"` // a rendered push's render manifest
 }
 
 // nameRE splits a versioned stem: prefix, separator, the v, the number, the rest.
@@ -44,9 +52,15 @@ var labelRE = regexp.MustCompile(`(?i)^v(\d+)$`)
 // VersionPush puts a new version into the family: it checks the push rule, copies (or moves) the file in as the
 // next v<N> (into a sibling v<N>/ folder when the family uses version folders, else next to its parent), and
 // records its sha256, parent and changelog. The changelog's notes become answered and the asked ones question.
-func (p *Project) VersionPush(_ context.Context, a PushArgs) (PushResult, error) {
+func (p *Project) VersionPush(ctx context.Context, a PushArgs) (PushResult, error) {
+	if a.Render {
+		if a.File != "" {
+			return PushResult{}, errorf(CodeBadRequest, "a rendered push renders its own file: give no file with render")
+		}
+		return p.pushRendered(ctx, a)
+	}
 	if a.File == "" {
-		return PushResult{}, errorf(CodeBadRequest, "push needs the new version's file")
+		return PushResult{}, errorf(CodeBadRequest, "push needs the new version's file (or render, in a timeline project)")
 	}
 	src, err := filepath.Abs(a.File)
 	if err != nil {
@@ -58,42 +72,11 @@ func (p *Project) VersionPush(_ context.Context, a PushArgs) (PushResult, error)
 	if !family.IsVideo(src) || family.IsPlaylist(src) {
 		return PushResult{}, errorf(CodeBadRequest, "%s is not a single video file (.mp4 .m4v .mov .webm .mkv)", src)
 	}
-	fam := p.Family()
-	if len(fam) == 0 {
-		return PushResult{}, errorf(CodeNotFound, "no versions found next to %s", p.Video)
-	}
-	parent := fam[len(fam)-1]
-	if a.Parent != "" {
-		v, ok := find(fam, a.Parent)
-		if !ok {
-			return PushResult{}, errorf(CodeNotFound, "no parent version %s (the family has %s)", a.Parent, labels(fam))
-		}
-		parent = v
-	}
-	m := nameRE.FindStringSubmatch(family.Stem(filepath.Base(parent.Path)))
-	if m == nil {
-		return PushResult{}, errorf(CodeBadRequest, "%s has no _v<N> in its name, so a new version can't be named after "+
-			"it; name the family's files like clip_v1.mp4", filepath.Base(parent.Path))
-	}
-	n, err := p.nextNumber(fam, m[1], a.Label)
+	tg, err := p.pushTarget(a, filepath.Ext(src))
 	if err != nil {
 		return PushResult{}, err
 	}
-	label := fmt.Sprintf("v%d", n)
-	dir := filepath.Dir(parent.Path)
-	if base := filepath.Base(dir); project.IsVersionDir(base) {
-		dir = filepath.Join(filepath.Dir(dir), base[:1]+strconv.Itoa(n))
-	}
-	dest := filepath.Join(dir, m[1]+m[2]+m[3]+strconv.Itoa(n)+strings.ToLower(filepath.Ext(src)))
-	if _, err := os.Lstat(dest); err == nil {
-		return PushResult{}, errorf(CodeBadRequest, "%s already exists", dest)
-	}
-	by := a.By
-	if by == "" {
-		by = "agent"
-	}
-	push := project.Push{Label: label, Path: dest, Parent: parent.Label, By: by, Changelog: a.Changes, Asks: a.Asks,
-		Scope: scope(parent)}
+	push, dest := tg.push, tg.push.Path
 	if err := p.Store.CheckPush(push); err != nil {
 		return PushResult{}, wrap(err)
 	}
@@ -112,6 +95,53 @@ func (p *Project) VersionPush(_ context.Context, a PushArgs) (PushResult, error)
 		_ = os.Remove(src) // the caller asked to move it
 	}
 	return PushResult{Version: res.Version, Answered: nonNil(res.Answered), Questions: nonNil(res.Questions)}, nil
+}
+
+// pushTarget is where a push puts its version, and the push to record (its file not placed yet).
+type pushTarget struct {
+	parent family.Version
+	push   project.Push
+}
+
+// pushTarget picks the parent (default the newest), the label (the next free v<N>, or a.Label) and the new file's
+// path: named after the parent's file, with ext, in a sibling v<N>/ folder when the family uses version folders.
+func (p *Project) pushTarget(a PushArgs, ext string) (pushTarget, error) {
+	fam := p.Family()
+	if len(fam) == 0 {
+		return pushTarget{}, errorf(CodeNotFound, "no versions found next to %s", p.Video)
+	}
+	parent := fam[len(fam)-1]
+	if a.Parent != "" {
+		v, ok := find(fam, a.Parent)
+		if !ok {
+			return pushTarget{}, errorf(CodeNotFound, "no parent version %s (the family has %s)", a.Parent, labels(fam))
+		}
+		parent = v
+	}
+	m := nameRE.FindStringSubmatch(family.Stem(filepath.Base(parent.Path)))
+	if m == nil {
+		return pushTarget{}, errorf(CodeBadRequest, "%s has no _v<N> in its name, so a new version can't be named "+
+			"after it; name the family's files like clip_v1.mp4", filepath.Base(parent.Path))
+	}
+	n, err := p.nextNumber(fam, m[1], a.Label)
+	if err != nil {
+		return pushTarget{}, err
+	}
+	label := fmt.Sprintf("v%d", n)
+	dir := filepath.Dir(parent.Path)
+	if base := filepath.Base(dir); project.IsVersionDir(base) {
+		dir = filepath.Join(filepath.Dir(dir), base[:1]+strconv.Itoa(n))
+	}
+	dest := filepath.Join(dir, m[1]+m[2]+m[3]+strconv.Itoa(n)+strings.ToLower(ext))
+	if _, err := os.Lstat(dest); err == nil {
+		return pushTarget{}, errorf(CodeBadRequest, "%s already exists", dest)
+	}
+	by := a.By
+	if by == "" {
+		by = "agent"
+	}
+	return pushTarget{parent: parent, push: project.Push{Label: label, Path: dest, Parent: parent.Label, By: by,
+		Changelog: a.Changes, Asks: a.Asks, Scope: scope(parent)}}, nil
 }
 
 func nonNil(ids []int64) []int64 {
@@ -306,6 +336,10 @@ type VersionView struct {
 	Created   string                `json:"created,omitempty"`
 	Changelog []project.ChangeEntry `json:"changelog"`
 	Open      int                   `json:"open"` // notes open on it, which a push from it must handle
+	// Render is the push record of a version pushed with render: its patches, unrequested ones and units.
+	Render *bridge.PushRecord `json:"render,omitempty"`
+	// Manifest is its render manifest's path, when it has one.
+	Manifest string `json:"manifest,omitempty"`
 }
 
 // VersionsResult is versions_list's result.
@@ -344,6 +378,10 @@ func (p *Project) VersionsList(_ context.Context) (VersionsResult, error) {
 			return VersionsResult{}, wrap(err)
 		}
 		view.Open = len(open)
+		view.Render, _ = bridge.ReadPushRecord(v.Path)
+		if _, err := os.Stat(bridge.ManifestPath(v.Path)); err == nil {
+			view.Manifest = bridge.ManifestPath(v.Path)
+		}
 		row, ok := pushed[v.Label]
 		add(view, row, ok)
 		delete(pushed, v.Label)

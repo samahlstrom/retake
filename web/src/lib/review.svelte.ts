@@ -69,7 +69,8 @@ import type {
   TakeImage,
   Version,
 } from './types';
-import { byLabel, coverMessage, covers, flipRefusal, flipTarget, flipToast, stepTarget } from './versions';
+import { mapTime, TimeMaps } from './timemap';
+import { byLabel, flipRefusal, flipTarget, flipToast, landing, neighbor, stepTarget } from './versions';
 import { addVoice, drawWave, levelDb, newAcc, newVad, pushBars, vadStep, type WaveBar } from './voice';
 import { clamp, fmt, isoLocal, now, r3, stamp } from './util';
 
@@ -161,6 +162,8 @@ export class Review {
   }
   /** The notes sidebar: agent questions on the newest version, resolved notes on older ones. */
   readonly notes = new Notes({ onVersion: () => void this.refreshFamily() });
+  /** Time maps between versions: switching versions lands on the matching moment (spec/bridge.md). */
+  readonly maps = new TimeMaps();
   readonly rows = $derived(
     sidebarRows(this.notes.res, {
       versions: this.versions,
@@ -939,12 +942,14 @@ export class Review {
 
   /** A `version` event: the family changed (a new version was pushed). */
   async refreshFamily(): Promise<void> {
+    this.maps.clear(); // a new version brings its own render manifest
     try {
       const info = (await (await fetch('/api/info')).json()) as Info;
       if (info.versions?.length) {
         this.info.versions = info.versions;
         this.versions = info.versions;
       }
+      this.#prefetchMaps();
     } catch {
       /* server gone */
     }
@@ -995,19 +1000,25 @@ export class Review {
   };
 
   // ---------------------------------------------------------------- versions: [ ] steps, C flips to the partner
-  /** Same time, same play state; the last frame stays up while the other file loads. */
+  /** The matching moment, same play state; the last frame stays up while the other file loads. The moment comes
+   * through the time map between the two versions (spec/bridge.md); without one it's the same time. */
   async showVersion(label: string): Promise<boolean> {
     const video = this.video,
-      v = byLabel(this.versions, label),
-      t = video.currentTime,
-      wasPlaying = !video.paused;
+      v = byLabel(this.versions, label);
     if (!v || this.switching) return false;
-    if (!covers(v, t)) {
-      this.toast.say(coverMessage(v), 2600);
+    this.switching = true;
+    this.frozenT = video.currentTime;
+    const segs = await this.maps.get(this.shown, label);
+    const from = video.currentTime,
+      wasPlaying = !video.paused,
+      land = landing(v, from, segs);
+    if ('refuse' in land) {
+      this.switching = false;
+      this.toast.say(land.refuse, 2600);
       return false;
     }
-    this.switching = true;
-    this.frozenT = t;
+    const t = land.t;
+    this.frozenT = from;
     const fz = this.el.freeze;
     if (video.videoWidth) {
       fz.width = video.videoWidth;
@@ -1023,6 +1034,7 @@ export class Review {
       await seeked;
       this.shown = label;
       void this.notes.load(label); // the sidebar follows the version on screen
+      this.#prefetchMaps();
       if (wasPlaying) await video.play().catch(() => {});
     } catch {
       this.toast.say(`Could not load ${label}`, 3000);
@@ -1032,6 +1044,17 @@ export class Review {
       this.switching = false;
     }
     return true;
+  }
+
+  /** Fetches the time maps from the version on screen to the ones C, [ and ] go to next, so they're here in time. */
+  #prefetchMaps(): void {
+    for (const label of [
+      neighbor(this.versions, this.shown, -1)?.label,
+      neighbor(this.versions, this.shown, 1)?.label,
+      flipTarget(this.versions, this.base, this.flipped)?.label,
+    ]) {
+      if (label) this.maps.peek(this.shown, label);
+    }
   }
 
   /** C: flip between the base and its partner (the next newer version, else the previous one). */
@@ -1053,8 +1076,11 @@ export class Review {
     if (this.switching || (label === this.base && !this.flipped)) return;
     const v = byLabel(this.versions, label);
     if (!v) return;
-    if (!covers(v, this.video.currentTime)) {
-      this.toast.say(coverMessage(v), 2600);
+    // A quick check before a recording is stopped for nothing, with the map if it's here already (it's fetched ahead,
+    // see #prefetchMaps): showVersion, which starts the switch at once, has the last word.
+    const land = landing(v, this.video.currentTime, this.maps.peek(this.shown, label));
+    if ('refuse' in land) {
+      this.toast.say(land.refuse, 2600);
       return;
     }
     const t = this.take;
@@ -1301,7 +1327,10 @@ export class Review {
       act = activeKey(rows, vt);
     if (act !== this.activeRow) this.activeRow = act;
     if (!this.notes.everShown && this.notes.available && (rows.length || this.notes.job)) this.notes.everShown = true;
-    if (this.touch) this.flipBlocked = flipRefusal(this.versions, this.base, this.flipped, vt);
+    if (this.touch)
+      this.flipBlocked = flipRefusal(this.versions, this.base, this.flipped, vt, (label, t) =>
+        mapTime(this.maps.peek(this.shown, label), t),
+      );
     this.curText = fmt(vt);
     if (this.seg) this.recElapsed = fmt(t - this.seg.p0, false);
     requestAnimationFrame(this.loop);
@@ -1361,6 +1390,7 @@ export class Review {
       void this.recoverImages().catch(() => {});
     }
     void this.notes.load(this.shown); // no sidebar at all if the server has no notes routes
+    this.#prefetchMaps();
   }
 
   /** Resend images that earlier takes left in the image buffer, like recover() does for audio. */

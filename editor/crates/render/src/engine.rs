@@ -6,7 +6,8 @@ use crate::ffmpeg::{self, EncodeSettings, MediaInfo};
 use crate::graphics::{DISPLAY_FONT, DISPLAY_WEIGHT, FontData, GRAPHICS_VERSION, ImageData, Resources};
 use crate::store::{Store, hex_of};
 use anyhow::{Context, Result};
-use retake_timeline::layer::{Clock, Content, Layer};
+use retake_timeline::keyframe::Prop;
+use retake_timeline::layer::{Clock, Content, Layer, TextValue};
 use retake_timeline::model::{Rgba, SpineKind};
 use retake_timeline::resolve::{Comp, UnitKind, UnitSpan};
 use retake_timeline::{EditError, Errors, Project, Resolved, canonical_json};
@@ -16,8 +17,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-/// Part of every unit key: bump when compositing code changes pixels.
-pub const ENGINE_VERSION: &str = "retake-render/0.1 compositor/1";
+/// Part of every unit key: bump when compositing code changes pixels. compositor/2: graphics split into static and
+/// animated runs, and video decoded at its displayed size.
+pub const ENGINE_VERSION: &str = "retake-render/0.1 compositor/2";
 
 #[derive(Debug, Clone)]
 pub struct Options {
@@ -60,6 +62,8 @@ pub struct Asset {
     pub path: PathBuf,
     pub hash: String,
     pub info: MediaInfo,
+    /// Drafts: a short-GOP proxy made by `retake-edit proxy` (its path and content hash).
+    pub proxy: Option<(PathBuf, String)>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -67,6 +71,11 @@ pub struct Src {
     pub hash: String,
     pub size: [u32; 2],
     pub duration: f64,
+    /// The proxy decoded instead of the source (drafts only): its content hash, so a draft made from a proxy has
+    /// another key than one made from the source.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub proxy: Option<String>,
+    /// The file decoded: the source, or its proxy.
     #[serde(skip)]
     pub path: PathBuf,
     #[serde(skip)]
@@ -138,7 +147,10 @@ pub struct Owner {
     pub layer: Option<(String, String)>,
 }
 
-/// A run of consecutive graphics layers rendered as alpha frames, keyed independently of where it lands.
+/// A run of consecutive graphics layers rendered as alpha frames, keyed independently of where it lands. A run is
+/// either static (nothing in it changes over its range: drawn once, stored as one image, and keyed without its
+/// range, so it is reused by a unit of any length) or animated (drawn per frame, skipping frames that look like the
+/// one before).
 #[derive(Debug, Clone)]
 pub struct RunSpec {
     pub key: String,
@@ -146,6 +158,33 @@ pub struct RunSpec {
     pub props: Value,
     /// Composition frames [a, b).
     pub range: [i64; 2],
+    /// Nothing changes over the range: one image.
+    pub still: bool,
+}
+
+fn prop_static(p: &Option<Prop>) -> bool {
+    p.as_ref().is_none_or(|p| p.is_static())
+}
+
+/// True when a layer looks the same on every frame of composition seconds [a, b): constant props, no text
+/// expression, and no edge (`from` / `to`) inside the range.
+pub fn layer_is_static(l: &Layer, a: f64, b: f64) -> bool {
+    let tr = &l.transform;
+    let edges_outside = l.from.is_none_or(|f| f <= a || f >= b) && l.to.is_none_or(|e| e <= a || e >= b);
+    let text_static = !matches!(&l.content, Content::Text(t) if matches!(t.text, TextValue::Expr { .. }));
+    edges_outside
+        && text_static
+        && prop_static(&tr.position)
+        && prop_static(&tr.scale)
+        && prop_static(&tr.rotation)
+        && prop_static(&tr.opacity)
+        && prop_static(&l.crop)
+        && prop_static(&l.blur)
+}
+
+/// True when a layer shows on no frame of composition seconds [a, b).
+pub fn layer_never_visible(l: &Layer, a: f64, b: f64) -> bool {
+    l.from.is_some_and(|f| f >= b) || l.to.is_some_and(|e| e <= a) || l.from.zip(l.to).is_some_and(|(f, e)| e <= f)
 }
 
 #[derive(Debug, Clone)]
@@ -237,7 +276,8 @@ impl Engine {
                     i
                 }
             };
-            assets.insert(id.clone(), Asset { id: id.clone(), path: p, hash, info });
+            let proxy = if opts.draft { crate::proxy::lookup(&store, &hash) } else { None };
+            assets.insert(id.clone(), Asset { id: id.clone(), path: p, hash, info, proxy });
         }
         let mut resources = Resources::default();
         resources.fonts.insert(
@@ -275,7 +315,7 @@ impl Engine {
         self.res.units.iter().filter(|u| u.f0 < b && u.f1 > a).cloned().collect()
     }
 
-    fn run_key(&self, layers: &[Value], typed: &[Layer], props: &Value, range: [i64; 2]) -> String {
+    fn run_key(&self, layers: &[Value], typed: &[Layer], props: &Value, range: [i64; 2], still: bool) -> String {
         let fonts: BTreeMap<String, String> = self
             .resources
             .faces(typed)
@@ -303,7 +343,9 @@ impl Engine {
             "scale": self.canvas.scale,
             "comp": self.canvas.comp,
             "fps": self.fps(),
-            "range": range,
+            // A static run is one image whatever its length; an animated one is drawn per frame of its range.
+            "range": if still { Value::Null } else { json!(range) },
+            "static": still,
             "fonts": fonts,
             "images": images,
         });
@@ -327,20 +369,31 @@ impl Engine {
             items.push(Item::Fill { color: Rgba::parse(bg).unwrap_or(Rgba::BLACK).0, active });
             owners.push(owner.clone());
         }
+        let range = [k0 + active[0], k0 + active[1]];
+        let (ra, rb) = (range[0] as f64 / self.fps() as f64, range[1] as f64 / self.fps() as f64);
         let mut pending: Vec<(Value, Layer)> = vec![];
+        // Consecutive graphics layers become runs; a static stretch and an animated stretch are separate runs, so a
+        // static card under a ticking clock is drawn once (draw order is kept: runs composite in layer order).
         let flush = |pending: &mut Vec<(Value, Layer)>,
                      items: &mut Vec<Item>,
                      owners: &mut Vec<Owner>,
                      runs: &mut Vec<RunSpec>| {
-            if pending.is_empty() {
-                return;
+            let all: Vec<(Value, Layer)> = pending.drain(..).filter(|(_, l)| !layer_never_visible(l, ra, rb)).collect();
+            let mut groups: Vec<(bool, Vec<(Value, Layer)>)> = vec![];
+            for (j, l) in all {
+                let still = layer_is_static(&l, ra, rb);
+                match groups.last_mut() {
+                    Some((s, g)) if *s == still => g.push((j, l)),
+                    _ => groups.push((still, vec![(j, l)])),
+                }
             }
-            let (js, ls): (Vec<Value>, Vec<Layer>) = pending.drain(..).unzip();
-            let range = [k0 + active[0], k0 + active[1]];
-            let key = self.run_key(&js, &ls, &comp.props, range);
-            runs.push(RunSpec { key: key.clone(), layers: ls, props: comp.props.clone(), range });
-            items.push(Item::Graphics { key, k0, active });
-            owners.push(owner.clone());
+            for (still, g) in groups {
+                let (js, ls): (Vec<Value>, Vec<Layer>) = g.into_iter().unzip();
+                let key = self.run_key(&js, &ls, &comp.props, range, still);
+                runs.push(RunSpec { key: key.clone(), layers: ls, props: comp.props.clone(), range, still });
+                items.push(Item::Graphics { key, k0, active });
+                owners.push(owner.clone());
+            }
         };
         for (li, (j, l)) in comp.layers_json.iter().zip(&comp.layers).enumerate() {
             match &l.content {
@@ -358,7 +411,8 @@ impl Engine {
                             hash: a.hash.clone(),
                             size,
                             duration: a.info.duration,
-                            path: a.path.clone(),
+                            proxy: a.proxy.as_ref().map(|(_, h)| h.clone()),
+                            path: a.proxy.as_ref().map(|(p, _)| p.clone()).unwrap_or_else(|| a.path.clone()),
                             asset: a.id.clone(),
                         },
                         props: comp.props.clone(),
@@ -490,9 +544,8 @@ impl Engine {
                 let Item::Video { typed, src, k0, active, t_out0, .. } = it else { continue };
                 let Content::Video(v) = &typed.content else { continue };
                 let Some(opts) = v.audio.clone().filter(|o| !o.mute) else { continue };
-                if !self.assets.get(&src.asset).is_some_and(|a| a.info.audio) {
-                    continue;
-                }
+                // The source's own sound (a draft may decode the picture from a proxy, which has none).
+                let Some(asset) = self.assets.get(&src.asset).filter(|a| a.info.audio) else { continue };
                 let t0 = match t_out0 {
                     Some(t) => v.in_ + t + active[0] as f64 / fps as f64,
                     None => v.in_ + (k0 + active[0]) as f64 / fps as f64,
@@ -500,7 +553,7 @@ impl Engine {
                 clips.push(Clip {
                     role: "layer".into(),
                     hash: src.hash.clone(),
-                    path: src.path.clone(),
+                    path: asset.path.clone(),
                     owner: ow.element.clone(),
                     src_in: t0.max(0.0),
                     at: (u.span.f0 + active[0]) * spf,

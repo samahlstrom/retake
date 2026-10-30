@@ -90,6 +90,9 @@ the agent loop (spec/notes.md; <video> is any version of the family, and every c
       mark a note answered by a version that's already in the family
   retake push <video> <file> [--parent vN] [--label vN] [--change ID="summary"]... [--ask ID="question"]... [--move]
       put <file> in the family as the next v<N>. Every note open on the parent must be in --change or --ask
+  retake push <video> --render [--draft] [--parent vN] [--label vN] [--change ID="..."]... [--ask ID="..."]...
+      a timeline project (spec/bridge.md): render the timeline with retake-edit and push it with its render
+      manifest; the patches since the parent answer their notes, so their changelog is written for you
   retake versions <video>
       the versions, their parents and changelogs
   retake mcp <video>
@@ -128,7 +131,7 @@ notes build:
   --video-transcript F  the edit's own voice-over words (JSON), quoted under (audio) comments
 
 config: $XDG_CONFIG_HOME/retake/config.toml (default ~/.config/retake/config.toml), keys name, port,
-idle_exit_minutes, open_browser. Flags override it.
+idle_exit_minutes, open_browser, [transcribe] and [edit] retake_edit. Flags override it.
 `
 
 // Main runs the command line and returns the exit code.

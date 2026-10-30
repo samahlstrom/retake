@@ -20,6 +20,30 @@ type Stroke struct {
 type Detail struct {
 	Strokes  []Stroke `json:"strokes,omitempty"`  // the strokes drawn while it was said
 	Snapshot string   `json:"snapshot,omitempty"` // path of a still of the frame with the strokes
+	Audio    bool     `json:"audio,omitempty"`    // an (audio) note: about sound, not the picture
+	// Targets are the timeline elements under the note, best first, from its version's render manifest
+	// (spec/bridge.md); Unit is the manifest unit at t0 and Word the spine word there. Empty without a manifest.
+	Targets []Target `json:"targets,omitempty"`
+	Unit    string   `json:"unit,omitempty"`
+	Word    *Word    `json:"word,omitempty"`
+}
+
+// Target is a timeline element under a note (spec/bridge.md, "Notes resolve to elements").
+type Target struct {
+	ID     string      `json:"id"`
+	Kind   string      `json:"kind"`
+	Ptr    string      `json:"ptr"`
+	Score  float64     `json:"score"`
+	Z      int64       `json:"z"`
+	Box    *[4]float64 `json:"box,omitempty"`
+	Parent string      `json:"parent,omitempty"`
+}
+
+// Word is a spine word of the edit: [t0, t1) in output seconds.
+type Word struct {
+	T0   float64 `json:"t0"`
+	T1   float64 `json:"t1"`
+	Text string  `json:"text"`
 }
 
 // Comment is one comment of a notes engine run: the part of the engine's result that a sync needs.

@@ -167,6 +167,52 @@ describe('sidebar rows', () => {
     expect(markOf(item({ kind: 'question', status: 'open' }))).toBe('question');
     expect(markOf(item({ status: 'open' }))).toBe('open');
   });
+
+  it("newest version: the parent's notes carried over, at their mapped times, tagged with what became of them", () => {
+    const carried = (as: string, was: number) => ({ from: 'v7', as, t0: was, t1: was + 1 });
+    const res: NotesResponse = {
+      version: 'v8',
+      newest: true,
+      items: [
+        item({
+          id: 2,
+          t0: 1,
+          t1: 2,
+          status: 'answered',
+          change: 'kept',
+          answered_in: 'v8',
+          carried: carried('unchanged', 1),
+        }),
+        item({
+          id: 1,
+          t0: 8.7,
+          t1: 9.2,
+          status: 'answered',
+          change: 'pip 40%',
+          answered_in: 'v8',
+          carried: carried('check', 9),
+        }),
+        item({
+          id: 5,
+          kind: 'question',
+          status: 'question',
+          t0: 12.7,
+          text: 'Lighter card?',
+          note: 3,
+          carried: carried('changed', 13),
+        }),
+        item({ id: 4, t0: 14, status: 'answered', change: 'not carried', answered_in: 'v8' }),
+      ],
+    };
+    const rows = sidebarRows(res, { versions, shown: 'v8' });
+    expect(rows.map((r) => [r.id, r.t0, r.mark, r.carried])).toEqual([
+      [2, 1, 'answered', 'unchanged · from v7'],
+      [1, 8.7, 'answered', 'answered, check it · from v7'],
+      [5, 12.7, 'question', 'context changed · from v7'],
+    ]);
+    expect(rows[1]).toMatchObject({ change: 'pip 40%', see: null, reopen: false }); // v8 is on screen
+    expect(sidebarRows(newest, { versions, shown: 'v8' }).every((r) => r.carried === null)).toBe(true);
+  });
 });
 
 describe('active row, heading, toggle and presence', () => {

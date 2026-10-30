@@ -23,6 +23,18 @@ export interface NoteItem {
   images?: { url: string; box: Box }[] | null;
   /** For a question: the note it's about. */
   note?: number | null;
+  /** A note of the parent version shown on the newest one at its mapped time (spec/bridge.md, "Carrying notes over"):
+   * `as` says what became of its moment, `t0`/`t1` are its times on `from`. */
+  carried?: Carried | null;
+  /** The timeline elements under the note, best first (versions rendered from a timeline). */
+  targets?: { id: string; kind: string; score: number }[] | null;
+}
+
+export interface Carried {
+  from: string;
+  as: 'unchanged' | 'check' | 'changed' | string;
+  t0: number;
+  t1: number;
 }
 
 export interface NotesResponse {

@@ -87,9 +87,13 @@ An **element** is a timeline element live in the unit:
 `retake-edit resolve-note <manifest> <t> [x y w h] [--px]` ranks the elements live at `t` under a stroke box
 (normalized 0–1 to the frame, like `images.json` boxes in `spec/notes.md`, or pixels with `--px`):
 
-1. By the fraction of the stroke box that lies on the element's box at `t`.
-2. Then by `z`, topmost first.
-3. Then the smaller element first (a picture-in-picture before the shot under it).
+An element's `score` is the overlap of its box at `t` and the stroke box, over the smaller of the two boxes: a mark
+inside an element and a loop drawn around one both score 1.
+
+1. The elements *under* the stroke (score at least 0.5) come first, topmost (`z`) first: a loose loop around a label
+   resolves to the label, ahead of the shot under it.
+2. Then the rest, by score, then `z`.
+3. Ties go to the smaller element (a picture-in-picture before the shot under it).
 
 Without a box, visible elements rank by `z`. Sound-only elements come last. The result also gives the unit and the
 spine word at `t` (or the nearest within 0.5 s) for `(audio)` notes:

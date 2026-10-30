@@ -177,6 +177,10 @@ pub struct RenderReport {
     pub rendered: usize,
     pub layers_rendered: usize,
     pub layers_reused: usize,
+    /// Graphics frames the rendered runs cover, and how many of them were drawn (static runs draw one image;
+    /// animated runs skip frames that look like the one before).
+    pub graphics_frames: usize,
+    pub graphics_drawn: usize,
     pub audio_reused: bool,
     pub frames: i64,
     pub duration: f64,
@@ -224,12 +228,16 @@ pub fn render(e: &Engine, out: Option<&Path>) -> Result<RenderReport> {
     }
     let runs: Vec<RunSpec> = need.into_values().collect();
     let faces = e.resources.faces(runs.iter().flat_map(|r| r.layers.iter()));
+    let (drawn, gframes) = (AtomicUsize::new(0), AtomicUsize::new(0));
     pool(
         &runs,
         e.opts.jobs,
         || Painter::new(e.resources.clone(), &faces).map_err(|x| anyhow!(x)),
         |painter, r| {
-            unit::render_run(r, painter, &e.canvas, e.fps(), &e.store).with_context(|| "graphics run".to_string())
+            let st = unit::render_run(r, painter, &e.canvas, e.fps(), &e.store).context("graphics run")?;
+            drawn.fetch_add(st.drawn, Ordering::Relaxed);
+            gframes.fetch_add(st.frames, Ordering::Relaxed);
+            Ok(())
         },
     )?;
     tick("graphics", &mut timings);
@@ -306,6 +314,8 @@ pub fn render(e: &Engine, out: Option<&Path>) -> Result<RenderReport> {
         rendered: plans.len() - reused,
         layers_rendered: runs.len(),
         layers_reused: have.len(),
+        graphics_frames: gframes.into_inner(),
+        graphics_drawn: drawn.into_inner(),
         audio_reused,
         frames: plans.iter().map(|p| p.span.frames()).sum(),
         duration: round6(plans.iter().map(|p| p.span.frames()).sum::<i64>() as f64 / e.fps() as f64),

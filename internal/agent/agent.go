@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/samahlstrom/retake/internal/bridge"
 	"github.com/samahlstrom/retake/internal/family"
 	"github.com/samahlstrom/retake/internal/project"
 	"github.com/samahlstrom/retake/internal/store"
@@ -68,6 +69,8 @@ type Project struct {
 	Root   string
 	Store  *project.Store
 	Prober family.Prober
+	// Editor finds and runs retake-edit, for pushes with render (spec/bridge.md).
+	Editor bridge.Editor
 }
 
 // Open opens the project of a video (absolute, symlinks resolved), creating its store if needed.
@@ -130,6 +133,9 @@ type NoteView struct {
 	Images   []ImageView      `json:"images"`
 	Snapshot string           `json:"snapshot,omitempty"`
 	Threads  []project.Thread `json:"threads"` // the questions about it and the reviewer's answers, oldest first
+	// Targets are the timeline elements under it, best first (spec/bridge.md); empty without a render manifest.
+	Targets []project.Target `json:"targets"`
+	Word    *project.Word    `json:"word,omitempty"` // (audio) notes: the edit's spine word at its time
 }
 
 // views adds strokes, images and threads to notes.
@@ -162,9 +168,15 @@ func (p *Project) views(notes []project.Note, fam []family.Version) ([]NoteView,
 	}
 	for _, n := range notes {
 		v := NoteView{Note: n, Strokes: n.Detail.Strokes, Snapshot: n.Detail.Snapshot, Images: []ImageView{},
-			Threads: []project.Thread{}}
+			Threads: []project.Thread{}, Targets: n.Detail.Targets}
 		if v.Strokes == nil {
 			v.Strokes = []project.Stroke{}
+		}
+		if v.Targets == nil {
+			v.Targets = []project.Target{}
+		}
+		if n.Detail.Audio {
+			v.Word = n.Detail.Word
 		}
 		for _, img := range images[n.ID] {
 			v.Images = append(v.Images, ImageView{Path: filepath.Join(takeDir(n), img.File), Box: img.Box,

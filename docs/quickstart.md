@@ -89,21 +89,22 @@ retake notes list how-to/v2/how-to_v2.mp4
 ```
 
 ```
-#1   v2   0:11.0-0:11.0  open      Sample Reviewer: The labels at the bottom are too small, make them bigger, please.  [1 stroke]
+#1   v2   0:11.0-0:11.0  open      Sample Reviewer: The labels at the bottom are too small, make them bigger, please.  [1 stroke, on label/2]
 cursor 1
 ```
 
 Note #1 is open. `notes sync` transcribes the takes that need it, runs the notes engine, and stores the result in
 `how-to/.retake/project.db`. The engine also writes `how-to/v2/how-to_v2.review/notes.md`, a readable version with a
-snapshot of the frame and your stroke.
+snapshot of the frame and your stroke. `on label/2` is the timeline element your stroke circled, found in v2's render
+manifest ([timeline.md](timeline.md#editing-with-the-timeline)).
 
 ## 5. Let an agent answer it
 
 **With an agent.** Connect it as in [agents.md](agents.md), then ask it something like:
 
 > Answer the open review notes on ~/retake-sample/how-to/v2/how-to_v2.mp4. The video is rendered from
-> ~/retake-sample/edit/timeline.json with retake-edit; change it only with patches. Render the result and push it as
-> v3, listing each note you answered in the changelog. Ask me about any note you're unsure of.
+> ~/retake-sample/edit/timeline.json with retake-edit; change it only with patches, each with the note ids it answers.
+> Then push v3 with version_push and render: true. Ask me about any note you're unsure of.
 
 **By hand.** This is what the agent does. It changes the timeline with a patch that answers the note
 ([examples/sample/patches/02-v3.json](../examples/sample/patches/02-v3.json) makes the labels 44 px instead of 30):
@@ -116,32 +117,24 @@ retake-edit patch apply edit/timeline.json edit/patches/02-v3.json
 applied p2 (rev 1 → 2), answers v2#1; re-renders 3 of 5 units
 ```
 
-It renders the new revision. Only the units the patch touched are drawn again; the rest come from the cache:
+Then it renders the new revision and pushes it as v3. `how-to/` is a timeline project (`how-to/retake.toml` points at
+the timeline), so `--render` does both. Only the units the patch touched are drawn again; the rest come from the cache:
 
 ```bash
-retake-edit render edit/timeline.json -o edit/renders/how-to_v3.mp4
-```
-
-```
-edit/renders/how-to_v3.mp4
-  5 units: 2 reused, 3 rendered; graphics runs: 1 reused, 3 rendered; audio reused
-  22.167 s, 665 frames; audio 0.00s, graphics 0.01s, package 0.09s, plan 0.00s, units 1.83s
-```
-
-Then it pushes the render as v3, with one changelog line per answered note:
-
-```bash
-retake push how-to/v2/how-to_v2.mp4 edit/renders/how-to_v3.mp4 --parent v2 \
-  --change 1="Bigger step labels: 44 px text on a taller bar"
+retake push how-to/v2/how-to_v2.mp4 --render --parent v2
 ```
 
 ```
 pushed v3 from v2: ~/retake-sample/how-to/v3/how-to_v3.mp4
+  rendered ../edit/timeline.json rev 2: 5 units, 2 reused, 3 rendered
+  #1 Bigger step labels: 44 px text on a taller bar (p2)
   answered #1
 ```
 
-The push copies the file into the family as `how-to/v3/how-to_v3.mp4` and marks note #1 answered. A push that left
-an open note out would be refused ([agents.md](agents.md#the-push-rule)).
+The push puts the render in the family as `how-to/v3/how-to_v3.mp4`, with its manifest beside it, and marks note #1
+answered. The changelog line is the patch's summary: the patch said it answers `v2#1`. A push that left an open note
+out would be refused ([agents.md](agents.md#the-push-rule)). Without `--render`, `retake push <video> <file>` pushes
+any file you rendered yourself.
 
 ```bash
 retake versions how-to/v2/how-to_v2.mp4
@@ -151,7 +144,8 @@ retake versions how-to/v2/how-to_v2.mp4
 v1   ~/retake-sample/how-to/v1/how-to_v1.mp4  0:22.2  0 open
 v2   ~/retake-sample/how-to/v2/how-to_v2.mp4  0:22.2  0 open
 v3   ~/retake-sample/how-to/v3/how-to_v3.mp4  0:22.2  0 open  (from v2 by agent, 1 change)
-       #1 Bigger step labels: 44 px text on a taller bar
+       #1 Bigger step labels: 44 px text on a taller bar (p2)
+       rendered from ../edit/timeline.json rev 2: 5 units, 2 reused
 ```
 
 ## 6. Flip with C

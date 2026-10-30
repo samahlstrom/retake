@@ -25,7 +25,7 @@ pub const DISPLAY_FONT: &[u8] = include_bytes!("../../../fonts/baloo2/Baloo2-Var
 pub const DISPLAY_WEIGHT: f64 = 800.0;
 
 /// Bumped when drawing code changes in a way that changes pixels: it's part of every layer key.
-pub const GRAPHICS_VERSION: &str = "graphics/1";
+pub const GRAPHICS_VERSION: &str = "graphics/2";
 
 #[derive(Clone)]
 pub struct FontData {
@@ -308,6 +308,32 @@ impl Painter {
         }
         canvas.restore();
         Ok(())
+    }
+
+    /// Everything about `layers` that can change over time, evaluated at composition time `t`: visibility, the
+    /// transform, crop and blur, and expression text. Two times with the same state draw the same pixels (the rest of
+    /// a layer is constant), so an animated run skips a frame whose state equals the previous frame's.
+    pub fn state(&mut self, layers: &[Layer], props: &Value, t: f64) -> Result<String, EditError> {
+        let mut out = String::new();
+        for l in layers {
+            if !l.visible_at(t) {
+                out.push_str("-;");
+                continue;
+            }
+            let tr = &l.transform;
+            for p in [&tr.position, &tr.scale, &tr.rotation, &tr.opacity, &l.crop, &l.blur] {
+                match p {
+                    Some(p) => out.push_str(&format!("{:?},", p.eval(t, props, &mut self.js)?)),
+                    None => out.push_str("_,"),
+                }
+            }
+            if let Content::Text(Text { text: TextValue::Expr { expr }, .. }) = &l.content {
+                let s = self.js.eval_text(expr, t, props).map_err(|e| e.at(format!("layer {}", l.id)))?;
+                out.push_str(&format!("{s:?}"));
+            }
+            out.push(';');
+        }
+        Ok(out)
     }
 
     /// Renders a run of graphics layers at composition time `t` into a `w` × `h` premultiplied RGBA frame. `scale`

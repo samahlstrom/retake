@@ -73,6 +73,9 @@ ed validate "$tl" >/dev/null
 
 echo "== v1 (timeline revision 0)"
 mkdir -p "$dir/how-to/v1" "$dir/how-to/v2"
+# how-to/ is a timeline project (spec/bridge.md): `retake push --render` renders this timeline as the next version.
+printf '# The timeline the versions of how-to/ are rendered from (spec/bridge.md).\n[edit]\ntimeline = "../edit/timeline.json"\n' \
+  >"$dir/how-to/retake.toml"
 ed render "$tl" -o "$dir/how-to/v1/how-to_v1.mp4"
 
 echo "== v2 (patches/01-v2.json)"

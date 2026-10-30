@@ -125,6 +125,24 @@ enum Cmd {
         #[command(flatten)]
         c: Common,
     },
+    /// Short-GOP, draft-size proxies of video assets (all the timeline's videos, or the given asset ids). Draft
+    /// renders decode a proxy instead of its source once it exists.
+    Proxy {
+        timeline: PathBuf,
+        /// Asset ids, e.g. proj:footage (default: every video asset the timeline uses).
+        assets: Vec<String>,
+        /// Proxy height in pixels (never above the source's).
+        #[arg(long, default_value_t = retake_render::proxy::DEFAULT_HEIGHT)]
+        height: u32,
+        /// Make them again even if they exist.
+        #[arg(long)]
+        force: bool,
+        /// Cache directory (default: `.retake/cache` next to the timeline).
+        #[arg(long)]
+        cache: Option<PathBuf>,
+        #[command(flatten)]
+        c: Common,
+    },
     /// Rank the elements under a reviewer's stroke at time `t` (box normalized 0-1, or pixels with --px).
     ResolveNote {
         manifest: PathBuf,
@@ -379,13 +397,15 @@ fn run(cmd: Cmd) -> Result<(bool, Value, String)> {
             let out = out.unwrap_or_else(|| pipeline::default_output(&e));
             let rep = pipeline::render(&e, Some(&out))?;
             let human = format!(
-                "{}\n  {} units: {} reused, {} rendered; graphics runs: {} reused, {} rendered; audio {}\n  {:.3} s, {} frames; {}",
+                "{}\n  {} units: {} reused, {} rendered; graphics runs: {} reused, {} rendered ({} of {} frames drawn); audio {}\n  {:.3} s, {} frames; {}",
                 out.display(),
                 rep.units,
                 rep.reused,
                 rep.rendered,
                 rep.layers_reused,
                 rep.layers_rendered,
+                rep.graphics_drawn,
+                rep.graphics_frames,
                 if rep.audio_reused { "reused" } else { "mixed" },
                 rep.duration,
                 rep.frames,
@@ -409,6 +429,38 @@ fn run(cmd: Cmd) -> Result<(bool, Value, String)> {
                 std::fs::write(o, &text)?;
             }
             Ok((c.json, json!({"manifest": rep.manifest}), text))
+        }
+        Cmd::Proxy { timeline, assets, height, force, cache, c } => {
+            let e = Engine::open(&timeline, Options { cache, ..Options::default() })?;
+            let ids: Vec<String> = if assets.is_empty() {
+                e.assets.values().filter(|a| a.info.size.is_some()).map(|a| a.id.clone()).collect()
+            } else {
+                assets
+            };
+            let mut done = vec![];
+            for id in &ids {
+                let a = e.assets.get(id).ok_or_else(|| {
+                    EditError::new("asset_unknown", format!("the timeline renders no asset `{id}`"))
+                        .suggest(e.assets.keys().cloned().collect())
+                })?;
+                done.push(retake_render::proxy::make(&e.store, a, height, force)?);
+            }
+            let human = done
+                .iter()
+                .map(|p| {
+                    format!(
+                        "{:<16} {}x{}, keyframe every {} frames{}  {}",
+                        p.asset,
+                        p.size[0],
+                        p.size[1],
+                        p.gop,
+                        if p.made { format!(", made in {:.1} s", p.seconds) } else { ", already there".into() },
+                        p.proxy.display()
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            Ok((c.json, json!({"proxies": done}), if human.is_empty() { "no video assets".into() } else { human }))
         }
         Cmd::ResolveNote { manifest, t, bbox, px, c } => {
             let m: Manifest = serde_json::from_str(
@@ -454,6 +506,7 @@ fn wants_json(cmd: &Cmd) -> bool {
         | Cmd::Render { c, .. }
         | Cmd::Frames { c, .. }
         | Cmd::Manifest { c, .. }
+        | Cmd::Proxy { c, .. }
         | Cmd::ResolveNote { c, .. } => c.json,
         Cmd::Patch { cmd: PatchCmd::Apply { c, .. } | PatchCmd::Log { c, .. } | PatchCmd::Revert { c, .. } } => c.json,
         Cmd::SynthVo { .. } => false,

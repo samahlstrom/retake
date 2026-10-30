@@ -110,7 +110,7 @@ pub struct Target {
     pub id: String,
     pub kind: String,
     pub ptr: String,
-    /// Fraction of the stroke box that lies on the element (0 without a box).
+    /// The overlap of the element's box and the stroke box over the smaller of the two (0 without a box).
     pub score: f64,
     pub z: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -142,8 +142,14 @@ fn overlap(a: [f64; 4], b: [f64; 4]) -> f64 {
     (x1 - x0).max(0.0) * (y1 - y0).max(0.0)
 }
 
-/// Ranks the elements live at `t` under `stroke` (pixels of `size`): by how much of the stroke box lies on each, then
-/// by z (topmost first), then the smaller element first. Without a stroke, visible elements rank by z.
+/// The overlap that makes an element "under" a stroke: half of the smaller of the two boxes.
+pub const UNDER: f64 = 0.5;
+
+/// Ranks the elements live at `t` under `stroke` (pixels of `size`). An element's score is the overlap of its box and
+/// the stroke box over the smaller of the two, so a mark inside an element and a loop around one both score 1. The
+/// elements under the stroke (score at least [`UNDER`]) come first, topmost (z) first: a loop around a label resolves
+/// to the label, ahead of the shot under it. Then the rest by score and z; ties go to the smaller element. Without a
+/// stroke, visible elements rank by z.
 pub fn resolve_note(m: &Manifest, t: f64, stroke: Option<[f64; 4]>) -> NoteResolution {
     let last = m.units.len().saturating_sub(1);
     let unit = m
@@ -162,7 +168,7 @@ pub fn resolve_note(m: &Manifest, t: f64, stroke: Option<[f64; 4]>) -> NoteResol
         .filter_map(|e| {
             let bx = e.box_at(t);
             let score = match (stroke, bx) {
-                (Some(s), Some(b)) if area(s) > 0.0 => overlap(s, b) / area(s),
+                (Some(s), Some(b)) if area(s) > 0.0 => (overlap(s, b) / area(s).min(area(b)).max(1e-9)).min(1.0),
                 // A point stroke: inside or not.
                 (Some(s), Some(b)) if s[0] >= b[0] && s[0] <= b[0] + b[2] && s[1] >= b[1] && s[1] <= b[1] + b[3] => 1.0,
                 _ => 0.0,
@@ -183,7 +189,13 @@ pub fn resolve_note(m: &Manifest, t: f64, stroke: Option<[f64; 4]>) -> NoteResol
         })
         .collect();
     targets.sort_by(|(a, aa), (b, ba)| {
-        b.score.total_cmp(&a.score).then(b.z.cmp(&a.z)).then(aa.total_cmp(ba)).then(a.id.cmp(&b.id))
+        let (ua, ub) = (a.score >= UNDER, b.score >= UNDER);
+        let order = if ua && ub {
+            b.z.cmp(&a.z).then(b.score.total_cmp(&a.score))
+        } else {
+            b.score.total_cmp(&a.score).then(b.z.cmp(&a.z))
+        };
+        ub.cmp(&ua).then(order).then(aa.total_cmp(ba)).then(a.id.cmp(&b.id))
     });
     let word = u
         .words
@@ -268,6 +280,19 @@ mod tests {
         assert_eq!(ids[1], "shot", "the shot under it is next (same overlap, lower z)");
         assert_eq!(r.targets[0].score, 1.0);
         assert_eq!(r.word.as_ref().unwrap().2, "world", "nearest word within 0.5 s");
+    }
+
+    #[test]
+    fn a_loose_loop_around_an_overlay_ranks_it_ahead_of_the_shot() {
+        // The pop is 700x150 at (600, 800); a loop drawn around it reaches well past its edges and the frame's.
+        let r = resolve_note(&manifest(), 15.0, Some([560.0, 760.0, 800.0, 260.0]));
+        let ids: Vec<&str> = r.targets.iter().map(|t| t.id.as_str()).collect();
+        assert_eq!(ids[..2], ["pop", "shot"], "{:?}", r.targets);
+        assert_eq!(r.targets[0].score, 1.0, "the loop covers all of the pop");
+        // A loop that clips a corner of the pip (less than half of either box) doesn't make it the target.
+        let r = resolve_note(&manifest(), 15.0, Some([1700.0, 300.0, 200.0, 200.0]));
+        assert_eq!(r.targets[0].id, "shot");
+        assert!(r.targets[1].id == "pip" && r.targets[1].score < UNDER, "{:?}", r.targets);
     }
 
     #[test]

@@ -171,9 +171,10 @@ fn demo_end_to_end() {
         .map(|u| u["unit"].as_str().unwrap().to_string())
         .collect();
     assert_eq!(reused, ["u1", "u3", "u5"], "title, insert and the moved body shot are reused");
-    assert_eq!(r2["layers_rendered"], 2, "only the badge on the resized footage shot");
-    // u6 has two graphics runs (card + title + clock, consecutive layers, are one; the lower third is the other).
-    assert_eq!(r2["layers_reused"], 2, "u6's graphics come from the cache");
+    // The badge on the resized footage shots is static: one image whatever the shot's length, so it's reused too.
+    assert_eq!(r2["layers_rendered"], 0, "no graphics draw again");
+    // u2 and u4 share the badge; u6 has three runs: card + title (static), the clock, and the lower third.
+    assert_eq!(r2["layers_reused"], 4, "every graphics run comes from the cache");
     let u5_before = m1["units"][4]["video_hash"].clone();
     assert_eq!(m2["units"][4]["video_hash"], u5_before, "the moved unit is the same bytes");
     assert_ne!(m2["units"][4]["t"], m1["units"][4]["t"], "…at a new time");

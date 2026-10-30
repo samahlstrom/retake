@@ -182,8 +182,9 @@ fn a_ripple_moves_units_without_touching_layer_keys() {
     let k = keys("ripple1", &d, Options::default());
     let f0 = |k: &Keys, s: &str| k.plans.iter().find(|p| p.span.source == s).unwrap().span.f0;
     assert_eq!(f0(&k, "s3"), f0(&base, "s3") + 5);
-    // s1 is longer: new key, and its text run covers more frames: new layer key.
+    // s1 is longer: new key. Its text is static, one image whatever the length: the same layer key.
     assert_ne!(unit(&k, "s1"), unit(&base, "s1"));
+    assert_eq!(runs(&k, "s1"), runs(&base, "s1"));
     // s3 only moved and its content is relative to it: the same key, so its segment is reused.
     assert_eq!(unit(&k, "s3"), unit(&base, "s3"));
     assert_eq!(runs(&k, "s3"), runs(&base, "s3"));

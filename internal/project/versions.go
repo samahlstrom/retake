@@ -13,6 +13,8 @@ import (
 type ChangeEntry struct {
 	Note    int64  `json:"note"`
 	Summary string `json:"summary"`
+	// Patches are the timeline patches that answered the note, in a push with render (spec/bridge.md).
+	Patches []string `json:"patches,omitempty"`
 }
 
 // VersionRow is one row of the versions table: a version that was pushed.

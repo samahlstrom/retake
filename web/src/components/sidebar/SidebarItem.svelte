@@ -7,7 +7,7 @@
   let { review, row, active }: { review: Review; row: Row; active: boolean } = $props();
 
   const answering = $derived(row.answer != null && review.seg?.answer_to === row.answer);
-  const hasActs = $derived(!!row.answeredIn || row.answer != null || row.reopen);
+  const hasActs = $derived(!!row.answeredIn || row.answer != null || row.reopen || !!row.carried);
 </script>
 
 <li class="item" class:active data-key={row.key} data-mark={row.mark}>
@@ -39,6 +39,7 @@
     {/if}
     {#if hasActs}
       <div class="acts">
+        {#if row.carried}<span class="meta carried">{row.carried}</span>{/if}
         {#if row.answeredIn}<span class="meta">answered in {row.answeredIn}</span>{/if}
         {#if row.see}
           {@const see = row.see}
