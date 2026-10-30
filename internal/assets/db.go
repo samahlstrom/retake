@@ -117,6 +117,12 @@ func migrate(sdb *sql.DB, ms []string) error {
 		return err
 	}
 	defer func() { _ = conn.Close() }()
+	// Foreign keys are off while migrating (they can't change inside a transaction): a step that rebuilds a table
+	// must not cascade into the tables that reference it. Each step ends with a foreign key check.
+	if _, err := conn.ExecContext(ctx, "PRAGMA foreign_keys = OFF"); err != nil {
+		return err
+	}
+	defer func() { _, _ = conn.ExecContext(ctx, "PRAGMA foreign_keys = ON") }()
 	for {
 		tx, err := conn.BeginTx(ctx, nil)
 		if err != nil {
@@ -138,6 +144,22 @@ func migrate(sdb *sql.DB, ms []string) error {
 		if _, err := tx.ExecContext(ctx, ms[v]); err != nil {
 			_ = tx.Rollback()
 			return fmt.Errorf("migrating to schema version %d: %w", v+1, err)
+		}
+		rows, err := tx.QueryContext(ctx, "PRAGMA foreign_key_check")
+		if err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+		broken := rows.Next()
+		ferr := rows.Err()
+		_ = rows.Close()
+		if ferr != nil {
+			_ = tx.Rollback()
+			return ferr
+		}
+		if broken {
+			_ = tx.Rollback()
+			return fmt.Errorf("migrating to schema version %d broke a foreign key", v+1)
 		}
 		if _, err := tx.ExecContext(ctx, fmt.Sprintf("PRAGMA user_version = %d", v+1)); err != nil {
 			_ = tx.Rollback()
