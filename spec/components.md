@@ -67,6 +67,7 @@ A component is a folder with a `component.json`:
 | `inputs` | Files in the package: `fonts` (`{name: {path, weight?}}`) and `images` (`{name: {path}}`). |
 | `background` | Pictures only: the composition's background color (a template). |
 | `layers` | The layers, as templates (below). Ids are local: `text` becomes `<element id>/text`. |
+| `backend` | Instead of `layers`: a program that draws the component's frames, `{command, timeout?}` ("Backends", below). A component has `layers` or a `backend`, not both. |
 | `examples` | Prop sets: `[{name, props, duration?, description?}]`. Previews render each; they are checked against `props`. |
 | `changelog` | `[{version, date?, changes}]`, newest first. |
 | `meta` | Free data, never read. |
@@ -147,6 +148,71 @@ A render manifest's elements say which component drew them (`use`, `spec/manifes
    `~/.local/share/retake/library`).
 
 Kits are found the same way (a folder with a `kit.json`).
+
+### Backends
+
+A component can draw with a program instead of layers: any language, any drawing code a creator already has (a
+Pillow script, a Cairo or canvas renderer, a game engine's exporter). The program ships in the package, so the
+package hash pins it, and it runs only through a locked use.
+
+```json
+{ "schema": "retake-component/0.1", "name": "python-text", "version": "1.0.0", "license": "CC0-1.0",
+  "use_as": ["overlay"], "props": { … },
+  "backend": { "command": ["python3", "draw.py"], "timeout": 30 } }
+```
+
+| `backend` field | Meaning |
+|---|---|
+| `command` | The argv to run. A first element with a `/` (`./draw`, `bin/draw`) is a path in the package; a bare name (`python3`) is looked up on `PATH`. Other arguments are passed as they are; the program runs in the package folder. |
+| `timeout` | Seconds one request may take, default 60, at most 3600. |
+
+**Expansion.** A use of a backend component expands into one layer that draws the whole composition, with the
+merged props on the composition as usual (`$words:` props too):
+
+```json
+{ "id": "pop/faster/raster", "type": "raster", "component": "python-text@1.0.0", "canvas": [1920, 1080],
+  "backend": { "command": ["python3", "draw.py"], "dir": "/abs/components/python-text@1.0.0",
+               "hash": "b3:5c1e…", "timeout": 30 } }
+```
+
+Its content box is the timeline's frame and its transform the identity: the program places its own pixels. The use's
+`from`/`to` time it like any overlay. A `raster` layer only comes from a backend: a timeline
+(or a component template) that writes one itself is refused (`raster_source`), so opening someone's timeline never runs
+a program it names. The layer key hashes the layer (the package hash, so the program's bytes, and the command), the
+composition's props, the output size and the frame range, so editing the program re-renders exactly its uses; `dir` is
+left out, so moving the project doesn't.
+
+**The protocol, `retake-raster/1`.** The renderer runs the command once per graphics run (a raster layer is always a run
+of its own), in the package folder, with a cleared environment: only `PATH`, `LANG=C.UTF-8`,
+`PYTHONDONTWRITEBYTECODE=1` (a `__pycache__` would change the package hash) and `TMPDIR`, a fresh scratch folder
+removed afterwards. It writes one JSON line on stdin and closes it:
+
+```json
+{ "protocol": "retake-raster/1", "component": "python-text@1.0.0", "props": { "text": "FASTER" },
+  "size": [1920, 1080], "scale": 1.0, "comp": [1920, 1080], "canvas": [1920, 1080], "fps": 30, "frames": [0, 36] }
+```
+
+- `size` is the output frame in pixels (a draft is half the timeline's `comp`, `scale` 0.5); `canvas` is the
+  component's design canvas, for programs that lay out in design pixels and scale by `min(size / canvas)`.
+- `frames` is `[a, b)`, composition frames; frame `k` is at composition time `t = k / fps` (negative `k` is before the
+  composition starts). Everything a frame may depend on is in the request: the same request must give the same frames.
+- For each frame, in order, the program writes to stdout a JSON header line, then the pixels:
+  - `{"box": [x, y, w, h]}` and exactly `w × h × 4` bytes of RGBA with straight (not premultiplied) alpha, rows top to
+    bottom, placed at (x, y) in output pixels (it may extend past the frame; that part is clipped);
+  - `{"same": true}`: the previous frame again (nothing follows; not on a request's first frame);
+  - `{"empty": true}`: nothing drawn.
+- It exits 0 after the last frame. Errors are typed, with the program's stderr (its last lines) in the message:
+  `backend_failed` (it couldn't start, or exited non-zero), `backend_timeout` (the request took longer than `timeout`;
+  the program is killed), `backend_output` (a malformed header, too few bytes, too few frames, or bytes after the
+  last frame).
+
+A Python backend reads the request with `json.loads(sys.stdin.readline())` and writes `sys.stdout.buffer`: see
+`editor/examples/backends/python-text/`, which draws with the standard library only.
+
+**Trust.** A backend runs code with the user's rights (the environment is cleared, but nothing is sandboxed). It runs
+only for a use pinned in the lockfile, so adding a backend component to a project (`retake lib add`, `component lock`)
+is the consent; a changed program is `component_changed` until it's re-pinned. The interpreter (`python3`) isn't part
+of the key: pin it outside, or ship a self-contained program.
 
 ## The lockfile
 

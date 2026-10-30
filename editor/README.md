@@ -56,6 +56,11 @@ timeline uses one where layers would go, `{"use": "pop-text@1.0.0", "props": {â€
 (QuickJS, registered by `retake_render::init`), and the fit from the design canvas to the timeline's. A `Project`
 keeps both documents: `src` (what patches change and what is saved) and `doc` (the expansion, what renders).
 
+A component may draw with a program instead of layers (`backend: {command}`, spec/components.md "Backends"): its use
+expands into one `raster` layer, and `crates/render/src/backend.rs` runs the program once per graphics run over the
+`retake-raster/1` protocol (a JSON request on stdin, framed straight-alpha RGBA on stdout, a cleared environment and
+a timeout). `examples/backends/python-text/` is a standard-library Python example; the package hash pins the program.
+
 The renderer only sees the expansion, so the layer and unit keys hash it: a changed component re-renders exactly
 the elements whose expansion changed (`crates/render/tests/components.rs`). `lint` (`crates/timeline/src/lint.rs`)
 evaluates the kits' rules over the resolved elements; `crates/render/src/lint.rs` measures each overlay's drawn box

@@ -2,6 +2,7 @@
 //! a content-addressed cache with two keys (layer and unit), a one-pass audio mix, and the render manifest.
 
 pub mod audio;
+pub mod backend;
 pub mod composite;
 pub mod dsp;
 pub mod engine;

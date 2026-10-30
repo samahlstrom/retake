@@ -3,6 +3,7 @@
 //! shadows and blur, keyframes evaluated per frame, all through a projective transform (perspective, corner pins).
 //! Also the Skia helpers the compositor uses on footage: mask coverage, mask outlines and filters on a frame.
 
+use crate::backend::{BackendStream, RasterFrame};
 use crate::composite::{Coverage, Frame};
 use crate::expr::Js;
 use crate::transform::{self, Proj};
@@ -365,6 +366,21 @@ enum Body {
     Shape(Shape),
     Image(Image, Rect),
     Group(Vec<Layer>),
+    /// A backend's frame and where it goes, in composition pixels.
+    Raster(Image, Rect),
+}
+
+/// A raster layer's current frame (component backends): the open request, and the frame's pixels with where they go
+/// in composition pixels. `id` stands for the pixels in [`Painter::state`].
+#[derive(Default)]
+struct RasterCur {
+    run: String,
+    next: i64,
+    end: i64,
+    first: bool,
+    stream: Option<BackendStream>,
+    image: Option<(Image, Rect)>,
+    id: String,
 }
 
 /// Draws graphics layers into RGBA frames. One per thread (Skia objects and the JS engine stay on their thread).
@@ -375,6 +391,7 @@ pub struct Painter {
     images: HashMap<String, Image>,
     /// Lanczos-resized images by (asset, source box, size).
     resized: HashMap<(String, [u64; 4], u32, u32), Image>,
+    raster: HashMap<String, RasterCur>,
     /// Output pixels per composition pixel of the frame being drawn.
     scale: f64,
     pub js: Js,
@@ -406,9 +423,95 @@ impl Painter {
             faces: faces.clone(),
             images: HashMap::new(),
             resized: HashMap::new(),
+            raster: HashMap::new(),
             scale: 1.0,
             js: Js::new()?,
         })
+    }
+
+    /// Makes composition frame `k` the current frame of the raster layer `l` (in the graphics run `run`, whose frames
+    /// end at `end`), read from its backend: from the open request when that's at `k`, else from a new request for
+    /// frames [k, end). The request ends (and the program's exit is checked) with its last frame.
+    #[allow(clippy::too_many_arguments)]
+    pub fn raster_frame(
+        &mut self,
+        l: &Layer,
+        run: &str,
+        props: &Value,
+        canvas: &crate::engine::Canvas,
+        fps: u32,
+        k: i64,
+        end: i64,
+    ) -> Result<(), EditError> {
+        let Content::Raster(r) = &l.content else { return Ok(()) };
+        let what = format!("layer {} ({})", l.id, r.component);
+        let cur = self.raster.entry(l.id.clone()).or_default();
+        if !(cur.stream.is_some() && cur.run == run && cur.next == k) {
+            cur.stream = None;
+            let end = end.max(k + 1);
+            let req = serde_json::json!({
+                "protocol": crate::backend::PROTOCOL,
+                "component": r.component,
+                "props": props,
+                "size": [canvas.w, canvas.h],
+                "scale": canvas.scale,
+                "comp": canvas.comp,
+                "canvas": r.canvas.unwrap_or(retake_timeline::component::DEFAULT_CANVAS),
+                "fps": fps,
+                "frames": [k, end],
+            });
+            let stream = BackendStream::open(&r.backend, &req, end - k, &what)?;
+            *cur = RasterCur {
+                run: run.to_string(),
+                next: k,
+                end,
+                first: true,
+                stream: Some(stream),
+                ..Default::default()
+            };
+        }
+        let st = cur.stream.as_mut().expect("an open request");
+        let f = st.next_frame()?;
+        cur.next += 1;
+        match f {
+            RasterFrame::Same if cur.first => {
+                return Err(EditError::new(
+                    "backend_output",
+                    format!("{what}: the first frame of a request is `same`"),
+                )
+                .hint("send a box or {\"empty\": true} first"));
+            }
+            RasterFrame::Same => {}
+            RasterFrame::Empty => {
+                cur.image = None;
+                cur.id = "-".into();
+            }
+            RasterFrame::Image { bx, rgba } => {
+                let mut h = blake3::Hasher::new();
+                for v in bx {
+                    h.update(&v.to_le_bytes());
+                }
+                h.update(&rgba);
+                cur.id = h.finalize().to_hex()[..16].to_string();
+                let info = ImageInfo::new(
+                    ISize::new(bx[2] as i32, bx[3] as i32),
+                    ColorType::RGBA8888,
+                    AlphaType::Unpremul,
+                    None,
+                );
+                let img = skia_safe::images::raster_from_data(&info, Data::new_copy(&rgba), bx[2] as usize * 4)
+                    .ok_or_else(|| EditError::new("skia", format!("{what}: can't wrap a {}x{} frame", bx[2], bx[3])))?;
+                let s = canvas.scale as f32;
+                let rect = Rect::from_xywh(bx[0] as f32 / s, bx[1] as f32 / s, bx[2] as f32 / s, bx[3] as f32 / s);
+                cur.image = Some((img, rect));
+            }
+        }
+        cur.first = false;
+        if cur.next >= cur.end {
+            let mut st = cur.stream.take().expect("an open request");
+            st.finish()?;
+        }
+        Ok(())
     }
 
     fn image(&mut self, asset: &str) -> Result<Image, EditError> {
@@ -606,6 +709,11 @@ impl Painter {
             }
             Content::Group(g) => (Body::Group(g.layers.clone()), comp.0, comp.1),
             Content::Video(_) => return Ok(None),
+            // The backend's current frame (`raster_frame`); the content box is the composition.
+            Content::Raster(_) => match self.raster.get(&l.id).and_then(|c| c.image.clone()) {
+                Some((img, rect)) => (Body::Raster(img, rect), comp.0, comp.1),
+                None => return Ok(None),
+            },
         }))
     }
 
@@ -719,6 +827,11 @@ impl Painter {
             Body::Group(children) => {
                 self.draw_list(canvas, &children, t, props, comp, true)?;
             }
+            Body::Raster(img, dst) => {
+                // Output pixels onto output pixels: with the identity transform this is an exact copy.
+                let sampling = SamplingOptions::new(skia_safe::FilterMode::Linear, skia_safe::MipmapMode::None);
+                canvas.draw_image_rect_with_sampling_options(&img, None, dst, sampling, &Paint::default());
+            }
         }
         if let Some(m) = &l.mask {
             apply_mask(canvas, m, (w, h), t, props, &mut self.js)?;
@@ -820,6 +933,9 @@ impl Painter {
         }
         if let Content::Text(Text { highlight: Some(h), .. }) = &l.content {
             out.push_str(&format!("h{:?}", h.words.eval(t, props, &mut self.js)?));
+        }
+        if let Content::Raster(_) = &l.content {
+            out.push_str(&format!("r{}", self.raster.get(&l.id).map(|c| c.id.as_str()).unwrap_or("-")));
         }
         if let Content::Group(g) = &l.content {
             out.push('[');

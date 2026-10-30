@@ -851,7 +851,7 @@ impl<'a> Resolver<'a> {
                     );
                 }
             }
-            Content::Shape(_) => {}
+            Content::Shape(_) | Content::Raster(_) => {}
             Content::Group(g) => {
                 for (i, c) in g.layers.iter().enumerate() {
                     self.check_layer_refs(c, &format!("{ptr}/layers/{i}"), errs);

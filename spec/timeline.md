@@ -155,7 +155,7 @@ Common fields:
 
 | Field | Meaning |
 |---|---|
-| `id`, `type` | `type` is `text`, `shape`, `image`, `video` or `group`. |
+| `id`, `type` | `type` is `text`, `shape`, `image`, `video` or `group` (`raster` comes only from component backends). |
 | `from`, `to` | When the layer shows, in composition seconds or as anchors. Default: the whole composition. |
 | `transform.anchor` | The point of the layer's content box that `position` places, as fractions of the box. Default `[0.5, 0.5]`, the center. |
 | `transform.position` | Prop `[x, y]`. Default: the center of the frame. |
@@ -198,6 +198,8 @@ Content by type:
   changes nothing, and its children are placed in composition pixels on the same clock. `transform.opacity` applies
   to the flattened group (children don't show through each other), and the children's `blend` modes combine them
   with each other inside the group only. Ids inside are unique like any other.
+- **raster**: frames drawn by a component's program (`spec/components.md`, "Backends"). Only the expansion of a
+  backend component has one; a timeline that writes `type: raster` itself is refused (`raster_source`).
 
 ### Perspective and corner pins
 

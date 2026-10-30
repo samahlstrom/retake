@@ -275,6 +275,8 @@ pub fn layer_is_static(l: &Layer, a: f64, b: f64) -> bool {
         Content::Text(t) => {
             !matches!(t.text, TextValue::Expr { .. }) && t.highlight.as_ref().is_none_or(|h| h.words.is_static())
         }
+        // A backend's frames may change on any frame (identical ones are skipped and stored once).
+        Content::Raster(_) => false,
         _ => true,
     };
     let mask_static = l.mask.as_ref().is_none_or(|m| m.props().iter().all(|p| prop_static(p)));
@@ -321,13 +323,17 @@ fn even(x: f64) -> u32 {
     ((x / 2.0).round() as u32 * 2).max(2)
 }
 
-/// A layer's JSON as hashed: no id (renaming doesn't re-render), no meta, no audio (sound isn't pixels).
+/// A layer's JSON as hashed: no id (renaming doesn't re-render), no meta, no audio (sound isn't pixels), and no
+/// backend folder (a raster layer's package hash stands for its program; moving the project doesn't re-render).
 fn key_json(v: &Value) -> Value {
     let mut v = v.clone();
     if let Some(o) = v.as_object_mut() {
         o.remove("id");
         o.remove("meta");
         o.remove("audio");
+        if let Some(b) = o.get_mut("backend").and_then(Value::as_object_mut) {
+            b.remove("dir");
+        }
     }
     v
 }
@@ -615,8 +621,10 @@ impl Engine {
             let mut groups: Vec<(bool, Vec<(Value, Layer)>)> = vec![];
             for (j, l) in all {
                 let still = layer_is_static(&l, ra, rb);
+                // A raster layer is a run of its own: its backend draws the run's frames in one request.
+                let alone = l.is_raster() || groups.last().is_some_and(|(_, g)| g.iter().any(|(_, x)| x.is_raster()));
                 match groups.last_mut() {
-                    Some((s, g)) if *s == still => g.push((j, l)),
+                    Some((s, g)) if *s == still && !alone => g.push((j, l)),
                     _ => groups.push((still, vec![(j, l)])),
                 }
             }

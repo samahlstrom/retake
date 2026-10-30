@@ -79,6 +79,20 @@ pub struct Example {
     pub description: Option<String>,
 }
 
+/// A component's program (spec/components.md, "Backends").
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct Backend {
+    /// The argv; a first element with a `/` is a path in the package.
+    pub command: Vec<String>,
+    /// Seconds one request may take (default 60).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout: Option<f64>,
+}
+
+/// The longest a backend request may be allowed to take, in seconds.
+pub const BACKEND_MAX_TIMEOUT: f64 = 3600.0;
+
 /// A `component.json`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -115,6 +129,9 @@ pub struct Component {
     pub background: Option<Value>,
     #[serde(default)]
     pub layers: Vec<Value>,
+    /// Instead of `layers`: a program that draws the frames ("Backends").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backend: Option<Backend>,
     #[serde(default)]
     pub examples: Vec<Example>,
     #[serde(default)]
@@ -330,7 +347,63 @@ pub fn check_component(c: &Component) -> Result<(), EditError> {
             return bad(format!("layers/{i}: every layer needs an id, unique in the component"));
         }
     }
+    if let Some(p) = raster_layers(&Value::Array(c.layers.clone()), "/layers").first() {
+        return Err(raster_source_error(p));
+    }
+    if let Some(b) = &c.backend {
+        if !c.layers.is_empty() {
+            return bad("a component has layers or a backend, not both".into());
+        }
+        if b.command.is_empty() || b.command.iter().any(|a| a.is_empty()) {
+            return bad("backend.command is the argv to run, e.g. [\"python3\", \"draw.py\"]".into());
+        }
+        if let Some(t) = b.timeout
+            && !(t > 0.0 && t <= BACKEND_MAX_TIMEOUT)
+        {
+            return bad(format!("backend.timeout {t}: seconds, more than 0 and at most {BACKEND_MAX_TIMEOUT}"));
+        }
+        let prog = &b.command[0];
+        if prog.contains('/') && (Path::new(prog).is_absolute() || prog.split('/').any(|s| s == "..")) {
+            return bad(format!("backend.command `{prog}`: a program path must stay inside the package"));
+        }
+    }
     Ok(())
+}
+
+/// Pointers of the `raster` layers in `v` (any object with `"type": "raster"` in a `layers` list, at any depth but
+/// under `meta` and `props`).
+pub fn raster_layers(v: &Value, ptr: &str) -> Vec<String> {
+    fn walk(v: &Value, ptr: &str, in_layers: bool, out: &mut Vec<String>) {
+        match v {
+            Value::Object(m) => {
+                if in_layers && m.get("type").and_then(Value::as_str) == Some("raster") {
+                    out.push(ptr.to_string());
+                }
+                for (k, c) in m {
+                    if k == "meta" || k == "props" {
+                        continue;
+                    }
+                    walk(c, &format!("{ptr}/{}", ptr_escape(k)), false, out);
+                }
+            }
+            Value::Array(a) => {
+                let layers = ptr.ends_with("/layers");
+                for (i, c) in a.iter().enumerate() {
+                    walk(c, &format!("{ptr}/{i}"), layers, out);
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut out = vec![];
+    walk(v, ptr, false, &mut out);
+    out
+}
+
+fn raster_source_error(ptr: &str) -> EditError {
+    EditError::new("raster_source", "a raster layer only comes from a component backend; this one is written by hand")
+        .at(ptr)
+        .hint("draw it with a backend component (spec/components.md, \"Backends\") and use that component instead")
 }
 
 /// Reads a kit folder.
@@ -1387,6 +1460,16 @@ impl Expander<'_> {
         let mut ev = self.ev.take();
         let mut errs = vec![];
         let mut layers = vec![];
+        if let Some(b) = &c.backend {
+            // One layer draws the whole composition; the program gets the props, the output size and the design
+            // canvas, so nothing is fitted here.
+            let mut backend = json!({"command": b.command, "dir": pkg.dir.to_string_lossy(), "hash": pkg.hash});
+            if let Some(t) = b.timeout {
+                backend["timeout"] = json!(t);
+            }
+            layers.push(json!({"id": format!("{id}/raster"), "type": "raster", "component": reference,
+                               "canvas": c.canvas(), "backend": backend}));
+        }
         for (i, l) in c.layers.iter().enumerate() {
             if let Some(mut nl) = subst(l, &sc, &format!("{ptr}/layers/{i}"), &mut ev, &mut errs) {
                 if let Some(local) = nl.get("id").and_then(Value::as_str) {
@@ -1399,7 +1482,7 @@ impl Expander<'_> {
         self.ev = ev;
         self.errs.extend(errs);
         let fit = Fit::new(c.canvas(), self.canvas);
-        if !fit.is_identity() {
+        if !fit.is_identity() && c.backend.is_none() {
             for l in &mut layers {
                 fit_layer(l, &fit);
             }
@@ -1528,6 +1611,10 @@ pub fn expand_with_roots(
             }
             Err(e) => x.errs.push(e.at(ptr)),
         }
+    }
+    // Raster layers come only from backends: opening a timeline must never run a program it names itself.
+    for p in raster_layers(&doc, "") {
+        x.errs.push(raster_source_error(&p));
     }
     // Tokens everywhere but in the props of uses.
     {
