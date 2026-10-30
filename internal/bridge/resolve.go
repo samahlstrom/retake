@@ -11,7 +11,7 @@ type Target struct {
 	ID     string      `json:"id"`
 	Kind   string      `json:"kind"`
 	Ptr    string      `json:"ptr"`
-	Score  float64     `json:"score"` // the fraction of the stroke box on the element (0 without a box)
+	Score  float64     `json:"score"` // the boxes' overlap over the smaller of the two (0 without a stroke box)
 	Z      int64       `json:"z"`
 	Box    *[4]float64 `json:"box,omitempty"` // where it was at the note's time, in manifest pixels
 	Parent string      `json:"parent,omitempty"`
@@ -41,18 +41,35 @@ func boxArea(t Target) float64 {
 	return area(*t.Box)
 }
 
-// rank orders targets the resolve-note way: by score, then z (topmost first), then the smaller element, then id.
+// Under is the score that puts an element under a stroke: their boxes overlap by half of the smaller one.
+const Under = 0.5
+
+// rank orders targets the resolve-note way: the elements under the stroke (score >= Under) first, topmost first,
+// then the rest by score and z; ties go to the smaller element, then the id.
 func rank(ts []Target) {
 	slices.SortStableFunc(ts, func(a, b Target) int {
-		return cmp.Or(cmp.Compare(b.Score, a.Score), cmp.Compare(b.Z, a.Z), cmp.Compare(boxArea(a), boxArea(b)),
-			cmp.Compare(a.ID, b.ID))
+		ua, ub := a.Score >= Under, b.Score >= Under
+		tier := 0
+		switch {
+		case ua && !ub:
+			tier = -1
+		case ub && !ua:
+			tier = 1
+		}
+		order := cmp.Or(cmp.Compare(b.Score, a.Score), cmp.Compare(b.Z, a.Z))
+		if ua && ub {
+			order = cmp.Or(cmp.Compare(b.Z, a.Z), cmp.Compare(b.Score, a.Score))
+		}
+		return cmp.Or(tier, order, cmp.Compare(boxArea(a), boxArea(b)), cmp.Compare(a.ID, b.ID))
 	})
 }
 
 // Resolve ranks the elements live at output time t under a stroke box ([x, y, w, h] in manifest pixels; nil: no
-// stroke), exactly as `retake-edit resolve-note` does (spec/manifest.md): by the fraction of the stroke box on each
-// element's box at t, then by z, then the smaller element first. Sound-only elements come last. It also gives the unit
-// and the spine word at t (or the nearest within 0.5 s).
+// stroke), exactly as `retake-edit resolve-note` does (spec/manifest.md). An element's score is the overlap of its
+// box at t and the stroke box over the smaller of the two (a mark inside it and a loop around it both score 1); the
+// elements under the stroke (score >= Under) come first, topmost first, then the rest by score and z, ties to the
+// smaller element. Sound-only elements come last. It also gives the unit and the spine word at t (or the nearest
+// within 0.5 s).
 func Resolve(m *Manifest, t float64, stroke *[4]float64) Resolution {
 	i := m.UnitAt(t)
 	if i < 0 {
@@ -73,7 +90,7 @@ func Resolve(m *Manifest, t float64, stroke *[4]float64) Resolution {
 			s := *stroke
 			switch {
 			case area(s) > 0:
-				score = overlap(s, b) / area(s)
+				score = math.Min(overlap(s, b)/math.Max(math.Min(area(s), area(b)), 1e-9), 1)
 			case s[0] >= b[0] && s[0] <= b[0]+b[2] && s[1] >= b[1] && s[1] <= b[1]+b[3]:
 				score = 1 // a point stroke: inside or not
 			}

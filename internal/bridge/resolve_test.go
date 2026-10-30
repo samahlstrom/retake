@@ -72,6 +72,15 @@ func TestResolveRanksLikeResolveNote(t *testing.T) {
 	if r := Resolve(m, 15, box(1500, 200, 0, 0)); r.Targets[0].ID != "pip" || r.Targets[0].Score != 1 {
 		t.Fatalf("a point stroke inside the pip: %+v", r.Targets)
 	}
+	// A loose loop around the pop (past its edges) resolves to it, ahead of the shot under it.
+	if got := ids(Resolve(m, 15, box(560, 760, 800, 260)).Targets); !slices.Equal(got[:2], []string{"pop", "shot"}) {
+		t.Fatalf("a loop around the pop: %v", got)
+	}
+	// A loop that clips the pip's corner (under half of either box) leaves the shot first.
+	if r := Resolve(m, 15, box(1700, 300, 200, 200)); r.Targets[0].ID != "shot" || r.Targets[1].ID != "pip" ||
+		r.Targets[1].Score >= Under {
+		t.Fatalf("a clipped corner: %+v", r.Targets)
+	}
 	e := Element{Box: [][5]float64{{10, 0, 0, 10, 10}, {12, 0, 0, 0, 0}, {13, 5, 5, 10, 10}}}
 	for _, c := range []struct {
 		t  float64
@@ -132,6 +141,7 @@ func TestResolveMatchesRetakeEdit(t *testing.T) {
 	cases := [][5]float64{
 		{9, 0.7, 0.65, 0.1, 0.1}, {7.8, 0.4, 0.75, 0.2, 0.1}, {1, 0.45, 0.45, 0.1, 0.1}, {13, 0.1, 0.8, 0.3, 0.1},
 		{4.5, 0.5, 0.5, 0.01, 0.01}, {16.1, 0, 0, 1, 1}, {10.5, 0.9, 0.9, 0.05, 0.05},
+		{7.8, 0.25, 0.7, 0.5, 0.25}, {9, 0.6, 0.5, 0.4, 0.5}, {13, 0.02, 0.85, 0.5, 0.12}, {9, 0.75, 0.55, 0.3, 0.1},
 	}
 	for _, c := range cases {
 		args := []string{"resolve-note", path}

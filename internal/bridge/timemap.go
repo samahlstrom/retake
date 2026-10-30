@@ -155,11 +155,11 @@ func (mp *mapper) spineAt(ai int, t float64) (rule, bool) {
 	return rule{}, false
 }
 
-// shotEnd is the latest time a same-shot match maps to: just inside the unit's end, so the mapped time still shows
-// that shot (on its last frame) when B's unit is the shorter one. The last unit holds its end.
-func (mp *mapper) shotEnd(bi int) float64 {
-	ub := mp.b.Units[bi]
-	if bi == len(mp.b.Units)-1 {
+// shotEnd is the latest time A unit ai's same-shot match bi maps to: when B's unit is the shorter one, just inside its
+// end, so the mapped time still shows that shot (on its last frame); the last unit holds its end.
+func (mp *mapper) shotEnd(ai, bi int) float64 {
+	ua, ub := mp.a.Units[ai], mp.b.Units[bi]
+	if bi == len(mp.b.Units)-1 || ub.T[1]-ub.T[0] >= ua.T[1]-ua.T[0]-1e-9 {
 		return ub.T[1]
 	}
 	return math.Max(ub.T[0], ub.T[1]-0.001)
@@ -186,7 +186,7 @@ func (mp *mapper) ruleAt(ai int, t float64) (rule, bool) {
 		return r, true
 	}
 	if bi, ok := mp.shotMatch(ai); ok {
-		ub, hi := mp.b.Units[bi], mp.shotEnd(bi)
+		ub, hi := mp.b.Units[bi], mp.shotEnd(ai, bi)
 		return rule{by: "shot", f: func(x float64) float64 {
 			return math.Min(math.Max(ub.T[0]+(x-ua.T[0]), ub.T[0]), hi)
 		}}, true
@@ -212,7 +212,7 @@ func (mp *mapper) breaks(ai int) []float64 {
 		}
 	}
 	if bi, ok := mp.shotMatch(ai); ok {
-		pts = append(pts, ua.T[0]+(mp.shotEnd(bi)-mp.b.Units[bi].T[0]))
+		pts = append(pts, ua.T[0]+(mp.shotEnd(ai, bi)-mp.b.Units[bi].T[0]))
 	}
 	var out []float64
 	for _, p := range pts {
