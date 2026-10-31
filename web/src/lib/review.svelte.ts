@@ -265,7 +265,7 @@ export class Review {
   /** The family refresh in flight, so a burst of events asks /api/info once. */
   #refreshing: Promise<void> | null = null;
   /** Tells the server which incomplete stream this page shows, so it renders while someone watches. */
-  readonly watcher = new Watcher({ onStream: (label, s) => this.#applyStream(label, s) });
+  readonly watcher = new Watcher({ viewer: this.viewer, onStream: (label, s) => this.#applyStream(label, s) });
   /**
    * The shown version is an incomplete stream with nothing rendered yet: the page shows its poster, and loads it
    * once its first segment is out, at `t`, playing if `play` (it was playing, or Space was pressed meanwhile).
@@ -461,6 +461,7 @@ export class Review {
   /** Tell the server this page no longer watches the versions it played, so the streaming side can stop a render no
    * one watches (spec/home.md, "Close means close"). A beacon: it goes out even as the page unloads. */
   leave = (): void => {
+    this.watcher.leave();
     if (typeof navigator === 'undefined' || typeof navigator.sendBeacon !== 'function') return;
     for (const label of this.#watched) {
       try {
@@ -1378,8 +1379,9 @@ export class Review {
   }
 
   /** The video's poster: a streamed version's first frame, shown until its video has a frame. */
-  #setPoster(v: Pick<Version, 'poster'> | undefined): void {
+  #setPoster(v: Pick<Version, 'poster' | 'label'> | undefined): void {
     if (v?.poster) this.video.poster = v.poster;
+    else if (this.homeCtx) this.video.poster = v ? `api/poster?v=${encodeURIComponent(v.label)}` : 'api/poster';
     else this.video.removeAttribute('poster');
   }
 

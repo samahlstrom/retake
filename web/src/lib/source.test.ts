@@ -118,6 +118,29 @@ describe('VideoSource', () => {
     expect(made.length).toBe(0);
   });
 
+  it.each([true, false])('streams with MSE when available (%s), otherwise falls back to native HLS', async (mse) => {
+    const video = fakeVideo(true);
+    const { Hls, made } = fakeHls(mse);
+    const src = new VideoSource(video.media, { loadHls: async () => Hls });
+    const p = src.load({
+      label: 'v7',
+      name: 'v7.m3u8',
+      stream: { state: 'rendering', done: 1, total: 6, seconds: 2 },
+    });
+    await tick();
+    if (mse) {
+      expect(made).toHaveLength(1);
+      expect(made[0].url).toBe('video/v7/v7.m3u8');
+      expect(video.src).toBe('');
+    } else {
+      expect(made).toHaveLength(0);
+      expect(video.src).toBe('video/v7/v7.m3u8');
+    }
+    video.fire('loadedmetadata');
+    await expect(p).resolves.toBeUndefined();
+    src.destroy();
+  });
+
   it('plays a playlist through hls.js elsewhere, and flips back to a file cleanly', async () => {
     const video = fakeVideo(false);
     const { Hls, made } = fakeHls();

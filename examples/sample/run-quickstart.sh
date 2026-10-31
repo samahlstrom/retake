@@ -72,7 +72,7 @@ run retake notes list "$V2"
 # 4. The agent: it reads the note, patches the timeline (the patch answers it), then renders v3 and pushes it; the
 #    changelog comes from the patch.
 run retake-edit patch apply edit/timeline.json edit/patches/02-v3.json
-run retake push "$V2" --render --parent v2
+run retake push "$V2" --render --no-stream --parent v2
 run retake versions "$V2"
 run retake notes list "$V2"
 kill "${PIDS[-1]}" && wait "${PIDS[-1]}" 2>/dev/null || true

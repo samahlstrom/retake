@@ -21,7 +21,10 @@ export interface ReviewHook {
     job: { text: string; error: boolean; hint: string | null } | null };
   sidebar?: { panel: boolean; toggle: boolean; phone: boolean; active: string | null; rows: SidebarRow[] };
   view: { base: string | null; shown: string | null; flipped: boolean; switching: boolean };
-  info: { label?: string; name?: string; versions?: { label: string; name: string; duration: number | null }[] };
+  info: { label?: string; name?: string; versions?: { label: string; name: string; duration: number | null;
+    /** A streamed version (spec/bridge.md, "Streaming"): its state, and its first frame's URL. */
+    stream?: { state: 'pending' | 'rendering' | 'complete'; done: number; total: number; seconds: number };
+    poster?: string }[] };
   hist: { strokes: unknown[]; images?: unknown[] };
   serialize: (take: unknown) => Record<string, unknown>;
   save: (take: unknown) => Promise<unknown>;

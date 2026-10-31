@@ -17,7 +17,7 @@ import (
 
 // emptyPlaylist is a streamed version's playlist before its first segment: it takes the version's number. The
 // renderer replaces it with its own (the same header) when it publishes.
-const emptyPlaylist = "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-PLAYLIST-TYPE:EVENT\n#EXT-X-TARGETDURATION:6\n" +
+const emptyPlaylist = "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-PLAYLIST-TYPE:EVENT\n#EXT-X-TARGETDURATION:3\n" +
 	"#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-INDEPENDENT-SEGMENTS\n#EXT-X-START:TIME-OFFSET=0\n"
 
 // streamPush pushes a version that renders on demand (spec/bridge.md, "Streaming"): it snapshots the timeline,

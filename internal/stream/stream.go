@@ -264,6 +264,15 @@ func (m *Manager) run(ctx context.Context, t Target, rec *bridge.PushRecord) err
 	}
 	var mu sync.Mutex // progress comes in on the editor's output goroutine
 	var last time.Time
+	var trailing *time.Timer
+	finished := false
+	emitProgress := func() {
+		last = m.o.Now()
+		if t.Emit != nil {
+			st := family.State(t.Playlist, s)
+			t.Emit(project.VersionEvent{Why: project.WhyProgress, Label: t.Label, Path: t.Playlist, Stream: &st})
+		}
+	}
 	first := true
 	rep, err := m.o.Editor.RenderStream(ctx, bin, args, func(p bridge.Progress) {
 		if p.Progress != "publish" {
@@ -277,16 +286,27 @@ func (m *Manager) run(ctx context.Context, t Target, rec *bridge.PushRecord) err
 			s.FirstS, first = &el, false
 		}
 		m.write(t, rec)
-		if now := m.o.Now(); now.Sub(last) >= m.o.Progress || p.Done == p.Total {
-			last = now
-			if t.Emit != nil {
-				st := family.State(t.Playlist, s)
-				t.Emit(project.VersionEvent{Why: project.WhyProgress, Label: t.Label, Path: t.Playlist, Stream: &st})
-			}
+		if p.Done == p.Total || trailing == nil && m.o.Now().Sub(last) >= m.o.Progress {
+			emitProgress()
+		} else if trailing == nil {
+			// Cached units arrive in a burst. Publish its final progress even if the next uncached unit takes minutes.
+			trailing = time.AfterFunc(m.o.Progress-m.o.Now().Sub(last), func() {
+				mu.Lock()
+				defer mu.Unlock()
+				if finished {
+					return
+				}
+				trailing = nil
+				emitProgress()
+			})
 		}
 	})
 	mu.Lock()
 	defer mu.Unlock()
+	finished = true
+	if trailing != nil {
+		trailing.Stop()
+	}
 	if err != nil {
 		return err
 	}

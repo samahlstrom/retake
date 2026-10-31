@@ -171,15 +171,16 @@ so the streaming side can stop a render no one is watching:
 - Its event stream (`api/events`) closes with the page, too.
 
 `POST api/versions/<label>/unwatch[?viewer=<id>]` needs watch (a viewer's link may leave too), is origin-checked like
-every POST, and answers 204. An unknown label is 404. Until the streaming side exists it does nothing else; with it,
-the server calls the streaming side's Unwatch(label, viewer) (`server.Options.Unwatch`).
+every POST, and answers 204 for ordinary videos. A streamed version requires the same nonempty viewer id as its
+watch call and returns its stream state (`200`, spec/bridge.md). An unknown label is 404. The optional
+`server.Options.Unwatch` hook is notified as well.
 
-### What the streaming side provides (spec, not built here)
+### Streaming integration
 
 - A pushed timeline version is a pending HLS version until it is rendered, with a first-frame poster
   `<stem>.poster.jpg` beside its playlist.
-- **Watching** starts when a viewer opens the version (its `video/<label>...` requests); the render stops when the
-  last viewer leaves (unwatch above, or no requests for a while). `GET api/info` never starts a render: the home reads
+- **Watching** starts when a visible page calls `POST api/versions/<label>/watch?viewer=<id>` and renews
+  its lease; the render stops when the last viewer leaves (unwatch above, or the watch lease expires). `GET api/info` never starts a render: the home reads
   every project's `api/info` to draw its cards.
 - `api/info`'s version objects (the top level and `versions`) carry `stream`: `{"state": "pending" | "rendering" |
   "complete", "done": n, "total": m}` for a streamed version, and may carry `poster`, the poster's URL relative to the

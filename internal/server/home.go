@@ -21,6 +21,10 @@ func (s *Server) unwatch(w http.ResponseWriter, r *http.Request, label string) {
 	if s.opts.Unwatch != nil {
 		s.opts.Unwatch(v.Label, query(r, "viewer"))
 	}
+	if v.Stream != nil {
+		s.watch(w, r, v.Label, false)
+		return
+	}
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusNoContent)
 }

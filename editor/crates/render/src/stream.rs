@@ -20,10 +20,11 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-/// Segments are about this long (whole GOPs)...
-pub const TARGET_S: f64 = 4.0;
-/// ...and a unit is cut while more than this much of it remains, so segments run up to 6 s.
-pub const MAX_S: f64 = 6.0;
+/// Segments are about this long (whole GOPs: one, at the encoder's 2 s)...
+pub const TARGET_S: f64 = 2.0;
+/// ...and a unit is cut while more than this much of it remains, so segments run up to 3 s. Players reload a growing
+/// playlist about every target duration, so short segments are what makes a stream fill in promptly.
+pub const MAX_S: f64 = 3.0;
 /// AAC-LC frames hold 1024 samples, and ffmpeg's encoder is 1024 samples late (its priming frame).
 const AAC_FRAME: i64 = 1024;
 const AAC_PRIMING: i64 = 1024;
@@ -552,17 +553,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn units_cut_at_keyframes_into_two_to_six_second_segments() {
+    fn units_cut_at_keyframes_into_segments_of_up_to_three_seconds() {
         // 30 fps, a keyframe every 60 frames (2 s).
         assert_eq!(pieces(15, 60, 30), vec![[0, 15]], "a short cut is one short segment");
-        assert_eq!(pieces(150, 60, 30), vec![[0, 150]], "5 s: one segment");
-        assert_eq!(pieces(180, 60, 30), vec![[0, 180]], "6 s: still one");
-        assert_eq!(pieces(181, 60, 30), vec![[0, 120], [120, 181]]);
-        assert_eq!(pieces(390, 60, 30), vec![[0, 120], [120, 240], [240, 390]], "13 s: 4 + 4 + 5");
+        assert_eq!(pieces(75, 60, 30), vec![[0, 75]], "2.5 s: one segment");
+        assert_eq!(pieces(90, 60, 30), vec![[0, 90]], "3 s: still one");
+        assert_eq!(pieces(91, 60, 30), vec![[0, 60], [60, 91]]);
+        assert_eq!(
+            pieces(390, 60, 30),
+            vec![[0, 60], [60, 120], [120, 180], [180, 240], [240, 300], [300, 390]],
+            "13 s: 2 + 2 + 2 + 2 + 2 + 3"
+        );
         // 60 fps, a keyframe every 120 frames.
         let p = pieces(60 * 61, 120, 60);
         assert!(p.iter().all(|x| x[0] % 120 == 0), "every cut on a keyframe");
-        assert!(p.iter().all(|x| (x[1] - x[0]) <= 360 && (x[1] - x[0]) >= 120), "{p:?}");
+        assert!(p.iter().all(|x| (x[1] - x[0]) <= 180 && (x[1] - x[0]) >= 60), "{p:?}");
         assert_eq!(p.first().unwrap()[0], 0);
         assert_eq!(p.last().unwrap()[1], 60 * 61);
         assert!(p.windows(2).all(|w| w[0][1] == w[1][0]), "contiguous");

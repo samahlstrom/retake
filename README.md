@@ -98,11 +98,13 @@ a timeline project, the review loop runs on it:
 
 ```bash
 retake-edit patch apply edit/timeline.json edit/patches/02-v3.json   # the patch says which note it answers
-retake push how-to/v2/how-to_v2.mp4 --render --parent v2             # renders, pushes v3, writes the changelog
+retake push how-to/v2/how-to_v2.mp4 --render --parent v2             # registers v3; streams when watched
 ```
 
-- `retake push --render` renders the current revision (only the changed parts draw again) and pushes it with its
-  manifest. Each patch's note ids and summary become the changelog.
+- `retake push --render` registers the current revision with a poster. Opening it starts a growing stream; closing
+  the last viewer stops rendering, and reopening resumes from the cache. Only changed units draw again.
+  Each patch's note ids and summary become the changelog. Use `--no-stream` to wait for a completed MP4.
+- `retake open <folder>` lists projects with thumbnails, review status, and Next video. `retake share <folder>` shares that home screen.
 - Notes point at the timeline elements under their strokes, so an agent knows what to patch.
 - C, `[` and `]` land on the matching moment when a trim moved things, not on the same clock time.
 - The newest version shows the parent's notes as unchanged, answered (check it), or context changed.

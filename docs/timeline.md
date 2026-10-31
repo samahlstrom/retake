@@ -239,9 +239,11 @@ points at `../edit/timeline.json`.
 
 ### Push a revision as a version
 
+`--render` defaults to on-demand streaming: push a poster and pending version, then render when a reviewer opens it. Unchanged units reuse the cache, and closing the last viewer stops work. The example below uses `--no-stream` to wait for a complete MP4.
+
 ```bash
 retake-edit patch apply edit/timeline.json edit/patches/02-v3.json   # its "answers": ["v2#1"]
-retake push how-to/v2/how-to_v2.mp4 --render --parent v2
+retake push how-to/v2/how-to_v2.mp4 --render --no-stream --parent v2
 ```
 
 ```
@@ -251,7 +253,7 @@ pushed v3 from v2: ~/retake-sample/how-to/v3/how-to_v3.mp4
   answered #1
 ```
 
-`--render` renders the current revision (only the units that changed draw again) and moves it into the family as the
+`--render --no-stream` renders the current revision (only the units that changed draw again) and moves it into the family as the
 next version, with its manifest beside it (`how-to_v3.manifest.json`) and a record of the push (`how-to_v3.push.json`).
 The changelog comes from the patches made since the parent was rendered: each patch's `answers` and `summary` become
 the line for those notes, so nothing is typed twice. `--change` still replaces a line, and `--ask` asks about a note

@@ -34,6 +34,7 @@ echo '{"progress": "plan", "units": '$total', "reused": 1, "published": '$start'
 i=$start
 while [ $i -lt $total ]; do
   i=$((i+1))
+  if [ $i -eq 3 ] && [ -n "$FAKE_PAUSE_THIRD" ]; then sleep "$FAKE_PAUSE_THIRD"; fi
   sleep "${FAKE_SLEEP:-0.05}"
   if [ -n "$FAKE_FAIL" ] && [ $i -eq 2 ]; then
     echo '{"ok": false, "errors": [{"code": "ffmpeg_failed", "message": "ffmpeg failed (encoding u2)"}]}'
@@ -148,6 +149,27 @@ func waitFor(t *testing.T, what string, cond func() bool) {
 			t.Fatalf("timed out waiting for %s", what)
 		}
 		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+func TestProgressPublishesBurstBeforeNextSlowUnit(t *testing.T) {
+	f, m := newFixture(t, 10*time.Second, "FAKE_SLEEP=0.005", "FAKE_PAUSE_THIRD=1")
+	m.o.Progress = 100 * time.Millisecond
+	if _, err := m.Watch(f.target, "page"); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "the cached burst's progress", func() bool {
+		f.events.mu.Lock()
+		defer f.events.mu.Unlock()
+		for _, e := range f.events.evs {
+			if e.Why == project.WhyProgress && e.Stream != nil && e.Stream.Done == 2 {
+				return true
+			}
+		}
+		return false
+	})
+	if got := f.playlist().Units; got != 2 {
+		t.Fatalf("progress should arrive before the slow third unit: got %d", got)
 	}
 }
 

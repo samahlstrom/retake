@@ -118,10 +118,12 @@ applied p2 (rev 1 → 2), answers v2#1; re-renders 3 of 5 units
 ```
 
 Then it renders the new revision and pushes it as v3. `how-to/` is a timeline project (`how-to/retake.toml` points at
-the timeline), so `--render` does both. Only the units the patch touched are drawn again; the rest come from the cache:
+the timeline), so `--render --no-stream` does both. Only the units the patch touched are drawn again; the rest come from the cache.
+
+For live review, omit `--no-stream`: the push registers a playlist and poster immediately, then renders while someone watches. This walkthrough uses a completed MP4 so its scripted checks can inspect the manifest right away:
 
 ```bash
-retake push how-to/v2/how-to_v2.mp4 --render --parent v2
+retake push how-to/v2/how-to_v2.mp4 --render --no-stream --parent v2
 ```
 
 ```

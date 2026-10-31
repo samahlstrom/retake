@@ -88,7 +88,7 @@ func TestStreamedVersionWatch(t *testing.T) {
 		"/api/versions/v6/watch?viewer=a":  400,
 		"/api/versions/v9/watch?viewer=a":  404,
 		"/api/versions/v7/frob?viewer=a":   404,
-		"/api/versions/v6/unwatch?viewer=": 400,
+		"/api/versions/v7/unwatch?viewer=": 400,
 	} {
 		if r := h.post(path, "", nil); r.code != code {
 			t.Errorf("%s: %d %s, want %d", path, r.code, r.body, code)

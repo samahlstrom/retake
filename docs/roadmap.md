@@ -37,6 +37,7 @@
    - 3b, done: `retake serve`, a self-hosted server for many projects: sign-in links and sessions, members, uploads
      (tus) and `retake push --remote`, Postgres + S3 drivers, Docker Compose ([spec/server.md](../spec/server.md),
      [deploy/README.md](../deploy/README.md)).
+   - Done: local multi-project home screen with thumbnails, status, Next video and folder share links; on-demand HLS rendering with cached resume and progress.
    - Left: a web admin page, per-person sidebars, redacting server paths, presigned media or a CDN.
 4. **Release.** Installers, docs, a CC0 sample project, then the hosted service.
    - Done, short of publishing: versions from tags, release archives, `scripts/install.sh`, the docs, the sample

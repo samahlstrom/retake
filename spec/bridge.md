@@ -93,7 +93,7 @@ folder, `v7/`. In a family without them, a default push renders one MP4 as befor
   id per page. The answer is the version's `stream` state (below). A viewer counts for 25 s after its last call.
 - `POST /api/versions/<label>/unwatch?viewer=<id>` says it stopped (`navigator.sendBeacon` on page hide and when the
   page shows another version).
-- Both are allowed for every role that can view (spec/team.md), and refused for other versions (`400`).
+- Both are allowed for every role that can view (spec/team.md). Watching a non-streamed version is refused (`400`); unwatching one is a harmless `204`, as used when leaving the home screen's regular videos.
 - While a version has a viewer and isn't complete, the server renders it: it takes the render lock (an exclusive
   `flock` on `.<stem>.lock` beside the playlist; if another process holds it, that one renders), and runs
   `retake-edit render <timeline> --doc <snapshot> --hls <playlist> --progress --json [--draft] [-o <export>]`.
@@ -129,12 +129,12 @@ from its start to its first published segment, and `done_s` the time of the rend
 #EXTM3U
 #EXT-X-VERSION:7
 #EXT-X-PLAYLIST-TYPE:EVENT
-#EXT-X-TARGETDURATION:6
+#EXT-X-TARGETDURATION:3
 #EXT-X-MEDIA-SEQUENCE:0
 #EXT-X-INDEPENDENT-SEGMENTS
 #EXT-X-START:TIME-OFFSET=0
 #EXT-X-MAP:URI="init_00000.mp4"
-#EXTINF:4.000000,
+#EXTINF:2.000000,
 seg_00000.m4s
 #EXTINF:2.533333,
 seg_00001.m4s
@@ -149,8 +149,8 @@ playlist is replaced whole (a temporary file renamed over it), so a player never
 
 **Segments are fragmented MP4** (CMAF-style: an init segment, then `moof`/`mdat` fragments). The video is the unit's
 encoded segment remuxed (never re-encoded), with a fragment at every keyframe. Units are encoded with an IDR every
-2 s (closed GOPs, no scene cuts), so a unit is cut at its keyframes into 4 s segments while more than 6 s of it
-remain: segments run 2–6 s, except that a unit shorter than 2 s is one short segment. Units encoded alike share one
+2 s (closed GOPs, no scene cuts), so a unit is cut at its keyframes into 2 s segments while more than 3 s of it
+remain: segments run up to 3 s, except that a unit shorter than 2 s is one short segment. Units encoded alike share one
 init segment (`EXT-X-MAP`); a new one comes only when a unit's differs.
 
 **Timestamps are exact.** Each fragment's decode time (`tfdt`) is set to when it plays in the whole render, and the
@@ -192,6 +192,8 @@ record that says `rendering` while nobody holds the lock (a server killed mid-re
   `#EXT-X-START`). The timeline uses the expected duration, so the scale doesn't grow, and shows how much is
   rendered.
 - When the playhead reaches the end of what's rendered, it waits (buffering) for the next segments.
+- Streamed versions prefer hls.js when MediaSource is supported, even if the browser advertises native HLS.
+  Chromium's native player can fail on a growing EVENT playlist. Browsers without MediaSource use native HLS.
 - Landing on a moment that isn't rendered yet lands at 0 instead, with a toast ("v8 is rendering: 0:41 of 3:02
   so far, from the start").
 - The page stops watching when it shows another version, when it's hidden, and when it's closed.

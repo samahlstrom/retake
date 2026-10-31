@@ -35,11 +35,12 @@ export const CONFIG_HOME = join(WORK, 'config');
 export const AUTHOR = 'E2E Reviewer';
 
 /**
- * HTTP ports for the servers under test, one per spec file, and the proxies of the crash and share tests:
- * RETAKE_E2E_PORT_BASE (default 8831) and the next ten, so parallel checkouts can run the suite side by side.
+ * HTTP ports for the servers under test, and the proxies of the crash and share tests: RETAKE_E2E_PORT_BASE (default
+ * 8831) and the next eight, so parallel checkouts can run the suite side by side. The spec files run one after
+ * another and each stops its servers, so later files reuse the ports of earlier ones; the nine stay a fixed block.
  */
 const PORT_BASE = Number.parseInt(process.env.RETAKE_E2E_PORT_BASE ?? '8831', 10);
-if (!(PORT_BASE > 0 && PORT_BASE < 65525)) throw new Error(`bad RETAKE_E2E_PORT_BASE: ${process.env.RETAKE_E2E_PORT_BASE}`);
+if (!(PORT_BASE > 0 && PORT_BASE < 65527)) throw new Error(`bad RETAKE_E2E_PORT_BASE: ${process.env.RETAKE_E2E_PORT_BASE}`);
 export const PORTS = {
   scenario: PORT_BASE,
   crash: PORT_BASE + 1,
@@ -50,8 +51,10 @@ export const PORTS = {
   share: PORT_BASE + 6,
   shareProxy: PORT_BASE + 7,
   timemap: PORT_BASE + 8,
-  teamServer: PORT_BASE + 9,
-  eraser: PORT_BASE + 10,
+  teamServer: PORT_BASE + 4, // 09, after 05-sidebar
+  eraser: PORT_BASE + 5, // 10, after 06-mobile
+  home: PORT_BASE + 2, // 12, after 11-stream
+  stream: PORT_BASE + 2, // 11, after 04-hls
 } as const;
 
 /** retake-edit, for the specs that render with the editor: $RETAKE_EDIT, else the repo's release build, else $PATH. */

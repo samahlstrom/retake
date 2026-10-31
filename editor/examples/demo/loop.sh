@@ -158,7 +158,7 @@ EOF
 "$edit" patch apply "$proj/edit/timeline.json" "$proj/edit/patches/02-trim-vo.json" | sed 's/^/   /'
 
 say "6. push v2 with --render: the changelog comes from the patches"
-nice -n 19 "$retake" push "$video" --render --draft --change "$title_note=Kept as it is" \
+nice -n 19 "$retake" push "$video" --render --no-stream --draft --change "$title_note=Kept as it is" \
   --ask "$card_note=Lighter card, or keep it dark and brighten the text?" | sed 's/^/   /'
 [[ -f "$proj/v2/demo_v2.mp4" && -f "$proj/v2/demo_v2.manifest.json" && -f "$proj/v2/demo_v2.push.json" ]] ||
   fail "v2, its manifest and its push record should be in demo/v2/"

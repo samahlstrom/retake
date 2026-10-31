@@ -4,6 +4,16 @@ All notable changes are listed here. Versions follow semver once the first relea
 
 ## Unreleased
 
+### On-demand streaming and review home
+- Rendered pushes register a poster and pending HLS version immediately. Opening the version starts rendering;
+  closing the last viewer stops it. Completed units stay cached, and reopening resumes. `--no-stream` keeps the
+  completed-MP4 workflow.
+- `retake open <folder>` and `retake share <folder>` show projects with thumbnails, review status, All videos and
+  Next video. The player shows render progress and keeps C comparison and mobile scrubbing.
+- Integrated the home screen and streaming lifecycle with a shared viewer id and compatible unwatch routes.
+- Streamed playback uses hls.js where supported to avoid Chromium native-HLS failures on growing playlists.
+  Progress includes the last update of a cached burst, and home posters persist when the player loads.
+
 ### Scrubbing on iPhone
 - Dragging the timeline now scrubs like a video player: playback pauses for the drag, one seek is in flight at a
   time (to the latest finger position, a fast keyframe seek where the browser has one), the release does one exact
