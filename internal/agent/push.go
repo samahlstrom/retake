@@ -32,6 +32,14 @@ type PushArgs struct {
 	// render manifest, and a changelog made from the patches since the parent (spec/bridge.md).
 	Render bool
 	Draft  bool // with Render: a draft render
+	// With Render, the push streams by default (spec/bridge.md, "Streaming"): the version is in the family from the
+	// first rendered unit on, as a growing HLS playlist. NoStream renders one MP4 first instead. Stream asks for
+	// streaming explicitly: then a family without version folders is an error instead of a fallback to an MP4.
+	Stream   bool
+	NoStream bool
+	Export   bool // a streamed push also packages an MP4 beside the playlist at the end (<stem>.export.mp4)
+	// Notify, when set, gets a line for a person as a streamed render goes (when it's playable, when it's done).
+	Notify func(string)
 }
 
 // PushResult is version_push's result.
@@ -42,6 +50,8 @@ type PushResult struct {
 	// Render is a rendered push's record: its patches, the unrequested ones, the skipped answers and the units.
 	Render   *bridge.PushRecord `json:"render,omitempty"`
 	Manifest string             `json:"manifest,omitempty"` // a rendered push's render manifest
+	// Note says why a rendered push didn't stream, when it would have by default.
+	Note string `json:"note,omitempty"`
 }
 
 // nameRE splits a versioned stem: prefix, separator, the v, the number, the rest.
@@ -324,11 +334,13 @@ func copyHash(src, dest string) (string, error) {
 
 // VersionView is one version for versions_list: the family member and what its push recorded.
 type VersionView struct {
-	Label     string                `json:"label"`
-	N         int                   `json:"n"`
-	Path      string                `json:"path"`
-	Newest    bool                  `json:"newest"`
-	InFamily  bool                  `json:"in_family"` // false: pushed, but not found or not playable (yet)
+	Label    string `json:"label"`
+	N        int    `json:"n"`
+	Path     string `json:"path"`
+	Newest   bool   `json:"newest"`
+	InFamily bool   `json:"in_family"` // false: pushed, but not found or not playable (yet)
+	// Stream is a streamed version's state (spec/bridge.md, "Streaming"): pending, rendering or complete.
+	Stream    *family.StreamState   `json:"stream,omitempty"`
 	Duration  *float64              `json:"duration"`
 	SHA256    string                `json:"sha256,omitempty"`
 	Parent    string                `json:"parent,omitempty"`
@@ -368,6 +380,7 @@ func (p *Project) VersionsList(_ context.Context) (VersionsResult, error) {
 	}
 	for i, v := range fam {
 		view := VersionView{Label: v.Label, N: v.N, Path: v.Path, Newest: i == len(fam)-1, InFamily: true}
+		view.Stream = v.Stream
 		if v.Duration != nil {
 			d := float64(*v.Duration)
 			view.Duration = &d

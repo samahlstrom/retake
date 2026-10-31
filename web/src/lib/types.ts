@@ -16,6 +16,31 @@ export interface Version {
   fps: number;
   width: number | null;
   height: number | null;
+  /** A streamed version (spec/bridge.md, "Streaming"): its state, and how far it is. Until it's complete, `duration`,
+   * `fps`, `width` and `height` are the expected ones. */
+  stream?: StreamState;
+  /** A streamed version's first frame: a URL relative to the page. */
+  poster?: string;
+}
+
+/** A streamed version's state: pending (nothing renders it), rendering, or complete; units published of all, and the
+ * seconds playable so far. */
+export interface StreamState {
+  state: 'pending' | 'rendering' | 'complete';
+  done: number;
+  total: number;
+  seconds: number;
+}
+
+/** The data of a `version` event (GET /api/events): `push` when a version is pushed; for a streamed version also
+ * `rendering` (its render started), `progress` (units published), `stopped` (no viewer), `complete` and `failed`. */
+export interface VersionEvent {
+  why?: 'push' | 'rendering' | 'progress' | 'stopped' | 'complete' | 'failed' | string;
+  label?: string;
+  parent?: string;
+  path?: string;
+  stream?: StreamState;
+  error?: string;
 }
 
 /** A stroke as /api/history (and the timeline) needs it. */

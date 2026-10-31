@@ -297,6 +297,7 @@ func newServer(env Env, cfg config.Config, st config.Settings, o server.Options)
 	}
 	o.Jobs = &engines
 	o.CheckEvery, o.Clock, o.Log, o.Version = env.CheckEvery, env.Clock, env.Stderr, Version()
+	o.Editor = editorOf(env)
 	return server.New(o)
 }
 

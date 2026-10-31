@@ -86,6 +86,10 @@ type Version struct {
 	FPS      jsonx.Float  `json:"fps"`
 	Width    *int         `json:"width"`
 	Height   *int         `json:"height"`
+	// Stream is a streamed version's state (spec/bridge.md, "Streaming"): its duration, fps and size are the expected
+	// ones from its push record, and Poster is the URL of its first frame.
+	Stream *StreamState `json:"stream,omitempty"`
+	Poster string       `json:"poster,omitempty"`
 }
 
 // Prober is what Detect needs from probe.Prober.
@@ -172,8 +176,14 @@ func Detect(video string, explicit []string, pr Prober) []Version {
 	sort.SliceStable(list, func(i, j int) bool { return list[i].n < list[j].n })
 	out := make([]Version, 0, len(list))
 	for _, p := range list {
-		info := pr.Probe(p.path)
 		cur := SamePath(p.path, video)
+		if v, ok := streamed(p.path, p.label); ok {
+			// A streamed version: listed in every state with what its plan expects, never probed (it may be growing).
+			v.Label, v.N, v.Path, v.Name, v.Current = p.label, p.n, p.path, filepath.Base(p.path), cur
+			out = append(out, v)
+			continue
+		}
+		info := pr.Probe(p.path)
 		if !info.HasDuration() && !cur {
 			continue // still rendering or broken: skipped until it probes
 		}
@@ -254,7 +264,7 @@ func detect(ps *picks, video string, name0 Name, pr Prober) {
 				return fs[i].mtime > fs[j].mtime
 			})
 			for _, c := range fs {
-				if pr.Probe(c.path).HasDuration() {
+				if _, ok := streamed(c.path, ""); ok || pr.Probe(c.path).HasDuration() {
 					best = c.path
 					break
 				}

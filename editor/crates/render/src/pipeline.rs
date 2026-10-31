@@ -90,7 +90,7 @@ pub struct PlanReport {
     pub estimate_s: f64,
 }
 
-fn unit_name(p: &UnitPlan) -> String {
+pub(crate) fn unit_name(p: &UnitPlan) -> String {
     format!("u{}", p.span.index + 1)
 }
 
@@ -110,7 +110,7 @@ fn ms_per_mpx(e: &Engine) -> f64 {
         .unwrap_or(15.0)
 }
 
-fn record_speed(e: &Engine, ms: f64) {
+pub(crate) fn record_speed(e: &Engine, ms: f64) {
     let old = ms_per_mpx(e);
     let v = json!({"ms_per_mpx_frame": (old + ms) / 2.0});
     let _ = std::fs::write(e.store.root().join("stats.json"), v.to_string());
@@ -187,8 +187,87 @@ pub struct RenderReport {
     pub duration: f64,
     /// Seconds per phase.
     pub timings: BTreeMap<String, f64>,
+    /// A streamed render's playlist (spec/bridge.md, "Streaming").
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stream: Option<StreamStats>,
     #[serde(skip)]
     pub manifest: Manifest,
+}
+
+/// What a streamed render published: the playlist, its segments, and when the first one and the end came, in seconds
+/// from the start of the render.
+#[derive(Debug, Clone, Serialize)]
+pub struct StreamStats {
+    pub playlist: PathBuf,
+    pub segments: usize,
+    pub first_s: f64,
+    pub done_s: f64,
+}
+
+/// The audio of a render: the AAC blob (an .m4a in the store), the per-frame digests of the mix, and whether both came
+/// from the cache. One mix for the whole range, cached by its plan.
+pub(crate) struct AudioOut {
+    pub aac: String,
+    pub digests: Vec<[u8; 32]>,
+    pub reused: bool,
+    pub sr: u32,
+}
+
+pub(crate) fn audio(e: &Engine, plans: &[UnitPlan]) -> Result<AudioOut> {
+    let mut ap = e.audio_plan(plans);
+    // Loudness targets measure the whole timeline's mix (cached), so a range sounds as it will in the full render.
+    e.audio_levels(&mut ap, true)?;
+    let akey = Engine::audio_key(&ap);
+    let sr = ap.sr;
+    Ok(match e.store.get_index("audio", &akey) {
+        Some(v) if v["aac"].as_str().is_some_and(|h| e.store.has_blob(h)) => {
+            let d = e.store.get_blob(v["digests"].as_str().context("digests")?)?;
+            let digests: Vec<[u8; 32]> = d.as_chunks::<32>().0.to_vec();
+            AudioOut { aac: v["aac"].as_str().unwrap().to_string(), digests, reused: true, sr }
+        }
+        _ => {
+            let m = audio::mix(&ap)?;
+            let tmp = e.store.tmp_path("m4a");
+            ffmpeg::encode_aac(&m.pcm, ap.sr, &tmp)?;
+            let aac = e.store.put_file(&tmp)?;
+            let flat: Vec<u8> = m.frame_digests.iter().flatten().copied().collect();
+            let dh = e.store.put_bytes(&flat)?;
+            e.store.set_index("audio", &akey, &json!({"aac": aac, "digests": dh, "clips": ap.clips.len()}))?;
+            AudioOut { aac, digests: m.frame_digests, reused: false, sr }
+        }
+    })
+}
+
+/// The units' store entries, in plan order.
+pub(crate) fn unit_indexes(e: &Engine, plans: &[UnitPlan]) -> Result<Vec<Value>> {
+    plans
+        .iter()
+        .map(|p| e.store.get_index("unit", &p.key).ok_or_else(|| anyhow!("unit {} wasn't stored", unit_name(p))))
+        .collect()
+}
+
+/// Packages an MP4 at `out` (the segments concatenated, the AAC muxed in) and writes the manifest beside it, with its
+/// `video` set to the MP4's name. Returns the manifest's path.
+pub(crate) fn package_mp4(
+    e: &Engine,
+    indexes: &[Value],
+    aac: &str,
+    manifest: &mut Manifest,
+    out: &Path,
+) -> Result<PathBuf> {
+    if let Some(d) = out.parent() {
+        std::fs::create_dir_all(d)?;
+    }
+    let segs: Vec<PathBuf> =
+        indexes.iter().map(|v| e.store.blob_path(v["blob"].as_str().unwrap_or_default())).collect();
+    let video = e.store.tmp_path("mp4");
+    ffmpeg::concat(&segs, &e.store.tmp_path("txt"), &video)?;
+    ffmpeg::mux(&video, &e.store.blob_path(aac), out)?;
+    let _ = std::fs::remove_file(&video);
+    manifest.video = out.file_name().map(|n| n.to_string_lossy().into_owned());
+    let mp = out.with_extension("manifest.json");
+    std::fs::write(&mp, serde_json::to_string_pretty(&manifest)?)?;
+    Ok(mp)
 }
 
 /// The default output path: `.retake/renders/<id>-r<rev>[-draft][-<a>-<b>].mp4`.
@@ -260,51 +339,15 @@ pub fn render(e: &Engine, out: Option<&Path>) -> Result<RenderReport> {
     }
     tick("units", &mut timings);
 
-    // Audio: one mix for the whole range, cached by its plan.
-    let mut ap = e.audio_plan(&plans);
-    // Loudness targets measure the whole timeline's mix (cached), so a range sounds as it will in the full render.
-    e.audio_levels(&mut ap, true)?;
-    let akey = Engine::audio_key(&ap);
-    let (aac, digests, audio_reused) = match e.store.get_index("audio", &akey) {
-        Some(v) if v["aac"].as_str().is_some_and(|h| e.store.has_blob(h)) => {
-            let d = e.store.get_blob(v["digests"].as_str().context("digests")?)?;
-            let digests: Vec<[u8; 32]> = d.as_chunks::<32>().0.to_vec();
-            (v["aac"].as_str().unwrap().to_string(), digests, true)
-        }
-        _ => {
-            let m = audio::mix(&ap)?;
-            let tmp = e.store.tmp_path("m4a");
-            ffmpeg::encode_aac(&m.pcm, ap.sr, &tmp)?;
-            let aac = e.store.put_file(&tmp)?;
-            let flat: Vec<u8> = m.frame_digests.iter().flatten().copied().collect();
-            let dh = e.store.put_bytes(&flat)?;
-            e.store.set_index("audio", &akey, &json!({"aac": aac, "digests": dh, "clips": ap.clips.len()}))?;
-            (aac, m.frame_digests, false)
-        }
-    };
+    let au = audio(e, &plans)?;
     tick("audio", &mut timings);
 
-    let indexes: Vec<Value> = plans
-        .iter()
-        .map(|p| e.store.get_index("unit", &p.key).ok_or_else(|| anyhow!("unit {} wasn't stored", unit_name(p))))
-        .collect::<Result<_>>()?;
-    let mut manifest = build_manifest(e, &plans, &indexes, &digests)?;
+    let indexes = unit_indexes(e, &plans)?;
+    let mut manifest = build_manifest(e, &plans, &indexes, &au.digests)?;
     let (mut output, mut manifest_path) = (None, None);
     if let Some(out) = out {
-        if let Some(d) = out.parent() {
-            std::fs::create_dir_all(d)?;
-        }
-        let segs: Vec<PathBuf> =
-            indexes.iter().map(|v| e.store.blob_path(v["blob"].as_str().unwrap_or_default())).collect();
-        let video = e.store.tmp_path("mp4");
-        ffmpeg::concat(&segs, &e.store.tmp_path("txt"), &video)?;
-        ffmpeg::mux(&video, &e.store.blob_path(&aac), out)?;
-        let _ = std::fs::remove_file(&video);
-        manifest.video = out.file_name().map(|n| n.to_string_lossy().into_owned());
-        let mp = out.with_extension("manifest.json");
-        std::fs::write(&mp, serde_json::to_string_pretty(&manifest)?)?;
+        manifest_path = Some(package_mp4(e, &indexes, &au.aac, &mut manifest, out)?);
         output = Some(out.to_path_buf());
-        manifest_path = Some(mp);
     }
     e.store.clean_tmp();
     tick("package", &mut timings);
@@ -319,10 +362,11 @@ pub fn render(e: &Engine, out: Option<&Path>) -> Result<RenderReport> {
         layers_reused: have.len(),
         graphics_frames: gframes.into_inner(),
         graphics_drawn: drawn.into_inner(),
-        audio_reused,
+        audio_reused: au.reused,
         frames: plans.iter().map(|p| p.span.frames()).sum(),
         duration: round6(plans.iter().map(|p| p.span.frames()).sum::<i64>() as f64 / e.fps() as f64),
         timings,
+        stream: None,
         manifest,
     })
 }
@@ -394,7 +438,12 @@ fn compress(per_frame: &[Option<[f64; 4]>], f0: i64, fps: f64, scale: f64) -> Ve
     out
 }
 
-fn build_manifest(e: &Engine, plans: &[UnitPlan], indexes: &[Value], digests: &[[u8; 32]]) -> Result<Manifest> {
+pub(crate) fn build_manifest(
+    e: &Engine,
+    plans: &[UnitPlan],
+    indexes: &[Value],
+    digests: &[[u8; 32]],
+) -> Result<Manifest> {
     let fps = e.fps() as f64;
     let start_frame = plans.first().map(|p| p.span.f0).unwrap_or(0);
     let tl = &e.project.tl;

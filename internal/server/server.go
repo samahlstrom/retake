@@ -22,11 +22,13 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/samahlstrom/retake/internal/bridge"
 	"github.com/samahlstrom/retake/internal/family"
 	"github.com/samahlstrom/retake/internal/jobs"
 	"github.com/samahlstrom/retake/internal/jsonx"
 	"github.com/samahlstrom/retake/internal/project"
 	"github.com/samahlstrom/retake/internal/store"
+	"github.com/samahlstrom/retake/internal/stream"
 	"github.com/samahlstrom/retake/internal/team"
 	"github.com/samahlstrom/retake/internal/ui"
 )
@@ -97,6 +99,11 @@ type Options struct {
 	// Media, when set, may serve a version file or take image itself (from object storage, say): it returns false
 	// to let the Server serve the file at path from disk.
 	Media func(w http.ResponseWriter, r *http.Request, path, contentType string) bool
+	// Editor finds retake-edit, for the streamed versions it renders (spec/bridge.md, "Streaming") and /mcp's pushes.
+	Editor bridge.Editor
+	// Streams renders streamed versions while pages watch them; nil = the Server runs its own (and stops it on Close).
+	// A home that serves many projects can share one.
+	Streams *stream.Manager
 	// MCPFiles resolves version_push's file argument on /mcp (an uploaded file's reference) to a path, and whether
 	// the push may move it. nil keeps spec/team.md's rule: a file inside the project root.
 	MCPFiles func(file string) (path string, move bool, err error)
@@ -126,6 +133,10 @@ type Server struct {
 
 	mcpMu sync.Mutex
 	mcpH  http.Handler // /mcp, built on first use
+
+	streamsMu  sync.Mutex
+	streams    *stream.Manager // opts.Streams, or one made on the first watch (then ownStreams)
+	ownStreams bool
 }
 
 // New returns a Server and scans the family once.
@@ -214,6 +225,12 @@ func (s *Server) store(create bool) (*project.Store, error) {
 func (s *Server) Close() error {
 	s.stopStreams()
 	s.cancel()
+	s.streamsMu.Lock()
+	if s.ownStreams {
+		s.streams.Close() // renders stop; what they published stays
+		s.streams, s.ownStreams = nil, false
+	}
+	s.streamsMu.Unlock()
 	s.projMu.Lock()
 	defer s.projMu.Unlock()
 	if s.jobsDone != nil {
@@ -606,6 +623,10 @@ func (s *Server) post(w http.ResponseWriter, r *http.Request, parts []string) {
 	}
 	if len(parts) == 4 && parts[0] == "api" && parts[1] == "notes" && parts[3] == "reopen" {
 		s.reopen(w, r, parts[2])
+		return
+	}
+	if len(parts) == 4 && parts[0] == "api" && parts[1] == "versions" && (parts[3] == "watch" || parts[3] == "unwatch") {
+		s.watch(w, r, parts[2], parts[3] == "watch")
 		return
 	}
 	if len(parts) == 4 && parts[0] == "api" && parts[1] == "versions" && parts[3] == "approve" {

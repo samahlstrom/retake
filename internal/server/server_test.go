@@ -353,9 +353,17 @@ func TestPlaylistFiles(t *testing.T) {
 	if r.code != 200 || r.header.Get("Content-Type") != "application/vnd.apple.mpegurl" || !bytes.Contains(r.body, []byte("seg_000.ts")) {
 		t.Fatalf("playlist: %d %q %q", r.code, r.header.Get("Content-Type"), r.body)
 	}
+	// A playlist may still be growing: no cache in between may keep it, a tunnel's CDN included.
+	if r.header.Get("Cache-Control") != "no-cache, private" || r.header.Get("CDN-Cache-Control") != "no-store" ||
+		r.header.Get("Cloudflare-CDN-Cache-Control") != "no-store" {
+		t.Errorf("playlist cache headers: %v", r.header)
+	}
 	r = h.get("/video/v9/seg_000.ts", map[string]string{"Range": "bytes=0-187"})
 	if r.code != 206 || r.header.Get("Content-Type") != "video/mp2t" || len(r.body) != 188 || r.body[0] != 0x47 {
 		t.Errorf("segment: %d %q %d bytes", r.code, r.header.Get("Content-Type"), len(r.body))
+	}
+	if r.header.Get("Cache-Control") != "no-cache" || r.header.Get("CDN-Cache-Control") != "" {
+		t.Errorf("segments never change: %v", r.header)
 	}
 	if r := h.get("/video/v9", nil); r.code != 200 || r.header.Get("Content-Type") != "application/vnd.apple.mpegurl" {
 		t.Errorf("/video/v9: %d %q", r.code, r.header.Get("Content-Type"))

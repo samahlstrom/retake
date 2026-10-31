@@ -8,6 +8,7 @@ pub mod dsp;
 pub mod engine;
 pub mod expr;
 pub mod ffmpeg;
+pub mod fmp4;
 pub mod graphics;
 pub mod lint;
 pub mod pipeline;
@@ -15,6 +16,7 @@ pub mod preview;
 pub mod proxy;
 pub mod resample;
 pub mod store;
+pub mod stream;
 pub mod transform;
 pub mod unit;
 

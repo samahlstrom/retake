@@ -134,6 +134,13 @@ func (s *Server) serveFile(w http.ResponseWriter, r *http.Request, p, ctype stri
 	h.Set("Accept-Ranges", "bytes")
 	h.Set("Content-Length", strconv.FormatInt(length, 10))
 	h.Set("Cache-Control", "no-cache")
+	if family.IsPlaylist(p) {
+		// A streamed render's playlist grows (spec/bridge.md, "Streaming"): nothing between the player and this server
+		// may keep a copy, a tunnel's CDN included (Cloudflare reads the targeted headers first).
+		h.Set("Cache-Control", "no-cache, private")
+		h.Set("CDN-Cache-Control", "no-store")
+		h.Set("Cloudflare-CDN-Cache-Control", "no-store")
+	}
 	code := http.StatusOK
 	if partial {
 		code = http.StatusPartialContent

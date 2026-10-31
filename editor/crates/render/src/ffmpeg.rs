@@ -402,6 +402,45 @@ pub fn mux(video: &Path, audio: &Path, out: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Copies the AAC frames of an `.m4a` into a raw ADTS stream, as encoded: the encoder's priming frame first.
+pub fn to_adts(m4a: &Path, out: &Path) -> Result<()> {
+    run(
+        Command::new(ffmpeg_bin())
+            .args(["-nostdin", "-v", "error", "-y", "-i"])
+            .arg(m4a)
+            .args(["-map", "0:a:0", "-c", "copy", "-f", "adts"])
+            .arg(out),
+        "copying the AAC frames",
+    )?;
+    Ok(())
+}
+
+/// Remuxes one unit's segment, with the AAC frames of `audio` (raw ADTS), into a fragmented MP4 for HLS without
+/// re-encoding: a fragment at every keyframe, signed composition offsets, no edit lists (crate::fmp4 then puts its
+/// times on the stream's clock). The moov waits for the first fragment (`delay_moov`), so the audio's
+/// AudioSpecificConfig, which only the first ADTS frame gives, is in it: players need it for the codec string.
+pub fn fragment(video: &Path, audio: Option<&Path>, out: &Path) -> Result<()> {
+    let mut cmd = Command::new(ffmpeg_bin());
+    cmd.args(["-nostdin", "-v", "error", "-y", "-i"]).arg(video);
+    if let Some(a) = audio {
+        cmd.args(["-f", "aac", "-i"]).arg(a);
+    }
+    cmd.args(["-map", "0:v:0"]);
+    if audio.is_some() {
+        cmd.args(["-map", "1:a:0", "-bsf:a", "aac_adtstoasc"]);
+    }
+    cmd.args([
+        "-c",
+        "copy",
+        "-movflags",
+        "+frag_keyframe+empty_moov+delay_moov+default_base_moof+negative_cts_offsets+skip_trailer",
+    ])
+    .args(["-use_editlist", "0", "-fflags", "+bitexact", "-map_metadata", "-1", "-f", "mp4"])
+    .arg(out);
+    run(&mut cmd, "fragmenting a unit for HLS")?;
+    Ok(())
+}
+
 /// Counts the video frames in a file (decodes it).
 pub fn count_frames(path: &Path) -> Result<u64> {
     let out = run(

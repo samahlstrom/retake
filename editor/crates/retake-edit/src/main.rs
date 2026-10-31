@@ -45,11 +45,23 @@ struct RenderArgs {
     /// Cache directory (default: `.retake/cache` next to the timeline).
     #[arg(long)]
     cache: Option<PathBuf>,
+    /// Work on this timeline document (a snapshot) instead of the file's own, as if it were the timeline file: its
+    /// media, components, lockfile and cache resolve from the timeline's folder.
+    #[arg(long)]
+    doc: Option<PathBuf>,
 }
 
 impl RenderArgs {
     fn options(&self) -> Options {
         Options { draft: self.draft, scale: self.scale, range: self.range, jobs: self.jobs, cache: self.cache.clone() }
+    }
+
+    fn engine(&self, timeline: &Path) -> Result<Engine> {
+        let Some(doc) = &self.doc else { return Engine::open(timeline, self.options()) };
+        retake_render::init();
+        let text = std::fs::read_to_string(doc).with_context(|| format!("reading {}", doc.display()))?;
+        let v: Value = serde_json::from_str(&text).with_context(|| format!("{} isn't valid JSON", doc.display()))?;
+        Engine::from_project(Project::from_doc(timeline, v)?, self.options())
     }
 }
 
@@ -93,9 +105,17 @@ enum Cmd {
     /// Render: only units whose description changed are drawn; the rest come from the cache.
     Render {
         timeline: PathBuf,
-        /// Output MP4 (default: `.retake/renders/<id>-r<rev>[-draft].mp4`); the manifest goes next to it.
+        /// Output MP4 (default: `.retake/renders/<id>-r<rev>[-draft].mp4`); the manifest goes next to it. With
+        /// `--hls`, an MP4 packaged at the end as well (none by default).
         #[arg(short, long)]
         out: Option<PathBuf>,
+        /// Stream into an HLS EVENT playlist that grows as units finish, in timeline order; segments go beside it,
+        /// and the manifest once it ends (spec/bridge.md, "Streaming").
+        #[arg(long)]
+        hls: Option<PathBuf>,
+        /// Print progress lines (one JSON object each) on stderr.
+        #[arg(long)]
+        progress: bool,
         #[command(flatten)]
         r: RenderArgs,
         #[command(flatten)]
@@ -443,7 +463,7 @@ fn run(cmd: Cmd) -> Result<(bool, Value, String)> {
             Ok((c.json, json!({"applied": !dry_run, "patch": a.entry}), human))
         }
         Cmd::Plan { timeline, r, c } => {
-            let e = Engine::open(&timeline, r.options())?;
+            let e = r.engine(&timeline)?;
             let (_, rep) = pipeline::plan(&e)?;
             let mut lines = vec![format!(
                 "{} rev {}: {} units, {} cached, {} to render ({} frames, {} graphics runs), audio {}, ~{:.1} s",
@@ -471,13 +491,39 @@ fn run(cmd: Cmd) -> Result<(bool, Value, String)> {
             }
             Ok((c.json, serde_json::to_value(&rep)?, lines.join("\n")))
         }
-        Cmd::Render { timeline, out, r, c } => {
-            let e = Engine::open(&timeline, r.options())?;
-            let out = out.unwrap_or_else(|| pipeline::default_output(&e));
-            let rep = pipeline::render(&e, Some(&out))?;
+        Cmd::Render { timeline, out, hls, progress, r, c } => {
+            let e = r.engine(&timeline)?;
+            let (rep, shown) = match hls {
+                Some(playlist) => {
+                    // A test hook: every unit takes at least this long, so a test can watch the playlist grow. A list
+                    // (`900,0`) gives each unit its own, the last one standing for the rest.
+                    let delay: Vec<std::time::Duration> = std::env::var("RETAKE_EDIT_TEST_UNIT_DELAY_MS")
+                        .unwrap_or_default()
+                        .split(',')
+                        .filter_map(|v| v.trim().parse::<u64>().ok())
+                        .map(std::time::Duration::from_millis)
+                        .collect();
+                    let report = |v: Value| {
+                        if progress {
+                            eprintln!("{v}");
+                        }
+                    };
+                    let o = retake_render::stream::StreamOptions {
+                        playlist: playlist.clone(),
+                        mp4: out,
+                        unit_delay: delay,
+                        progress: &report,
+                    };
+                    (retake_render::stream::render_stream(&e, &o)?, playlist)
+                }
+                None => {
+                    let out = out.unwrap_or_else(|| pipeline::default_output(&e));
+                    (pipeline::render(&e, Some(&out))?, out)
+                }
+            };
             let human = format!(
                 "{}\n  {} units: {} reused, {} rendered; graphics runs: {} reused, {} rendered ({} of {} frames drawn); audio {}\n  {:.3} s, {} frames; {}",
-                out.display(),
+                shown.display(),
                 rep.units,
                 rep.reused,
                 rep.rendered,
@@ -493,7 +539,7 @@ fn run(cmd: Cmd) -> Result<(bool, Value, String)> {
             Ok((c.json, serde_json::to_value(&rep)?, human))
         }
         Cmd::Frames { timeline, times, out, r, c } => {
-            let e = Engine::open(&timeline, r.options())?;
+            let e = r.engine(&timeline)?;
             let dir = out.unwrap_or_else(|| e.project.work_dir().join("frames"));
             let shots = pipeline::stills(&e, &times, &dir)?;
             let human = shots.iter().map(|(t, p)| format!("{t:>8.3}  {}", p.display())).collect::<Vec<_>>().join("\n");
@@ -501,7 +547,7 @@ fn run(cmd: Cmd) -> Result<(bool, Value, String)> {
             Ok((c.json, json!({"frames": v}), human))
         }
         Cmd::Manifest { timeline, out, r, c } => {
-            let e = Engine::open(&timeline, r.options())?;
+            let e = r.engine(&timeline)?;
             let rep = pipeline::render(&e, None)?;
             let text = serde_json::to_string_pretty(&rep.manifest)?;
             if let Some(o) = &out {

@@ -429,10 +429,11 @@ func parseEntries(name string, vals []string) ([]project.ChangeEntry, error) {
 }
 
 func pushCmd(ctx context.Context, args []string, env Env) int {
-	var asJSON, move, render, draft bool
+	var asJSON, move, render, draft, stream, noStream, export bool
 	var parent, label string
 	var changes, asks []string
-	f := flags{bools: map[string]*bool{"--json": &asJSON, "--move": &move, "--render": &render, "--draft": &draft},
+	f := flags{bools: map[string]*bool{"--json": &asJSON, "--move": &move, "--render": &render, "--draft": &draft,
+		"--stream": &stream, "--no-stream": &noStream, "--export": &export},
 		values: map[string]*string{"--parent": &parent, "--label": &label},
 		multi:  map[string]*[]string{"--change": &changes, "--ask": &asks}}
 	pos, help, err := f.parse(args)
@@ -448,6 +449,12 @@ func pushCmd(ctx context.Context, args []string, env Env) int {
 		err = errors.New("--move is for a file you give; a render is always moved in")
 	case !render && draft:
 		err = errors.New("--draft goes with --render")
+	case !render && (stream || noStream || export):
+		err = errors.New("--stream, --no-stream and --export go with --render")
+	case stream && noStream:
+		err = errors.New("--stream or --no-stream, not both")
+	case noStream && export:
+		err = errors.New("--export is for a streamed render: without streaming the render is one MP4 already")
 	case !render && len(pos) != 2:
 		err = errors.New("give the video (any version of the family) and the new version's file, or --render")
 	}
@@ -466,7 +473,9 @@ func pushCmd(ctx context.Context, args []string, env Env) int {
 		return code
 	}
 	defer func() { _ = p.Close() }()
-	a := agent.PushArgs{Parent: parent, Label: label, Changes: ch, Move: move, Render: render, Draft: draft}
+	a := agent.PushArgs{Parent: parent, Label: label, Changes: ch, Move: move, Render: render, Draft: draft,
+		Stream: stream, NoStream: noStream, Export: export}
+	a.Notify = func(s string) { _, _ = fmt.Fprintln(env.Stderr, s) } // stderr: --json stays one object on stdout
 	if !render {
 		a.File = absPath(pos[1], env.Getenv)
 	}
@@ -482,6 +491,9 @@ func pushCmd(ctx context.Context, args []string, env Env) int {
 		return ExitOK
 	}
 	_, _ = fmt.Fprintf(env.Stdout, "pushed %s from %s: %s\n", res.Version.Label, res.Version.Parent, res.Version.Path)
+	if res.Note != "" {
+		_, _ = fmt.Fprintf(env.Stdout, "  %s\n", res.Note)
+	}
 	if r := res.Render; r != nil {
 		_, _ = fmt.Fprintf(env.Stdout, "  rendered %s rev %d: %d units, %d reused, %d rendered\n", r.Timeline, r.Rev,
 			r.Units.Total, r.Units.Reused, r.Units.Rendered)

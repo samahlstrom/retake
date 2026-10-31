@@ -39,9 +39,32 @@ func (p *Project) pushRendered(ctx context.Context, a PushArgs) (PushResult, err
 	if err != nil {
 		return PushResult{}, errorf(CodeFailed, "%v", err)
 	}
-	tg, err := p.pushTarget(a, ".mp4")
+	if a.Stream && a.NoStream {
+		return PushResult{}, errorf(CodeBadRequest, "stream and no stream both asked for: pick one")
+	}
+	if !a.Render || a.NoStream {
+		a.Export = false // only a streamed push has a separate export
+	}
+	stream, note := !a.NoStream, ""
+	ext := ".mp4"
+	if stream {
+		ext = ".m3u8"
+	}
+	tg, err := p.pushTarget(a, ext)
 	if err != nil {
 		return PushResult{}, err
+	}
+	if stream && !project.IsVersionDir(filepath.Base(filepath.Dir(tg.parent.Path))) {
+		// The playlist's segments need a folder of their own: the family's version folders.
+		if a.Stream {
+			return PushResult{}, errorf(CodeBadRequest, "streaming needs a family in version folders (v6/clip_v6.mp4), "+
+				"and %s isn't in one; push with --no-stream for one MP4", filepath.Base(tg.parent.Path))
+		}
+		stream, note = false, "rendered one MP4 instead of streaming: streaming needs a family in version folders "+
+			"(v6/clip_v6.mp4)"
+		if tg, err = p.pushTarget(a, ".mp4"); err != nil {
+			return PushResult{}, err
+		}
 	}
 	base := int64(-1)
 	if m, err := bridge.ForVideo(tg.parent.Path); err == nil {
@@ -63,6 +86,14 @@ func (p *Project) pushRendered(ctx context.Context, a PushArgs) (PushResult, err
 	push.Changelog = mergeChangelog(auto, a.Changes, a.Asks)
 	if err := p.Store.CheckPush(push); err != nil {
 		return PushResult{}, wrap(err)
+	}
+	rec.Version, rec.From, rec.Rev, rec.Draft = push.Label, tg.parent.Label, rev, a.Draft
+	rec.Timeline = timeline
+	if rel, err := filepath.Rel(p.Root, timeline); err == nil {
+		rec.Timeline = filepath.ToSlash(rel)
+	}
+	if stream {
+		return p.streamPush(ctx, a, push, rec, timeline, bin)
 	}
 
 	// Render into the project's store folder (beside the family, so the move in is a rename), then move it in.
@@ -97,11 +128,6 @@ func (p *Project) pushRendered(ctx context.Context, a PushArgs) (PushResult, err
 		_ = os.Remove(rpath)
 		cleanup()
 	}
-	rec.Version, rec.From, rec.Rev, rec.Draft = push.Label, tg.parent.Label, rev, a.Draft
-	rec.Timeline = timeline
-	if rel, err := filepath.Rel(p.Root, timeline); err == nil {
-		rec.Timeline = filepath.ToSlash(rel)
-	}
 	rec.Units = bridge.Units{Total: rep.Units, Reused: rep.Reused, Rendered: rep.Rendered}
 	recJSON, err := jsonx.Marshal(rec)
 	if err == nil {
@@ -122,7 +148,7 @@ func (p *Project) pushRendered(ctx context.Context, a PushArgs) (PushResult, err
 	}
 	cleanup()
 	return PushResult{Version: res.Version, Answered: nonNil(res.Answered), Questions: nonNil(res.Questions),
-		Render: &rec, Manifest: mpath}, nil
+		Render: &rec, Manifest: mpath, Note: note}, nil
 }
 
 // mergeChangelog joins the changelog made from patches with the explicit one: an explicit change replaces a note's

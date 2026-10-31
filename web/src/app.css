@@ -239,6 +239,28 @@ button {
   color: var(--dim);
   font-weight: 400;
 }
+/* A streamed version that isn't complete: a chip after its label in the list ("pending", "rendering 12/50"), a dot on
+   the button while it's shown. The list floats, so the chip only widens it; the dot sits over the button's border, so
+   nothing moves. */
+#verList .stream {
+  margin-left: 8px;
+  color: var(--voice);
+  font-size: 11px;
+  font-weight: 400;
+}
+#verBtn.rendering {
+  position: relative;
+}
+#verBtn.rendering::after {
+  content: '';
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--voice);
+}
 #colors {
   flex: none;
   display: flex;

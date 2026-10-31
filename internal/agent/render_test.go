@@ -70,7 +70,7 @@ func TestPushRenderWritesTheChangelogFromPatches(t *testing.T) {
 		t.Fatal("nothing renders, nothing lands in the family")
 	}
 
-	res, err := p.VersionPush(ctx, PushArgs{Render: true, Draft: true,
+	res, err := p.VersionPush(ctx, PushArgs{Render: true, Draft: true, NoStream: true,
 		Changes: []project.ChangeEntry{{Note: 4, Summary: "kept as is"}, {Note: 3, Summary: "music -4 dB under the VO"}}})
 	if err != nil {
 		t.Fatal(err)
@@ -135,7 +135,7 @@ func TestPushRenderWritesTheChangelogFromPatches(t *testing.T) {
 	// The next render push starts after v8's revision: nothing to answer, nothing open, so it just pushes.
 	_ = os.Remove(mark)
 	p.Editor.Env = []string{"FAKE_REV=3", "FAKE_MARK=" + mark}
-	res, err = p.VersionPush(ctx, PushArgs{Render: true})
+	res, err = p.VersionPush(ctx, PushArgs{Render: true, NoStream: true})
 	if err != nil || res.Version.Label != "v9" || len(res.Version.Changelog) != 0 || len(res.Render.Patches) != 0 ||
 		len(res.Render.Unrequested) != 0 {
 		t.Fatalf("v9 = %+v %v", res, err)
@@ -149,7 +149,7 @@ func TestPushRenderFailures(t *testing.T) {
 
 	// A failed render leaves nothing: no file, no manifest, no version, notes still open.
 	p.Editor.Env = append(p.Editor.Env, "FAKE_FAIL=1")
-	_, err := p.VersionPush(ctx, PushArgs{Render: true, Changes: all})
+	_, err := p.VersionPush(ctx, PushArgs{Render: true, NoStream: true, Changes: all})
 	if code(err) != CodeFailed || !strings.Contains(err.Error(), "ffmpeg failed (encoding u3)") || !exists(mark) {
 		t.Fatalf("failed render: %v", err)
 	}
@@ -183,7 +183,7 @@ func TestPushRenderFailures(t *testing.T) {
 	if _, err := p2.NoteAsk(ctx, AskArgs{Note: 2, Text: "which pause?"}); err != nil {
 		t.Fatal(err)
 	}
-	res, err := p2.VersionPush(ctx, PushArgs{Render: true, Changes: all})
+	res, err := p2.VersionPush(ctx, PushArgs{Render: true, NoStream: true, Changes: all})
 	if err != nil {
 		t.Fatal(err)
 	}

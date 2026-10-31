@@ -2,6 +2,7 @@
 // GET /api/events (SSE), plus job progress from its `job` events. A server without the notes routes (milestone 1, the
 // legacy player) leaves `available` false, and the page shows no sidebar at all.
 import { applyJob, jobLine } from './jobs';
+import type { VersionEvent } from '../types';
 import type { Job, NoteItem, NotesResponse } from './types';
 
 const enc = encodeURIComponent;
@@ -30,8 +31,8 @@ export interface NotesDeps {
   fetch?: typeof fetch;
   eventSource?: (url: string) => EventSourceLike;
   storage?: () => Pick<Storage, 'getItem' | 'setItem'> | null;
-  /** The family changed (a `version` event). */
-  onVersion?: () => void;
+  /** The family changed (a `version` event), with its data (`{}` when it has none). */
+  onVersion?: (e: VersionEvent) => void;
   setTimeout?: (fn: () => void, ms: number) => unknown;
 }
 
@@ -173,7 +174,8 @@ export class Notes {
     });
     es.addEventListener('version', (e) => {
       seen(e);
-      this.deps.onVersion?.();
+      const d = parse<VersionEvent>(e.data);
+      this.deps.onVersion?.(d && typeof d === 'object' ? d : {});
     });
     es.onerror = () => {
       if (es.readyState !== 2) return; // CONNECTING: the browser retries by itself

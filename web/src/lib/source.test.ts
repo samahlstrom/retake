@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { HLS_MIME, isPlaylist, planSource, VideoSource, type HlsClass, type HlsInstance } from './source';
+import { HLS_CONFIG, HLS_MIME, isPlaylist, planSource, VideoSource, type HlsClass, type HlsInstance } from './source';
 
 describe('source selection', () => {
   it('plays files from /video/<label>', () => {
@@ -53,8 +53,13 @@ function fakeVideo(native: boolean) {
 
 /** An hls.js stand-in. */
 function fakeHls(supported = true) {
-  const made: (HlsInstance & { url?: string; media?: unknown; destroyed: boolean; emit: (fatal: boolean) => void })[] =
-    [];
+  const made: (HlsInstance & {
+    url?: string;
+    media?: unknown;
+    config?: Record<string, unknown>;
+    destroyed: boolean;
+    emit: (fatal: boolean) => void;
+  })[] = [];
   class Hls {
     static Events = { ERROR: 'hlsError' };
     static isSupported = () => supported;
@@ -62,7 +67,7 @@ function fakeHls(supported = true) {
     media?: unknown;
     destroyed = false;
     #cb: ((e: string, d: { fatal?: boolean; type?: string; details?: string }) => void) | undefined;
-    constructor() {
+    constructor(readonly config?: Record<string, unknown>) {
       made.push(this);
     }
     loadSource(u: string) {
@@ -122,6 +127,16 @@ describe('VideoSource', () => {
     expect(made.length).toBe(1);
     expect(made[0].url).toBe('video/v7/v7.m3u8');
     expect(made[0].media).toBe(video.media);
+    // A still-rendering (live) playlist starts at 0, not at the live edge, and nothing jumps to the edge later.
+    expect(made[0].config).toEqual(HLS_CONFIG);
+    expect(made[0].config).toMatchObject({ startPosition: 0, enableWorker: true });
+    for (const k of [
+      'liveDurationInfinity',
+      'liveMaxLatencyDurationCount',
+      'liveMaxLatencyDuration',
+      'maxLiveSyncPlaybackRate',
+    ])
+      expect(made[0].config).not.toHaveProperty(k);
     expect(video.srcs).toEqual([]); // hls.js attaches its own MediaSource
     video.fire('loadedmetadata');
     await p;
@@ -158,6 +173,20 @@ describe('VideoSource', () => {
     await tick();
     expect(made.length).toBe(0);
     expect(video.src).toBe('video/v7/v7.m3u8');
+  });
+
+  it('clears to the poster alone: hls.js gone, no source, a pending load cancelled', async () => {
+    const video = fakeVideo(false);
+    const { Hls, made } = fakeHls();
+    const src = new VideoSource(video.media, { loadHls: async () => Hls });
+    const p = src.load({ label: 'v7', name: 'v7.m3u8' });
+    await tick();
+    src.clear();
+    await expect(p).rejects.toThrow('superseded');
+    expect(made[0].destroyed).toBe(true);
+    expect(src.plan).toBeNull();
+    expect(video.removeAttribute).toHaveBeenCalledWith('src');
+    expect(video.load).toHaveBeenCalled();
   });
 
   it('rejects a load that another load replaced', async () => {

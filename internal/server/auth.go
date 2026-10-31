@@ -106,6 +106,9 @@ func permFor(method string, parts []string) team.Perm {
 		}
 		return team.PermWatch
 	case http.MethodPost:
+		if len(parts) == 4 && parts[0] == "api" && parts[1] == "versions" && (parts[3] == "watch" || parts[3] == "unwatch") {
+			return team.PermWatch // a viewer's page watches a streamed version (spec/bridge.md, "Streaming")
+		}
 		if len(parts) == 4 && parts[0] == "api" &&
 			(parts[1] == "notes" && parts[3] == "reopen" || parts[1] == "versions" && parts[3] == "approve") {
 			return team.PermApprove
@@ -312,7 +315,7 @@ func (s *Server) mcpHandler() (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
-	p := &agent.Project{Video: s.opts.Video, Root: s.root, Store: st, Prober: s.opts.Prober}
+	p := &agent.Project{Video: s.opts.Video, Root: s.root, Store: st, Prober: s.opts.Prober, Editor: s.opts.Editor}
 	s.mcpH = mcp.HTTPHandlerWith(p, s.opts.Version, mcp.Options{Root: s.root, MaxWait: mcp.RemoteWait,
 		Files: s.opts.MCPFiles})
 	return s.mcpH, nil

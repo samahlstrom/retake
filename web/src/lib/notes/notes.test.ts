@@ -164,6 +164,15 @@ describe('Notes', () => {
     expect(notes.jobs).toEqual([]);
     es.emit('version', {}, '9');
     expect(onVersion).toHaveBeenCalledOnce();
+    expect(onVersion).toHaveBeenLastCalledWith({});
+    const progress = { why: 'progress', label: 'v9', stream: { state: 'rendering', done: 3, total: 8, seconds: 12.5 } };
+    es.emit('version', progress, '10');
+    expect(onVersion).toHaveBeenLastCalledWith(progress);
+    es.emit('version', 'not json', '11');
+    expect(onVersion).toHaveBeenLastCalledWith({});
+    es.emit('version', undefined, '12'); // no data at all
+    expect(onVersion).toHaveBeenLastCalledWith({});
+    expect(onVersion).toHaveBeenCalledTimes(4);
   });
 
   it('reconnects from the last event after the stream closes, and catches up when it reopens', async () => {
