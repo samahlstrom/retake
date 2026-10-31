@@ -30,6 +30,7 @@ const DefaultPoll = 250 * time.Millisecond
 type Store struct {
 	db   *sqldb.DB
 	root string
+	path string     // the SQLite file; "" for Postgres
 	mu   sync.Mutex // serializes this process's write transactions
 	bell bell       // rung after every committed write that appended events
 	// Now tells the time; tests swap it.
@@ -55,16 +56,19 @@ func OpenExisting(root string) (*Store, error) {
 	return open(root, migrations)
 }
 
-func open(root string, ms []string) (*Store, error) {
-	db, err := sqldb.OpenSQLite(DBPath(root))
+func open(root string, ms []string) (*Store, error) { return openFile(DBPath(root), root, ms) }
+
+// openFile opens the SQLite store at path for the project (or home) at root.
+func openFile(path, root string, ms []string) (*Store, error) {
+	db, err := sqldb.OpenSQLite(path)
 	if err != nil {
 		return nil, fmt.Errorf("opening the project store: %w", err)
 	}
-	s := &Store{db: db, root: root, Now: time.Now}
+	s := &Store{db: db, root: root, path: path, Now: time.Now}
 	s.bell.init()
 	if err := sqldb.Migrate(context.Background(), db, ms); err != nil {
 		_ = db.Close()
-		return nil, fmt.Errorf("project store %s: %w", DBPath(root), err)
+		return nil, fmt.Errorf("project store %s: %w", path, err)
 	}
 	return s, nil
 }
@@ -95,6 +99,9 @@ func (s *Store) Root() string { return s.root }
 func (s *Store) Path() string {
 	if s.db.Dialect() == sqldb.Postgres {
 		return "postgres schema " + s.db.Schema()
+	}
+	if s.path != "" {
+		return s.path
 	}
 	return DBPath(s.root)
 }

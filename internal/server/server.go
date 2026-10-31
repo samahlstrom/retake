@@ -30,6 +30,7 @@ import (
 	"github.com/samahlstrom/retake/internal/store"
 	"github.com/samahlstrom/retake/internal/stream"
 	"github.com/samahlstrom/retake/internal/team"
+	"github.com/samahlstrom/retake/internal/thumb"
 	"github.com/samahlstrom/retake/internal/ui"
 )
 
@@ -107,6 +108,12 @@ type Options struct {
 	// MCPFiles resolves version_push's file argument on /mcp (an uploaded file's reference) to a path, and whether
 	// the push may move it. nil keeps spec/team.md's rule: a file inside the project root.
 	MCPFiles func(file string) (path string, move bool, err error)
+
+	// The home screen (spec/home.md). Thumbs makes the versions' posters for /api/poster; nil = thumb.Default.
+	// Unwatch is told when a page leaves a version (POST /api/versions/<label>/unwatch): the streaming side's hook to
+	// stop a render no one watches. nil: the call does nothing.
+	Thumbs  *thumb.Maker
+	Unwatch func(label, viewer string)
 }
 
 // Server serves one version family.
@@ -504,6 +511,8 @@ func (s *Server) get(w http.ResponseWriter, r *http.Request, parts []string) {
 		s.timemap(w, r)
 	case len(parts) == 4 && parts[0] == "api" && parts[1] == "takes":
 		s.takeFile(w, r, parts[2], parts[3])
+	case is(parts, "api", "poster"):
+		s.poster(w, r)
 	case parts[0] == "api" || parts[0] == "video":
 		s.fail(w, r, http.StatusNotFound, "not found")
 	default:
@@ -631,6 +640,10 @@ func (s *Server) post(w http.ResponseWriter, r *http.Request, parts []string) {
 	}
 	if len(parts) == 4 && parts[0] == "api" && parts[1] == "versions" && parts[3] == "approve" {
 		s.approve(w, r, parts[2])
+		return
+	}
+	if isUnwatch(parts) {
+		s.unwatch(w, r, parts[2])
 		return
 	}
 	if len(parts) != 4 || parts[0] != "api" || parts[1] != "session" || !store.ValidTakeID(parts[2]) {

@@ -1,6 +1,7 @@
 /// <reference types="vitest/config" />
 import { createServer, defineConfig, type Plugin, type ProxyOptions, type ViteDevServer } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
+import { fileURLToPath } from 'node:url';
 import { mockNotes } from './dev/mock-notes';
 
 // `npm run dev` serves the page and proxies the API and the videos to a running review server (the Go `retake open
@@ -49,6 +50,7 @@ function prerenderShell(): Plugin {
       dev.httpServer?.once('close', () => void ssr?.then((s) => s.close()));
     },
     async transformIndexHtml(html, ctx) {
+      if (!html.includes('<div id="app"></div>')) return html; // home.html: the home screen mounts on its own
       let body: string;
       if (ctx.server) body = await render(await (ssr ??= ssrServer()));
       else {
@@ -73,7 +75,19 @@ export default defineConfig({
   // Relative asset and API URLs: the same build works at / (retake open) and at /p/<name>/ (retake serve).
   base: './',
   // hls.js (about 580 kB) is its own chunk, loaded only for .m3u8 versions in browsers without native HLS.
-  build: { outDir: 'dist', emptyOutDir: true, target: 'es2022', chunkSizeWarningLimit: 700 },
+  // Two pages: the review page (index.html) and the home screen of retake open <folder> (home.html, spec/home.md).
+  build: {
+    outDir: 'dist',
+    emptyOutDir: true,
+    target: 'es2022',
+    chunkSizeWarningLimit: 700,
+    rollupOptions: {
+      input: {
+        index: fileURLToPath(new URL('index.html', import.meta.url)),
+        home: fileURLToPath(new URL('home.html', import.meta.url)),
+      },
+    },
+  },
   server: { proxy: { '/api': proxy, '/video': proxy } },
   // phone.css is read as text by a unit test (its media query must match lib/layout.ts).
   test: { include: ['src/**/*.test.ts'], environment: 'node', css: { include: [/phone\.css/] } },

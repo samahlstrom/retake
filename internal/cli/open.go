@@ -137,11 +137,11 @@ func parseOpen(args []string) (openArgs, error) {
 	}
 	switch len(pos) {
 	case 0:
-		return a, errors.New("missing the video file")
+		return a, errors.New("missing the video file (or a folder of videos)")
 	case 1:
 		a.video = pos[0]
 	default:
-		return a, fmt.Errorf("unexpected argument %q (one video; use --versions for more)", pos[1])
+		return a, fmt.Errorf("unexpected argument %q (one video or folder; use --versions for more)", pos[1])
 	}
 	return a, nil
 }
@@ -220,6 +220,9 @@ func openCmd(ctx context.Context, args []string, env Env) int {
 	st := config.Resolve(cfg, config.Flags{Port: a.port, IdleExit: a.idleExit, NoOpen: a.noOpen})
 
 	video := absPath(a.video, env.Getenv)
+	if isDir(video) {
+		return openFolder(ctx, a, env, cfg, st, video) // every project in it, with the home screen (spec/home.md)
+	}
 	if !isFile(video) {
 		_, _ = fmt.Fprintf(env.Stderr, "retake: no such file: %s\n", video)
 		return ExitUsage

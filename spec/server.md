@@ -6,7 +6,8 @@ One `retake serve` process hosts many **projects**. Each project is what `retake
 family, its takes and its project store (spec/api.md, spec/notes.md). People sign in with one-time links (there are
 no passwords), guests come in through the share links of spec/team.md, and agents push versions with tokens.
 
-`retake open` and `retake share` don't change.
+`retake open` and `retake share` don't change. `retake open <folder>` serves many local projects with the same
+`/p/<name>/` routing and a home screen, without accounts (spec/home.md).
 
 ## Running it
 
@@ -176,6 +177,7 @@ email. A share guest's get the token's label, else "guest".
 | POST | `/signout` | a session | Ends it. |
 | GET | `/api/me` | a session | `{email, name, admin, projects: [{name, title, role}]}` |
 | GET | `/api/projects` | a session | `{projects: [{name, title, role, versions}]}`: the ones you can see |
+| GET | `/api/home` | a session | The home screen's cards for your projects (spec/home.md): status, thumbnail, newest version, plus `user` |
 | POST | `/api/projects` | admin | Creates a project: `{name, title}`. 201 with the project. |
 | GET, POST | `/api/projects/<name>/members` | owner | The members; adds or changes one: `{email, role}` |
 | DELETE | `/api/projects/<name>/members/<email>` | owner | Removes one |

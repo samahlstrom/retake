@@ -15,6 +15,7 @@ import (
 
 	"github.com/samahlstrom/retake/internal/config"
 	"github.com/samahlstrom/retake/internal/family"
+	"github.com/samahlstrom/retake/internal/hub"
 	"github.com/samahlstrom/retake/internal/project"
 	"github.com/samahlstrom/retake/internal/qrterm"
 	"github.com/samahlstrom/retake/internal/server"
@@ -60,9 +61,18 @@ func bareHost(flag, v string) (string, error) {
 	return h, nil
 }
 
-// openStore opens (creating it if needed) the project store of the video named on the command line.
+// openStore opens (creating it if needed) the project store of the video named on the command line, or the home
+// store of a folder (spec/home.md, "Sharing the home").
 func openStore(env Env, cmd, video string) (*project.Store, string, int) {
 	path := absPath(video, env.Getenv)
+	if isDir(path) {
+		st, err := project.OpenHome(path)
+		if err != nil {
+			_, _ = fmt.Fprintf(env.Stderr, "retake %s: %v\n", cmd, err)
+			return nil, "", ExitError
+		}
+		return st, path, ExitOK
+	}
 	if !isFile(path) {
 		_, _ = fmt.Fprintf(env.Stderr, "retake %s: no such file: %s\n", cmd, path)
 		return nil, "", ExitUsage
@@ -183,7 +193,7 @@ func shareCmd(ctx context.Context, args []string, env Env) int {
 	}
 	defer func() { _ = st.Close() }()
 	liveHosts(st) // forget the hosts of shares that died
-	s := &share{env: env, a: a, video: video, given: pos[0], st: st, role: role, ttl: ttl}
+	s := &share{env: env, a: a, video: video, given: pos[0], st: st, role: role, ttl: ttl, folder: isDir(video)}
 	return s.run(ctx, port)
 }
 
@@ -213,13 +223,14 @@ func (a *shareArgs) checkTunnel() error {
 
 // share is one run of retake share.
 type share struct {
-	env   Env
-	a     shareArgs
-	video string // absolute
-	given string // as typed, for the revoke hint
-	st    *project.Store
-	role  team.Role
-	ttl   time.Duration
+	env    Env
+	a      shareArgs
+	video  string // absolute
+	given  string // as typed, for the revoke hint
+	folder bool   // video is a folder: share its home (spec/home.md)
+	st     *project.Store
+	role   team.Role
+	ttl    time.Duration
 
 	port     int
 	attached bool
@@ -283,7 +294,7 @@ func (s *share) server(cfg config.Config, port *int) error {
 		n = 1
 	}
 	for p := sets.Port; p < sets.Port+n && p <= 65535; p++ {
-		if p > 0 && serves(p, s.video) {
+		if p > 0 && (s.folder && servesFolder(p, s.video) || !s.folder && serves(p, s.video)) {
 			s.port, s.attached = p, true
 			return nil
 		}
@@ -293,8 +304,17 @@ func (s *share) server(cfg config.Config, port *int) error {
 		return errors.New(msg)
 	}
 	s.port = ln.Addr().(*net.TCPAddr).Port
-	srv := newServer(s.env, cfg, sets, server.Options{Video: s.video, Port: s.port, UI: ui.Embedded(),
-		Verbose: s.a.verbose})
+	var srv interface {
+		Serve(ctx context.Context, ln net.Listener) (bool, error)
+		Close() error
+	}
+	if s.folder {
+		srv = newFolder(s.env, cfg, sets, hub.FolderOptions{Dir: s.video, Port: s.port, UI: ui.Embedded(),
+			Verbose: s.a.verbose})
+	} else {
+		srv = newServer(s.env, cfg, sets, server.Options{Video: s.video, Port: s.port, UI: ui.Embedded(),
+			Verbose: s.a.verbose})
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	s.srvDone = make(chan struct{})
 	go func() {
@@ -528,6 +548,10 @@ func tokenCreateCmd(args []string, env Env) int {
 	}
 	if err == nil && host != "" {
 		host, err = bareHost("--host", host)
+	}
+	if err == nil && r == team.Agent && isDir(absPath(pos[0], env.Getenv)) {
+		err = errors.New("an agent works on one project: retake token create <video> --role agent " +
+			"(it then reaches /p/<name>/mcp of the folder's server too)")
 	}
 	if err != nil {
 		return usageError(env, "token create", err)

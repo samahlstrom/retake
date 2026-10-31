@@ -62,6 +62,8 @@ A streamed version also has `"stream": {"state": "rendering", "done": 12, "total
 | POST | `/api/versions/<label>/unwatch?viewer=<id>` | The page stopped showing it (`navigator.sendBeacon`). The render stops when the last viewer is gone. Same rules as `watch`. |
 | GET | `/favicon.ico` | 204 |
 | GET | `/s/<token>` | New in milestone 3a: a share link. Sets the share cookie and bounces to `/` (spec/team.md). |
+| GET/HEAD | `/api/poster?v=<label>` | New: a JPEG of the version's first frame (no `v`: the current one), for `<video poster>` and the home's cards (spec/home.md). 404 `{"error":"no poster"}` when there is none. |
+| POST | `/api/versions/<label>/unwatch?viewer=<id>` | New: the page left that version (spec/home.md, "Close means close"). 204. Needs watch, not record. |
 | any | `/mcp` | New in milestone 3a: the agent tools over MCP's streamable HTTP transport, for a Bearer `agent` token (spec/team.md). |
 
 Anything else is 404 `{"error": "not found"}`. Any request whose `Host` header isn't `127.0.0.1:<port>` or `localhost:<port>` gets 403 `{"error": "bad host"}` first, on every route. That blocks DNS rebinding, where another site points its own hostname at 127.0.0.1 to read local videos and takes. Refused requests don't count as contact for the idle timer. `--allow-host H` (repeatable) adds `H` to the accepted Host headers and `https://H` to the accepted origins. It's for a tunnel such as a Cloudflare quick tunnel. Since milestone 3a every request through such a host must carry a token, and each route checks the token's role (spec/team.md); local requests without a token keep full access. All JSON responses send `Cache-Control: no-store`.
@@ -144,6 +146,7 @@ window.__review = {
   vad, bars, mic // getters, as in the legacy page
   notes,         // getter, new in milestone 2: {available, version, newest, items, jobs, job} from /api/notes and SSE
   sidebar,       // getter, new in milestone 2: {panel, toggle, phone, rows, active}, what the sidebar shows
+  home,          // getter, new: {available, next} when the page is a project of a home (spec/home.md)
 }
 ```
 
@@ -159,11 +162,13 @@ New: on a phone the page has its own layout, with the same ids. `<html data-layo
 
 ```
 retake open <video> [--versions a.mp4 b.mp4 ...] [--port N] [--no-open] [--idle-exit MIN] [--ui-dir DIR] [--allow-host H]... [--verbose]
+retake open <folder> [--port N] [--no-open] [--idle-exit MIN] [--ui-dir DIR] [--allow-host H]... [--verbose]
 retake sessions <video> [--json]
 retake version
 ```
 
 - Without `--no-open`, the page opens with the OS opener: `xdg-open`, `open` or `start`.
+- With a folder, every project in it is served, with a home screen at `/` (spec/home.md).
 - Exit code 2 for a missing file, a busy `--port`, or no free port.
 - The startup lines match the legacy ones (video, versions, page URL, where takes are saved).
 

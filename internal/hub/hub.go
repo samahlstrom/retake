@@ -337,7 +337,10 @@ func splitPath(p string) []string {
 	return out
 }
 
-func (h *Hub) json(w http.ResponseWriter, r *http.Request, code int, v any) {
+func (h *Hub) json(w http.ResponseWriter, r *http.Request, code int, v any) { writeJSON(w, r, code, v) }
+
+// writeJSON sends v as JSON with Cache-Control: no-store.
+func writeJSON(w http.ResponseWriter, r *http.Request, code int, v any) {
 	body, err := jsonx.Marshal(v)
 	if err != nil {
 		code, body = http.StatusInternalServerError, []byte(`{"error": "encoding failed"}`)

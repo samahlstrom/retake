@@ -1,9 +1,10 @@
 <script lang="ts">
   // The video, the frozen last frame while another version loads, the image cards, the pen layer, the hint, the toast
-  // and the fatal message. In the phone layout the stage takes the video's shape (--ar), and in portrait the hint moves
+  // and the fatal message; in a home (spec/home.md), "All videos" and "Next video". In the phone layout the stage takes the video's shape (--ar), and in portrait the hint moves
   // out of it.
   import type { Review } from '../lib/review.svelte';
   import Hint from './Hint.svelte';
+  import HomeNav from './HomeNav.svelte';
   import ImageLayer from './ImageLayer.svelte';
 
   let { review }: { review: Review } = $props();
@@ -37,4 +38,5 @@
   {/if}
   <div id="toast" class="float" class:show={review.toast.show}>{review.toast.msg}</div>
   <div id="fatal" style:display={review.fatal ? 'flex' : null}>{review.fatal}</div>
+  <HomeNav {review} />
 </main>

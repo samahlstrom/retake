@@ -8,7 +8,7 @@
   let { review }: { review: Review } = $props();
 </script>
 
-<svelte:window onkeydowncapture={review.onKeydown} onpagehide={review.flushOnExit} />
+<svelte:window onkeydowncapture={review.onKeydown} onpagehide={review.onPageHide} />
 <svelte:document onmousedown={review.onDocMousedown} />
 
 <Stage {review} />

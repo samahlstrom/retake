@@ -21,7 +21,7 @@ Permissions by route:
 
 | Route | Needs |
 |---|---|
-| `GET/HEAD /`, `/index.html`, page files, `/favicon.ico`, `/video...`, `/api/info`, `/api/history`, `/api/notes`, `/api/events`, `/api/takes/...`, unknown GET paths (still 404), `POST /api/versions/<label>/watch` and `/unwatch` (spec/bridge.md, "Streaming") | watch |
+| `GET/HEAD /`, `/index.html`, page files, `/favicon.ico`, `/video...`, `/api/info`, `/api/history`, `/api/notes`, `/api/events`, `/api/takes/...`, `/api/poster`, unknown GET paths (still 404), `POST /api/versions/<label>/watch` and `/unwatch` (spec/bridge.md, "Streaming") | watch |
 | `GET /api/ping` | any role |
 | `POST /api/session/<take>/data`, `/audio`, `/image`, `/done`, unknown POST paths (still 404) | record |
 | `POST /api/notes/<id>/reopen`, `POST /api/versions/<label>/approve` | approve |
@@ -174,6 +174,10 @@ codex mcp add retake --url https://<host>/mcp --bearer-token-env-var RETAKE_TOKE
 
 `<host>` is `--host`, else the newest live share host of the project, else `http://127.0.0.1:<port>`. Durations are
 Go durations (`90m`, `24h`) or days (`7d`); `0` or `never` means no expiry.
+
+**A whole folder.** `retake share <folder>` (and `share list`, `share revoke`, `token create` with a folder) shares the
+home of `retake open <folder>`: one link for every project in it, with tokens kept in the folder's own store
+(spec/home.md, "Sharing the home").
 
 Config additions:
 
