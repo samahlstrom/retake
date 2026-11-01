@@ -15,6 +15,7 @@ import (
 	"github.com/samahlstrom/retake/internal/family"
 	"github.com/samahlstrom/retake/internal/jobs"
 	"github.com/samahlstrom/retake/internal/server"
+	"github.com/samahlstrom/retake/internal/worker"
 )
 
 // Exit codes.
@@ -42,6 +43,8 @@ type Env struct {
 	Engines func(config.Config) jobs.Engines
 	// SharePing is how often `retake share` pings the server it attached to; 0 = DefaultSharePing.
 	SharePing time.Duration
+	// Agents returns the agents an editing worker may run; nil = the config's [[agents]] and those found on PATH.
+	Agents func() []worker.Profile
 }
 
 func (e Env) withDefaults() Env {
@@ -70,6 +73,7 @@ usage:
       serve the review page for <video> and its version family (clip_v5, v6/clip_v6, ...)
   retake open <folder> [--port N] [--no-open] [--idle-exit MIN] [--ui-dir DIR] [--allow-host H]... [--verbose]
       review many videos: every project in <folder> and its folders, with a home screen of them all at /
+      (in a timeline project, Send hands your notes to Claude Code or Codex on this machine; nothing else to run)
   retake sessions <video> [--json]
       list the takes saved for <video>
   retake notes build <video | .review dir | take dir> [--window 2] [--max-span 8] [--video-transcript F] [--json]
@@ -139,6 +143,7 @@ the team server (spec/server.md; settings also come from RETAKE_* variables and 
   retake remote add <name> <project URL> --token <agent token>   (also remote list, remote remove <name>)
   retake worker --remote NAME --project DIR [--name NAME] [--profiles FILE]
       connect this editing machine: run assigned agents and stream live source edits through the hosted project
+      (agents: [[agents]] in config.toml plus Claude Code and Codex on PATH; --profiles FILE replaces them)
   retake push --remote <name> <file> [--parent vN] [--label vN] [--change ID="summary"]... [--ask ID="q"]...
       upload <file> to the team server (resumable) and push it, with the same push rule
 

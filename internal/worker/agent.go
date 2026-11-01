@@ -95,7 +95,7 @@ func (r *runner) execute(ctx context.Context, a project.WorkAssignment) outcome 
 	prompt := fmt.Sprintf(`You are editing a native Retake video project in the current working directory.
 Read the project instructions, then the durable task context at %q. The native timeline is %q.
 Only the note IDs in task.notes are assigned. Other notes are context: check them and prior events for conflicting or already-applied feedback. Original note versions, timing, strokes and targets must be respected. Saved annotated stills, when available, are note-<id>.png in this task directory. Attached reference images are note-<id>-<file>; their boxes and original video times are in the context.
-Original local video revisions are retained in .retake/worker/renders/: each state.json gives its public version label, source.json is its timeline snapshot, and index.m3u8 is its video. Inspect the original frame there when needed; do not assume an old comment's time refers to the current source.
+Original local video revisions are retained in .retake/worker/renders/: each state.json gives its label (a draft such as v4-draft2 until a task completes it as v4), source.json is its timeline snapshot, and index.m3u8 is its video. Inspect the original frame there when needed; do not assume an old comment's time refers to the current source.
 Make the requested source edits in this project. Preserve all existing working changes, media and other people's work. Retake automatically renders valid saved source changes and streams them to reviewers. Do not run retake push or mark notes complete yourself.
 If feedback conflicts, the target is ambiguous, or needed material is missing, ask a concise specific question instead of guessing.
 Before exiting, write a JSON object to %q with exactly: {"state":"completed","message":"concrete description of the change and checks"} OR {"state":"question","message":"your question"}.
@@ -106,7 +106,7 @@ The next agent may differ from you; leave source changes and useful context on d
 	cmd := exec.CommandContext(ctx, p.Command[0], p.Command[1:]...) //nolint:gosec // trusted local argv, never supplied by the host
 	cmd.Dir = r.opts.Root
 	cmd.Stdin = strings.NewReader(prompt)
-	cmd.Env = agentEnv(os.Environ(), contextPath, reportPath)
+	cmd.Env = agentEnv(os.Environ(), contextPath, reportPath, p.Env)
 	ownGroup(cmd)
 	cmd.Cancel = func() error { return stopGroup(cmd.Process) }
 	cmd.WaitDelay = 3 * time.Second
@@ -196,15 +196,37 @@ func (r *runner) fetchArtifact(ctx context.Context, path, destination string) er
 	return os.WriteFile(destination, b, 0o600)
 }
 
-func agentEnv(env []string, contextPath, reportPath string) []string {
-	out := make([]string, 0, len(env)+2)
+// agentEnv is the agent's environment: the worker's own without its token, the profile's extra variables (their
+// $VAR and ${VAR} read from that same environment), then the task's context and report paths.
+func agentEnv(env []string, contextPath, reportPath string, extra map[string]string) []string {
+	reserved := func(k string) bool { return k == "RETAKE_TOKEN" || k == "RETAKE_CONTEXT" || k == "RETAKE_REPORT" }
+	own := map[string]string{}
+	out := make([]string, 0, len(env)+len(extra)+2)
 	for _, v := range env {
-		k, _, _ := strings.Cut(v, "=")
-		if k != "RETAKE_TOKEN" && k != "RETAKE_CONTEXT" && k != "RETAKE_REPORT" {
+		k, val, _ := strings.Cut(v, "=")
+		if !reserved(k) && !hasKey(extra, k) {
 			out = append(out, v)
 		}
+		if !reserved(k) {
+			own[k] = val
+		}
+	}
+	keys := make([]string, 0, len(extra))
+	for k := range extra {
+		if k != "" && !strings.ContainsAny(k, "=\x00") && !reserved(k) {
+			keys = append(keys, k)
+		}
+	}
+	slices.Sort(keys)
+	for _, k := range keys {
+		out = append(out, k+"="+os.Expand(extra[k], func(name string) string { return own[name] }))
 	}
 	return append(out, "RETAKE_CONTEXT="+contextPath, "RETAKE_REPORT="+reportPath)
+}
+
+func hasKey(m map[string]string, k string) bool {
+	_, ok := m[k]
+	return ok
 }
 
 // telemetry reads only structured provider records. Subscription balances are never inferred from token usage.

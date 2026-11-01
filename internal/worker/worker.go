@@ -20,20 +20,33 @@ import (
 	"github.com/samahlstrom/retake/internal/project"
 )
 
-// Profile is a trusted local executable and argument vector. Retake never executes a server-supplied command.
+// Profile is a trusted local executable and argument vector. Retake never executes a server-supplied command. Env
+// is added to the agent's environment; its values may name the worker's own variables ($VAR, ${VAR}), so keys
+// needn't be written into files.
 type Profile struct {
 	project.AgentProfile
-	Command []string `json:"command"`
+	Command []string          `json:"command"`
+	Env     map[string]string `json:"env,omitempty"`
 }
 
-// Options connects a native project to one hosted project using an agent token.
+// Options connects a native project to one hosted project using an agent token, or (Handler) to the project served
+// by this process.
 type Options struct {
 	URL, Token, Root, Name string
 	Profiles               []Profile
 	Editor                 bridge.Editor
 	Log                    io.Writer
 	HTTP                   *http.Client
+	// Handler serves the project's /api/worker/* routes in this process (retake open: spec/automation.md, "Local
+	// mode"). Requests go straight to it, with no network and no token; URL, Token and HTTP are then unused.
+	Handler http.Handler
 }
+
+// Errors that say why a project can't be edited here (Reason turns them into a sentence for the page).
+var (
+	ErrNoAgents = errors.New("no agents installed: install Claude Code or Codex, or configure an agent")
+	ErrBusy     = errors.New("another retake worker is editing this project")
+)
 
 type runner struct {
 	opts                  Options
@@ -47,6 +60,7 @@ type runner struct {
 	render                project.LiveRender
 	renderErr             string
 	finalTask             string
+	versions              int // the family's versions, from the last poll: outside a task, render only while 0
 }
 
 type httpError struct {
@@ -102,6 +116,9 @@ func writeJSON(path string, v any) error {
 
 // Run blocks until cancellation. It holds the project lock until all child processes have stopped.
 func Run(ctx context.Context, o Options) error {
+	if o.Handler != nil {
+		o.URL, o.Token, o.HTTP = "http://retake.invalid", "in-process", &http.Client{Transport: handlerTransport{o.Handler}}
+	}
 	u, e := url.Parse(o.URL)
 	if e != nil || u.Host == "" || u.User != nil || u.Scheme != "http" && u.Scheme != "https" || o.Token == "" {
 		return errors.New("a project URL and agent token are required")
@@ -141,22 +158,22 @@ func Run(ctx context.Context, o Options) error {
 		return e
 	}
 	defer unlock()
-	identityPath := filepath.Join(r.dir, "identity")
-	id, e := os.ReadFile(identityPath) //nolint:gosec // fixed identity file in the locked project worker directory
-	if errors.Is(e, os.ErrNotExist) {
-		id = []byte(project.NewWorkID())
-		e = os.WriteFile(identityPath, id, 0o600)
-	}
+	id, e := savedID(filepath.Join(r.dir, "identity"))
 	if e != nil {
 		return e
 	}
-	if !project.ValidWorkID(string(id)) {
-		return errors.New("invalid saved worker identity")
+	session := project.NewWorkID()
+	if o.Handler != nil {
+		// In process, the project lock already excludes a second worker, so a restart takes over its own session at
+		// once instead of waiting for the old one's heartbeat to run out.
+		if session, e = savedID(filepath.Join(r.dir, "session")); e != nil {
+			return e
+		}
 	}
 	if o.Name == "" {
 		o.Name, _ = os.Hostname()
 	}
-	r.identity = project.EditingWorker{ID: string(id), Name: o.Name, Session: project.NewWorkID()}
+	r.identity = project.EditingWorker{ID: id, Name: o.Name, Session: session}
 	seen := map[string]bool{}
 	for _, p := range o.Profiles {
 		if !project.ValidWorkID(p.ID) || len(p.Command) == 0 || seen[p.ID] {
@@ -166,8 +183,9 @@ func Run(ctx context.Context, o Options) error {
 		r.identity.Agents = append(r.identity.Agents, p.AgentProfile)
 	}
 	if len(seen) == 0 {
-		return errors.New("no agents installed: install Claude Code or Codex, or supply --profiles")
+		return ErrNoAgents
 	}
+	r.render = lastRender(r.dir) // a restart with unchanged source renders and registers nothing
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	var wg sync.WaitGroup
@@ -177,7 +195,9 @@ func Run(ctx context.Context, o Options) error {
 	wg.Go(func() { r.renderLoop(ctx) })
 	defer wg.Wait()
 	defer cancel()
-	r.log("Connecting %s to %s", r.identity.Name, o.URL)
+	if o.Handler == nil {
+		r.log("Connecting %s to %s", r.identity.Name, o.URL)
+	}
 	return r.controlLoop(ctx)
 }
 
@@ -251,13 +271,16 @@ func (r *runner) controlLoop(ctx context.Context) error {
 				continue
 			}
 			if !registered || lastError != "" {
-				r.log("Connected. Choose this machine and agent in the review's Agent panel.")
+				if r.opts.Handler == nil {
+					r.log("Connected. Choose this machine and agent in the review's Agent panel.")
+				}
 				registered = true
 				lastError = ""
 			}
 			r.mu.Lock()
 			r.connected = started
 			r.selected = assignment.Config.Worker == r.identity.ID
+			r.versions = assignment.Versions
 			r.mu.Unlock()
 			if current == nil && assignment.Task != nil {
 				if !project.ValidWorkID(assignment.Task.ID) || !project.ValidWorkID(assignment.Task.Lease) || assignment.Task.Worker != r.identity.ID {
@@ -315,4 +338,20 @@ func (r *runner) state() (*project.EditingTask, bool) {
 		t = &clone
 	}
 	return t, r.selected && time.Since(r.connected) < 10*time.Second
+}
+
+// savedID reads a random identifier kept in the locked worker directory, making it on first use.
+func savedID(path string) (string, error) {
+	id, e := os.ReadFile(path) //nolint:gosec // a fixed file in the locked project worker directory
+	if errors.Is(e, os.ErrNotExist) {
+		id = []byte(project.NewWorkID())
+		e = os.WriteFile(path, id, 0o600)
+	}
+	if e != nil {
+		return "", e
+	}
+	if !project.ValidWorkID(string(id)) {
+		return "", fmt.Errorf("invalid saved worker identity in %s", path)
+	}
+	return string(id), nil
 }

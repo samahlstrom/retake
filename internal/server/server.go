@@ -115,6 +115,11 @@ type Options struct {
 	// stop a render no one watches. nil: the call does nothing.
 	Thumbs  *thumb.Maker
 	Unwatch func(label, viewer string)
+
+	// LocalWorker runs the project's editing worker inside this process (retake open and share; spec/automation.md,
+	// "Local mode"). New starts it once with the project root and WorkerHandler; Close cancels ctx and waits for it.
+	// It calls blocked with why it can't run ("" once it runs).
+	LocalWorker func(ctx context.Context, root string, h http.Handler, blocked func(string))
 }
 
 // Server serves one version family.
@@ -146,6 +151,8 @@ type Server struct {
 	streamsMu  sync.Mutex
 	streams    *stream.Manager // opts.Streams, or one made on the first watch (then ownStreams)
 	ownStreams bool
+
+	inproc localWorker // Options.LocalWorker's state
 }
 
 // New returns a Server and scans the family once.
@@ -187,6 +194,7 @@ func New(opts Options) *Server {
 	if _, err := s.store(false); err != nil && !errors.Is(err, project.ErrNoProject) {
 		_, _ = fmt.Fprintf(s.opts.Log, "retake: project store: %v\n", err)
 	}
+	s.startLocalWorker()
 	return s
 }
 
@@ -234,6 +242,7 @@ func (s *Server) store(create bool) (*project.Store, error) {
 func (s *Server) Close() error {
 	s.stopStreams()
 	s.cancel()
+	s.inproc.wait() // before the store closes: the worker's last reports go through it
 	s.streamsMu.Lock()
 	if s.ownStreams {
 		s.streams.Close() // renders stop; what they published stays
@@ -299,7 +308,7 @@ func (s *Server) version(label string) (family.Version, bool) {
 			return v, true
 		}
 	}
-	return family.Version{}, false
+	return s.unlistedRender(label) // a draft the family no longer lists still takes its takes
 }
 
 func (s *Server) touch() {
@@ -314,8 +323,9 @@ func (s *Server) Idle() bool {
 		return false
 	}
 	s.contactMu.Lock()
-	defer s.contactMu.Unlock()
-	return !s.contact.IsZero() && s.opts.Clock.Now().Sub(s.contact) > s.opts.IdleExit
+	idle := !s.contact.IsZero() && s.opts.Clock.Now().Sub(s.contact) > s.opts.IdleExit
+	s.contactMu.Unlock()
+	return idle && !s.Busy() // a local agent at work keeps the server up
 }
 
 // Serve serves on ln until ctx is done, or until the page has been gone for IdleExit. idle reports which.
@@ -582,7 +592,7 @@ func (s *Server) page(w http.ResponseWriter, r *http.Request) {
 	h.Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusOK)
 	if r.Method != http.MethodHead {
-		_, _ = w.Write(body)
+		_, _ = w.Write(body) //nolint:gosec // the page's own index.html, not request data
 	}
 }
 
@@ -691,7 +701,7 @@ func (s *Server) post(w http.ResponseWriter, r *http.Request, parts []string) {
 	case "transcribe":
 		s.transcribeClips(w, r, v, parts[2], dir)
 	case "done":
-		s.done(w, r, v, parts[2], dir)
+		s.done(w, r, v, parts[2], dir, body)
 	default:
 		s.fail(w, r, http.StatusNotFound, "not found")
 	}

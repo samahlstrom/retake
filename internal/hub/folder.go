@@ -57,6 +57,8 @@ type FolderOptions struct {
 	RescanEvery time.Duration
 	// Project adjusts a project's server options before its server is made (the streaming side's hooks, tests).
 	Project func(name string, o *server.Options)
+	// LocalWorker is each project's server.Options.LocalWorker: its editing worker, in this process.
+	LocalWorker func(ctx context.Context, root string, h http.Handler, blocked func(string))
 }
 
 // Folder serves a folder of projects.
@@ -164,7 +166,7 @@ func (f *Folder) projectOf(fd home.Found) *folderProject {
 	o := server.Options{Video: fd.Anchor, Root: fd.Root, Port: f.opts.Port, UI: f.opts.UI, Author: f.opts.Author,
 		Prober: f.opts.Prober, Jobs: f.opts.Jobs, Version: f.opts.Version, Log: f.opts.Log, Verbose: f.opts.Verbose,
 		EventPoll: f.opts.EventPoll, External: true, BasePath: "/p/" + fd.Name, FollowNewest: true,
-		Thumbs: f.opts.Thumbs}
+		Thumbs: f.opts.Thumbs, LocalWorker: f.opts.LocalWorker}
 	if f.opts.Project != nil {
 		f.opts.Project(fd.Name, &o)
 	}
@@ -244,14 +246,30 @@ func (f *Folder) touch() {
 	f.contactMu.Unlock()
 }
 
-// Idle reports whether every page has been gone for longer than IdleExit (never before the first request).
+// Idle reports whether every page has been gone for longer than IdleExit (never before the first request), and no
+// project's agent is at work.
 func (f *Folder) Idle() bool {
 	if f.opts.IdleExit <= 0 {
 		return false
 	}
 	f.contactMu.Lock()
-	defer f.contactMu.Unlock()
-	return !f.contact.IsZero() && f.opts.Now().Sub(f.contact) > f.opts.IdleExit
+	idle := !f.contact.IsZero() && f.opts.Now().Sub(f.contact) > f.opts.IdleExit
+	f.contactMu.Unlock()
+	if !idle {
+		return false
+	}
+	f.mu.Lock()
+	open := make([]*folderProject, 0, len(f.open))
+	for _, fp := range f.open {
+		open = append(open, fp)
+	}
+	f.mu.Unlock()
+	for _, fp := range open {
+		if fp.srv.Busy() {
+			return false
+		}
+	}
+	return true
 }
 
 // Serve serves on ln until ctx is done, or until the pages have been gone for IdleExit. idle reports which. Call Close

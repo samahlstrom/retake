@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 
 	"github.com/BurntSushi/toml"
@@ -19,6 +20,9 @@ type Config struct {
 	Port            *int     `toml:"port"`              // preferred port (the next free one is used if busy)
 	IdleExitMinutes *float64 `toml:"idle_exit_minutes"` // 0 = never
 	OpenBrowser     *bool    `toml:"open_browser"`
+	// FindAgents adds Claude Code and Codex found on PATH to the agents (default true); false offers only Agents.
+	FindAgents *bool   `toml:"find_agents"`
+	Agents     []Agent `toml:"agents"` // [[agents]]: what retake open and retake worker may run
 
 	Transcribe Transcribe `toml:"transcribe"`
 	Share      Share      `toml:"share"`
@@ -44,6 +48,17 @@ type Server struct {
 	SMTPFrom       *string  `toml:"smtp_from"`
 }
 
+// Agent is one [[agents]] entry (docs/config.md): a program the editing worker runs for a task. Env is added to its
+// environment; a value may name the worker's own variables ($VAR, ${VAR}), so keys needn't be written here. An
+// entry whose id is "claude" or "codex" replaces the one found on PATH.
+type Agent struct {
+	ID      string            `toml:"id"`
+	Name    string            `toml:"name"`
+	Model   string            `toml:"model"`
+	Command []string          `toml:"command"`
+	Env     map[string]string `toml:"env"`
+}
+
 // Share is the [share] table (spec/team.md): the tunnel binaries `retake share` runs.
 type Share struct {
 	Cloudflared *string `toml:"cloudflared"` // unset or "" = cloudflared on $PATH
@@ -63,6 +78,8 @@ type Transcribe struct {
 	Command    *string `toml:"command"`     // engine = "command": the program (and arguments) to run
 	WhisperCLI *string `toml:"whisper_cli"` // the whisper-cli binary; unset = $PATH, then the install-whisper.sh folder
 }
+
+var agentID = regexp.MustCompile(`^[A-Za-z0-9_-]{1,80}$`)
 
 // Path returns the config file's path. getenv is os.Getenv in production.
 func Path(getenv func(string) string) (string, error) {
@@ -123,6 +140,19 @@ func Parse(s string) (Config, []string, error) {
 	}
 	if d := c.Transcribe.Device; d != nil && *d != "auto" && *d != "cuda" && *d != "cpu" {
 		return Config{}, warnings, fmt.Errorf("transcribe.device %q isn't auto, cuda or cpu", *d)
+	}
+	ids := map[string]bool{}
+	for i, a := range c.Agents {
+		if !agentID.MatchString(a.ID) || ids[a.ID] {
+			return Config{}, warnings, fmt.Errorf("agents[%d]: id %q must be unique letters, digits, - or _", i, a.ID)
+		}
+		ids[a.ID] = true
+		if len(a.Command) == 0 || a.Command[0] == "" {
+			return Config{}, warnings, fmt.Errorf("agents[%d] (%s): command is empty", i, a.ID)
+		}
+		if c.Agents[i].Name == "" {
+			c.Agents[i].Name = a.ID
+		}
 	}
 	return c, warnings, nil
 }

@@ -301,6 +301,7 @@ func newServer(env Env, cfg config.Config, st config.Settings, o server.Options)
 	o.Jobs = &engines
 	o.CheckEvery, o.Clock, o.Log, o.Version = env.CheckEvery, env.Clock, env.Stderr, Version()
 	o.Editor = editorOf(env)
+	o.LocalWorker = localWorker(env, cfg) // Send works with nothing else to run
 	return server.New(o)
 }
 

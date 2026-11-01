@@ -76,8 +76,13 @@ type jobRef struct {
 }
 
 // done is POST /api/session/<take>/done: it marks the take closed and queues transcribe(take), then notes(version).
-// It is idempotent.
-func (s *Server) done(w http.ResponseWriter, r *http.Request, v family.Version, take, dir string) {
+// It is idempotent. A body of {"send": true} sends the take's notes to the agent once they're processed
+// (spec/automation.md); any other body, or none, leaves that to the automation config.
+func (s *Server) done(w http.ResponseWriter, r *http.Request, v family.Version, take, dir string, body []byte) {
+	var opts struct {
+		Send bool `json:"send"`
+	}
+	_ = json.Unmarshal(body, &opts) // not JSON: as if absent
 	s.writeMu.Lock()
 	if _, err := os.Stat(filepath.Join(dir, "session.json")); err != nil {
 		s.writeMu.Unlock()
@@ -110,7 +115,7 @@ func (s *Server) done(w http.ResponseWriter, r *http.Request, v family.Version, 
 		refs[i] = jobRef{j.ID, j.Kind, j.State}
 		dependencies[i] = j.ID
 	}
-	if err := st.SubmitReview(v.Label, take, dependencies); err != nil {
+	if err := st.SubmitReview(v.Label, take, dependencies, opts.Send); err != nil {
 		s.storeFailed(w, r, err)
 		return
 	}

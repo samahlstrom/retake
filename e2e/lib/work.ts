@@ -18,8 +18,12 @@ export function resetWork(): void {
   mkdirSync(WORK, { recursive: true });
   writeFileSync(WORK_MARKER, 'Scratch data of the retake e2e suite. Safe to delete.\n');
   mkdirSync(join(CONFIG_HOME, 'retake'), { recursive: true });
-  // Read by the new server only. Flags override it; the author name lands in session.json.
-  writeFileSync(join(CONFIG_HOME, 'retake', 'config.toml'), `name = "${AUTHOR}"\nopen_browser = false\n`);
+  // Read by the new server only. Flags override it; the author name lands in session.json. find_agents = false keeps
+  // the local editing worker from ever running a real Claude Code or Codex found on PATH.
+  writeFileSync(
+    join(CONFIG_HOME, 'retake', 'config.toml'),
+    `name = "${AUTHOR}"\nopen_browser = false\nfind_agents = false\n`,
+  );
 }
 
 export type Version = 'v5' | 'v6' | 'v7' | 'v8';

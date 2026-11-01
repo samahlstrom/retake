@@ -88,6 +88,7 @@ func newFolder(env Env, cfg config.Config, st config.Settings, o hub.FolderOptio
 	}
 	o.Jobs = &engines
 	o.CheckEvery, o.Log, o.Version = env.CheckEvery, env.Stderr, Version()
+	o.LocalWorker = localWorker(env, cfg) // each project's editing worker runs in this process
 	if env.Clock != nil {
 		o.Now = env.Clock.Now
 	}

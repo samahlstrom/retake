@@ -96,7 +96,7 @@ func TestProviderTelemetryDoesNotConfuseQuotedFeedbackWithAnError(t *testing.T) 
 	if limited {
 		t.Fatal("ordinary output became a failure")
 	}
-	env := agentEnv([]string{"RETAKE_TOKEN=secret", "PATH=/bin", "OTHER=value"}, "context.json", "report.json")
+	env := agentEnv([]string{"RETAKE_TOKEN=secret", "PATH=/bin", "OTHER=value"}, "context.json", "report.json", nil)
 	if strings.Contains(strings.Join(env, "\n"), "secret") {
 		t.Fatal("worker token passed to agent")
 	}

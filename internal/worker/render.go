@@ -140,10 +140,11 @@ func (r *runner) renderLoop(ctx context.Context) {
 					continue
 				}
 			} else {
+				// Outside a task, only an empty project's first video is rendered: a plain save makes no version.
 				r.mu.Lock()
-				complete := r.render.Complete && r.render.Source == source
+				skip := r.versions > 0 || r.render.Complete && r.render.Source == source
 				r.mu.Unlock()
-				if complete {
+				if skip {
 					continue
 				}
 			}
@@ -268,4 +269,29 @@ func (r *runner) renderSource(ctx context.Context, source string, doc []byte, ta
 		return
 	}
 	set(v.Error)
+}
+
+// lastRender is the newest complete render retained in dir (its state.json), so a restarted worker knows what it last
+// rendered; zero when there is none.
+func lastRender(dir string) project.LiveRender {
+	var last project.LiveRender
+	var newest time.Time
+	entries, _ := os.ReadDir(filepath.Join(dir, "renders"))
+	for _, e := range entries {
+		if !e.IsDir() || !project.ValidWorkID(e.Name()) {
+			continue
+		}
+		path := filepath.Join(dir, "renders", e.Name(), "state.json")
+		info, err := os.Stat(path)
+		if err != nil || info.Size() > 8<<20 || !info.ModTime().After(newest) {
+			continue
+		}
+		b, err := os.ReadFile(path) //nolint:gosec // a render's own state, under the worker directory
+		var v project.LiveRender
+		if err != nil || json.Unmarshal(b, &v) != nil || v.ID != e.Name() || !v.Complete || len(v.Source) != 64 {
+			continue
+		}
+		last, newest = v, info.ModTime()
+	}
+	return last
 }

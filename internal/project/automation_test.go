@@ -54,17 +54,17 @@ func TestAutomationSwitchIsFencedUntilPreviousAgentStops(t *testing.T) {
 	if t2, _ := s.PollWork(w, "", ""); t2 != nil {
 		t.Fatal("replacement started before acknowledgement")
 	}
-	if e = s.ReportWork(WorkReport{Worker: w.ID, Task: running.ID, Lease: running.Lease, State: "stopped"}); e != nil {
+	if _, e = s.ReportWork(WorkReport{Worker: w.ID, Task: running.ID, Lease: running.Lease, State: "stopped"}, 0); e != nil {
 		t.Fatal(e)
 	}
 	next, e := s.PollWork(w, "", "")
 	if e != nil || next.ID != running.ID || next.Agent != "codex" || next.Lease == running.Lease {
 		t.Fatal(next, e)
 	}
-	if e = s.ReportWork(WorkReport{Worker: w.ID, Task: running.ID, Lease: running.Lease, State: "question", Message: "late response"}); e == nil {
+	if _, e = s.ReportWork(WorkReport{Worker: w.ID, Task: running.ID, Lease: running.Lease, State: "question", Message: "late response"}, 0); e == nil {
 		t.Fatal("stale agent mutated task")
 	}
-	if e = s.ReportWork(WorkReport{Worker: w.ID, Task: next.ID, Lease: next.Lease, State: "question", Message: "Blue or teal?"}); e != nil {
+	if _, e = s.ReportWork(WorkReport{Worker: w.ID, Task: next.ID, Lease: next.Lease, State: "question", Message: "Blue or teal?"}, 0); e != nil {
 		t.Fatal(e)
 	}
 	if e = s.ControlTask(next.ID, "answer", "", "Use teal"); e != nil {
@@ -120,7 +120,7 @@ func TestAutomationCompletionRequiresOwnPlayableResultAndKeepsApprovalSeparate(t
 		t.Fatal(e)
 	}
 	report := WorkReport{Worker: w.ID, Task: j.ID, Lease: j.Lease, State: "completed", Message: "Title is now blue", Result: "render"}
-	if e = s.ReportWork(report); e == nil {
+	if _, e = s.ReportWork(report, 0); e == nil {
 		t.Fatal("completed without render")
 	}
 	e = s.UpdateAutomation(func(a *AutomationState) (bool, error) {
@@ -130,14 +130,14 @@ func TestAutomationCompletionRequiresOwnPlayableResultAndKeepsApprovalSeparate(t
 	if e != nil {
 		t.Fatal(e)
 	}
-	if e = s.ReportWork(report); e == nil {
+	if _, e = s.ReportWork(report, 0); e == nil {
 		t.Fatal("completed with another task's render")
 	}
 	e = s.UpdateAutomation(func(a *AutomationState) (bool, error) { a.Renders[0].Task = j.ID; return false, nil })
 	if e != nil {
 		t.Fatal(e)
 	}
-	if e = s.ReportWork(report); e != nil {
+	if _, e = s.ReportWork(report, 0); e != nil {
 		t.Fatal(e)
 	}
 	n, e := s.Note(1)
@@ -159,7 +159,7 @@ func TestAutomationUsageLimitUsesOnlyConfiguredFallback(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if e = s.ReportWork(WorkReport{Worker: w.ID, Task: j.ID, Lease: j.Lease, State: "paused", Message: "Usage limit reached"}); e != nil {
+	if _, e = s.ReportWork(WorkReport{Worker: w.ID, Task: j.ID, Lease: j.Lease, State: "paused", Message: "Usage limit reached"}, 0); e != nil {
 		t.Fatal(e)
 	}
 	a, _ := s.Automation()
@@ -176,7 +176,7 @@ func TestAutomationUsageLimitUsesOnlyConfiguredFallback(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if e = s.ReportWork(WorkReport{Worker: w.ID, Task: j.ID, Lease: j.Lease, State: "paused", Message: "Usage limit reached"}); e != nil {
+	if _, e = s.ReportWork(WorkReport{Worker: w.ID, Task: j.ID, Lease: j.Lease, State: "paused", Message: "Usage limit reached"}, 0); e != nil {
 		t.Fatal(e)
 	}
 	next, e := s.PollWork(w, "", "")
@@ -211,7 +211,7 @@ func TestOnlyFinalSubmissionQueuesFeedbackAfterProcessing(t *testing.T) {
 	for _, j := range final {
 		after = append(after, j.ID)
 	}
-	if e = s.SubmitReview("v6", take1, after); e != nil {
+	if e = s.SubmitReview("v6", take1, after, false); e != nil {
 		t.Fatal(e)
 	}
 	if e = s.ReadyFeedback(); e != nil {
@@ -257,5 +257,112 @@ func TestWithdrawnFeedbackNeverStartsAndOfflineStateExpiresWithoutWorkerPolling(
 	a, e := s.Automation()
 	if e != nil || a.Tasks[0].State != "cancelled" || a.Tasks[1].State != "paused" {
 		t.Fatal(a, e)
+	}
+}
+
+func TestSendRunsWithAutoSendOffAndFinishedReviewsWaitForSendOrAutoSend(t *testing.T) {
+	s, _, w := automationFixture(t)
+	if e := s.UpdateAutomation(func(a *AutomationState) (bool, error) { a.Config.Enabled = false; return true, nil }); e != nil {
+		t.Fatal(e)
+	}
+	final, e := s.QueueTake("v6", take1, t.TempDir())
+	if e != nil {
+		t.Fatal(e)
+	}
+	var after []int64
+	for _, j := range final {
+		after = append(after, j.ID)
+		if _, e = s.Finish(j.ID, Succeeded, "", "", 1); e != nil {
+			t.Fatal(e)
+		}
+	}
+	// Finished without send while auto-send is off: considered once, nothing queued, and enabling later
+	// doesn't sweep it up.
+	if e = s.SubmitReview("v6", take1, after, false); e != nil {
+		t.Fatal(e)
+	}
+	if e = s.ReadyFeedback(); e != nil {
+		t.Fatal(e)
+	}
+	a, _ := s.Automation()
+	if len(a.Tasks) != 0 || !a.Submissions[0].Done {
+		t.Fatalf("unsent review queued: %+v", a)
+	}
+	if e = s.UpdateAutomation(func(a *AutomationState) (bool, error) { a.Config.Enabled = true; return true, nil }); e != nil {
+		t.Fatal(e)
+	}
+	if e = s.ReadyFeedback(); e != nil {
+		t.Fatal(e)
+	}
+	if a, _ = s.Automation(); len(a.Tasks) != 0 {
+		t.Fatal("turning auto-send on swept up an old review")
+	}
+	if e = s.UpdateAutomation(func(a *AutomationState) (bool, error) { a.Config.Enabled = false; return true, nil }); e != nil {
+		t.Fatal(e)
+	}
+	// Finishing again with send queues it, and the worker runs it although auto-send is off.
+	if e = s.SubmitReview("v6", take1, after, true); e != nil {
+		t.Fatal(e)
+	}
+	if e = s.ReadyFeedback(); e != nil {
+		t.Fatal(e)
+	}
+	if e = s.ReadyFeedback(); e != nil {
+		t.Fatal(e)
+	}
+	if a, _ = s.Automation(); len(a.Tasks) != 2 {
+		t.Fatalf("sent review: %+v", a.Tasks)
+	}
+	j, e := s.PollWork(w, "", "")
+	if e != nil || j == nil {
+		t.Fatal("sent feedback didn't run with auto-send off", j, e)
+	}
+}
+
+func TestDraftLabelsAndPromotion(t *testing.T) {
+	var a AutomationState
+	// An empty project's first render is its first version.
+	first := a.AddRender(LiveRender{ID: "r1"}, 0, 0)
+	if first.Label != "v1" || first.Draft {
+		t.Fatalf("first render: %+v", first)
+	}
+	// With versions on disk (v1..v3), renders are drafts of v4.
+	a = AutomationState{}
+	plain := a.AddRender(LiveRender{ID: "r1"}, 3, 3)
+	d2 := a.AddRender(LiveRender{ID: "r2", Task: "t", Complete: true}, 3, 3)
+	d3 := a.AddRender(LiveRender{ID: "r3", Task: "t"}, 3, 3)
+	if plain.Label != "v4-draft1" || d2.Label != "v4-draft2" || d3.Label != "v4-draft3" || !d3.Draft || d3.N != 4 {
+		t.Fatalf("drafts: %q %q %q", plain.Label, d2.Label, d3.Label)
+	}
+	listed := func() []string {
+		var out []string
+		for i := range a.Renders {
+			if a.Listed(i, 3) {
+				out = append(out, a.Renders[i].Label)
+			}
+		}
+		return out
+	}
+	if got := strings.Join(listed(), " "); got != "v4-draft2 v4-draft3" {
+		t.Fatalf("listed while working: %s", got)
+	}
+	a.promote(a.Render("r2"), 3)
+	if v := a.Render("v4-draft2"); v == nil || v.Label != "v4" || v.Alias != "v4-draft2" || v.Draft || v.N != 4 {
+		t.Fatalf("promoted: %+v", v)
+	}
+	if got := strings.Join(listed(), " "); got != "v4" {
+		t.Fatalf("listed after completion: %s", got)
+	}
+	if next := a.AddRender(LiveRender{ID: "r4", Task: "u"}, 3, 3); next.Label != "v5-draft1" {
+		t.Fatalf("next draft: %q", next.Label)
+	}
+	// A version on disk numbered past the drafts (a push) hides them too.
+	if got := len(listed()); got != 2 {
+		t.Fatalf("listed: %v", listed())
+	}
+	for i := range a.Renders {
+		if a.Renders[i].Draft && a.Listed(i, 9) {
+			t.Fatalf("draft %s listed behind v9", a.Renders[i].Label)
+		}
 	}
 }

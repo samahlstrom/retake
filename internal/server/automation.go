@@ -3,7 +3,6 @@ package server
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -11,6 +10,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/samahlstrom/retake/internal/bridge"
 	"github.com/samahlstrom/retake/internal/family"
@@ -18,6 +18,7 @@ import (
 	"github.com/samahlstrom/retake/internal/project"
 	"github.com/samahlstrom/retake/internal/relay"
 	"github.com/samahlstrom/retake/internal/store"
+	"github.com/samahlstrom/retake/internal/team"
 )
 
 func (s *Server) automationRoute(w http.ResponseWriter, r *http.Request, p []string) {
@@ -49,7 +50,11 @@ func (s *Server) automationRoute(w http.ResponseWriter, r *http.Request, p []str
 			return
 		}
 		redactAutomation(&a)
-		s.json(w, r, 200, a)
+		view := automationView{AutomationState: a, Local: s.opts.LocalWorker != nil}
+		if view.Local {
+			view.Blocked = s.inproc.reason()
+		}
+		s.json(w, r, 200, view)
 		return
 	}
 	if r.Method != http.MethodPost {
@@ -75,17 +80,8 @@ func (s *Server) automationRoute(w http.ResponseWriter, r *http.Request, p []str
 			if a.Config.Worker != b.Worker && slices.ContainsFunc(a.Tasks, func(t project.EditingTask) bool { return t.State == "running" || t.State == "stopping" }) {
 				return false, errors.New("pause the active task before changing machines")
 			}
+			// Enabled only decides whether finished reviews go out by themselves: turning it off stops nothing.
 			a.Config = b.AutomationConfig
-			if !b.Enabled {
-				for i := range a.Tasks {
-					t := &a.Tasks[i]
-					if t.State == "running" {
-						t.State = "stopping"
-						t.Stop = true
-						t.NextAgent = ""
-					}
-				}
-			}
 			return true, nil
 		})
 	case is(p, "api", "automation", "tasks"):
@@ -102,6 +98,13 @@ func (s *Server) automationRoute(w http.ResponseWriter, r *http.Request, p []str
 		return
 	}
 	s.json(w, r, 200, map[string]bool{"ok": true})
+}
+
+// automationView is GET /api/automation: the state, and in Local mode whether its in-process worker can run.
+type automationView struct {
+	project.AutomationState
+	Local   bool   `json:"local"`
+	Blocked string `json:"blocked,omitempty"`
 }
 
 func redactAutomation(a *project.AutomationState) {
@@ -171,7 +174,14 @@ func (s *Server) workerRoute(w http.ResponseWriter, r *http.Request, p []string,
 			s.storeFailed(w, r, err)
 			return
 		}
-		s.json(w, r, 200, project.WorkAssignment{Task: t, Notes: notes, Config: state.Config})
+		disk, _ := s.diskVersions(&state)
+		versions := disk
+		for _, v := range state.Renders {
+			if !v.Draft {
+				versions++
+			}
+		}
+		s.json(w, r, 200, project.WorkAssignment{Task: t, Notes: notes, Config: state.Config, Versions: versions})
 		return
 	}
 	// Every request after registration belongs to the live worker session. A token alone cannot impersonate
@@ -247,7 +257,20 @@ func (s *Server) workerRoute(w http.ResponseWriter, r *http.Request, p []string,
 			s.fail(w, r, 400, "invalid report")
 			return
 		}
-		err = st.ReportWork(b)
+		_, floor := s.diskVersions(&a)
+		var v project.LiveRender
+		if v, err = st.ReportWork(b, floor); err == nil && v.ID != "" {
+			// The task's final draft is a version now: the family gains its label.
+			s.Rescan()
+			if v.Manifest != nil {
+				if e := s.writeRemoteManifest(v.Label, v.Manifest); e != nil {
+					s.storeFailed(w, r, e)
+					return
+				}
+			}
+			stream := remoteStream(v)
+			err = st.EmitVersion(project.VersionEvent{Label: v.Label, Why: "push", Stream: &stream})
+		}
 	case is(p, "api", "worker", "render") && r.Method == http.MethodPost:
 		var b struct {
 			project.LiveRender
@@ -273,22 +296,15 @@ func (s *Server) workerRoute(w http.ResponseWriter, r *http.Request, p []string,
 			}
 			old := a.Render(b.ID)
 			if old != nil {
-				if old.Worker != id || old.Source != b.Source || old.Task != b.Task {
+				if old.ID != b.ID || old.Worker != id || old.Source != b.Source || old.Task != b.Task {
 					return false, errors.New("immutable render identity changed")
 				}
-				b.Label, b.N = old.Label, old.N
+				b.Label, b.N, b.Draft, b.Alias = old.Label, old.N, old.Draft, old.Alias
 				*old = b.LiveRender
 			} else {
-				n := 0
-				for _, v := range s.Family() {
-					n = max(n, v.N)
-				}
-				for _, v := range a.Renders {
-					n = max(n, v.N)
-				}
-				b.N = n + 1
-				b.Label = fmt.Sprintf("v%d", b.N)
-				a.Renders = append(a.Renders, b.LiveRender)
+				// Only a task's completion or an empty project's first render makes a version; the rest are drafts.
+				disk, floor := s.diskVersions(a)
+				b.LiveRender = a.AddRender(b.LiveRender, disk, floor)
 				fresh = true
 			}
 			return fresh, nil
@@ -296,15 +312,7 @@ func (s *Server) workerRoute(w http.ResponseWriter, r *http.Request, p []string,
 		if err == nil {
 			s.Rescan()
 			if b.Manifest != nil {
-				v, _ := s.version(b.Label)
-				raw, e := json.Marshal(b.Manifest)
-				if e == nil {
-					e = os.MkdirAll(filepath.Dir(v.Path), 0o700)
-				}
-				if e == nil {
-					e = store.WriteJSON(bridge.ManifestPath(v.Path), raw)
-				}
-				if e != nil {
+				if e := s.writeRemoteManifest(b.Label, b.Manifest); e != nil {
 					s.storeFailed(w, r, e)
 					return
 				}
@@ -402,14 +410,133 @@ func (s *Server) remoteFamily(f []family.Version) []family.Version {
 	if e != nil {
 		return f
 	}
-	for _, v := range a.Renders {
-		stream := remoteStream(v)
-		duration := jsonx.Float(v.Duration)
-		w, h := v.Width, v.Height
-		f = append(f, family.Version{Label: v.Label, N: v.N, Name: "index.m3u8", Path: filepath.Join(s.root, ".retake", "remote", v.Label, "index.m3u8"), FPS: jsonx.Float(v.FPS), Duration: &duration, Width: &w, Height: &h, Stream: &stream})
+	floor := 0
+	for _, v := range f {
+		floor = max(floor, v.N)
+	}
+	for i, v := range a.Renders {
+		if a.Listed(i, floor) {
+			f = append(f, s.remoteVersion(v))
+		}
 	}
 	slices.SortStableFunc(f, func(a, b family.Version) int { return a.N - b.N })
 	return f
+}
+
+// remoteVersion is a relayed render as a version of the family.
+func (s *Server) remoteVersion(v project.LiveRender) family.Version {
+	stream := remoteStream(v)
+	duration := jsonx.Float(v.Duration)
+	w, h := v.Width, v.Height
+	return family.Version{Label: v.Label, N: v.N, Name: "index.m3u8", Path: s.remotePath(v.Label), FPS: jsonx.Float(v.FPS),
+		Duration: &duration, Width: &w, Height: &h, Stream: &stream}
+}
+
+// remotePath is where a relayed version's takes and manifest live on the host.
+func (s *Server) remotePath(label string) string {
+	return filepath.Join(s.root, ".retake", "remote", label, "index.m3u8")
+}
+
+// unlistedRender finds a relayed render the family doesn't list (an older draft, or a promoted draft's old label).
+func (s *Server) unlistedRender(label string) (family.Version, bool) {
+	if label == "" {
+		return family.Version{}, false
+	}
+	v, ok := s.remoteRender(label)
+	if !ok {
+		return family.Version{}, false
+	}
+	return s.remoteVersion(v), true
+}
+
+func (s *Server) writeRemoteManifest(label string, m *bridge.Manifest) error {
+	raw, err := json.Marshal(m)
+	if err != nil {
+		return err
+	}
+	path := s.remotePath(label)
+	if err = os.MkdirAll(filepath.Dir(path), 0o700); err != nil { //nolint:gosec // label is one the server made (v<N>, v<N>-draft<K>)
+		return err
+	}
+	return store.WriteJSON(bridge.ManifestPath(path), raw)
+}
+
+// diskVersions counts the family's versions that aren't relayed renders, and their highest number.
+func (s *Server) diskVersions(a *project.AutomationState) (count, floor int) {
+	for _, v := range s.Family() {
+		if a.Render(v.Label) == nil {
+			count++
+			floor = max(floor, v.N)
+		}
+	}
+	return count, floor
+}
+
+// localWorker is the state of Options.LocalWorker: why it can't run, and when it has stopped.
+type localWorker struct {
+	mu      sync.Mutex
+	blocked string
+	done    chan struct{} // closed when it returns; nil without one
+}
+
+func (l *localWorker) setReason(why string) {
+	l.mu.Lock()
+	l.blocked = why
+	l.mu.Unlock()
+}
+
+func (l *localWorker) reason() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.blocked
+}
+
+func (l *localWorker) wait() {
+	if l.done != nil {
+		<-l.done
+	}
+}
+
+// startLocalWorker starts Options.LocalWorker, once, for the life of the server.
+func (s *Server) startLocalWorker() {
+	if s.opts.LocalWorker == nil {
+		return
+	}
+	s.inproc.done = make(chan struct{})
+	go func() {
+		defer close(s.inproc.done)
+		s.opts.LocalWorker(s.ctx, s.root, s.WorkerHandler(), s.inproc.setReason)
+	}()
+}
+
+// WorkerHandler serves the project's /api/worker/* routes to an editing worker inside this process (Local mode), as
+// the agent role. Nothing outside the process can reach it, so there are no Host, origin or token checks.
+func (s *Server) WorkerHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		parts := splitPath(r.URL.Path)
+		if len(parts) < 3 || parts[0] != "api" || parts[1] != "worker" {
+			s.fail(w, r, http.StatusNotFound, "not found")
+			return
+		}
+		s.route(w, withAccess(r, access{role: team.Agent}), parts)
+	})
+}
+
+// Busy reports whether this process's own worker has an agent at work, which keeps an idle server from exiting.
+func (s *Server) Busy() bool {
+	if s.opts.LocalWorker == nil {
+		return false
+	}
+	s.projMu.Lock()
+	st := s.proj // a worker at work has opened it; checking doesn't open it
+	s.projMu.Unlock()
+	if st == nil {
+		return false
+	}
+	a, err := st.Automation()
+	return err == nil && slices.ContainsFunc(a.Tasks, func(t project.EditingTask) bool {
+		return t.State == "running" || t.State == "stopping"
+	})
 }
 
 func (s *Server) remoteMedia(w http.ResponseWriter, r *http.Request, label, name string) bool {

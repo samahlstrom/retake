@@ -16,7 +16,7 @@ func lockProject(path string) (func(), error) {
 	}
 	if e = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); e != nil {
 		_ = f.Close()
-		return nil, fmt.Errorf("a worker already owns this project: %w", e)
+		return nil, fmt.Errorf("%w: %w", ErrBusy, e)
 	}
 	return func() { _ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN); _ = f.Close() }, nil
 }

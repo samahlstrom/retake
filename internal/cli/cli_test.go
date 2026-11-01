@@ -19,6 +19,7 @@ import (
 
 	"github.com/samahlstrom/retake/internal/probe"
 	"github.com/samahlstrom/retake/internal/store"
+	"github.com/samahlstrom/retake/internal/worker"
 )
 
 // Ports reserved for these tests (the repo's test port range is 8811-8819).
@@ -103,6 +104,7 @@ func (w *world) environment(ready func(string)) Env {
 			return nil
 		},
 		PortTries: 3, Ready: ready, Prober: fakeProber{}, CheckEvery: 2 * time.Millisecond,
+		Agents: func() []worker.Profile { return nil }, // never a real agent from PATH
 	}
 }
 
