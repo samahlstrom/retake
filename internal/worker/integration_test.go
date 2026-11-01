@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"image/png"
 	"io"
 	"net"
 	"net/http"
@@ -330,5 +331,121 @@ func TestPlainProjectRelaysItsVersionsAndPushesTheAgentsVideo(t *testing.T) {
 	}
 	if fv := a.FileVersion("v3"); fv == nil || fv.Duration < 1.9 || fv.Duration > 2.1 {
 		t.Fatalf("v3: %+v", fv)
+	}
+}
+
+// A note whose saved still the server can't give (its project was moved, say) never pauses the task: the worker makes
+// its own from the version on this computer, at the note's moment, with the note's pen lines drawn on it, and says so
+// in the note's context. A note without a still to make is said too, and the task still runs.
+func TestMissingStillNeverStopsTheAgent(t *testing.T) {
+	testmedia.Need(t)
+	scratch, e := filepath.Abs("../../.retake-work")
+	if e != nil {
+		t.Fatal(e)
+	}
+	if e = os.MkdirAll(scratch, 0o700); e != nil {
+		t.Fatal(e)
+	}
+	base, e := os.MkdirTemp(scratch, "still-worker-test-")
+	if e != nil {
+		t.Fatal(e)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(base) })
+	local, hosted := filepath.Join(base, "local"), filepath.Join(base, "hosted")
+	testmedia.Video(t, filepath.Join(local, "clip_v1.mp4"), 3)
+	st, e := project.Open(hosted)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer func() { _ = st.Close() }()
+	token, hash, e := team.NewToken()
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, e = st.CreateToken(project.NewToken{Hash: hash, Role: "agent"}); e != nil {
+		t.Fatal(e)
+	}
+	ts := httptest.NewUnstartedServer(nil)
+	srv := server.New(server.Options{Root: hosted, Store: st, Port: ts.Listener.Addr().(*net.TCPAddr).Port, FollowNewest: true})
+	ts.Config.Handler = srv
+	ts.Start()
+	defer ts.Close()
+	defer func() { _ = srv.Close() }()
+	bin, e := os.Executable()
+	if e != nil {
+		t.Fatal(e)
+	}
+	profiles := []Profile{{AgentProfile: project.AgentProfile{ID: "still", Name: "Still"}, Command: []string{bin, "-test.run=^TestAgentProcess$", "--", "plain-still"}}}
+	ctx, cancel := context.WithCancel(context.Background())
+	finished := make(chan error, 1)
+	go func() {
+		finished <- Run(ctx, Options{URL: ts.URL, Token: token, Root: local, Name: "Test machine", Profiles: profiles,
+			Editor: bridge.Editor{Configured: filepath.Join(base, "no-retake-edit")}})
+	}()
+	defer func() {
+		cancel()
+		select {
+		case err := <-finished:
+			if err != nil {
+				t.Error(err)
+			}
+		case <-time.After(10 * time.Second):
+			t.Error("worker did not stop")
+		}
+	}()
+	wait := func(label string, test func(project.AutomationState) bool) project.AutomationState {
+		t.Helper()
+		deadline := time.Now().Add(45 * time.Second)
+		for time.Now().Before(deadline) {
+			a, err := st.Automation()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if test(a) {
+				return a
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		a, _ := st.Automation()
+		b, _ := json.Marshal(a)
+		t.Fatalf("waiting for %s: %s", label, b)
+		return project.AutomationState{}
+	}
+	wait("the version file", func(a project.AutomationState) bool { return len(a.ListedFiles()) == 1 })
+
+	// Its still was saved where the project used to be: the server won't read outside the project.
+	gone := filepath.Join(base, "old-place", "v1", "clip_v1.review", "snaps", "01_00-01-0.png")
+	line := project.Stroke{Shape: "line", Color: "green", Box: [4]float64{0.1, 0.5, 0.8, 0}, Points: [][2]float64{{0.1, 0.5}, {0.9, 0.5}}, T: 1.5}
+	if _, e = st.Sync(project.Run{Version: "v1", Comments: []project.Comment{
+		{Key: "drawn", Text: "Cut where I drew", T0: 1, T1: 2, Detail: project.Detail{Snapshot: gone, Strokes: []project.Stroke{line}}},
+		{Key: "words", Text: "And tighten the end", T0: 2, T1: 3},
+	}}); e != nil {
+		t.Fatal(e)
+	}
+	if e = st.UpdateAutomation(func(a *project.AutomationState) (bool, error) { a.Config.Agent = "still"; return true, nil }); e != nil {
+		t.Fatal(e)
+	}
+	if _, e = st.QueueFeedback([]int64{1, 2}, ""); e != nil {
+		t.Fatal(e)
+	}
+	a := wait("the task", func(a project.AutomationState) bool {
+		return len(a.Tasks) == 1 && (a.Tasks[0].State == "completed" || a.Tasks[0].State == "paused")
+	})
+	if a.Tasks[0].State != "completed" || a.Tasks[0].Result != "v2" {
+		t.Fatalf("task %+v", a.Tasks[0])
+	}
+	f, e := os.Open(filepath.Join(local, "seen-still.png"))
+	if e != nil {
+		t.Fatal("the agent had no still:", e)
+	}
+	defer func() { _ = f.Close() }()
+	img, e := png.Decode(f)
+	if e != nil {
+		t.Fatal(e)
+	}
+	b := img.Bounds()
+	r, g, bl, _ := img.At(b.Min.X+b.Dx()/2, b.Min.Y+b.Dy()/2).RGBA()
+	if b.Dx() < 64 || r>>8 != 48 || g>>8 != 209 || bl>>8 != 88 {
+		t.Fatalf("the still is %v and its middle %d,%d,%d, not the green line", b, r>>8, g>>8, bl>>8)
 	}
 }

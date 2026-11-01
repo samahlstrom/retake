@@ -334,6 +334,11 @@ type Still func(ctx context.Context, path string, t float64) ([]byte, error)
 
 // FFmpegStill is the default Still: one frame with ffmpeg, within 15 s.
 func FFmpegStill(ctx context.Context, path string, t float64) ([]byte, error) {
+	return ffmpegFrame(ctx, path, t, 480, project.MaxFrame)
+}
+
+// ffmpegFrame is the frame of the video at path at t seconds as a JPEG, at most width pixels wide and limit bytes.
+func ffmpegFrame(ctx context.Context, path string, t float64, width, limit int) ([]byte, error) {
 	bin, err := exec.LookPath("ffmpeg")
 	if err != nil {
 		return nil, err
@@ -341,13 +346,13 @@ func FFmpegStill(ctx context.Context, path string, t float64) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, bin, "-nostdin", "-v", "error", "-threads", "2", "-ss", strconv.FormatFloat(t, 'f', 3, 64), //nolint:gosec // ffmpeg with a path of this project
-		"-i", path, "-frames:v", "1", "-vf", "scale='min(480,iw)':-2", "-q:v", "4", "-f", "image2", "-c:v", "mjpeg", "pipe:1")
+		"-i", path, "-frames:v", "1", "-vf", "scale='min("+strconv.Itoa(width)+",iw)':-2", "-q:v", "4", "-f", "image2", "-c:v", "mjpeg", "pipe:1")
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	if err = cmd.Run(); err != nil {
 		return nil, err
 	}
-	if out.Len() == 0 || out.Len() > project.MaxFrame {
+	if out.Len() == 0 || out.Len() > limit {
 		return nil, errors.New("no frame")
 	}
 	return out.Bytes(), nil

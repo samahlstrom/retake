@@ -8,14 +8,6 @@ import (
 // minStroke: strokes smaller than this fraction of the frame diagonal are noise (2-3 px ticks).
 const minStroke = 0.01
 
-// colors are the pen colors; any other color is drawn and named as red.
-var colors = map[string][3]uint8{
-	"red":    {255, 59, 48},
-	"yellow": {255, 214, 10},
-	"green":  {48, 209, 88},
-	"white":  {255, 255, 255},
-}
-
 // Geometry is what the shape classifier finds out about one stroke. Coordinates are normalized 0-1 to the frame.
 type Geometry struct {
 	BBox  [4]float64 // x0, y0, x1, y1

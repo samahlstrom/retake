@@ -108,6 +108,20 @@ An agent runs unattended, so the built-in profiles never stop for a permission p
   question tools. When unsure about a note, ask with `retake ask` ("Questions from inside a task") and carry on with
   the rest of the task.
 
+## A note's stills and images
+
+- Before an attempt starts, the worker saves each assigned note's still as `note-<id>.png` and its attached images as
+  `note-<id>-<file>` in the task folder, from `/api/worker/notes/<id>/snapshot` and `…/images/<file>`.
+- Nothing about them stops the task. When the server has no still to give (the note has strokes but no snapshot, or
+  the snapshot is missing or outside the project), the worker makes one: the frame of the note's version on this
+  computer at the note's moment (the middle one of its strokes' times, else its `t0`), at most 1280 px wide, with the
+  note's strokes drawn and numbered as the notes engine draws them (a stroke stored without its points is the outline
+  of its box: an ellipse for a circle, else a rectangle).
+- Each note in the context may carry `missing`: plain sentences saying which of its files the agent didn't get and
+  what it has instead ("Its saved still couldn't be fetched (host returned 404): note-3.png is a still this computer
+  made of v6 at 20.10 s, with the note's pen lines drawn on it."). A still that can't be made either, or an image
+  that can't be fetched, is said there and left out; the task runs on.
+
 ## Questions from inside a task: `retake ask`
 
 An agent that is unsure about a note asks about a moment of the video, and keeps working. It can draw to make the
@@ -443,6 +457,7 @@ closing the pane, and two projects' tasks running at the same time. For `retake 
 CLI's parsing and validation of visuals, their persistence and the hosted relay of their images, a fake agent that
 asks mid-task and then completes (Local mode and hosted), a wrong or stale secret refused, an answer reaching a herdr
 and a tmux session (fake binaries) and a background attempt's context, a task ending with some notes Done and some
-Question, the agent's visuals drawn in their own style (a web unit test), and an e2e test where an agent's question
+Question, a note whose still the server can't give (a fake agent that gets the worker's own still, its pen line on it),
+an attached image that can't be fetched, the agent's visuals drawn in their own style (a web unit test), and an e2e test where an agent's question
 with a box, an arrow and two image choices is answered with one tap. Provider adapters are tested with deterministic executables; live paid-provider execution is reported
 separately if it is not exercised.
