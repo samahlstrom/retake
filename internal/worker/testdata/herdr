@@ -1,0 +1,106 @@
+#!/bin/sh
+# A stand-in for herdr in tests. It logs its argv (fields end with \037, one call per line) to $FAKE_HERDR_DIR/argv.log
+# and keeps workspaces, panes and agents as files there. "agent prompt" runs $FAKE_AGENT with the line, in the pane's
+# folder and environment, the way an interactive agent gets a message. It never talks to a herdr server and never
+# starts claude or codex. $FAKE_HERDR_DIR/not-ready makes the next "agent start" stop at a startup question.
+set -u
+D=$FAKE_HERDR_DIR
+until mkdir "$D/lock" 2>/dev/null; do sleep 0.01; done
+trap 'rmdir "$D/lock"' EXIT
+printf '%s\037' "$@" >>"$D/argv.log"
+printf '\n' >>"$D/argv.log"
+fail() {
+	printf '{"id":"cli","error":{"code":"%s","message":"%s"}}\n' "$1" "$2" >&2
+	exit 1
+}
+next() {
+	n=$(($(cat "$D/next" 2>/dev/null || echo 0) + 1))
+	echo "$n" >"$D/next"
+	echo "$n"
+}
+case "$1 ${2:-}" in
+"workspace get")
+	[ -f "$D/ws-$3" ] || fail workspace_not_found "workspace $3 not found"
+	echo '{"id":"cli","result":{"type":"workspace_info"}}'
+	;;
+"pane get")
+	[ -f "$D/pane-$3" ] || fail pane_not_found "pane $3 not found"
+	echo '{"id":"cli","result":{"type":"pane_info"}}'
+	;;
+"workspace create" | "tab create")
+	shift 2
+	ws="" cwd=""
+	: >"$D/env.new"
+	while [ $# -gt 0 ]; do
+		case "$1" in
+		--workspace) ws=$2 && shift 2 ;;
+		--cwd) cwd=$2 && shift 2 ;;
+		--label) shift 2 ;;
+		--env) printf '%s\n' "$2" >>"$D/env.new" && shift 2 ;;
+		*) shift ;;
+		esac
+	done
+	if [ -z "$ws" ]; then
+		ws="w$(next)"
+		: >"$D/ws-$ws"
+	fi
+	n=$(next)
+	pane="$ws:p$n"
+	printf '%s\n' "$cwd" >"$D/pane-$pane"
+	mv "$D/env.new" "$D/env-$pane"
+	printf '{"id":"cli","result":{"type":"created","workspace":{"workspace_id":"%s"},"tab":{"tab_id":"%s:t%s"},"root_pane":{"pane_id":"%s","workspace_id":"%s"}}}\n' \
+		"$ws" "$ws" "$n" "$pane" "$ws"
+	;;
+"agent start")
+	name=$3
+	shift 3
+	pane=""
+	while [ $# -gt 0 ]; do
+		case "$1" in
+		--pane) pane=$2 && shift 2 ;;
+		--kind | --timeout) shift 2 ;;
+		*) shift ;;
+		esac
+	done
+	[ -f "$D/pane-$pane" ] || fail pane_not_found "pane $pane not found"
+	printf '%s' "$pane" >"$D/agent-$name"
+	if [ -f "$D/not-ready" ]; then
+		rm -f "$D/not-ready"
+		fail agent_not_ready "agent $name is blocked during startup"
+	fi
+	printf '{"id":"cli","result":{"type":"agent_started","agent":{"pane_id":"%s"},"argv":[]}}\n' "$pane"
+	;;
+"agent wait")
+	echo '{"id":"cli","result":{"type":"agent_info"}}'
+	;;
+"agent get")
+	[ -f "$D/agent-$3" ] || fail agent_not_found "agent $3 not found"
+	printf '{"id":"cli","result":{"type":"agent_info","agent":{"pane_id":"%s"}}}\n' "$(cat "$D/agent-$3")"
+	;;
+"agent prompt")
+	[ -f "$D/agent-$3" ] || fail agent_not_found "agent $3 not found"
+	pane=$(cat "$D/agent-$3")
+	(
+		cd "$(head -n 1 "$D/pane-$pane")" || exit 1
+		while IFS= read -r kv; do export "${kv?}"; done <"$D/env-$pane"
+		FAKE_AGENT_NAME=$3 exec "$FAKE_AGENT" "$4"
+	) </dev/null >/dev/null 2>&1 &
+	echo "$!" >>"$D/pids-$pane"
+	echo '{"id":"cli","result":{"type":"agent_prompted"}}'
+	;;
+"pane close")
+	[ -f "$D/pane-$3" ] || fail pane_not_found "pane $3 not found"
+	if [ -f "$D/pids-$3" ]; then
+		# shellcheck disable=SC2046 # one pid per word
+		kill $(cat "$D/pids-$3") 2>/dev/null
+	fi
+	rm -f "$D/pane-$3" "$D/pids-$3" "$D/env-$3"
+	for a in "$D"/agent-*; do
+		[ -f "$a" ] && [ "$(cat "$a")" = "$3" ] && rm -f "$a"
+	done
+	echo '{"id":"cli","result":{"type":"ok"}}'
+	;;
+*)
+	fail unknown "fake herdr can't $*"
+	;;
+esac
