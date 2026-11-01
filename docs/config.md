@@ -16,6 +16,9 @@ model = "large-v3"
 device = "auto"
 command = ""
 whisper_cli = ""
+
+[render]
+encoder = "auto"
 ```
 
 ## Top-level keys
@@ -62,6 +65,14 @@ command = "python3 /path/to/faster-whisper-words.py {audio}"
 
 A segment is transcribed again only when its file, the engine's name or the prompt changed.
 `retake transcribe <take folder | audio file>` runs the transcriber by hand, for debugging.
+
+## [render]
+
+How `retake-edit` renders timeline projects on this machine (it gets the value as `RETAKE_ENCODER`).
+
+| Key | Default | Meaning |
+|---|---|---|
+| `encoder` | `"auto"` | The H.264 encoder. `auto` uses NVENC on an NVIDIA GPU, VideoToolbox on a Mac, else x264, after a quick test encode (remembered for a day). `x264` is the CPU encoder, the same everywhere. `nvenc`, `videotoolbox`, `qsv` (Intel) and `vaapi` (Linux, `/dev/dri/renderD128`) ask for one, and the render fails if it doesn't work here. Changing it re-renders each shot once. |
 
 ## [[agents]]
 
@@ -128,7 +139,7 @@ only by you. `retake push --remote` remembers unfinished uploads in `$XDG_STATE_
 |---|---|---|
 | `XDG_CONFIG_HOME` | retake | Where `retake/config.toml` is. |
 | `XDG_DATA_HOME` | retake | Where `scripts/install-whisper.sh` installs whisper.cpp, and where retake looks for it. |
-| `XDG_CACHE_HOME` | retake | Where whisper models are downloaded (`retake/models`). |
+| `XDG_CACHE_HOME` | retake, retake-edit | Where whisper models are downloaded (`retake/models`), and where retake-edit keeps `retake/ffmpeg-caps.json`. |
 | `RETAKE_WHISPER_THREADS` | retake | whisper.cpp's CPU threads. |
 | `RETAKE_DATA`, `RETAKE_LISTEN`, `RETAKE_PUBLIC_URL`, `RETAKE_TRUSTED_PROXIES`, `RETAKE_DATABASE_URL`, `RETAKE_S3_*`, `RETAKE_SMTP_URL`, `RETAKE_SMTP_FROM`, `RETAKE_RELAY_CACHE` | retake serve, user, project | The team server's settings ([server] above). |
 | `RETAKE_TOKEN` | retake remote add | The agent token, when `--token` isn't given. |
@@ -138,6 +149,10 @@ only by you. `retake push --remote` remembers unfinished uploads in `$XDG_STATE_
 | `RETAKE_VIDEO`, `RETAKE_PROJECT`, `RETAKE_SINCE` | your `retake watch` command | Set by retake for the command it runs ([agents.md](agents.md#retake-watch)). |
 | `RETAKE_DIR` | retake-edit | Where the render cache and renders go, instead of `.retake/` next to the timeline. |
 | `RETAKE_FFMPEG`, `RETAKE_FFPROBE` | retake-edit | The ffmpeg and ffprobe binaries, instead of the ones on `PATH`. |
+| `RETAKE_ENCODER` | retake-edit | The encoder when `--encoder` isn't given (`[render] encoder` sets it for the renders Retake runs). |
+| `RETAKE_CONVERT` | retake-edit | `swscale` converts footage with ffmpeg's scaler instead of zimg (`zscale`). |
+| `RETAKE_HW_SESSIONS` | retake-edit | Hardware encode sessions one render holds at once (default 4). |
+| `RETAKE_VAAPI_DEVICE` | retake-edit | The VAAPI device for `encoder = "vaapi"` (default `/dev/dri/renderD128`). |
 
 ## Files retake writes
 
@@ -148,6 +163,7 @@ only by you. `retake push --remote` remembers unfinished uploads in `$XDG_STATE_
 | `<project>/.retake/project.db` | The project store: notes, questions, versions, jobs (SQLite). The project is the folder above the `v<N>` folders, or the video's own folder. |
 | `<project>/.retake/worker/` | The editing worker's files: its identity and lock, each task's prompt, context, log and report (`tasks/`), the herdr or tmux session it uses (`view.json`), and each render's snapshot and video (`renders/`). Keep `renders/` for older versions to stay playable. |
 | `<timeline folder>/.retake/` | retake-edit's render cache and renders. |
+| `$XDG_CACHE_HOME/retake/ffmpeg-caps.json` | retake-edit: what the ffmpeg in use can do here (zimg, which encoder `auto` picks), probed once a day per ffmpeg build. Safe to delete. On macOS `~/Library/Caches/retake/`, on Windows `%LOCALAPPDATA%\retake\`. |
 | `<data>/server.db`, `<data>/projects/<name>/`, `<data>/uploads/` | `retake serve`: the server store (SQLite), each project's workspace (a retake project folder), and uploads in progress. |
 
 Retake never changes or deletes your videos. `retake push` copies the new file into the family, or moves it with

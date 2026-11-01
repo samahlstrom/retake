@@ -131,11 +131,16 @@ func openProject(env Env, cmd, video string) (*agent.Project, int) {
 	return p, ExitOK
 }
 
-// editorOf says where retake-edit is: [edit] retake_edit, else $RETAKE_EDIT, $PATH, editor/target/release.
+// editorOf says where retake-edit is ([edit] retake_edit, else $RETAKE_EDIT, $PATH, editor/target/release), and how
+// it renders here: [render] encoder becomes its RETAKE_ENCODER.
 func editorOf(env Env) bridge.Editor {
 	e := bridge.Editor{Getenv: env.Getenv}
-	if c := loadConfig(env); c.Edit.RetakeEdit != nil {
+	c := loadConfig(env)
+	if c.Edit.RetakeEdit != nil {
 		e.Configured = absPath(*c.Edit.RetakeEdit, env.Getenv)
+	}
+	if c.Render.Encoder != nil {
+		e.Env = append(e.Env, "RETAKE_ENCODER="+*c.Render.Encoder)
 	}
 	return e
 }

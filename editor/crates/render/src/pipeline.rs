@@ -88,6 +88,9 @@ pub struct PlanReport {
     pub audio_cached: bool,
     /// Rough seconds to render the misses, from measured throughput on this machine.
     pub estimate_s: f64,
+    /// The encoder units are (or would be) encoded with, and how footage is converted to RGB.
+    pub encoder: String,
+    pub convert: String,
 }
 
 pub(crate) fn unit_name(p: &UnitPlan) -> String {
@@ -163,6 +166,8 @@ pub fn plan(e: &Engine) -> Result<(Vec<UnitPlan>, PlanReport)> {
         layers_to_render: layer_keys.len(),
         audio_cached,
         estimate_s,
+        encoder: e.encode.encoder.name().into(),
+        convert: e.convert.name().into(),
     };
     Ok((plans, report))
 }
@@ -185,6 +190,9 @@ pub struct RenderReport {
     pub audio_reused: bool,
     pub frames: i64,
     pub duration: f64,
+    /// The encoder the units were encoded with, and how footage was converted to RGB.
+    pub encoder: String,
+    pub convert: String,
     /// Seconds per phase.
     pub timings: BTreeMap<String, f64>,
     /// A streamed render's playlist (spec/bridge.md, "Streaming").
@@ -365,6 +373,8 @@ pub fn render(e: &Engine, out: Option<&Path>) -> Result<RenderReport> {
         audio_reused: au.reused,
         frames: plans.iter().map(|p| p.span.frames()).sum(),
         duration: round6(plans.iter().map(|p| p.span.frames()).sum::<i64>() as f64 / e.fps() as f64),
+        encoder: e.encode.encoder.name().into(),
+        convert: e.convert.name().into(),
         timings,
         stream: None,
         manifest,

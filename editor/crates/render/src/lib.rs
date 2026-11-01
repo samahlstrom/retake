@@ -3,6 +3,7 @@
 
 pub mod audio;
 pub mod backend;
+pub mod caps;
 pub mod composite;
 pub mod dsp;
 pub mod engine;

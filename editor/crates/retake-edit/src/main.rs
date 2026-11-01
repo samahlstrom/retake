@@ -5,6 +5,7 @@ mod synth;
 
 use anyhow::{Context, Result, anyhow};
 use clap::{Args, Parser, Subcommand};
+use retake_render::ffmpeg::{EncoderChoice, EncoderKind};
 use retake_render::{Engine, Options, pipeline};
 use retake_timeline::manifest::{Manifest, resolve_note};
 use retake_timeline::patch::{self, read_log};
@@ -49,19 +50,40 @@ struct RenderArgs {
     /// media, components, lockfile and cache resolve from the timeline's folder.
     #[arg(long)]
     doc: Option<PathBuf>,
+    /// The H.264 encoder: auto (NVENC on NVIDIA, VideoToolbox on macOS, else x264, after a test encode cached per
+    /// machine), x264, nvenc, videotoolbox, qsv or vaapi. Default: `$RETAKE_ENCODER`, else auto.
+    #[arg(long)]
+    encoder: Option<String>,
 }
 
 impl RenderArgs {
-    fn options(&self) -> Options {
-        Options { draft: self.draft, scale: self.scale, range: self.range, jobs: self.jobs, cache: self.cache.clone() }
+    fn options(&self) -> Result<Options> {
+        let choice = match &self.encoder {
+            Some(e) => e.clone(),
+            None => std::env::var("RETAKE_ENCODER").unwrap_or_default(),
+        };
+        let encoder = EncoderChoice::parse(&choice)
+            .map_err(|e| anyhow!(EditError::new("bad_encoder", e.to_string()).hint("--encoder auto works anywhere")))?;
+        Ok(Options {
+            draft: self.draft,
+            scale: self.scale,
+            range: self.range,
+            jobs: self.jobs,
+            cache: self.cache.clone(),
+            encoder,
+        })
     }
 
     fn engine(&self, timeline: &Path) -> Result<Engine> {
-        let Some(doc) = &self.doc else { return Engine::open(timeline, self.options()) };
+        self.engine_with(timeline, self.options()?)
+    }
+
+    fn engine_with(&self, timeline: &Path, opts: Options) -> Result<Engine> {
+        let Some(doc) = &self.doc else { return Engine::open(timeline, opts) };
         retake_render::init();
         let text = std::fs::read_to_string(doc).with_context(|| format!("reading {}", doc.display()))?;
         let v: Value = serde_json::from_str(&text).with_context(|| format!("{} isn't valid JSON", doc.display()))?;
-        Engine::from_project(Project::from_doc(timeline, v)?, self.options())
+        Engine::from_project(Project::from_doc(timeline, v)?, opts)
     }
 }
 
@@ -466,7 +488,7 @@ fn run(cmd: Cmd) -> Result<(bool, Value, String)> {
             let e = r.engine(&timeline)?;
             let (_, rep) = pipeline::plan(&e)?;
             let mut lines = vec![format!(
-                "{} rev {}: {} units, {} cached, {} to render ({} frames, {} graphics runs), audio {}, ~{:.1} s",
+                "{} rev {}: {} units, {} cached, {} to render ({} frames, {} graphics runs), audio {}, ~{:.1} s ({}, {})",
                 rep.timeline.id,
                 rep.timeline.rev,
                 rep.units.len(),
@@ -475,7 +497,9 @@ fn run(cmd: Cmd) -> Result<(bool, Value, String)> {
                 rep.frames_to_render,
                 rep.layers_to_render,
                 if rep.audio_cached { "cached" } else { "to mix" },
-                rep.estimate_s
+                rep.estimate_s,
+                rep.encoder,
+                rep.convert
             )];
             for u in &rep.units {
                 lines.push(format!(
@@ -522,7 +546,7 @@ fn run(cmd: Cmd) -> Result<(bool, Value, String)> {
                 }
             };
             let human = format!(
-                "{}\n  {} units: {} reused, {} rendered; graphics runs: {} reused, {} rendered ({} of {} frames drawn); audio {}\n  {:.3} s, {} frames; {}",
+                "{}\n  {} units: {} reused, {} rendered; graphics runs: {} reused, {} rendered ({} of {} frames drawn); audio {}\n  {:.3} s, {} frames, {}, {}; {}",
                 shown.display(),
                 rep.units,
                 rep.reused,
@@ -534,12 +558,16 @@ fn run(cmd: Cmd) -> Result<(bool, Value, String)> {
                 if rep.audio_reused { "reused" } else { "mixed" },
                 rep.duration,
                 rep.frames,
+                rep.encoder,
+                rep.convert,
                 rep.timings.iter().map(|(k, v)| format!("{k} {v:.2}s")).collect::<Vec<_>>().join(", ")
             );
             Ok((c.json, serde_json::to_value(&rep)?, human))
         }
         Cmd::Frames { timeline, times, out, r, c } => {
-            let e = r.engine(&timeline)?;
+            // Stills aren't encoded: no encoder to choose.
+            let e =
+                r.engine_with(&timeline, Options { encoder: EncoderChoice::Fixed(EncoderKind::X264), ..r.options()? })?;
             let dir = out.unwrap_or_else(|| e.project.work_dir().join("frames"));
             let shots = pipeline::stills(&e, &times, &dir)?;
             let human = shots.iter().map(|(t, p)| format!("{t:>8.3}  {}", p.display())).collect::<Vec<_>>().join("\n");

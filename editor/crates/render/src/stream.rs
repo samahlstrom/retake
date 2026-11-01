@@ -436,6 +436,8 @@ pub fn render_stream(e: &Engine, o: &StreamOptions) -> Result<RenderReport> {
         audio_reused: au.out.reused,
         frames,
         duration: round6(frames as f64 / fps as f64),
+        encoder: e.encode.encoder.name().into(),
+        convert: e.convert.name().into(),
         timings,
         stream: Some(StreamStats {
             playlist: o.playlist.clone(),

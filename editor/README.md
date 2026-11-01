@@ -33,7 +33,7 @@ retake-edit patch apply <timeline.json> <patch.json|-> [--dry-run]
 retake-edit patch log  <timeline.json>
 retake-edit patch revert <timeline.json> <p3>
 retake-edit plan       <timeline.json> [--range a-b] [--draft]   # hits, misses, estimate
-retake-edit render     <timeline.json> [--range a-b] [--draft] [-o out.mp4]
+retake-edit render     <timeline.json> [--range a-b] [--draft] [-o out.mp4] [--encoder auto|x264|nvenc|…]
 retake-edit frames     <timeline.json> 3.5 12.0 [-o dir]   # PNG stills
 retake-edit manifest   <timeline.json>                     # renders what's missing, prints the manifest
 retake-edit resolve-note <manifest.json> 9.0 0.7 0.65 0.1 0.1     # t and a normalized stroke box
@@ -84,7 +84,7 @@ has a matte or is one becomes its own run and an item with `Fx`, since the compo
 against what's under it; a group of graphics only is drawn by Skia inside its run (children blend within it); a
 group with footage is an `Item::Group`, composited into its own picture first. Every item has a `slot` for its
 decode state and its manifest boxes. `resample: lanczos` resizes images with a Pillow-exact Lanczos-3
-(`resample.rs`) and decodes footage with ffmpeg's Lanczos scaler, cropped in the pipe when the crop is constant
+(`resample.rs`) and decodes footage with a Lanczos scaler (zimg's; ffmpeg's for RGB sources), cropped in the pipe when the crop is constant
 (`unit.rs`, `decode_plan`); `delogo` runs first in that pipe. `crates/render/tests/picture.rs` checks each against an
 independent reference (ffmpeg's `perspective`, `crop,scale` and `delogo`, the W3C formulas) or its other path, and
 `tests/pillow.rs` text placement and Lanczos against Pillow (skipped without it; `RETAKE_PILLOW_PYTHON`).
@@ -139,7 +139,8 @@ recording isn't re-read on every plan.
   length. An animated run skips drawing a frame whose layers evaluate to the same state as the frame before (a pop
   that has settled). Layers that show on no frame of the range are left out.
 - **Video is decoded at its displayed size**: the source times the largest scale it's shown at in the unit (never
-  above the render scale), scaled in the ffmpeg pipe. A picture-in-picture at 30% decodes at 30%.
+  above the render scale), scaled in the ffmpeg pipe. A picture-in-picture at 30% decodes at 30%. Layers that read
+  the same frames of a file share that decode ("Rendering fast", below).
 - **Proxies.** `retake-edit proxy` makes a short-GOP (a keyframe every 0.5 s), 540-line H.264 copy of each video
   asset into the cache, keyed by the source's content hash. Draft renders decode the proxy when there is one (it's
   part of their unit keys); full renders always read the source. Worth it for long recordings with sparse keyframes,
@@ -151,7 +152,41 @@ and 2.1 s with proxies (2.9 s to 2.1 s when the footage has one keyframe in 30 s
 went from 2.8 s to 2.3 s; after the VO-trim patch it draws no graphics at all (it drew two runs before), and the time
 left is encoding the three units that changed.
 - **Unit key**: the hash of the fully resolved unit description, the only input the compositor gets: canvas, frame
-  count, encoder settings (including the ffmpeg build), each layer with its source's content hash and source times
+  count, encoder settings (the encoder and every option it gets, the ffmpeg build), the colour converter, each layer with its source's content hash and source times
   (including absolute-time inputs such as a `clock: timeline` background), and the layer keys on it.
 - Segments are stored by content and reused byte for byte. With a cold cache on the same machine, x264 with pinned
-  threads and bitexact muxing reproduces the same bytes (the end-to-end test checks it).
+  threads and bitexact muxing reproduces the same bytes (the end-to-end test checks it). Hardware encoders make no
+  such promise; the cache's reuse is what keeps a unit's bytes.
+
+## Rendering fast
+
+A unit is one shot (or insert): its footage decoded by ffmpeg, composited in Rust, encoded by ffmpeg. Units render
+`--jobs` at a time. Within a unit:
+
+- **One decode per source.** Video layers that read the same frames of the same file share one ffmpeg decoder
+  (`unit.rs`, `feeds`): the same file and decode (crop, delogo, scaler, colour), the same `in`, clock, loop and hold,
+  over the same active frames. Bilinear layers share at the largest size any of them needs; a Lanczos decode is its
+  exact displayed size, so only equal ones share. A layer that shows on none of its unit's frames decodes nothing.
+  The item-shop pilot's 3D panels are 96 tiles of one clip: 96 decoders became one.
+- **Colour conversion with zimg.** When the ffmpeg in use has the `zscale` filter (probed once, cached per machine),
+  YUV footage is converted to RGB by zimg in the decode pipe, scaled with spline36 (Lanczos for `resample: lanczos`),
+  and comes out as planar RGB that the reader packs into RGBA. It reads the source's matrix and range from its tags;
+  untagged sources are read as BT.601 limited range, as ffmpeg's own scaler reads them, so footage looks the same
+  either way. RGB, grey and palette sources, and an ffmpeg without zscale, keep ffmpeg's scaler (`swscale`), the old
+  path. The choice is in every unit key (`convert`); `RETAKE_CONVERT=swscale` forces the old path. zimg is closer to
+  exact and costs a third of the CPU (numbers below).
+- **A pipeline per unit.** Each decoder has a reader thread that decodes ahead into a two-frame queue (and starts a
+  quarter second before its layer appears); the compositor draws on the unit's thread (rows in parallel); a writer
+  thread feeds the encoder. Frame buffers go round (decoders to the compositor and back, the compositor to the
+  encoder and back) instead of being allocated per frame. The bytes are the same as composing in lockstep
+  (`crates/render/tests/pipeline.rs` checks frames and segments).
+- **Hardware encoders.** `--encoder auto|x264|nvenc|videotoolbox|qsv|vaapi` (or `RETAKE_ENCODER`; Retake passes
+  `[render] encoder` from its config this way). `auto`, the CLI's default, picks NVENC on NVIDIA, VideoToolbox on
+  macOS, else x264, after a real one-frame test encode with the render's own settings, cached for a day per ffmpeg
+  build in `<user cache>/retake/ffmpeg-caps.json` (`$XDG_CACHE_HOME/retake`, `~/Library/Caches/retake`,
+  `%LOCALAPPDATA%\retake`). Every encoder's settings are in the unit key, so switching re-renders each unit once and
+  segments of two encoders never mix. All encoders get the same RGB → YUV conversion (ffmpeg's scaler, BT.709
+  limited), the same colour tags, and a keyframe every 2 s (hardware encoders have one forced on every GOP), so stream
+  segments cut where they're planned. A process holds at most `RETAKE_HW_SESSIONS` (default 4) hardware sessions;
+  a unit whose hardware encoder fails is tried twice more before the render fails. The library's default is x264 (no
+  device, the same bytes every run); there is no CUDA, Metal or VAAPI code: only ffmpeg's encoders.
