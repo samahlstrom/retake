@@ -22,7 +22,7 @@ type ChangeEntry struct {
 // VersionRow is one row of the versions table: a version that was pushed.
 type VersionRow struct {
 	Label     string        `json:"label"`
-	Path      string        `json:"path"`
+	Path      string        `json:"path"` // the file: the store keeps it relative to the project root
 	SHA256    string        `json:"sha256"`
 	Parent    string        `json:"parent"`
 	By        string        `json:"by"`
@@ -57,6 +57,7 @@ func (s *Store) Versions() ([]VersionRow, error) {
 		if err != nil {
 			return nil, err
 		}
+		v.Path = s.Abs(v.Path)
 		out = append(out, v)
 	}
 	return out, rows.Err()
@@ -68,6 +69,7 @@ func (s *Store) Version(label string) (VersionRow, error) {
 	if errors.Is(err, sql.ErrNoRows) {
 		return v, fmt.Errorf("version %s: %w", label, ErrNotFound)
 	}
+	v.Path = s.Abs(v.Path)
 	return v, err
 }
 
@@ -205,7 +207,7 @@ func (s *Store) RecordPush(p Push) (PushResult, error) {
 		}
 		now := s.stamp()
 		if _, err := t.Exec(`INSERT INTO versions (label, path, sha256, parent, by, created, changelog)
-			VALUES (?, ?, ?, ?, ?, ?, ?)`, p.Label, p.Path, p.SHA256, p.Parent, p.By, now, string(cl)); err != nil {
+			VALUES (?, ?, ?, ?, ?, ?, ?)`, p.Label, t.s.Rel(p.Path), p.SHA256, p.Parent, p.By, now, string(cl)); err != nil {
 			return err
 		}
 		for _, c := range p.Changelog {

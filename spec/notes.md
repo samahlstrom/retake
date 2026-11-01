@@ -23,6 +23,19 @@ API all build against it. Change it here first.
 
   Milestone 3a adds `tokens` and `hosts`, for sharing (spec/team.md).
 
+- **Paths.** Every file path the store keeps is relative to the project root, with forward slashes: a note's
+  `snapshot` (`v6/clip_v6.review/snaps/02_00-20-1.png`), a pushed version's `path` and a transcribe job's take `dir`.
+  So a project folder can be moved, renamed or copied and still find its files. Readers resolve them against the root
+  where it is now (`Store.Abs`); the agent API gives them whole. A path outside the root is kept as given, and only a
+  file inside the project is ever served. Opening an older store fixes the absolute paths it holds: one inside the
+  root becomes relative; one outside it (the folder moved) becomes the longest tail of it, two parts at least, that
+  names a file (a folder, for a take) in this project, so `/old/place/demo/v6/demo_v6.review/snaps/02.png` becomes
+  `v6/demo_v6.review/snaps/02.png` when that file is here. Anything else stays as it was. Images, takes, threads,
+  the workspace, the hosts and the automation state keep no paths (names and labels only).
+- **A note's detail.** Each stroke is `{shape, color, box: [x, y, w, h], points?, t?}`: `points` is the line as drawn,
+  normalized 0–1 to the frame (at most 64, evenly picked, ends included), and `t` the video time of the frame it was
+  drawn on. Notes stored before these existed have neither.
+
 - **Note keys.** A note key is `<take>/<seg>/<n>`, where n is the comment's index within that segment from the notes
   engine. `take` is the take's folder name, `seg` the segment's own id in that take (`S2`, not the S-number notes.md
   renumbers across takes; `no-audio` for marks outside every segment), and n counts from 1, before inherited ranges
@@ -57,7 +70,10 @@ that aren't done (`{id, kind, state, attempts, error?, hint?, take?}`), so a pag
 - **On an older version:** that version's notes in their final state. Each has `status`, `text`, `t0`, `t1`, `by`, and
   then `change` and `answered_in` for answered ones, or the question text for asked ones.
 - **Item fields:** `{id, kind: "note"|"question", status, t0, t1, text, by, change?, answered_in?, question?, options?,
-  images?: [{url, box}], ask?}`. For a question item, `id` is the thread id (what `answer_to` takes), `text` is the
+  images?: [{url, box}], snapshot?, ask?}`. A note's `snapshot` is the URL of the still of its moment with its strokes
+  drawn on it (`GET /api/notes/<id>/snapshot?m=<file time>`), only when that file is in the project. A comment card
+  draws its drawing's thumbnail over it, else over the first frame of the version it was left on (that version's
+  poster), else on a plain dark box. For a question item, `id` is the thread id (what `answer_to` takes), `text` is the
   question, and an optional `note` is the id of the note it's about.
 - **A task's question.** A note in `question` whose newest question an agent asked from inside its editing task
   (`retake ask`) carries it as `ask: {id, task, t, from?, to?, version, text, visuals}`: the thread id, the task that
@@ -97,6 +113,7 @@ that aren't done (`{id, kind, state, attempts, error?, hint?, take?}`), so a pag
 | POST | `/api/notes/<id>/reopen`, `/api/versions/<label>/approve` | Reviewer actions. Origin-checked. |
 | GET | `/api/events?since=<seq>` | Server-sent events: `notes` (the sidebar should refresh), `job` (`{id, kind, state, error?, hint?}`; a failed job's `hint` is a one-line fix, such as how to set up transcription), `version` (the family changed: `{why, label, parent?, path?, stream?, error?}`, where `why` is `push`, or for a streamed version `rendering`, `progress`, `stopped`, `complete` and `failed`, with its `stream` state; spec/bridge.md, "Streaming"). |
 | GET | `/api/takes/<take>/<file>?v=` | Serves an image of a take, for the sidebar thumbnails. |
+| GET | `/api/notes/<id>/snapshot` | Serves a note's snapshot, for its card's drawing. Only a regular file inside the project (through `os.Root`); else 404. Same viewing permissions as `/api/takes/…`. |
 
 ## Jobs
 

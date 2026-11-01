@@ -159,8 +159,9 @@ tmux kill-pane -t <pane>                                               # pause, 
 ## How the worker runs an agent
 
 In the background, the worker runs the agent's command in the project folder, with the task prompt on stdin. `RETAKE_CONTEXT` names a
-JSON file with the task and its notes (text, times, strokes, snapshots and images), and the agent writes its answer
-to `RETAKE_REPORT`: `{"state": "completed", "message": "what changed"}` or `{"state": "question", "message": "..."}`.
+JSON file with the task and its notes (text, times, strokes, snapshots and images; a note's `missing` says which of
+its files couldn't be given and what the agent has instead, such as a still the worker made itself), and the agent
+writes its answer to `RETAKE_REPORT`: `{"state": "completed", "message": "what changed"}` or `{"state": "question", "message": "..."}`.
 `RETAKE_ASK_URL` and `RETAKE_ASK_TOKEN` are what `retake ask` uses to reach the worker (above).
 A completed task still waits for a checked, playable render of the agent's final source before the comment is Done.
 In a project without a timeline, `RETAKE_OUTPUT` names the file the agent writes its video to
@@ -281,6 +282,9 @@ The agent never approves anything. Approving a version is the reviewer's action.
 - `t0` and `t1` are seconds in that version. A note said while the video was paused has `t0 == t1`.
 - A stroke's `box` is `[x, y, w, h]`, normalized 0–1 to the frame, with (0, 0) at the top left.
 - `snapshot` is a PNG of the frame with the strokes drawn on it and numbered. A multimodal agent should look at it.
+  The project store keeps it relative to the project folder, so moving or copying the folder keeps it.
+- A stroke may also have `points` (the line as drawn, up to 64, normalized like `box`) and `t` (the video time it was
+  drawn at).
 - `threads` holds the questions about the note and the reviewer's answers.
 - The engine also writes `<video>.review/notes.md` for each version: the same notes as readable text, with rules for
   applying them (later statements override earlier ones, and "scrap that" retracts what came before).

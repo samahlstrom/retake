@@ -273,6 +273,58 @@ func (s *Server) takeFile(w http.ResponseWriter, r *http.Request, take, name str
 	s.serveFile(w, r, filepath.Join(store.TakeDir(v.Path, take), name), project.ImageTypes[filepath.Ext(name)])
 }
 
+// noteSnapshot is GET /api/notes/<id>/snapshot: the still of a note's moment with its strokes, for its card's drawing
+// (spec/notes.md, "What the sidebar shows").
+func (s *Server) noteSnapshot(w http.ResponseWriter, r *http.Request, id string) {
+	noteID, err := strconv.ParseInt(id, 10, 64)
+	if err != nil || noteID <= 0 {
+		s.fail(w, r, http.StatusNotFound, "no snapshot")
+		return
+	}
+	st, err := s.store(false)
+	if err != nil {
+		s.fail(w, r, http.StatusNotFound, "no snapshot")
+		return
+	}
+	n, err := st.Note(noteID)
+	if err != nil {
+		s.fail(w, r, http.StatusNotFound, "no snapshot")
+		return
+	}
+	s.serveSnapshot(w, r, st, n)
+}
+
+// serveSnapshot serves a note's snapshot. Only a regular file inside the project is served, through os.Root, so an
+// imported note can't name any other file of the host (spec/notes.md, "Paths").
+func (s *Server) serveSnapshot(w http.ResponseWriter, r *http.Request, st *project.Store, n project.Note) {
+	rel, _, ok := st.SnapshotFile(n)
+	if !ok {
+		s.fail(w, r, http.StatusNotFound, "no snapshot")
+		return
+	}
+	root, err := os.OpenRoot(st.Root())
+	if err != nil {
+		s.fail(w, r, http.StatusNotFound, "no snapshot")
+		return
+	}
+	defer func() { _ = root.Close() }()
+	file, err := root.Open(rel)
+	if err != nil {
+		s.fail(w, r, http.StatusNotFound, "no snapshot")
+		return
+	}
+	defer func() { _ = file.Close() }()
+	stat, err := file.Stat()
+	ctype := project.ImageTypes[strings.ToLower(filepath.Ext(rel))]
+	if err != nil || !stat.Mode().IsRegular() || stat.Size() > MaxImage || ctype == "" {
+		s.fail(w, r, http.StatusNotFound, "no snapshot")
+		return
+	}
+	w.Header().Set("Content-Type", ctype)
+	w.Header().Set("Cache-Control", "no-cache")
+	http.ServeContent(w, r, filepath.Base(rel), stat.ModTime(), file)
+}
+
 type jobView struct {
 	ID       int64  `json:"id"`
 	Kind     string `json:"kind"`
@@ -316,6 +368,10 @@ func (s *Server) sidebar(w http.ResponseWriter, r *http.Request) {
 	q := project.SidebarQuery{Version: v.Label, Newest: resp.Newest, TakeDir: s.takeDirOf(fam),
 		ImageURL: func(n project.Note, img project.TakeImage) string {
 			return s.opts.BasePath + "/api/takes/" + n.Take + "/" + img.File + "?v=" + url.QueryEscape(n.Version)
+		},
+		SnapshotURL: func(n project.Note, modified time.Time) string {
+			// The file's time in the URL: a notes rebuild redraws it, and the card loads the new one.
+			return s.opts.BasePath + "/api/notes/" + strconv.FormatInt(n.ID, 10) + "/snapshot?m=" + strconv.FormatInt(modified.UnixMilli(), 10)
 		}}
 	if resp.Scope != "" {
 		seen := map[string]bool{}
