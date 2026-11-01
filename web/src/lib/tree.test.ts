@@ -115,6 +115,8 @@ describe('the folder tree', () => {
 
   it('filters: matches and the way to them, opened; a matching folder keeps its own state', () => {
     expect(draw([], 'HONOR')).toEqual(['▾ item-shop', '  honored']);
+    // A project's video also by the folders it's in: item-shop/shorts/honored.
+    expect(draw([], 'shorts/')).toEqual(['▾ item-shop', '  honored']);
     expect(draw([], 'aura')).toEqual(['▾ 2026-10-19', '  ▾ shorts', '    aura ·question']);
     // The folder's own name matches: it shows as it is (closed here), with what's in it when opened.
     expect(draw([], '2026')).toEqual(['▸ 2026-10-19 ·question']);

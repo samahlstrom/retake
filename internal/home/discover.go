@@ -138,14 +138,15 @@ func (s *scanner) subdirs(dir string) []subdir {
 		switch {
 		case e.IsDir():
 		case e.Type()&os.ModeSymlink != 0:
-			real, err := filepath.EvalSymlinks(p)
+			target, err := filepath.EvalSymlinks(p)
 			if err != nil {
 				continue
 			}
-			if st, err := os.Stat(real); err != nil || !st.IsDir() || inside(real, s.top) || s.linked[real] {
+			st, err := os.Stat(target) //nolint:gosec // a link in the scanned tree, only looked at
+			if err != nil || !st.IsDir() || inside(target, s.top) || s.linked[target] {
 				continue
 			}
-			s.linked[real] = true
+			s.linked[target] = true
 		default:
 			continue
 		}
@@ -202,7 +203,7 @@ func (s *scanner) anchor(root string) string {
 				continue
 			}
 			p := filepath.Join(d, name)
-			st, err := os.Stat(p)
+			st, err := os.Stat(p) //nolint:gosec // a file of the scanned tree, only looked at
 			if err != nil || !st.Mode().IsRegular() {
 				continue
 			}
@@ -296,7 +297,7 @@ func (s *scanner) inner(dir, rel, proj string, in, at int) {
 func ScanDir(dir string) Scan {
 	start := time.Now()
 	s := newScanner(dir)
-	if st, err := os.Stat(s.top); err == nil && st.IsDir() {
+	if st, err := os.Stat(s.top); err == nil && st.IsDir() { //nolint:gosec // the folder being opened
 		s.walk(s.top, "", 0)
 	}
 	used := map[string]bool{}

@@ -83,7 +83,7 @@ async function rows(page: Page): Promise<string[]> {
     const level = Number(el.getAttribute('aria-level')) - 1;
     const exp = el.getAttribute('aria-expanded');
     const mark = exp === 'true' ? '▾ ' : exp === 'false' ? '▸ ' : '';
-    const dot = el.querySelector('.dot')?.getAttribute('data-dot');
+    const dot = el.querySelector('.sdot')?.getAttribute('data-dot');
     return `${'  '.repeat(level)}${mark}${el.querySelector('.label')?.textContent}${dot ? ` ·${dot}` : ''}`;
   }));
 }

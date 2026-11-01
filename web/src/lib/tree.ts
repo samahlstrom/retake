@@ -105,17 +105,20 @@ const has = (n: TreeNode): boolean => n.videos.length > 0 || n.children.length >
 /**
  * The rows the column shows: the top's own videos, then its folders and projects, each followed by what's in it
  * when it's open. With a filter (case ignored), a row stays when its name or one of the names inside it contains
- * the text, and the rows on the way to a match are open; a folder or project whose own name matches shows what's in
- * it as usual.
+ * the text (a video's also by its folders below its project), and the rows on the way to a match are open; a
+ * folder or project whose own name matches shows what's in it as usual.
  */
 export function rows(tree: TreeNode, expanded: ReadonlySet<string>, filter = ''): Row[] {
   const q = filter.trim().toLowerCase();
   const matches = (s: string): boolean => s.toLowerCase().includes(q);
+  // A video matches by its name, or by the folders it's in below its project (shorts/one-item).
+  const videoMatches = (v: Card): boolean =>
+    matches(videoName(v)) || (v.path.startsWith(`${v.project}/`) && matches(v.path.slice(v.project.length + 1)));
   const keep = new Map<TreeNode, boolean>();
   const kept = (n: TreeNode): boolean => {
     let k = keep.get(n);
     if (k === undefined) {
-      k = matches(n.title) || n.videos.some((v) => matches(videoName(v))) || n.children.some(kept);
+      k = matches(n.title) || n.videos.some(videoMatches) || n.children.some(kept);
       keep.set(n, k);
     }
     return k;
@@ -151,11 +154,11 @@ export function rows(tree: TreeNode, expanded: ReadonlySet<string>, filter = '')
         parent,
       });
       if (!open) continue;
-      for (const v of c.videos) if (!filtering || self || matches(videoName(v))) video(v, c, depth + 1, c.path);
+      for (const v of c.videos) if (!filtering || self || videoMatches(v)) video(v, c, depth + 1, c.path);
       walk(c, depth + 1, filtering && !self, c.path);
     }
   };
-  for (const v of tree.videos) if (!q || matches(videoName(v))) video(v, tree, 0, '');
+  for (const v of tree.videos) if (!q || videoMatches(v)) video(v, tree, 0, '');
   walk(tree, 0, !!q, '');
   return out;
 }

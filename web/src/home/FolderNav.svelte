@@ -109,7 +109,7 @@
 
 {#snippet dot(d: Row['dot'])}
   <span
-    class="dot {d}"
+    class="sdot {d}"
     data-dot={d}
     role={d ? 'img' : undefined}
     title={d ? DOT_TEXT[d] : undefined}
@@ -357,20 +357,21 @@
     color: #b4b4bd;
   }
   /* The status dot, in a fixed slot at the end of every row, so nothing moves when one comes or goes. */
-  .dot {
+  .sdot {
     flex: none;
     width: 7px;
     height: 7px;
     margin-left: 8px;
     border-radius: 50%;
+    background: transparent;
   }
-  .dot.to_review {
+  .sdot.to_review {
     background: var(--voice, #5ac8fa);
   }
-  .dot.being_edited {
+  .sdot.being_edited {
     background: var(--st-working, #efb441);
   }
-  .dot.question {
+  .sdot.question {
     background: var(--st-question, #a693fa);
   }
   .none-found {
