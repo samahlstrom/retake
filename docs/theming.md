@@ -53,6 +53,8 @@ docker compose cp ./my-theme retake:/data/theme
 
 The server reads the folder on every page load, so there's nothing to restart after an edit.
 
+On a server, the sign-in and setup pages wear the theme too: its name, logo, favicon and colour tokens.
+
 ## Colours
 
 Every colour of the page is a token. The ones you'll want first:

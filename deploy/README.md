@@ -115,14 +115,27 @@ docker run --rm --network retake_default -v "$PWD/backup:/backup" \
   --entrypoint mc pgsty/minio:RELEASE.2026-08-04T00-00-00Z mirror --overwrite src/retake /backup/media
 ```
 
+## Your look
+
+The page's look is a theme folder in the volume, `/data/theme/` (docs/theming.md), so an upgrade never changes it:
+
+```bash
+docker compose cp ./my-theme retake:/data/theme   # theme.css, theme.toml, fonts, a logo
+```
+
+The server reads it on every page load. `RETAKE_THEME` in the compose file points somewhere else, or `none` for the
+built-in look.
+
 ## Upgrades
 
 ```bash
 git pull
 docker compose up -d --build
+docker compose exec retake retake theme check /data/theme   # with a theme: anything this version doesn't use
 ```
 
-The server migrates its tables when it starts. Migrations only go forward, so back up first.
+The server migrates its tables when it starts. Migrations only go forward, so back up first. The server also prints
+a `retake: theme:` warning at startup for anything in your theme the new version doesn't use.
 
 ## Check a build
 

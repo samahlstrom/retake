@@ -62,6 +62,18 @@ When a `vX.Y.Z` tag is pushed, CI runs every test job, then:
 
 Nothing is published: `release.disable` is `true` in `.goreleaser.yaml`.
 
+## Release notes and your users' looks
+
+Users' themes live outside the install (spec/theme.md), so a release never changes them, but it can stop using them.
+Every release's `CHANGELOG.md` entry says, under **Theme API**:
+
+- tokens and parts added (any release), and defaults that changed (that's a new built-in look);
+- tokens and parts deprecated or removed (major releases only; a deprecated name keeps working for one major), with
+  `web/src/theme/api.json`'s `deprecated` updated to match;
+- the line: run `retake theme check` after updating (hosted: `retake theme check /data/theme`).
+
+The HTTP API's breaking changes are listed the same way, and only in a major release (spec/api.md, "API versions").
+
 ## The installer
 
 `scripts/install.sh` installs the binaries for the current machine into `~/.local/bin`. It never uses sudo. It

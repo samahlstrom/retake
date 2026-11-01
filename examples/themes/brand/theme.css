@@ -1,0 +1,66 @@
+/* Northwind Review: a made-up company's look for Retake. A deep navy page, a teal accent, Noto Serif (OFL, in
+   fonts/) for every word, sharper corners, and the logo and name from theme.toml. Only tokens and parts
+   (spec/theme.md), so `retake theme check` can say if a new version stops using something here. */
+
+@font-face {
+  font-family: 'Northwind Serif';
+  src: url('fonts/NotoSerif-Regular.woff2') format('woff2');
+  font-weight: 100 549;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Northwind Serif';
+  src: url('fonts/NotoSerif-Bold.woff2') format('woff2');
+  font-weight: 550 900;
+  font-display: swap;
+}
+
+:root {
+  /* surfaces */
+  --bg: #0b1220;
+  --surface: #0f1828;
+  --surface-raised: #111b2d;
+  --surface-sunken: #0a1120;
+  --surface-control: #16223a;
+  --surface-control-hover: #1e2c47;
+  --surface-popover: #16223a;
+  --overlay: #e6f0ff;
+
+  /* text */
+  --text-strong: #ffffff;
+  --text: #e8eef7;
+  --text-2: #dde5f0;
+  --text-3: #cfd8e6;
+  --text-4: #b8c3d4;
+  --text-5: #a3afc2;
+  --text-6: #8f9bb0;
+  --muted: #7f8ba0;
+  --dim: #77839a;
+  --faint: #5e6a80;
+  --faintest: #4a556a;
+
+  /* the brand */
+  --accent: #2dd4bf;
+  --accent-hover: #5eead4;
+  --on-accent: #042f2e;
+  --focus: #2dd4bf;
+  --link: #7dd3fc;
+  --voice: #38bdf8;
+  --voice-text: #bae6fd;
+
+  /* type and shape */
+  --font-ui: 'Northwind Serif', Georgia, serif;
+  --radius-sm: 4px;
+  --radius: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+}
+
+/* A teal line over the bar, and the name in the accent colour. */
+[data-part~='bar'] {
+  border-top-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+[data-part~='brand'] {
+  color: var(--accent);
+  letter-spacing: 0;
+}

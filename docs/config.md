@@ -122,6 +122,13 @@ Forwarding headers (`X-Forwarded-For`, `-Proto`, `-Host`) are believed only from
 only by you. `retake push --remote` remembers unfinished uploads in `$XDG_STATE_HOME/retake/uploads.json`
 (`~/.local/state/retake/uploads.json`), so the next push of the same file resumes them.
 
+## Your theme
+
+The page's look is a folder next to `config.toml`: `$XDG_CONFIG_HOME/retake/theme/` (`~/.config/retake/theme/`),
+with `theme.css`, `theme.toml` and any fonts and images. `retake open` and `retake share` use it when it's there;
+`--theme DIR` or `RETAKE_THEME` pick another folder, and `none` the built-in look. `retake theme init` makes one.
+See [theming.md](theming.md).
+
 ## Environment variables
 
 | Variable | Read by | Meaning |
@@ -131,6 +138,7 @@ only by you. `retake push --remote` remembers unfinished uploads in `$XDG_STATE_
 | `XDG_CACHE_HOME` | retake | Where whisper models are downloaded (`retake/models`). |
 | `RETAKE_WHISPER_THREADS` | retake | whisper.cpp's CPU threads. |
 | `RETAKE_DATA`, `RETAKE_LISTEN`, `RETAKE_PUBLIC_URL`, `RETAKE_TRUSTED_PROXIES`, `RETAKE_DATABASE_URL`, `RETAKE_S3_*`, `RETAKE_SMTP_URL`, `RETAKE_SMTP_FROM`, `RETAKE_RELAY_CACHE` | retake serve, user, project | The team server's settings ([server] above). |
+| `RETAKE_THEME` | retake open, share, serve, theme | The theme folder ([theming.md](theming.md)), or `none` for the built-in look. |
 | `RETAKE_TOKEN` | retake remote add | The agent token, when `--token` isn't given. |
 | `XDG_STATE_HOME` | retake push --remote | Where unfinished uploads are remembered (`retake/uploads.json`). |
 | `RETAKE_PROMPT`, `RETAKE_LANGUAGE` | your command engine | Set by retake for the program it runs. |
@@ -148,6 +156,7 @@ only by you. `retake push --remote` remembers unfinished uploads in `$XDG_STATE_
 | `<project>/.retake/project.db` | The project store: notes, questions, versions, jobs (SQLite). The project is the folder above the `v<N>` folders, or the video's own folder. |
 | `<project>/.retake/worker/` | The editing worker's files: its identity and lock, each task's prompt, context, log and report (`tasks/`), the herdr or tmux session it uses (`view.json`), and each render's snapshot and video (`renders/`). Keep `renders/` for older versions to stay playable. |
 | `<timeline folder>/.retake/` | retake-edit's render cache and renders. |
+| `$XDG_CONFIG_HOME/retake/theme/` | Only `retake theme init`, when you run it. Nothing else ever writes your theme. |
 | `<data>/server.db`, `<data>/projects/<name>/`, `<data>/uploads/` | `retake serve`: the server store (SQLite), each project's workspace (a retake project folder), and uploads in progress. |
 
 Retake never changes or deletes your videos. `retake push` copies the new file into the family, or moves it with

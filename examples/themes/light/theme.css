@@ -1,0 +1,74 @@
+/* Retake on a light page: the same layout, light surfaces and dark text. Hovers, hairlines and borders follow
+   --overlay, so one line flips all of them. The video keeps a dark stage, and text over it stays light (--scrim and
+   --on-scrim are left as they are). Only tokens and parts (spec/theme.md). */
+
+:root {
+  /* surfaces */
+  --bg: #f3f3f6;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-sunken: #ececf1;
+  --surface-control: #ffffff;
+  --surface-control-hover: #eeeef3;
+  --surface-popover: #ffffff;
+  --overlay: #000000;
+  --shadow: #1c1c28;
+
+  /* text */
+  --text-strong: #000000;
+  --text: #1b1b21;
+  --text-2: #26262d;
+  --text-3: #383842;
+  --text-4: #4a4a55;
+  --text-5: #575763;
+  --text-6: #65656f;
+  --muted: #71717b;
+  --dim: #7b7b85;
+  --faint: #95959f;
+  --faintest: #b2b2bb;
+
+  /* actions */
+  --accent: #1b1b21;
+  --accent-hover: #000000;
+  --on-accent: #ffffff;
+  --focus: #6d5bd0;
+  --link: #0a6fb8;
+
+  /* recording and voice */
+  --record: #e5302a;
+  --record-text: #c8261f;
+  --record-wait: #b07d16;
+  --voice: #0a84c8;
+  --voice-text: #075985;
+  --flip: #a86a00;
+
+  /* status */
+  --status-open: #8a8a94;
+  --status-working: #d08a00;
+  --status-done: #1f9d5c;
+  --status-off: #b2b2bb;
+
+  /* the agent */
+  --agent: #6d5bd0;
+  --agent-ink: #ffffff;
+  --agent-text: #4b3aa8;
+  --agent-text-2: #5b4ab8;
+
+  /* feedback */
+  --danger: #c8261f;
+  --warn: #8a5d00;
+  --change: #1d7a4c;
+
+  /* the timeline: the playhead while recording */
+  --playhead-recording: #e5302a;
+}
+
+/* The video keeps a dark stage, like any player. */
+[data-part~='stage'] {
+  background: #111114;
+}
+
+/* The white pen on a white bar: a hairline so it shows. */
+[data-part~='pen'][data-color='white'] {
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.3);
+}

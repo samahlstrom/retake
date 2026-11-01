@@ -4,6 +4,25 @@ All notable changes are listed here. Versions follow semver once the first relea
 
 ## Unreleased
 
+### Your look, outside the install (Theme API v1)
+- A theme is a folder of CSS, fonts and images that lives outside the install: `~/.config/retake/theme/` for
+  `retake open` and `retake share`, `<data dir>/theme/` (`/data/theme/` in Docker) for `retake serve`, or `--theme
+  DIR` / `RETAKE_THEME` anywhere (`none`: the built-in look). Updating retake never changes it. `theme.toml` sets
+  the name shown in the titles and on the home, a logo, a favicon and light or dark (spec/theme.md,
+  docs/theming.md).
+- Every colour and font of the page is a token (`--bg`, `--accent`, `--record`, `--status-done`, `--agent`,
+  `--font-ui` …), including the timeline's canvas; every major element has a `data-part`; the built-in CSS is in
+  `@layer retake`, so a theme wins without `!important`. A test fails on a hard-coded colour.
+- `retake theme init [DIR]` writes a starter with every token and part; `retake theme check [DIR]` reports what
+  this version doesn't use (exit 1). Theme files are served as CSS, fonts and images only, with a CSP that blocks
+  scripts; a broken theme is a startup warning, never a broken page.
+- Two examples in `examples/themes/`: `light` and `brand` (a made-up company with an OFL font and a logo).
+- Every answer carries `X-Retake-Api-Version: 1` (spec/api.md, "API versions"), for teams that ship their own page
+  with `--ui-dir`.
+- **Theme API:** v1, all tokens and parts new. After updating, run `retake theme check`.
+- The built-in look is the same, except for a few near-identical greys merged into one token each (the list is in
+  the commit that tokenized the page).
+
 ### Agents ask on the video, never in the terminal
 - The built-in agents never stop for a permission prompt: Claude Code runs with `--dangerously-skip-permissions`
   (and without its own question tool), Codex with `--dangerously-bypass-approvals-and-sandbox`, in the background and

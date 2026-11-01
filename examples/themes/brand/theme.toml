@@ -1,0 +1,5 @@
+# Northwind Review: a made-up company's look for Retake (examples/themes/README.md).
+name = "Northwind Review"
+logo = "logo.svg"
+favicon = "favicon.svg"
+mode = "dark"
