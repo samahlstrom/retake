@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   cardStatus,
+  crumb,
   fmtLength,
-  moveTargets,
   needsComputer,
   homeContext,
   nextToReview,
@@ -12,6 +12,7 @@ import {
   streamText,
   toReview,
   unwatchUrl,
+  videoName,
   viewerId,
   type Card,
 } from './home';
@@ -19,6 +20,9 @@ import {
 const card = (name: string, status: Card['status']): Card => ({
   name,
   title: name,
+  video: name,
+  path: name,
+  project: name,
   url: `p/${name}/`,
   version: 'v1',
   versions: 1,
@@ -27,6 +31,7 @@ const card = (name: string, status: Card['status']): Card => ({
   status,
   takes: 0,
   open: 0,
+  questions: 0,
   stream: null,
   thumb: `p/${name}/api/poster`,
 });
@@ -82,8 +87,57 @@ describe('home', () => {
       ['a', 'being_edited', 12.5, { state: 'rendering', done: 2, total: 5 }, 'p/a/', 'a'],
       ['b', 'to_review', null, null, 'p/b/', 'b'],
     ]);
-    expect(normalizeHome(null)).toEqual({ title: '', folder: undefined, role: '', projects: [] });
+    expect(normalizeHome(null)).toEqual({
+      title: '',
+      folder: undefined,
+      role: '',
+      projects: [],
+      tree: { title: '', path: '', project: false, videos: [], children: [] },
+    });
     expect(normalizeHome({ projects: 'nope' }).projects).toEqual([]);
+  });
+
+  it('reads the tree: its videos are the cards, and an older server gets one at the top', () => {
+    const h = normalizeHome({
+      title: 'deadlock',
+      projects: [
+        { name: 'item-shop', video: 'itemshop', path: 'item-shop', project: 'item-shop', questions: 2 },
+        { name: 'one', path: 'item-shop/shorts/one', project: 'item-shop' },
+        { name: 'flat', path: 'flat' },
+      ],
+      tree: {
+        title: 'deadlock',
+        path: '',
+        children: [
+          {
+            title: 'item-shop',
+            path: 'item-shop',
+            project: true,
+            videos: [{ name: 'item-shop' }, { name: 'one' }, { name: 'not-a-card' }, 'x'],
+            children: 'nope',
+          },
+          null,
+        ],
+      },
+    });
+    const [shop, one, flat] = h.projects;
+    expect([shop.video, shop.questions, one.project, flat.project]).toEqual(['itemshop', 2, 'item-shop', 'flat']);
+    expect(h.tree.children).toHaveLength(1);
+    expect(h.tree.children[0].videos).toEqual([shop, one]);
+    expect(h.tree.children[0].children).toEqual([]);
+    expect(h.tree.videos).toEqual([]);
+    const old = normalizeHome({ title: 'shows', projects: [{ name: 'a' }] });
+    expect(old.tree).toEqual({ title: 'shows', path: '', project: false, videos: old.projects, children: [] });
+  });
+
+  it('names a video, and where it is', () => {
+    expect(videoName({ video: 'itemshop', title: 'item-shop', name: 'item-shop' })).toBe('itemshop');
+    expect(videoName({ video: '', title: 'Intro Cut', name: 'intro-cut' })).toBe('Intro Cut');
+    expect(crumb('item-shop', 'itemshop')).toEqual(['item-shop']);
+    expect(crumb('Item Shop', 'item_shop')).toEqual(['Item Shop']);
+    expect(crumb('item-shop', 'honored-one')).toEqual(['item-shop', 'honored-one']);
+    expect(crumb('', 'clip')).toEqual(['clip']);
+    expect(crumb('jump-souls', '')).toEqual(['jump-souls']);
   });
 
   it('formats lengths, viewer ids and the unwatch call', () => {
@@ -101,7 +155,7 @@ describe('home', () => {
   });
 });
 
-describe('one status per card, and where a video can move', () => {
+describe('one status per card', () => {
   it('rendering wins over the review status', () => {
     expect(cardStatus({ status: 'to_review', stream: null })).toEqual({ text: 'To review', tone: 'to_review' });
     expect(cardStatus({ status: 'reviewed', stream: { state: 'rendering', done: 3, total: 12 } })).toEqual({
@@ -111,33 +165,14 @@ describe('one status per card, and where a video can move', () => {
     expect(cardStatus({ status: 'being_edited', stream: { state: 'complete', done: 12, total: 12 } }).text).toBe(
       'Being edited',
     );
-  });
-  it('one project without groups: nowhere to move, so no menu', () => {
-    const w = { revision: 1, projects: [{ id: 'default', title: 'Shows', groups: [] }], placements: [] };
-    expect(moveTargets(w, 'alpha')).toEqual([]);
-  });
-  it('one project with groups: the groups and Ungrouped, minus where it is', () => {
-    const w = {
-      revision: 1,
-      projects: [{ id: 'default', title: 'Shows', groups: [{ id: 'g', title: 'Shorts' }] }],
-      placements: [{ video: 'alpha', project: 'default', group: 'g' }],
-    };
-    expect(moveTargets(w, 'alpha')).toEqual([{ value: 'default/', label: 'Ungrouped' }]);
-    expect(moveTargets(w, 'bravo')).toEqual([{ value: 'default/g', label: 'Shorts' }]);
-  });
-  it('several projects: named with their project', () => {
-    const w = {
-      revision: 1,
-      projects: [
-        { id: 'default', title: 'Shows', groups: [] },
-        { id: 'l', title: 'Launch', groups: [{ id: 's', title: 'Shorts' }] },
-      ],
-      placements: [],
-    };
-    expect(moveTargets(w, 'alpha')).toEqual([
-      { value: 'l/', label: 'Launch · Ungrouped' },
-      { value: 'l/s', label: 'Launch · Shorts' },
-    ]);
+    // A question waiting on an answer says so (rendering still wins).
+    expect(cardStatus({ status: 'being_edited', stream: null, questions: 1 })).toEqual({
+      text: 'Has questions',
+      tone: 'question',
+    });
+    expect(
+      cardStatus({ status: 'being_edited', stream: { state: 'pending', done: 0, total: 0 }, questions: 1 }).tone,
+    ).toBe('rendering');
   });
 });
 

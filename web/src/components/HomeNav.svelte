@@ -1,7 +1,7 @@
 <script lang="ts">
-  // In a home (retake open <folder>, spec/home.md): "← <project>" at the top left of the video (with more than one
-  // project, "← Projects" and the project), and after Done "Next video →" at the bottom right, where players put their
-  // next episode. Nothing at all outside a home.
+  // In a home (retake open <folder>, spec/home.md): "← Project › video" at the top left of the video, back to the
+  // home at the place the reviewer came from, and after Done "Next video →" at the bottom right, where players put
+  // their next episode. Nothing at all outside a home.
   import type { Review } from '../lib/review.svelte';
 
   let { review }: { review: Review } = $props();
@@ -13,13 +13,13 @@
 </script>
 
 {#if review.homeAvailable}
-  {@const back = review.homeSingle && review.homeProject ? review.homeProject.title : 'Projects'}
   <a
     id="allVideos"
     class="navpill back"
-    href={review.homeHref}
-    aria-label={review.homeSingle && review.homeProject ? `Back to ${back}` : back}
-    title={review.homeSingle ? 'All videos' : 'Projects'}
+    href={review.homeBack.href}
+    title={`Back to ${review.homeBack.title}`}
+    aria-label={`Back to ${review.homeBack.title}`}
+    data-part="review-back"
     ><svg viewBox="0 0 24 24" aria-hidden="true"
       ><path
         d="M14.5 6 8.5 12l6 6"
@@ -29,19 +29,18 @@
         stroke-linecap="round"
         stroke-linejoin="round"
       /></svg
-    ><span class="label">{back}</span></a
+    ><span class="label"
+      >{#each review.homeCrumb as part, i (i)}{#if i}<span class="sep" aria-hidden="true">{' › '}</span>{/if}<span
+          class="part">{part}</span
+        >{/each}</span
+    ></a
   >
-  {#if review.homeProject && !review.homeSingle}
-    <a class="navpill containing" href={review.projectHref} aria-label={`Back to ${review.homeProject.title}`}
-      >{review.homeProject.title}</a
-    >
-  {/if}
   {#if review.doneSaved && review.homeNext}
     <a
       id="nextVideo"
       class="navpill next"
       href={review.nextHref}
-      title={`Next: ${review.homeNext.title}`}
+      title={`Next: ${review.homeNext.video || review.homeNext.title}`}
       onclick={next}
       >Next video <span aria-hidden="true">→</span>{#if !review.touch}<span class="k">&gt;</span>{/if}</a
     >
@@ -83,16 +82,17 @@
     opacity: 1;
   }
   .back svg {
+    flex: none;
     width: 16px;
     height: 16px;
   }
-  .containing {
-    top: 14px;
-    left: 120px;
-    max-width: calc(100vw - 270px);
+  .back .label {
+    max-width: calc(100vw - 300px);
     overflow: hidden;
     text-overflow: ellipsis;
-    display: block;
+  }
+  .sep {
+    color: #85858d;
   }
   .next {
     right: 18px;
@@ -124,12 +124,6 @@
   :global(html[data-phone]) .back svg {
     width: 22px;
     height: 22px;
-  }
-  :global(html[data-phone]) .containing {
-    left: 58px;
-    top: 8px;
-    max-width: calc(100vw - 180px);
-    line-height: 30px;
   }
   :global(html[data-phone]) .next {
     right: 10px;

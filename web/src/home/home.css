@@ -351,6 +351,9 @@ input:focus {
 .chip.reviewed .dot {
   background: var(--st-done);
 }
+.chip.question .dot {
+  background: var(--st-question);
+}
 .card-more {
   position: absolute;
   right: -4px;

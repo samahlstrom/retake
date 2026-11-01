@@ -31,18 +31,18 @@ import {
 } from './images';
 import { ERASE_RADIUS, strokesHit, sweep, undoTarget } from './eraser';
 import {
+  crumb,
   homeContext,
   nextToReview,
   NO_MORE,
   normalizeHome,
   projectUrl,
   unwatchUrl,
+  videoName,
   viewerId,
-  placementOf,
-  workspaceUrl,
-  type WorkspaceProject,
   type Card,
 } from './home';
+import { backPlace, findNode, hashOf, rememberedPlace } from './tree';
 import { Scrubber } from './scrub';
 import { hintSeen, keyAction, markHintSeen, type Action } from './keys';
 import { layoutMode, type LayoutMode } from './layout';
@@ -337,18 +337,16 @@ export class Review {
   homeAvailable = $state(false);
   /** The next project to review, from the home. */
   homeNext = $state.raw<Card | null>(null);
-  homeProject = $state.raw<WorkspaceProject | null>(null);
-  /** The home has one project, so it opens straight to its videos: one way back, named after the project. */
-  homeSingle = $state(true);
+  /** Where the video is: "Project › video" (or the project alone when the two are one name), from the home's tree. */
+  homeCrumb = $state.raw<string[]>([]);
+  /** Where the back link goes: the home at the place the reviewer came from, or at the video's project. */
+  homeBack = $state.raw<{ href: string; title: string }>({ href: '/', title: '' });
   /** Where the page sits in its home, from its path; null outside one. */
   homeCtx: { home: string; project: string } | null = null;
   /** This page load's id for the unwatch call. */
   readonly viewer = viewerId();
   get homeHref(): string {
     return this.homeCtx?.home ?? '/';
-  }
-  get projectHref(): string {
-    return this.homeProject ? workspaceUrl(this.homeHref, this.homeProject.id) : this.homeHref;
   }
   get nextHref(): string {
     return this.homeCtx && this.homeNext ? projectUrl(this.homeCtx.home, this.homeNext.name) : '';
@@ -2094,18 +2092,21 @@ export class Review {
       const r = await fetch(`${ctx.home}api/home`);
       if (!r.ok) return;
       const h = normalizeHome(await r.json());
-      this.homeSingle = !h.workspace || h.workspace.projects.length <= 1;
-      if (h.workspace) {
-        const placement = placementOf(h.workspace, ctx.project);
-        this.homeProject = h.workspace.projects.find((p) => p.id === placement.project) ?? null;
-        this.homeNext = nextToReview(
-          h.projects.filter((v) => placementOf(h.workspace!, v.name).project === placement.project),
-          ctx.project,
-        );
-      } else {
-        this.homeProject = null;
-        this.homeNext = nextToReview(h.projects, ctx.project);
+      const me = h.projects.find((c) => c.name === ctx.project);
+      const titleOf = (path: string) => (path ? (findNode(h.tree, path)?.title ?? path.split('/').pop()!) : h.title);
+      // The next one to review: from the same project first, then any.
+      const mine = me ? h.projects.filter((c) => c.project === me.project) : [];
+      this.homeNext = nextToReview(mine, ctx.project) ?? nextToReview(h.projects, ctx.project);
+      this.homeCrumb = me ? crumb(titleOf(me.project), videoName(me)) : [h.title || 'All videos'];
+      let storage: Storage | null = null;
+      try {
+        storage = localStorage;
+      } catch {
+        /* none here */
       }
+      const place = me ? backPlace(rememberedPlace(storage, ctx.home), me) : '';
+      // The top has no hash: the home then shows what it remembers, which is the top (backPlace says so).
+      this.homeBack = { href: ctx.home + hashOf(place), title: titleOf(place) || 'All videos' };
       this.homeAvailable = true;
     } catch {
       /* no home here, or the server is gone */
