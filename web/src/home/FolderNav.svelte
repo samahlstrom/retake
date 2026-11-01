@@ -139,7 +139,7 @@
   </div>
   <div class="rows" role="tree" aria-label={home.tree.title || 'Folders'} bind:this={tree}>
     <div
-      class="row top"
+      class="row toprow"
       class:project={home.tree.project}
       role="treeitem"
       aria-level={1}
