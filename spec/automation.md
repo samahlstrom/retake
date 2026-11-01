@@ -341,7 +341,8 @@ its version files and runs the agent, and the agent makes the next version howev
   without `send` (an older page) queues them only when `config.enabled` is on. Each finished take is considered
   once: if neither applies, its notes stay Open until someone sends them, and turning `enabled` on later doesn't
   sweep up old reviews. Finishing again with `"send": true` sends a take that was already processed. Send also
-  submits the other open comments (`POST /api/automation/tasks`); that always queues. Submission is idempotent
+  submits the shown version's other open comments (`POST /api/automation/tasks`); that always queues. An older
+  version's open comments are sent from that version (spec/notes.md, "Comments belong to their version"). Submission is idempotent
   while an unfinished task owns a note. Reopened notes may be submitted again.
 - Any role that can record (reviewer, approver, owner; signed in or through a share link, local or hosted) sends
   and retries. A queued task waits for the selected worker, or for the first worker to connect when none was ever
@@ -408,13 +409,13 @@ its version files and runs the agent, and the agent makes the next version howev
   attempt reports, questions (`ask`), render registration/progress, version files (`files`), note artifacts and
   relay response endpoints. An attempt's `completed` report names a render (`result`) or, in a plain project, a version file
   (`version`). The poll answer has
-  `config`, `task`, `notes`, `questions` (the task's, with their answers) and `versions` (how many versions the
-  family has, drafts not counted). A poll may carry `told` (answers that reached the agent). In Local mode
+  `config`, `task`, `notes` (the task's notes, plus every open note of every version as context), `questions` (the
+  task's, with their answers) and `versions` (how many versions the family has, drafts not counted). A poll may carry `told` (answers that reached the agent). In Local mode
   the in-process worker reaches these handlers without HTTP or a token.
 - Existing video URLs serve remote versions through the relay. Existing viewing permissions apply to all media.
-- The bar has one action for everyone who can record: Send (`Send N to agent`, N the open comments no task owns
-  and no `sending` take holds). It finishes the take in progress with `send: true` on its `/done` and submits the
-  other open comments. With no computer online it does the same: the comments show Working, "Waiting for the
+- The bar has one action for everyone who can record: Send (`Send N to agent`, N the shown version's open comments
+  no task owns and no `sending` take holds). It finishes the take in progress with `send: true` on its `/done` and
+  submits the shown version's other open comments. With no computer online it does the same: the comments show Working, "Waiting for the
   editing computer", and start when one connects; the owner's press also opens the agent popover with the connect
   command (`POST /api/connect`). In local mode, when the built-in worker can't edit (`blocked`), Send saves the take
   without `send`, and the popover says what's missing (it doesn't open by itself). There is no other action.
