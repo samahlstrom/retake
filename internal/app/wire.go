@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math"
 	"path/filepath"
 
 	"github.com/samahlstrom/retake/internal/config"
@@ -87,6 +88,7 @@ func runFromResult(label string, res *notes.Result) project.Run {
 			x0, y0, x1, y1 := float64(st.BBox[0]), float64(st.BBox[1]), float64(st.BBox[2]), float64(st.BBox[3])
 			pc.Detail.Strokes = append(pc.Detail.Strokes, project.Stroke{
 				Shape: st.Shape, Color: st.Color, Box: [4]float64{x0, y0, x1 - x0, y1 - y0},
+				Points: project.FewerPoints(st.Pts()), T: math.Round(st.Time()*1e3) / 1e3,
 			})
 		}
 		pc.Detail.Snapshot = snaps[c]

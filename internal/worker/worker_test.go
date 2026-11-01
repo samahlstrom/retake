@@ -281,6 +281,23 @@ func TestAgentProcess(t *testing.T) {
 			t.Fatal(e)
 		}
 		return
+	case "plain-still": // checks its note's still is one the worker made, keeps a copy, then edits like plain-edit
+		var c plainContext
+		if e = json.Unmarshal(b, &c); e != nil || len(c.Notes) == 0 {
+			t.Fatal("plain context", e)
+		}
+		n := c.Notes[0]
+		if n.Detail.Snapshot != "note-1.png" || len(n.Missing) != 1 || !strings.Contains(n.Missing[0], "this computer made of v1") {
+			t.Fatalf("note 1: snapshot %q, missing %q", n.Detail.Snapshot, n.Missing)
+		}
+		still, e := os.ReadFile(filepath.Join(filepath.Dir(contextPath), "note-1.png"))
+		if e != nil {
+			t.Fatal(e)
+		}
+		if e = os.WriteFile("seen-still.png", still, 0o600); e != nil {
+			t.Fatal(e)
+		}
+		fallthrough
 	case "plain-edit": // a plain project's agent: cuts the newest version's first second, into $RETAKE_OUTPUT
 		var c plainContext
 		if e = json.Unmarshal(b, &c); e != nil || len(c.Family) == 0 || c.Output != os.Getenv("RETAKE_OUTPUT") {

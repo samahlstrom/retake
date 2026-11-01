@@ -8,6 +8,7 @@ import {
   MARKS,
   presence,
   sidebarRows,
+  sketchFrame,
   toggleLabel,
   visible,
   type Row,
@@ -295,5 +296,36 @@ describe("an agent's question from inside its task", () => {
   it('goes once the note is answered (open again)', () => {
     const [row] = sidebarRows({ ...res, items: [item({ id: 12, status: 'open', ask })] }, { versions, shown: 'v8' });
     expect(row!.ask).toBeNull();
+  });
+});
+
+describe("a drawing's thumbnail frame", () => {
+  const fam = [{ label: 'v1' }, { label: 'v2', poster: 'video/v2/index.poster.jpg' }, { label: 'v3', relay: true }];
+  const snapshot = 'api/notes/4/snapshot?m=1';
+  it("is the note's snapshot, the still of its moment, when the server has one", () => {
+    const [row] = sidebarRows(
+      { version: 'v1', newest: true, items: [item({ id: 4, version: 'v1', snapshot })] },
+      { versions, shown: 'v1' },
+    );
+    expect(row!.snapshot).toBe(snapshot);
+    expect(sketchFrame(row!, fam, 'v1', true)).toBe(snapshot);
+    expect(sketchFrame(row!, fam, 'v1', false)).toBe(snapshot);
+  });
+  it('else the first frame of the version it was left on, not the one on screen', () => {
+    expect(sketchFrame({ version: 'v1' }, fam, 'v2', true)).toBe('api/poster?v=v1');
+    expect(sketchFrame({ version: 'v2' }, fam, 'v1', true)).toBe('video/v2/index.poster.jpg'); // a stream's own
+    expect(sketchFrame({ snapshot: null }, fam, 'v1', true)).toBe('api/poster?v=v1'); // no version: the shown one
+  });
+  it('else none: no poster route, a version played from another computer, or an unknown version', () => {
+    expect(sketchFrame({ version: 'v1' }, fam, 'v1', false)).toBeNull();
+    expect(sketchFrame({ version: 'v3' }, fam, 'v3', true)).toBeNull();
+    expect(sketchFrame({ version: 'v9' }, fam, 'v1', true)).toBeNull();
+  });
+  it("a question's row never has a snapshot", () => {
+    const [row] = sidebarRows(
+      { version: 'v1', newest: true, items: [item({ id: 5, kind: 'question', status: 'question', snapshot })] },
+      { versions, shown: 'v1' },
+    );
+    expect(row!.snapshot).toBeNull();
   });
 });

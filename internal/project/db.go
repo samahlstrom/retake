@@ -70,6 +70,12 @@ func openFile(path, root string, ms []string) (*Store, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("project store %s: %w", path, err)
 	}
+	if len(ms) == len(migrations) { // the whole schema: a test's partial one has no notes to relocate
+		if err := s.relocatePaths(); err != nil {
+			_ = db.Close()
+			return nil, fmt.Errorf("project store %s: making its paths relative: %w", path, err)
+		}
+	}
 	return s, nil
 }
 
@@ -85,6 +91,10 @@ func OpenPostgres(ctx context.Context, dsn, schema, root string) (*Store, error)
 	if err := sqldb.Migrate(ctx, db, pgMigrations); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("project store (schema %s): %w", schema, err)
+	}
+	if err := s.relocatePaths(); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("project store (schema %s): making its paths relative: %w", schema, err)
 	}
 	return s, nil
 }

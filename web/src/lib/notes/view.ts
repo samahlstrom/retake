@@ -4,7 +4,7 @@
 //  - older version: the notes in their final state (✓ with the change, ? with the question);
 //  - retracted notes are never shown.
 import { fmt } from '../util';
-import type { Box } from '../types';
+import type { Box, Version } from '../types';
 import type { NoteItem, NotesResponse, TaskAsk } from './types';
 import type { EditingTask } from '../automation.svelte';
 
@@ -50,11 +50,30 @@ export interface Row {
   reopen: boolean;
   options: Chip[];
   images: { url: string; box: Box }[];
+  /** A note's still of its moment with its strokes drawn on it (a URL), for its drawing's thumbnail. */
+  snapshot?: string | null;
   /** Carried over from the parent version: what became of its moment ("unchanged", "answered, check it", "context
    * changed"), with the version it came from. */
   carried: string | null;
   /** The agent's open question from inside its task, with its time as m:ss. */
   ask: (TaskAsk & { time: string }) | null;
+}
+
+/** The picture under a comment's drawing thumbnail, so its strokes sit on what they were drawn over: the still of
+ * its moment (the note's snapshot), else the first frame of the version it was left on (a streamed version's
+ * poster, or the server's `api/poster` when the page has one), else none: a plain dark box. A version that plays
+ * from another computer has no server poster. */
+export function sketchFrame(
+  row: Pick<Row, 'snapshot' | 'version'>,
+  versions: readonly Pick<Version, 'label' | 'poster' | 'relay'>[],
+  shown: string | null,
+  posters: boolean,
+): string | null {
+  if (row.snapshot) return row.snapshot;
+  const v = versions.find((x) => x.label === (row.version || shown));
+  if (!v) return null;
+  if (v.poster) return v.poster;
+  return posters && !v.relay ? `api/poster?v=${encodeURIComponent(v.label)}` : null;
 }
 
 /** Submitted work stays beside the live edit, even as its original reviewed version becomes historical. */
@@ -136,6 +155,7 @@ export function toRow(item: NoteItem, newest: boolean, ctx: ViewContext): Row {
     reopen: !newest && item.status === 'answered' && ctx.approve !== false,
     options: (item.options ?? []).map((label) => ({ label, known: known(label), on: label === ctx.shown })),
     images: item.images ?? [],
+    snapshot: item.kind === 'note' ? item.snapshot || null : null,
     carried: carriedText(item),
     ask: item.kind === 'note' && item.ask && mark === 'question' ? { ...item.ask, time: fmt(item.ask.t, false) } : null,
   };

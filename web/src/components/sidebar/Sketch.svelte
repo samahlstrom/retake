@@ -1,6 +1,6 @@
 <script lang="ts">
-  // A comment's drawing, small: its pen lines and images in the frame's shape, so a card shows what you circled
-  // without playing to it. Click it to go to that moment.
+  // A comment's drawing, small: its pen lines and images over the frame they were drawn on (sketchFrame), so a card
+  // shows what you circled without playing to it. Click it to go to that moment.
   import { COLORS } from '../../lib/constants';
   import type { Box, HistoryStroke } from '../../lib/types';
 
@@ -8,11 +8,14 @@
     strokes,
     images,
     aspect,
+    frame = null,
     onclick,
   }: {
     strokes: HistoryStroke[];
     images: { url: string; box: Box }[];
     aspect: number;
+    /** The picture under the lines; none: the dark box alone. */
+    frame?: string | null;
     onclick: () => void;
   } = $props();
 
@@ -33,6 +36,7 @@
 
 <button class="sketch" title="Go to this moment" aria-label="Drawing: go to this moment" {onclick}>
   <svg viewBox="0 0 {W} {H}" aria-hidden="true">
+    {#if frame}<image href={frame} width={W} height={H} opacity="0.8" preserveAspectRatio="xMidYMid slice" />{/if}
     {#each images as im, i (i)}<image
         href={im.url}
         x={im.box[0] * W}

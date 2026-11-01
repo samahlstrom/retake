@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/samahlstrom/retake/internal/jsonx"
+	"github.com/samahlstrom/retake/internal/still"
 )
 
 type itemKind int
@@ -109,7 +110,7 @@ func takeComments(t *take, video *jsonx.Object) []*Comment {
 		}
 		desc, g := Describe(pts, W, H)
 		color := str(st["color"])
-		if _, ok := colors[color]; !ok || jsonx.Kind(st["color"]) != "string" {
+		if _, ok := still.Colors[color]; !ok || jsonx.Kind(st["color"]) != "string" {
 			color = "red"
 		}
 		seg := t.segOf(st["seg"], s)

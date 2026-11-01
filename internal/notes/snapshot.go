@@ -18,17 +18,12 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 
 	xdraw "golang.org/x/image/draw"
-	"golang.org/x/image/font"
-	"golang.org/x/image/font/gofont/gobold"
-	"golang.org/x/image/font/opentype"
-	"golang.org/x/image/math/fixed"
-	"golang.org/x/image/vector"
 	_ "golang.org/x/image/webp" // decodes reviewers' dropped .webp images
 
 	"github.com/samahlstrom/retake/internal/jsonx"
+	"github.com/samahlstrom/retake/internal/still"
 )
 
 // snapshotTime is the frame a moment's snapshot shows: the middle one of its (unflipped) marks, else its first
@@ -144,48 +139,6 @@ func grabFrame(ctx context.Context, ffmpeg, video string, t, fps float64) (image
 	return png.Decode(&stdout)
 }
 
-var (
-	badgeFontOnce sync.Once
-	badgeFont     *opentype.Font
-)
-
-// face returns Go Bold (the Go fonts, BSD license, bundled with golang.org/x/image) at size pixels.
-func face(size float64) (font.Face, error) {
-	badgeFontOnce.Do(func() { badgeFont, _ = opentype.Parse(gobold.TTF) })
-	if badgeFont == nil {
-		return nil, errors.New("bundled font unreadable")
-	}
-	return opentype.NewFace(badgeFont, &opentype.FaceOptions{Size: size, DPI: 72, Hinting: font.HintingNone})
-}
-
-func rgba(c [3]uint8) color.RGBA { return color.RGBA{R: c[0], G: c[1], B: c[2], A: 255} }
-
-// capsule adds a segment p-q with round ends of radius r to z (always wound the same way, so overlaps stay solid).
-func capsule(z *vector.Rasterizer, p, q [2]float64, r float64) {
-	dx, dy := q[0]-p[0], q[1]-p[1]
-	th := math.Atan2(dy, dx)
-	if dx == 0 && dy == 0 {
-		th = 0
-	}
-	const steps = 12
-	arc := func(c [2]float64, from float64, first bool) {
-		for i := 0; i <= steps; i++ {
-			a := from - math.Pi*float64(i)/steps
-			x, y := float32(c[0]+r*math.Cos(a)), float32(c[1]+r*math.Sin(a))
-			if first && i == 0 {
-				z.MoveTo(x, y)
-			} else {
-				z.LineTo(x, y)
-			}
-		}
-	}
-	arc(q, th+math.Pi/2, true)
-	arc(p, th-math.Pi/2, false)
-	z.ClosePath()
-}
-
-func disc(z *vector.Rasterizer, c [2]float64, r float64) { capsule(z, c, c, r) }
-
 // renderSnapshot draws the numbered strokes and the framed images over the frame at t and saves it as a PNG.
 func renderSnapshot(ctx context.Context, ffmpeg, video string, t, fps float64, strokes []*Stroke, images []*Image,
 	out string) error {
@@ -203,69 +156,26 @@ func renderSnapshot(ctx context.Context, ffmpeg, video string, t, fps float64, s
 	for _, im := range images {
 		drawImage(img, im, fw, fh, short)
 	}
-	width := math.Max(3, short*0.0065) // flat strokes, as wide as the page draws them
+	lines := make([]still.Line, 0, len(strokes))
 	for _, st := range strokes {
-		if len(st.pts) == 0 {
-			continue
-		}
-		z := vector.NewRasterizer(W, H)
-		px := make([][2]float64, len(st.pts))
-		for i, p := range st.pts {
-			px[i] = [2]float64{p[0] * fw, p[1] * fh}
-		}
-		if len(px) == 1 {
-			disc(z, px[0], width/2)
-		}
-		for i := 0; i+1 < len(px); i++ {
-			capsule(z, px[i], px[i+1], width/2)
-		}
-		z.Draw(img, img.Bounds(), image.NewUniform(rgba(colorOf(st.Color))), image.Point{})
+		lines = append(lines, still.Line{Points: st.pts, Color: st.Color, N: st.N})
 	}
-	r := math.Max(11, math.RoundToEven(short*0.015))
-	f, err := face(math.RoundToEven(r * 1.2))
-	if err != nil {
+	if err := still.Draw(img, lines); err != nil {
 		return err
 	}
-	for _, st := range strokes { // numbered badge beside each stroke's start, matching "stroke N" in notes.md
-		if len(st.pts) == 0 {
-			continue
-		}
-		x, y := st.pts[0][0]*fw, st.pts[0][1]*fh
-		c := [2]float64{math.Min(math.Max(x-r*1.7, r), fw-r), math.Min(math.Max(y-r*1.7, r), fh-r)}
-		z := vector.NewRasterizer(W, H)
-		disc(z, c, r)
-		z.Draw(img, img.Bounds(), image.NewUniform(rgba(colorOf(st.Color))), image.Point{})
-		ink := color.RGBA{R: 17, G: 17, B: 19, A: 255}
-		if st.Color == "red" {
-			ink = color.RGBA{R: 255, G: 255, B: 255, A: 255}
-		}
-		label(img, f, strconv.Itoa(st.N), c, ink)
+	r := still.Radius(short)
+	f, err := still.Face(math.RoundToEven(r * 1.2))
+	if err != nil {
+		return err
 	}
 	for _, im := range images { // a square badge on each image's corner, matching "image N"
 		x, y := float64(im.Box[0])*fw, float64(im.Box[1])*fh
 		c := [2]float64{math.Min(math.Max(x, r), fw-r), math.Min(math.Max(y, r), fh-r)}
 		sq := image.Rect(int(c[0]-r), int(c[1]-r), int(c[0]+r), int(c[1]+r))
-		draw.Draw(img, sq, image.NewUniform(color.RGBA{R: 17, G: 17, B: 19, A: 255}), image.Point{}, draw.Src)
-		label(img, f, strconv.Itoa(im.N), c, color.RGBA{R: 255, G: 255, B: 255, A: 255})
+		draw.Draw(img, sq, image.NewUniform(still.Ink), image.Point{}, draw.Src)
+		still.Label(img, f, strconv.Itoa(im.N), c, color.RGBA{R: 255, G: 255, B: 255, A: 255})
 	}
 	return writePNG(out, img)
-}
-
-func colorOf(name string) [3]uint8 {
-	if c, ok := colors[name]; ok {
-		return c
-	}
-	return colors["red"]
-}
-
-// label draws text centered on c (the middle of the font's ascent and descent, like Pillow's "mm" anchor).
-func label(dst draw.Image, f font.Face, text string, c [2]float64, ink color.Color) {
-	d := &font.Drawer{Dst: dst, Src: image.NewUniform(ink), Face: f}
-	adv := d.MeasureString(text)
-	m := f.Metrics()
-	base := c[1] + (float64(m.Ascent)-float64(m.Descent))/64/2
-	d.Dot = fixed.Point26_6{X: fixed.Int26_6((c[0] - float64(adv)/64/2) * 64), Y: fixed.Int26_6(base * 64)}
-	d.DrawString(text)
 }
 
 // drawImage draws a dropped image scaled into its box, with a frame; an unreadable file leaves an empty frame.
@@ -283,7 +193,7 @@ func drawImage(dst *image.RGBA, im *Image, fw, fh, short float64) {
 		_ = f.Close()
 	}
 	frame := int(math.Max(2, math.Round(short*0.004)))
-	white, dark := image.NewUniform(color.White), image.NewUniform(color.RGBA{R: 17, G: 17, B: 19, A: 255})
+	white, dark := image.NewUniform(color.White), image.NewUniform(still.Ink)
 	for _, ring := range []struct {
 		in  int
 		src image.Image

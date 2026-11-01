@@ -167,7 +167,7 @@ func (p *Project) views(notes []project.Note, fam []family.Version) ([]NoteView,
 		return nil, err
 	}
 	for _, n := range notes {
-		v := NoteView{Note: n, Strokes: n.Detail.Strokes, Snapshot: n.Detail.Snapshot, Images: []ImageView{},
+		v := NoteView{Note: n, Strokes: n.Detail.Strokes, Snapshot: p.Store.Abs(n.Detail.Snapshot), Images: []ImageView{},
 			Threads: []project.Thread{}, Targets: n.Detail.Targets}
 		if v.Strokes == nil {
 			v.Strokes = []project.Stroke{}

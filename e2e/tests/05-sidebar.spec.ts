@@ -440,6 +440,46 @@ test('history: an earlier take\'s image shows near its time, like a stroke', asy
   await page.unroute(historyRoute);
 });
 
+test('a drawing comment shows its strokes over the still of its moment', async () => {
+  // An earlier take with two strokes at 30 s, and its note, words-less, whose snapshot the server serves.
+  const take = '2000-01-02_00-00-00';
+  const ring = Array.from({ length: 33 }, (_, i): [number, number] =>
+    [0.62 + 0.1 * Math.cos((i / 32) * 2 * Math.PI), 0.42 + 0.18 * Math.sin((i / 32) * 2 * Math.PI)]);
+  const historyRoute = (u: URL) => u.pathname === '/api/info' || u.pathname === '/api/history';
+  await page.route(historyRoute, async (route) => {
+    const r = await route.fetch();
+    const info = (await r.json()) as { history: unknown[] };
+    info.history.push({ id: take, inherited_from: null, voice: { bin: 0.25, bins: [] }, images: [], strokes: [
+      { id: 1, video_t: 30.2, color: 'red', points: ring },
+      { id: 2, video_t: 30.6, color: 'yellow', points: [[0.2, 0.78], [0.48, 0.78]] }] });
+    return json(route, 200, info);
+  });
+  const snapshot = '/api/notes/9/snapshot?m=1';
+  const snapRoute = (u: URL) => u.pathname === '/api/notes/9/snapshot';
+  await page.route(snapRoute, (route) => route.fulfill({ status: 200, contentType: 'image/png', body: png }));
+  const before = notes.v6!;
+  notes.v6 = [...before, { id: 9, kind: 'note', status: 'open', t0: 30, t1: 31, by: AUTHOR, text: '', take,
+    version: 'v6', drawings: ['red', 'yellow'], snapshot }];
+  await page.reload();
+  await ui.waitFor(READY, 20_000);
+  const card = item('note:9');
+  await expect(card.locator('.text')).toHaveText('Drawing', { timeout: 8000 });
+  await expect(card.locator('.sketch path')).toHaveCount(2);
+  const frame = card.locator('.sketch image').first();
+  await expect(frame).toHaveAttribute('href', snapshot);
+  // The frame is under the lines, and it loaded.
+  expect(await card.locator('.sketch svg > *').first().evaluate((el) => el.tagName)).toBe('image');
+  await expect.poll(() => page.evaluate(() => performance.getEntriesByType('resource')
+    .some((e) => e.name.includes('/api/notes/9/snapshot')))).toBe(true);
+  await card.scrollIntoViewIfNeeded();
+  await sleep(300);
+  await shot('sidebar-drawing-1920.png');
+  if (SHOTS) writeFileSync(join(SHOTS, 'sidebar-drawing-card.png'), await card.screenshot());
+  notes.v6 = before;
+  await page.unroute(snapRoute);
+  await page.unroute(historyRoute);
+});
+
 // ------------------------------------------------------------------ phone
 test('phone: the list sits under the controls behind a toggle', async () => {
   await page.setViewportSize(PHONE);

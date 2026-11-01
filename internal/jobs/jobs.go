@@ -100,7 +100,7 @@ type FamilyFunc func() []family.Version
 func Handlers(st *project.Store, fam FamilyFunc, e Engines) map[string]Handler {
 	return map[string]Handler{
 		project.JobTranscribe: func(ctx context.Context, job project.Job) error {
-			return transcribe(ctx, e, job.Args.Dir, job.Args.Revision != "")
+			return transcribe(ctx, e, st.Abs(job.Args.Dir), job.Args.Revision != "")
 		},
 		project.JobNotes: func(ctx context.Context, job project.Job) error {
 			f := fam()
