@@ -1,87 +1,111 @@
-/* The notes sidebar. Same palette, fonts and restraint as the bar: hairlines, no boxes, times in tabular mono. Placed
-   in #app's grid (app.css): column 2 next to the stage on desktop, row 3 under the bar on phones. */
+/* The comments column. Same palette and restraint as the bar: hairlines between comments, no boxes, no colored side
+   tabs; the status is a dot and a word. Placed in #app's grid (app.css): column 2 next to the stage on desktop, row 3
+   under the bar on phones. */
 #side {
+  position: relative;
   grid-row: 1;
   grid-column: 2;
   width: 360px;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  background: #18181b;
+  background: #121215;
   border-left: 1px solid var(--hair);
 }
 #side header {
   flex: none;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  height: 60px;
+  gap: 2px;
+  height: 52px;
   padding: 0 8px 0 18px;
-  color: var(--dim);
-  font-size: 15px;
+}
+#side header .h {
+  flex: 1;
+  font-size: 14px;
   font-weight: 600;
+  letter-spacing: 0.005em;
   color: var(--text);
 }
-#side .hide {
+#side header .search {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  margin-right: 4px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font: inherit;
+  outline: none;
+  user-select: text;
+}
+#side header .search:focus {
+  border-color: rgba(166, 147, 250, 0.55);
+}
+#side .icon {
+  flex: none;
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: var(--dim);
+  color: #8e8e99;
 }
-#side .hide:hover {
-  background: rgba(255, 255, 255, 0.06);
+#side .icon:hover,
+#side .icon.on {
   color: var(--text);
 }
-#side .hide svg {
+#side .icon svg {
   width: 18px;
   height: 18px;
 }
 
-/* Job progress: one quiet line; a failure is warmer and says how to fix it. */
-#side .job {
+/* To do · Done: two words, the active one underlined. */
+#side .tabs {
   flex: none;
   display: flex;
-  align-items: baseline;
-  gap: 9px;
-  margin: 0 18px 10px;
-  padding: 0;
+  gap: 20px;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--hair);
+}
+#side .tabs button {
+  position: relative;
+  padding: 0 0 11px;
   border: 0;
   background: none;
-  color: var(--dim);
-  font-size: 12px;
-  text-align: left;
-  cursor: default;
+  color: #8e8e99;
+  font-size: 13px;
+  font-weight: 500;
 }
-#side .job.err {
-  color: #ff9f8f;
-  cursor: pointer;
+#side .tabs button b {
+  margin-left: 5px;
+  font-weight: 500;
+  color: #6f6f7a;
+  font-variant-numeric: tabular-nums;
 }
-#side .job .pulse {
-  flex: none;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--voice);
-  transform: translateY(-1px);
-  animation: side-pulse 1.4s ease-in-out infinite;
+#side .tabs button:hover {
+  color: #c9c9d1;
 }
-#side .job.err .pulse {
-  background: var(--live);
-  animation: none;
+#side .tabs button.on {
+  color: var(--text);
 }
-#side .job .hint {
-  display: block;
-  margin-top: 2px;
-  color: var(--dim);
+#side .tabs button.on b {
+  color: #a3a3ad;
 }
-@keyframes side-pulse {
-  50% {
-    opacity: 0.25;
-  }
+#side .tabs button.on::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--text);
 }
 
 #side .scroll {
@@ -109,213 +133,293 @@
 #side ol {
   list-style: none;
   margin: 0;
-  padding: 0 0 14px;
-}
-#side .empty {
-  margin: 4px 18px;
-  color: var(--dim);
-  font-size: 12px;
+  padding: 0 0 64px; /* room for the floating strip at the bottom */
 }
 
-/* Frame-anchored conversation: author, timecode, readable body, and editor replies. */
+/* ---------------------------------------------------------------- a comment */
 #side .item {
   position: relative;
-  padding: 20px;
-  border-top: 1px solid var(--hair);
+  padding: 14px 18px 16px;
+  border-bottom: 1px solid var(--hair);
   user-select: text;
+  transition: background 0.15s ease;
+}
+#side .item:hover {
+  background: rgba(255, 255, 255, 0.018);
 }
 #side .item.active {
-  background: #252331;
-  box-shadow: inset 3px 0 #a99aff;
+  background: rgba(255, 255, 255, 0.045);
 }
-#side .comment-author {
+#side .line1 {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 13px;
+  min-height: 26px;
+  font-size: 12px;
+}
+#side .line1 .grow {
+  flex: 1;
+}
+#side .who {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #d6d6de;
+  font-weight: 600;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 #side .avatar {
+  flex: none;
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
-  background: #4a3e67;
-  color: #e5d7ff;
-  font-weight: 600;
-  flex: none;
-}
-#side .avatar.editor {
-  background: #29464b;
-  color: #b5e9e6;
-}
-#side .resolved {
-  margin-left: auto;
-  color: #86cda5;
+  background: #3b3550;
+  color: #ddd5ff;
   font-size: 11px;
-}
-#side .comment-body {
-  margin: 8px 0 0 40px;
+  font-weight: 600;
 }
 #side .time {
-  display: inline-block;
-  width: auto;
+  padding: 0;
   border: 0;
-  border-radius: 4px;
-  padding: 2px 6px;
-  background: #343049;
-  color: #c1b5ff;
+  background: none;
+  color: #c9c9d1;
   font:
-    12px ui-monospace,
+    500 12px ui-monospace,
+    'JetBrains Mono',
+    Menlo,
     monospace;
   font-variant-numeric: tabular-nums;
 }
 #side .time:hover {
-  background: #49405f;
+  color: #fff;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+#side .status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #8e8e99;
+}
+#side .status .dot {
+  width: 7px;
+  height: 7px;
+}
+#side .status.open .dot {
+  background: var(--st-open);
+}
+#side .status.working .dot {
+  background: var(--st-working);
+  animation: dot-pulse 1.4s ease-in-out infinite;
+}
+#side .status.question {
+  color: #c9bfff;
+}
+#side .status.question .dot {
+  background: var(--st-question);
+}
+#side .status.done .dot {
+  background: var(--st-done);
+}
+#side .origin {
+  color: #6f6f7a;
+  font-size: 11.5px;
 }
 #side .text {
-  margin: 9px 0 0;
-  font-size: 13px;
-  line-height: 1.65;
+  margin: 6px 0 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: #e4e4ea;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
-  color: #e2e2e7;
 }
-#side .editor-reply {
-  border-left: 2px solid #414148;
-  padding-left: 12px;
-  margin-top: 14px;
-  color: #b9b9c2;
-  font-size: 12px;
-  line-height: 1.6;
+#side .text.quiet {
+  color: #8e8e99;
 }
-#side .editor-reply strong {
-  color: #d3d3db;
-  font-size: 11px;
+#side .item.asking .text {
+  color: #ddd7ff;
 }
-#side .editor-reply p {
-  margin: 3px 0 0;
+#side .asked {
+  margin: 10px 0 0;
+  color: #ddd7ff;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-#side .thumbs {
+#side .change,
+#side .paused {
   display: flex;
-  gap: 8px;
-  margin-top: 12px;
   flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin: 9px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
 }
-#side .thumbs button {
-  border: 0;
-  background: none;
+#side .change {
+  color: #9ccfb3;
+}
+#side .paused {
+  color: #e2bd73;
+}
+#side .link {
   padding: 0;
-}
-#side .thumbs img {
-  height: 56px;
-  max-width: 110px;
-  object-fit: cover;
-  border-radius: 5px;
-}
-#side .acts {
-  display: flex;
-  gap: 12px;
-  margin-top: 12px;
-}
-#side .act,
-#side .answer {
   border: 0;
-  padding: 0;
   background: none;
-  color: #aaa4c2;
-  font-size: 12px;
-}
-#side .act:hover,
-#side .answer:hover {
-  color: #ded5ff;
-}
-#side .answer.on {
-  color: #ff9c92;
-}
-#side .count {
-  font-size: 12px;
-  color: #9999a3;
-  margin-left: 8px;
-  font-weight: 400;
-}
-#side .comment-tools {
-  padding: 0 20px 12px;
-}
-#side .comment-search {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 7px 10px;
-  background: #222225;
-  border: 1px solid #333338;
-  border-radius: 6px;
-  color: #9b9ba5;
-}
-#side input {
-  min-width: 0;
-  width: 100%;
-  background: none;
-  border: 0;
-  outline: 0;
-  color: var(--text);
+  color: #e4e4ea;
   font: inherit;
-  user-select: text;
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: rgba(255, 255, 255, 0.3);
+  text-underline-offset: 3px;
 }
-#side .comment-search:focus-within {
-  border-color: #9d8ce1;
+#side .link:hover {
+  text-decoration-color: currentColor;
 }
-#side .comment-filters {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding-top: 14px;
-  font-size: 11px;
-  color: #9999a3;
-}
-#side .comment-filters {
-  gap: 8px;
-}
-#side .comment-filters .retake-select-trigger {
-  flex: 1;
-  min-width: 0;
-}
-#side .comment-footer {
-  padding: 14px 20px;
-  border-top: 1px solid var(--hair);
+
+/* ⋯: there on hover or focus, always on touch. It sits in the first line, so showing it moves nothing. */
+#side .more {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 26px;
+  margin: -2px -6px -2px 0;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
   color: #8e8e99;
-  font-size: 11px;
+  opacity: 0;
+  transition: opacity 0.12s ease;
 }
+#side .more svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+#side .item:hover .more,
+#side .item:focus-within .more,
+#side .more[data-state='open'] {
+  opacity: 1;
+}
+#side .more:hover,
+#side .more[data-state='open'] {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+}
+@media (hover: none) {
+  #side .more {
+    opacity: 1;
+  }
+}
+html[data-phone] #side .more {
+  opacity: 1;
+  width: 44px;
+  height: 36px;
+}
+
 #side .empty {
+  margin: 64px 24px;
   text-align: center;
   font-size: 14px;
-  margin: 55px 24px;
   color: #d8d8df;
 }
 #side .empty span {
   display: block;
   margin-top: 8px;
-  color: #93939e;
-  font-size: 12px;
+  color: #8e8e99;
+  font-size: 12.5px;
   line-height: 1.6;
-}
-#side .recording-comment {
-  padding: 10px 20px 16px;
-  color: #ffaca5;
-  font-size: 12px;
-}
-#side .recording-comment small {
-  display: block;
-  margin-top: 5px;
-  color: #9999a3;
 }
 #side button:focus-visible {
   outline: 2px solid #b7a6ff;
-  outline-offset: 3px;
+  outline-offset: 2px;
 }
 
-/* The toggle: a quiet pill over the video's top-right corner, in the hint's style. */
+/* ---------------------------------------------------------------- the bottom strip: progress, undo */
+#side .strip {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+#side .strip > * {
+  pointer-events: auto;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: calc(100% - 24px);
+  margin: 0 12px 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--pop-line);
+  border-radius: 10px;
+  background: rgba(29, 29, 33, 0.96);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(10px);
+  color: #c9c9d1;
+  font-size: 12.5px;
+  text-align: left;
+}
+#side .job {
+  align-items: baseline;
+  font: inherit;
+  font-size: 12.5px;
+  cursor: default;
+}
+#side .job.err {
+  color: #ffa69e;
+  cursor: pointer;
+}
+#side .pulse {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--voice);
+  animation: dot-pulse 1.4s ease-in-out infinite;
+}
+#side .job .pulse {
+  transform: translateY(-1px);
+}
+#side .job.err .pulse {
+  background: var(--live);
+  animation: none;
+}
+#side .job .hint {
+  display: block;
+  margin-top: 2px;
+  color: #8e8e99;
+}
+#side .recording-comment .pulse {
+  background: var(--live);
+}
+#side .deleted-comment {
+  justify-content: space-between;
+}
+#side .deleted-comment button {
+  padding: 2px 4px;
+  border: 0;
+  background: transparent;
+  color: #9edcff;
+  font: inherit;
+  font-weight: 600;
+}
+#side .delete-error {
+  margin: 0;
+  color: #ffaaa2;
+}
+
+/* ---------------------------------------------------------------- the toggle over the video */
 #sideToggle {
   grid-area: 1 / 1;
   justify-self: end;
@@ -344,11 +448,14 @@
   background: var(--dim);
 }
 #sideToggle .dot.q {
-  background: #ffcf6e;
+  background: var(--st-question);
+}
+#sideToggle .dot.w {
+  background: var(--st-working);
 }
 #sideToggle .dot.busy {
   background: var(--voice);
-  animation: side-pulse 1.4s ease-in-out infinite;
+  animation: dot-pulse 1.4s ease-in-out infinite;
 }
 #sideToggle .dot.err {
   background: var(--live);
@@ -368,10 +475,10 @@
 
 @media (min-width: 2200px) {
   #side {
-    width: 380px;
+    width: 400px;
   }
-  #side .time {
-    font-size: 13px;
+  #side .text {
+    font-size: 14.5px;
   }
 }
 
@@ -386,100 +493,9 @@
     border-top: 1px solid var(--hair);
   }
   #side header {
-    height: 38px;
+    height: 44px;
   }
   #sideToggle {
     margin: 12px;
   }
-}
-
-#side .review-status {
-  display: flex;
-  gap: 6px;
-  padding: 0 16px 12px;
-}
-#side .review-status button {
-  flex: 1;
-  border: 1px solid var(--hair);
-  border-radius: 7px;
-  background: transparent;
-  color: var(--dim);
-  padding: 8px 6px;
-  font-size: 12px;
-}
-#side .review-status button.on {
-  background: #303036;
-  color: var(--text);
-  border-color: #55555e;
-}
-#side .review-status b {
-  margin-left: 4px;
-  font-variant-numeric: tabular-nums;
-}
-#side .scope-help {
-  padding: 0 18px;
-  margin: 0 0 12px;
-  color: var(--dim);
-  font-size: 12px;
-  line-height: 1.5;
-}
-#side .origin-version {
-  color: var(--dim);
-  font-size: 11px;
-}
-#side .item[data-mark='answered'] {
-  border-left: 2px solid #3f9f70;
-  background: rgba(48, 209, 88, 0.035);
-}
-#side .comment-filters .retake-select-trigger {
-  max-width: 175px;
-}
-
-#side .delete-comment {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  padding: 5px;
-  border: 0;
-  background: transparent;
-  color: #98989f;
-  border-radius: 5px;
-  cursor: pointer;
-}
-#side .delete-comment svg {
-  width: 16px;
-  height: 16px;
-}
-#side .delete-comment:hover,
-#side .delete-comment:focus-visible {
-  color: #ffaaa2;
-  background: #ff7a7012;
-}
-#side .deleted-comment {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px 16px;
-  background: #ffffff09;
-  font-size: 12px;
-}
-#side .deleted-comment button {
-  background: transparent;
-  border: 0;
-  color: #9edcff;
-  padding: 6px 10px;
-  cursor: pointer;
-  font: inherit;
-}
-#side .delete-error {
-  color: #ffaaa2;
-  font-size: 12px;
-  margin: 10px 16px;
-}
-html[data-phone] #side .delete-comment {
-  width: 44px;
-  height: 44px;
 }

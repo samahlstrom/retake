@@ -1,6 +1,7 @@
 <script lang="ts">
-  // In a home (retake open <folder>, spec/home.md): "← All videos" at the top left of the video, and after Done
-  // "Next video →" at the bottom right, where players put their next episode. Nothing at all outside a home.
+  // In a home (retake open <folder>, spec/home.md): "← <project>" at the top left of the video (with more than one
+  // project, "← Projects" and the project), and after Done "Next video →" at the bottom right, where players put their
+  // next episode. Nothing at all outside a home.
   import type { Review } from '../lib/review.svelte';
 
   let { review }: { review: Review } = $props();
@@ -12,7 +13,13 @@
 </script>
 
 {#if review.homeAvailable}
-  <a id="allVideos" class="navpill back" href={review.homeHref} aria-label="Projects" title="Projects"
+  {@const back = review.homeSingle && review.homeProject ? review.homeProject.title : 'Projects'}
+  <a
+    id="allVideos"
+    class="navpill back"
+    href={review.homeHref}
+    aria-label={review.homeSingle && review.homeProject ? `Back to ${back}` : back}
+    title={review.homeSingle ? 'All videos' : 'Projects'}
     ><svg viewBox="0 0 24 24" aria-hidden="true"
       ><path
         d="M14.5 6 8.5 12l6 6"
@@ -22,9 +29,9 @@
         stroke-linecap="round"
         stroke-linejoin="round"
       /></svg
-    ><span class="label">Projects</span></a
+    ><span class="label">{back}</span></a
   >
-  {#if review.homeProject}
+  {#if review.homeProject && !review.homeSingle}
     <a class="navpill containing" href={review.projectHref} aria-label={`Back to ${review.homeProject.title}`}
       >{review.homeProject.title}</a
     >

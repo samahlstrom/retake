@@ -136,3 +136,31 @@ export function drawTimeline(g: CanvasRenderingContext2D, w: number, h: number, 
   g.arc(tlX(x.vt, w, x.xd), y, x.knob ?? 6, 0, Math.PI * 2);
   g.fill();
 }
+
+// ---------------------------------------------------------------- one row of markers
+/** A stroke belongs to a comment of its take when it falls within this many seconds of the comment's span. */
+export const COVER = 2.5;
+
+/** The stroke `st` was drawn for comment `row`: same take (a stroke of the take in progress has none: `current`),
+ * and within COVER s of the comment. */
+export function covers(
+  row: { take?: string; t0: number; t1: number },
+  st: { take?: string; video_t: number },
+  current: string | null,
+): boolean {
+  const take = st.take ?? current;
+  return !!row.take && row.take === take && st.video_t >= row.t0 - COVER && st.video_t <= row.t1 + COVER;
+}
+
+/**
+ * The pen ticks the timeline still draws: only strokes no comment covers yet (the take being recorded, before it is
+ * transcribed; old takes without notes). Once a comment covers a stroke, the comment's marker stands for both, so the
+ * timeline has one row of markers instead of a dot and a tick for the same moment.
+ */
+export function pendingStrokes<T extends { take?: string; video_t: number }>(
+  strokes: readonly T[],
+  rows: readonly { take?: string; t0: number; t1: number }[],
+  current: string | null,
+): T[] {
+  return strokes.filter((st) => !rows.some((row) => covers(row, st, current)));
+}

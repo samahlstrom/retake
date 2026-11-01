@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { TL_PAD } from './constants';
-import { drawTimeline, pendingVoiceBins, TRACK, TRACK_PENDING, tlT, tlX, type TimelineData } from './timeline';
+import {
+  covers,
+  drawTimeline,
+  pendingStrokes,
+  pendingVoiceBins,
+  TRACK,
+  TRACK_PENDING,
+  tlT,
+  tlX,
+  type TimelineData,
+} from './timeline';
 
 /** A 2D context that records the rounded rectangles it fills (the track and the played part) with their color. */
 function recorder() {
@@ -104,5 +114,26 @@ describe('audio becoming comments', () => {
   it('replaces only matching time ranges in older aggregate waveforms', () => {
     expect([...pendingVoiceBins([{ take: 'take-a', bins }], [comment])]).toEqual([1, 0, 0, 4]);
     expect([...pendingVoiceBins([{ take: 'take-b', bins }], [comment])]).toEqual([...bins]);
+  });
+});
+
+describe('one row of markers: pen ticks fold into their comment', () => {
+  const rows = [{ take: 'A', t0: 10, t1: 12 }];
+  it('a stroke of the same take near the comment is covered', () => {
+    expect(covers(rows[0]!, { take: 'A', video_t: 11 }, null)).toBe(true);
+    expect(covers(rows[0]!, { take: 'A', video_t: 14.4 }, null)).toBe(true);
+    expect(covers(rows[0]!, { take: 'A', video_t: 15 }, null)).toBe(false);
+    expect(covers(rows[0]!, { take: 'B', video_t: 11 }, null)).toBe(false);
+  });
+  it('the take being recorded has no take id on its strokes', () => {
+    expect(covers(rows[0]!, { video_t: 11 }, 'A')).toBe(true);
+    expect(covers(rows[0]!, { video_t: 11 }, 'B')).toBe(false);
+    expect(covers({ t0: 10, t1: 12 }, { video_t: 11 }, null)).toBe(false);
+  });
+  it('only strokes no comment covers stay on the timeline', () => {
+    const strokes = [{ take: 'A', video_t: 11 }, { take: 'A', video_t: 30 }, { video_t: 11 }];
+    expect(pendingStrokes(strokes, rows, 'B')).toEqual([{ take: 'A', video_t: 30 }, { video_t: 11 }]);
+    expect(pendingStrokes(strokes, rows, 'A')).toEqual([{ take: 'A', video_t: 30 }]);
+    expect(pendingStrokes(strokes, [], 'A')).toEqual(strokes);
   });
 });

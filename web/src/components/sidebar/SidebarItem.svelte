@@ -1,70 +1,92 @@
 <script lang="ts">
+  // One comment: when, its words, what you drew, and one status (Open, Working, Question, Done). A question from the
+  // agent has the reply box under it; a paused one says why once, with Retry. Everything else is in its ⋯.
   import type { Review } from '../../lib/review.svelte';
   import type { Row } from '../../lib/notes/view';
-  import TaskControls from './TaskControls.svelte';
+  import { STATE_TEXT } from '../../lib/status';
+  import { verName } from '../../lib/versions';
+  import CommentMenu from './CommentMenu.svelte';
+  import ReplyBox from '../ReplyBox.svelte';
+  import Sketch from './Sketch.svelte';
+
   let { review, row, active }: { review: Review; row: Row; active: boolean } = $props();
-  const answering = $derived(row.answer != null && review.seg?.answer_to === row.answer);
+
+  const status = $derived(review.statusOf(row));
+  const task = $derived(review.taskOf(row));
+  const strokes = $derived(row.drawings.length || !row.text.trim() ? review.strokesOf(row) : []);
+  const aspect = $derived.by(() => {
+    const [w, h] = review.aspect.split('/').map(Number);
+    return w && h ? w / h : 16 / 9;
+  });
+  /** Agent questions asked through the notes take a recorded answer; a worker's question takes typed words. */
+  const voiceThread = $derived(row.answer);
+  const workerAsks = $derived(task?.state === 'question' && review.canRecord ? task : null);
+  const asked = $derived(row.kind === 'question' ? null : (workerAsks?.question ?? row.question));
+  const answering = $derived(voiceThread != null && review.seg?.answer_to === voiceThread);
+  const text = $derived(
+    row.text.trim() || (row.drawings.length || row.images.length || strokes.length ? 'Drawing' : 'No words'),
+  );
+
+  async function answer(message: string): Promise<boolean> {
+    if (!workerAsks) return false;
+    const ok = await review.automation.send(`/tasks/${workerAsks.id}/answer`, { message });
+    if (ok) await review.notes.refresh();
+    else review.toast.say(review.automation.error || 'Could not send your answer. Try again.', 5000);
+    return ok;
+  }
+  async function retry() {
+    if (!task) return;
+    const agent = task.agent || review.agent.worker?.agents[0]?.id || '';
+    if (await review.automation.send(`/tasks/${task.id}/retry`, { agent })) await review.notes.refresh();
+    else review.toast.say(review.automation.error || 'Could not retry. Try again.', 5000);
+  }
 </script>
 
-<li class="item" class:active data-key={row.key} data-mark={row.mark}>
-  <div class="comment-author">
-    <span class="avatar" class:editor={row.kind === 'question'}>{row.by.slice(0, 1).toUpperCase()}</span>
-    <strong>{row.by}</strong>
-    {#if row.kind === 'note' && review.canApprove}
-      <button
-        class="delete-comment"
-        aria-label="Delete comment"
-        title="Delete comment"
-        disabled={review.notes.deleting}
-        onclick={() => review.notes.deleteComment(row.id)}
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true"
-          ><path
-            d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v7m4-7v7"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.6"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          /></svg
-        >
-      </button>
-    {/if}
-    {#if row.version && row.version !== review.shown}<span class="origin-version">{row.version}</span>{/if}
-    {#if row.mark === 'answered'}<span class="resolved" title="Edit completed"
-        >✓ <span>Resolved{row.answeredIn ? ` in ${row.answeredIn}` : ''}</span></span
+<li
+  class="item"
+  class:active
+  class:asking={row.kind === 'question'}
+  data-key={row.key}
+  data-mark={row.mark}
+  data-state={status.state}
+>
+  <div class="line1">
+    {#if review.manyAuthors && row.kind === 'note'}<span class="who"
+        ><span class="avatar" aria-hidden="true">{row.by.slice(0, 1).toUpperCase()}</span>{row.by}</span
       >{/if}
-  </div>
-  <div class="comment-body">
     <button class="time jump" title="Go to {row.time}" onclick={() => review.jumpToComment(row)}>{row.time}</button>
-    <p class="text">
-      {row.text || (row.drawings.length || row.images.length ? 'Drawing on this frame' : 'Empty comment')}
-    </p>
-    {#if row.images.length}<div class="thumbs">
-        {#each row.images as im, i (i)}<button
-            title="View annotation at {row.time}"
-            onclick={() => review.jumpToComment(row)}
-            ><img src={im.url} alt="Attached annotation" draggable="false" /></button
-          >{/each}
-      </div>{/if}
-    {#if row.change}<div class="editor-reply">
-        <strong>Completed edit</strong>
-        <p class="change">{row.change}</p>
-        {#if row.see}<button class="act" onclick={() => review.setBase(row.see!)}>View {row.see}</button>{/if}
-      </div>{/if}
-    {#if row.question}<div class="editor-reply">
-        <strong>Editor</strong>
-        <p class="asked">{row.question}</p>
-      </div>{/if}
-    {#if row.reopen || row.answer != null}<div class="acts">
-        {#if row.reopen}<button class="act reopen" onclick={() => review.reopen(row)}>Reopen</button>{/if}
-        {#if row.answer != null}{@const thread = row.answer}<button
-            class="answer"
-            class:on={answering}
-            onclick={() => review.answer(thread, row.t0)}
-            ><span class="dot"></span>{answering ? 'Stop reply' : 'Record reply'}</button
-          >{/if}
-      </div>{/if}
-    {#if row.kind === 'note'}<TaskControls {review} {row} />{/if}
+    <span class="status {status.state}"><span class="dot" aria-hidden="true"></span>{STATE_TEXT[status.state]}</span>
+    {#if row.version && row.version !== review.shown && status.state !== 'done'}<span
+        class="origin"
+        title="Left on {verName(row.version)}">{verName(row.version)}</span
+      >{/if}
+    <span class="grow"></span>
+    <CommentMenu {review} {row} />
   </div>
+  {#if row.kind === 'question'}
+    <p class="text asked">{row.text}</p>
+  {:else}
+    <p class="text" class:quiet={!row.text.trim()}>{text}</p>
+  {/if}
+  {#if strokes.length || row.images.length}
+    <Sketch {strokes} images={row.images} {aspect} onclick={() => review.jumpToComment(row)} />
+  {/if}
+  {#if status.state === 'done' && row.change}
+    <p class="change">
+      <span>{row.change}</span>{#if row.see}<button class="link" onclick={() => review.setBase(row.see!)}
+          >See {verName(row.see)}</button
+        >{/if}
+    </p>
+  {/if}
+  {#if status.paused}
+    <p class="paused">
+      <span>{status.paused}</span>{#if review.owner && task}<button class="link" onclick={retry}>Retry</button>{/if}
+    </p>
+  {/if}
+  {#if asked}<p class="asked">{asked}</p>{/if}
+  {#if voiceThread != null}
+    <ReplyBox onmic={() => review.answer(voiceThread, row.t0)} recording={answering} />
+  {:else if workerAsks}
+    <ReplyBox onsend={answer} busy={review.automation.busy} />
+  {/if}
 </li>

@@ -204,7 +204,8 @@ test('open questions have readable comments, timecodes and reply controls', asyn
   await expect(item('question:101').locator('.text')).toHaveText(/Keep the zoom on the shop/);
   await expect(item('question:101').locator('.time')).toHaveText('0:04');
   await expect(item('question:101').locator('.chip')).toHaveCount(0);
-  await expect(item('question:101').locator('.answer')).toHaveText('Record reply');
+  await expect(item('question:101').locator('.status')).toHaveText('Question');
+  await expect(item('question:101').locator('.answer')).toHaveText('Answer out loud');
   await expect(page.locator('#side')).not.toContainText('hidden');
   // A right-hand column next to the video; the bar stays full width under both.
   const side = await box('#side'), stage = await box('#stage'), bar = await box('#bar');
@@ -225,21 +226,28 @@ test('click an item: the video jumps to its moment, and the row under the playhe
 });
 
 // ------------------------------------------------------------------ older version
-test('All comments includes resolved changes alongside open questions', async () => {
+test('To do and Done split the comments, each with one status', async () => {
   notes.v6 = [...OLDER, ...NEWEST]; push('notes', {});
-  await page.getByRole('combobox', {name:'Filter comments',exact:true}).click();
-  await page.getByRole('option', {name:'All comments',exact:true}).click();
-  await expect(page.locator('#side .item')).toHaveCount(5);
-  await expect(item('note:1').locator('.resolved')).toContainText('Resolved');
-  await expect(item('note:1').locator('.change')).toHaveText('Title now lands on the first beat');
+  await expect(page.getByRole('tab', { name: 'To do 3', exact: true })).toBeVisible();
+  await expect(page.locator('#side .item')).toHaveCount(3);
+  await expect(item('note:2').locator('.status')).toHaveText('Question');
   await expect(item('note:2').locator('.asked')).toContainText('Keep the zoom');
-  await expect(item('note:4').locator('.reopen')).toHaveCount(0);
+  await page.getByRole('tab', { name: 'Done 2', exact: true }).click();
+  await expect(page.locator('#side .item')).toHaveCount(2);
+  await expect(item('note:1').locator('.status')).toHaveText('Done');
+  await expect(item('note:1').locator('.change')).toHaveText('Title now lands on the first beat');
   expect((await ui.state()).shown).toBe('v6');
   await expect(page.locator('#side')).not.toContainText('hidden');
 });
 
-test('Reopen posts to the notes route', async () => {
-  await item('note:1').locator('.reopen').click();
+test('Reopen is in the comment\'s ⋯ (an accepted one has none) and posts to the notes route', async () => {
+  await item('note:4').hover();
+  await item('note:4').getByRole('button', { name: 'More for this comment' }).click();
+  await expect(page.getByRole('menuitem', { name: 'Reopen' })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await item('note:1').hover();
+  await item('note:1').getByRole('button', { name: 'More for this comment' }).click();
+  await page.getByRole('menuitem', { name: 'Reopen' }).click();
   await expect.poll(() => reopened).toEqual([1]);
 });
 
@@ -248,8 +256,7 @@ test('resolved comment timecodes seek on the current video', async () => {
   await ui.waitFor(() => Math.abs(document.querySelector('video')!.currentTime - 3) < 0.1, 5000);
   expect((await ui.state()).shown).toBe('v6');
   notes.v6 = NEWEST; push('notes', {});
-  await page.getByRole('combobox', {name:'Filter comments',exact:true}).click();
-  await page.getByRole('option', {name:'Open',exact:true}).click();
+  await page.getByRole('tab', { name: /^To do/ }).click();
   await expect(page.locator('#side .item')).toHaveCount(2);
 });
 
@@ -260,7 +267,7 @@ test('N hides the sidebar (the page looks as before), remembered across a reload
   await ui.waitFor(() => !window.__review.sidebar!.panel, 3000);
   await expect(page.locator('#side')).toBeHidden();
   await expect(page.locator('#sideToggle')).toBeVisible();
-  await expect(page.locator('#sideToggle')).toHaveText('2 comments');
+  await expect(page.locator('#sideToggle')).toHaveText('2 to do');
   expect((await box('#stage')).width).toBeCloseTo(1920, 0);
   await page.reload();
   await ui.waitFor(READY, 20_000);
@@ -297,7 +304,7 @@ test('Answer: jumps to the question and records, exactly like R, with answer_to 
   });
   expect(s.seg).toMatchObject({ id: 'S1', answer_to: 101 });
   expect(Math.abs(s.t - 4)).toBeLessThan(0.1);
-  await expect(item('question:101').locator('.answer')).toHaveText('Stop reply');
+  await expect(item('question:101').locator('.answer')).toHaveText('Stop answering');
   await expect(page.locator('#bar')).toHaveClass(/recording/);
 });
 

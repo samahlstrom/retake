@@ -91,7 +91,7 @@ retake open ~/Videos
 
 Open a video, press R, talk and draw, press R again, then **Send**. The agent edits the project on this computer,
 the page plays the edit as it renders, and the comment turns Done when the new version is ready. If something is
-missing, the Agent panel says what. [docs/agents.md](docs/agents.md) covers other providers (OpenRouter, API keys)
+missing, the agent menu next to Send says what. [docs/agents.md](docs/agents.md) covers other providers (OpenRouter, API keys)
 and driving your own agent over MCP (`retake mcp <video>`) or the CLI.
 
 ## Editing with the timeline

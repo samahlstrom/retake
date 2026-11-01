@@ -10,21 +10,21 @@ up to it. It can patch a timeline with `retake-edit`, run ffmpeg, or drive anoth
 retake open ~/Videos
 ```
 
-Open a video, press R, talk and draw over it, and press R again. Then press **Send** (or **Finish review** and
-send). Claude Code or Codex on this computer edits the project, the page plays the edit as it renders, and the
+Open a video, press R, talk and draw over it, and press R again. Then press **Send to agent**. Claude Code or Codex on this computer edits the project, the page plays the edit as it renders, and the
 comment turns Done when the new version is ready. If the agent is unsure, the comment shows its question; answer it
 and the agent carries on. There is nothing else to start: `retake open` runs the editing worker itself, one per
 project, named after this computer.
 
 What it needs: a timeline project (`edit/timeline.json`, or `[edit] timeline` in the project's `retake.toml`),
 `retake-edit` ([timeline.md](timeline.md)), and Claude Code or Codex installed and signed in. When something is
-missing, the Agent panel says what, and it picks the fix up within 15 seconds without a restart.
+missing, the agent menu next to Send says what, and it picks the fix up within 15 seconds without a restart.
 
 - One task runs at a time; each Send queues one. The agent works in the project folder with its own sign-in and
   settings.
 - While it works, the page follows its drafts (`v4-draft1`, `v4-draft2`, ...). Only a finished task makes a version
   (`v4`), and restarting `retake open` makes none.
-- **Start edits when feedback is submitted** only sends finished reviews that nobody sent. Send always works.
+- **Send other reviewers' comments automatically** (in the agent menu) only sends other people's finished reviews.
+  Send always works.
 - Each task's prompt, context, log and report are in `.retake/worker/tasks/<task>/`.
 
 Reviewing on a hosted server instead? Run `retake connect` and the same worker connects out to it: [hosting.md](hosting.md).

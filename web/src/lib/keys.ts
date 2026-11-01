@@ -22,7 +22,8 @@ export type Action =
   | 'fullscreen'
   | 'notes'
   | 'eraser'
-  | 'next';
+  | 'next'
+  | 'help';
 
 const PLAIN: Record<string, Action> = {
   ' ': 'togglePlay',
@@ -44,10 +45,12 @@ const PLAIN: Record<string, Action> = {
   // The next video to review, in a home (spec/home.md). Shift+. on a US keyboard: its own character, so it never
   // reaches '.' (a frame step), and N stays the notes.
   '>': 'next',
+  // The keys sheet (Shift+/ on a US keyboard).
+  '?': 'help',
 };
 
 /** Keys that do nothing on auto-repeat (holding R must not toggle recording on and off). */
-const NO_REPEAT = 'kzrfcne[]> ';
+const NO_REPEAT = 'kzrfcne[]>? ';
 
 export interface KeyLike {
   key: string;
@@ -74,4 +77,50 @@ export function keyAction(e: KeyLike): KeyResult | null {
   const act = Object.hasOwn(PLAIN, k) ? PLAIN[k] : null;
   if (!act) return null;
   return { act: e.repeat && NO_REPEAT.includes(k) ? null : act, stop: true };
+}
+
+/** The keys sheet (? or its button): every key of the player, in the order people need them. */
+export const KEY_SHEET: readonly { keys: string[]; what: string }[] = [
+  { keys: ['R'], what: 'Record your voice and pen. R again stops' },
+  { keys: ['Space'], what: 'Play or pause' },
+  { keys: ['←', '→'], what: 'Back or forward 5 seconds' },
+  { keys: [',', '.'], what: 'One frame back or forward' },
+  { keys: ['1', '2', '3', '4'], what: 'Pen color' },
+  { keys: ['E'], what: 'Eraser' },
+  { keys: ['Z'], what: 'Undo the last line' },
+  { keys: ['C'], what: 'Flip to the other version and back' },
+  { keys: ['[', ']'], what: 'Older or newer version' },
+  { keys: ['N'], what: 'Show or hide comments' },
+  { keys: ['>'], what: 'Next video to review' },
+  { keys: ['F'], what: 'Full screen' },
+  { keys: ['?'], what: 'These keys' },
+];
+
+/** localStorage key: the keyboard hint has been seen (it shows once per browser). */
+export const HINT_KEY = 'retake.hint';
+
+type HintStorage = Pick<Storage, 'getItem' | 'setItem'> | null;
+const hintStorage = (): HintStorage => {
+  try {
+    return typeof localStorage === 'undefined' ? null : localStorage;
+  } catch {
+    return null; // blocked
+  }
+};
+
+/** The hint was dismissed in this browser before. */
+export function hintSeen(storage: HintStorage = hintStorage()): boolean {
+  try {
+    return storage?.getItem(HINT_KEY) === 'seen';
+  } catch {
+    return false;
+  }
+}
+
+export function markHintSeen(storage: HintStorage = hintStorage()): void {
+  try {
+    storage?.setItem(HINT_KEY, 'seen');
+  } catch {
+    /* blocked: it shows again next time, nothing worse */
+  }
 }

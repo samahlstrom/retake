@@ -1,3 +1,4 @@
+import '../ui.css';
 import './home.css';
 import { mount } from 'svelte';
 import Home from './Home.svelte';

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  cardStatus,
   fmtLength,
+  moveTargets,
+  needsComputer,
   homeContext,
   nextToReview,
   normalizeHome,
@@ -95,5 +98,77 @@ describe('home', () => {
     expect(viewerId(() => 0.9999)).toBe('zzzzzzzzzzzz');
     expect(unwatchUrl('v3', 'abc')).toBe('api/versions/v3/unwatch?viewer=abc');
     expect(unwatchUrl('a b', 'x&y')).toBe('api/versions/a%20b/unwatch?viewer=x%26y');
+  });
+});
+
+describe('one status per card, and where a video can move', () => {
+  it('rendering wins over the review status', () => {
+    expect(cardStatus({ status: 'to_review', stream: null })).toEqual({ text: 'To review', tone: 'to_review' });
+    expect(cardStatus({ status: 'reviewed', stream: { state: 'rendering', done: 3, total: 12 } })).toEqual({
+      text: 'Rendering 3/12',
+      tone: 'rendering',
+    });
+    expect(cardStatus({ status: 'being_edited', stream: { state: 'complete', done: 12, total: 12 } }).text).toBe(
+      'Being edited',
+    );
+  });
+  it('one project without groups: nowhere to move, so no menu', () => {
+    const w = { revision: 1, projects: [{ id: 'default', title: 'Shows', groups: [] }], placements: [] };
+    expect(moveTargets(w, 'alpha')).toEqual([]);
+  });
+  it('one project with groups: the groups and Ungrouped, minus where it is', () => {
+    const w = {
+      revision: 1,
+      projects: [{ id: 'default', title: 'Shows', groups: [{ id: 'g', title: 'Shorts' }] }],
+      placements: [{ video: 'alpha', project: 'default', group: 'g' }],
+    };
+    expect(moveTargets(w, 'alpha')).toEqual([{ value: 'default/', label: 'Ungrouped' }]);
+    expect(moveTargets(w, 'bravo')).toEqual([{ value: 'default/g', label: 'Shorts' }]);
+  });
+  it('several projects: named with their project', () => {
+    const w = {
+      revision: 1,
+      projects: [
+        { id: 'default', title: 'Shows', groups: [] },
+        { id: 'l', title: 'Launch', groups: [{ id: 's', title: 'Shorts' }] },
+      ],
+      placements: [],
+    };
+    expect(moveTargets(w, 'alpha')).toEqual([
+      { value: 'l/', label: 'Launch · Ungrouped' },
+      { value: 'l/s', label: 'Launch · Shorts' },
+    ]);
+  });
+});
+
+describe('machines (C5)', () => {
+  it('reads them when the server sends them, and leaves them out otherwise', () => {
+    expect(normalizeHome({ projects: [] }).machines).toBeUndefined();
+    expect(normalizeHome({ projects: [], machines: [] }).machines).toEqual([]);
+    expect(
+      normalizeHome({
+        projects: [],
+        machines: [{ id: 'm1', name: 'sam-pc', online: true, agents: [{ id: 'claude', name: 'Claude Code' }] }, null],
+      }).machines,
+    ).toEqual([{ id: 'm1', name: 'sam-pc', online: true, agents: [{ id: 'claude', name: 'Claude Code' }] }]);
+  });
+});
+
+describe('hosted: connect your computer', () => {
+  const m = (online: boolean) => ({ id: 'm', name: 'sam-pc', online, agents: [] });
+  it('an owner signed in to a hosted server with no computer online', () => {
+    expect(normalizeHome({ projects: [], user: { email: 'a@example.com', name: 'Ana' } }).user).toEqual({
+      email: 'a@example.com',
+      name: 'Ana',
+    });
+    const user = { email: 'a@example.com', name: 'Ana' };
+    expect(needsComputer({ user, role: 'owner', machines: [] })).toBe(true);
+    expect(needsComputer({ user, role: 'owner', machines: [m(false)] })).toBe(true);
+    expect(needsComputer({ user, role: 'owner', machines: [m(false), m(true)] })).toBe(false);
+  });
+  it('never in local mode, for other roles, or on an older server', () => {
+    expect(needsComputer({ role: 'owner', machines: [] })).toBe(false);
+    expect(needsComputer({ user: { email: '', name: '' }, role: 'reviewer', machines: [] })).toBe(false);
+    expect(needsComputer({ user: { email: '', name: '' }, role: 'owner' })).toBe(false);
   });
 });

@@ -44,12 +44,12 @@ import {
   type Card,
 } from './home';
 import { Scrubber } from './scrub';
-import { keyAction, type Action } from './keys';
+import { hintSeen, keyAction, markHintSeen, type Action } from './keys';
 import { layoutMode, type LayoutMode } from './layout';
 import { closeMic, MIC_BLOCKED, MIC_BLOCKED_TOUCH, openMic, pickMime, recorderMime, type Mic } from './mic';
 import { Notes } from './notes/notes.svelte';
 import type { NoteItem } from './notes/types';
-import { activeKey, inCurrentReview, PHONE_QUERY, presence, sidebarRows, type Row } from './notes/view';
+import { activeKey, PHONE_QUERY, presence, sidebarRows, type Row } from './notes/view';
 import { addPoint, alphaAt, fitFrame, isClick, renderInk } from './pen';
 import { Saver } from './saver';
 import { VideoSource } from './source';
@@ -64,7 +64,18 @@ import {
   serialize as serializeTake,
   settleMime,
 } from './take';
-import { drawTimeline, pendingVoiceBins, tlT, type VoiceTrack } from './timeline';
+import { covers, drawTimeline, pendingStrokes, pendingVoiceBins, tlT, type VoiceTrack } from './timeline';
+import {
+  agentStatus,
+  commentStatus,
+  dispatcher,
+  sendButton,
+  unsent,
+  type AgentStatus,
+  type CommentStatus,
+  type SendButton,
+} from './status';
+import type { EditingTask } from './automation.svelte';
 import { Toast } from './toast.svelte';
 import type {
   Box,
@@ -174,15 +185,25 @@ export class Review {
   shown = $state<string | null>(null);
   flipped = $state(false);
   verOpen = $state(false);
-  hintGone = $state(false);
+  /** The hint is hidden until the page knows whether to show it (start()), so a returning reviewer never sees it
+   * flash. */
+  hintGone = $state(true);
   doneSaved = $state(false);
   fatal = $state('');
   freezeShown = $state(false);
   tip = $state<{ show: boolean; left: number | null; text: string }>({ show: false, left: null, text: '' });
   hoverRows = $state.raw<Row[]>([]);
   commentSearch = $state('');
-  commentFilter = $state<'all' | 'open' | 'resolved'>('open');
-  commentScope = $state<'current' | 'earlier' | 'all'>('current');
+  /** The sidebar's two tabs: what's still to do (Open, Working, Question) and what's Done. */
+  commentFilter = $state<'todo' | 'done'>('todo');
+  /** The keys sheet (? or its button). */
+  keysOpen = $state(false);
+  /** The agent popover by the Send button (it also opens when Send finds no computer to send to). */
+  agentOpen = $state(false);
+  /** The last finish also sent the take to the agent (the button then says Sent). */
+  sent = $state(false);
+  /** A clock for the agent's online state (a worker that stops polling goes offline without a new answer). */
+  clock = $state(Date.now() / 1000);
   followLatest = true;
   finishing = $state(false);
   #historyRequest = 0;
@@ -228,24 +249,32 @@ export class Review {
   transcribedTakes = $state.raw<string[]>([]);
   transcribedClips = $state.raw<string[]>([]);
   readonly pendingHistoryVoice = $derived(pendingVoiceBins(this.historyVoice, this.rows));
-  readonly timelineComments = $derived(this.sidebar.rows.filter((row) => row.kind === 'question' || row.text.trim()));
-  readonly earlierCount = $derived(
-    this.rows.filter((row) => !inCurrentReview(row, this.shown) && row.mark !== 'answered').length,
+  /** One marker per comment on the timeline (a drawing-only comment too); its pen ticks fold into it. */
+  readonly timelineComments = $derived(this.sidebar.rows);
+  /** The task that owns each note, freshest first: the automation state, else the one the notes route carried. */
+  readonly tasks = $derived.by(() => {
+    const live: Record<string, EditingTask> = Object.fromEntries(
+      (this.automation.state?.tasks ?? []).map((t) => [t.id, t]),
+    );
+    const out: Record<string, EditingTask> = {};
+    for (const row of this.rows) if (row.work) out[row.key] = live[row.work.id] ?? row.work;
+    return out;
+  });
+  readonly statuses: Record<string, CommentStatus> = $derived(
+    Object.fromEntries(this.rows.map((row) => [row.key, commentStatus(row, this.tasks[row.key])])),
   );
-  readonly resolvedCount = $derived(this.rows.filter((row) => row.mark === 'answered').length);
-  readonly currentOpenCount = $derived(
-    this.rows.filter((row) => inCurrentReview(row, this.shown) && row.mark !== 'answered').length,
-  );
-  // Loaded take histories provide exact pen ticks; other cuts' annotations use their mapped comment anchor.
+  readonly todoCount = $derived(this.rows.filter((row) => this.statusOf(row).state !== 'done').length);
+  readonly doneCount = $derived(this.rows.length - this.todoCount);
+  /** Open notes nobody has sent to the agent yet. */
+  readonly unsentRows = $derived(this.rows.filter((row) => unsent(row, this.tasks[row.key])));
+  /** More than one person commented: then (only then) cards say who. */
+  readonly manyAuthors = $derived.by(() => {
+    const notes = this.rows.filter((row) => row.kind === 'note');
+    return notes.some((row) => row.by !== notes[0]!.by);
+  });
+  readonly agent: AgentStatus = $derived(agentStatus(this.automation.state, this.clock));
+  readonly owner = $derived(dispatcher(this.role, this.canRecord));
   historyTakeIds = $state.raw<string[]>([]);
-  readonly timelineDrawings = $derived(
-    this.sidebar.rows.filter(
-      (row) =>
-        (row.drawings.length || !row.text.trim()) &&
-        !this.historyTakeIds.includes(row.take ?? '') &&
-        row.take !== this.take.id,
-    ),
-  );
   activeRow = $state<string | null>(null);
   /**
    * The sidebar's phone mode (a list under the controls, behind a toggle): narrow windows (PHONE_QUERY) and the phone
@@ -267,6 +296,8 @@ export class Review {
   /** The next project to review, from the home. */
   homeNext = $state.raw<Card | null>(null);
   homeProject = $state.raw<WorkspaceProject | null>(null);
+  /** The home has one project, so it opens straight to its videos: one way back, named after the project. */
+  homeSingle = $state(true);
   /** Where the page sits in its home, from its path; null outside one. */
   homeCtx: { home: string; project: string } | null = null;
   /** This page load's id for the unwatch call. */
@@ -462,6 +493,91 @@ export class Review {
   newTake(): void {
     this.take = newTake(this.base, this.nBins());
     this.doneSaved = false;
+    this.sent = false;
+  }
+
+  /** The reviewer recorded something this take and hasn't finished it (reads the runes that change with it). */
+  get takeOpen(): boolean {
+    void [this.seg, this.starting, this.finishing, this.doneSaved, this.base];
+    return !!this.take.id && !this.take.closed;
+  }
+
+  /** The bar's one button: Send N to agent, Finish review, … (lib/status.ts). */
+  get button(): SendButton {
+    return sendButton({
+      role: this.role,
+      canRecord: this.canRecord,
+      status: this.agent,
+      takeOpen: this.takeOpen,
+      unsent: this.unsentRows.length,
+      finishing: this.finishing,
+      saved: this.doneSaved,
+      sent: this.sent,
+    });
+  }
+
+  /** The bar's button pressed. */
+  primary = async (): Promise<void> => {
+    const b = this.button;
+    switch (b.action) {
+      case 'finish':
+        await this.done();
+        break;
+      case 'connect':
+        if (this.takeOpen) await this.done();
+        this.agentOpen = true;
+        break;
+      case 'send':
+        await this.sendAll();
+        break;
+      case 'none':
+        if (!this.finishing)
+          this.toast.say(
+            this.notes.job
+              ? 'Your notes are still being transcribed. They go to the agent when ready.'
+              : this.touch
+                ? 'Nothing new to send. Tap ● and talk to add a comment.'
+                : 'Nothing new to send. Press R and talk to add a comment.',
+            4000,
+          );
+        break;
+    }
+  };
+
+  /** Send: the take in progress goes with `send: true` (its notes go once transcribed, contract C3), and every other
+   * open note nobody sent yet goes now. */
+  async sendAll(): Promise<void> {
+    const t = this.take,
+      open = !!t.id && !t.closed;
+    const others = this.unsentRows.filter((row) => !open || row.take !== t.id).map((row) => row.id);
+    // Nothing chosen yet (a first send): the computer that's online and its first agent.
+    const w = this.agent.worker;
+    if (w && !this.automation.state?.config?.worker)
+      await this.automation.configure({ worker: w.id, agent: w.agents[0]?.id ?? '', fallback: '' });
+    if (open && !(await this.done(true))) return;
+    if (others.length) {
+      if (!(await this.automation.send('/tasks', { notes: others }))) {
+        this.toast.say(this.automation.error || 'Could not send. Try again.', 5000);
+        return;
+      }
+      void this.notes.refresh();
+    }
+    this.sent = true;
+    this.toast.say(
+      open
+        ? 'Sent. The agent starts as soon as your notes are transcribed.'
+        : others.length === 1
+          ? 'Sent 1 comment to the agent.'
+          : `Sent ${others.length} comments to the agent.`,
+      4000,
+    );
+  }
+
+  /** The keyboard hint is shown until the first recording, once per browser (it's then behind ?). */
+  dismissHint(): void {
+    if (this.hintGone || !this.canRecord) return;
+    this.hintGone = true;
+    markHintSeen();
   }
 
   ensureTake(): void {
@@ -639,7 +755,7 @@ export class Review {
       return;
     }
     this.starting = true;
-    this.hintGone = true;
+    this.dismissHint();
     const video = this.video;
     try {
       if (this.mic) void this.mic.ac.resume();
@@ -1235,6 +1351,20 @@ export class Review {
   }
 
   // ---------------------------------------------------------------- notes sidebar
+  taskOf(row: Row): EditingTask | undefined {
+    return this.tasks[row.key];
+  }
+
+  statusOf(row: Row): CommentStatus {
+    return this.statuses[row.key] ?? commentStatus(row);
+  }
+
+  /** The pen strokes drawn for a comment (its card's sketch), in drawing order. */
+  strokesOf(row: Row): HistoryStroke[] {
+    void this.historyTakeIds; // re-read once an earlier take's strokes arrive
+    return [...this.hist.strokes, ...this.take.strokes].filter((st) => !st.undone && covers(row, st, this.take.id));
+  }
+
   get sidebar(): SidebarView {
     const n = this.notes,
       rows = this.rows;
@@ -1252,11 +1382,7 @@ export class Review {
         const query = this.commentSearch.trim().toLowerCase();
         return (
           (!query || `${row.text} ${row.by} ${row.change ?? ''}`.toLowerCase().includes(query)) &&
-          (this.commentFilter === 'all' || (row.mark === 'answered') === (this.commentFilter === 'resolved')) &&
-          (this.commentScope === 'all' ||
-            (this.commentScope === 'earlier'
-              ? !inCurrentReview(row, this.shown) && row.mark !== 'answered'
-              : inCurrentReview(row, this.shown)))
+          (this.statusOf(row).state === 'done') === (this.commentFilter === 'done')
         );
       }),
       active: this.activeRow,
@@ -1424,9 +1550,12 @@ export class Review {
     }
   }
 
+  /** Takes finished with Send: their /done says `send: true` (also when it's retried later). */
+  #sendOnDone = new WeakSet<Take>();
+
   async #postDone(t: Take): Promise<void> {
     if (!t.id) return;
-    const status = await this.notes.postDone(t.id, t.version);
+    const status = await this.notes.postDone(t.id, t.version, this.#sendOnDone.has(t));
     if (status < 200 || status >= 300) {
       this.#donePending.add(t);
       this.#unsaved.add(t);
@@ -1453,11 +1582,7 @@ export class Review {
       this.tip.show = true;
       const time = this.#tlT(e.clientX);
       const key = (e.target as Element).closest<HTMLElement>('[data-comment]')?.dataset.comment;
-      const candidates =
-        e.clientY - r.top > r.height / 2 + 3
-          ? this.sidebar.rows.filter((row) => row.drawings.length || !row.text.trim())
-          : this.timelineComments;
-      this.hoverRows = candidates
+      this.hoverRows = this.timelineComments
         .filter(
           (row) =>
             time >= row.t0 - (this.mediaDuration() * 9) / r.width &&
@@ -1769,8 +1894,10 @@ export class Review {
     this.eraser = false;
   };
 
-  done = async (): Promise<void> => {
-    if (this.finishing) return;
+  /** Finish review: stop, save and close the take, then POST /done (with `send`, the notes go to the agent). Resolves
+   * to whether the take was finished now. */
+  done = async (send = false): Promise<boolean> => {
+    if (this.finishing) return false;
     const t = this.take;
     if (!t.id || t.closed) {
       const open = this.rows.filter((row) => row.mark !== 'answered').length;
@@ -1782,9 +1909,10 @@ export class Review {
             : 'Press Record to leave feedback. It saves automatically.',
         5000,
       );
-      return;
+      return false;
     }
     this.finishing = true;
+    if (send) this.#sendOnDone.add(t);
     try {
       this.video.pause();
       if (this.seg || this.starting) await this.stopRec();
@@ -1795,15 +1923,17 @@ export class Review {
         this.#unsaved.add(t);
         this.#donePending.add(t);
         this.toast.say(MSG_SAVE_FAILED, 5000);
-        return;
+        return false;
       }
       this.#doneCall = this.#postDone(t);
       await this.#doneCall;
       this.doneSaved = true;
-      this.toast.say('Feedback saved. Transcription continues; comments stay open until edited.', 5000);
+      if (!send) this.toast.say('Saved. Your comments stay open until they are edited.', 5000);
       if (this.homeCtx) void this.loadHome();
+      return true;
     } catch (err) {
       this.toast.say((err as Error).message, 5000);
+      return false;
     } finally {
       this.closeMic();
       this.finishing = false;
@@ -1819,6 +1949,7 @@ export class Review {
       const r = await fetch(`${ctx.home}api/home`);
       if (!r.ok) return;
       const h = normalizeHome(await r.json());
+      this.homeSingle = !h.workspace || h.workspace.projects.length <= 1;
       if (h.workspace) {
         const placement = placementOf(h.workspace, ctx.project);
         this.homeProject = h.workspace.projects.find((p) => p.id === placement.project) ?? null;
@@ -1892,6 +2023,12 @@ export class Review {
       case 'escape':
         this.drawing = null;
         this.verOpen = false;
+        this.keysOpen = false;
+        this.agentOpen = false;
+        break;
+      case 'help':
+        this.keysOpen = !this.keysOpen;
+        this.dismissHint();
         break;
       case 'flip':
         void this.flip();
@@ -1929,7 +2066,7 @@ export class Review {
     const target = e.target as Element | null;
     if (
       target?.closest?.(
-        'input, textarea, select, [contenteditable=true], [role=combobox], [role=listbox], [role=option]',
+        'input, textarea, select, [contenteditable=true], [role=combobox], [role=listbox], [role=option], [role=menu], [role=menuitem], [role=menuitemradio], [role=dialog]',
       ) &&
       !((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's')
     )
@@ -1938,7 +2075,8 @@ export class Review {
     const r = keyAction(e);
     if (!r) return;
     e.preventDefault();
-    if (r.stop) e.stopPropagation();
+    // Escape also reaches an open menu or popover (Bits UI closes them on it), wherever the focus is.
+    if (r.stop && e.key !== 'Escape') e.stopPropagation();
     if (r.act) this.run(r.act);
   };
 
@@ -1954,6 +2092,30 @@ export class Review {
   };
 
   // ---------------------------------------------------------------- frame loop and timers
+  #ticks: { key: unknown[]; hist: HistoryStroke[]; take: HistoryStroke[] } | null = null;
+  /** The pen ticks no comment stands for yet (lib/timeline.ts, pendingStrokes), recomputed only when they change. */
+  #pendingTicks(): { histStrokes: HistoryStroke[]; takeStrokes: HistoryStroke[] } {
+    const hist = this.visibleHistoryStrokes,
+      key = [
+        this.rows,
+        this.take,
+        this.take.strokes.length,
+        hist.length,
+        this.hist.strokes,
+        this.commentFilter,
+        this.commentSearch,
+      ];
+    const c = this.#ticks;
+    if (!c || c.key.some((k, i) => k !== key[i])) {
+      this.#ticks = {
+        key,
+        hist: pendingStrokes(hist, this.rows, this.take.id),
+        take: pendingStrokes(this.take.strokes, this.rows, this.take.id),
+      };
+    }
+    return { histStrokes: this.#ticks!.hist, takeStrokes: this.#ticks!.take };
+  }
+
   #drawTimeline(vt: number): void {
     const tl = this.el.tl;
     if (!tl) return; // between two layouts
@@ -1988,8 +2150,7 @@ export class Review {
         this.rows,
       ),
       histBins: this.pendingHistoryVoice,
-      histStrokes: this.visibleHistoryStrokes,
-      takeStrokes: this.take.strokes,
+      ...this.#pendingTicks(),
       knob: this.touch ? 8 : undefined,
     });
   }
@@ -2090,6 +2251,8 @@ export class Review {
     }
     document.title = `Review · ${this.info.name}`;
     this.role = this.info.role ?? null;
+    // Shown once per browser, then it's behind ?. A viewer's "View only" always shows.
+    if (!this.take.id) this.hintGone = this.canRecord && hintSeen();
     this.versions = this.info.versions || [];
     // Streams already there when the page opens show their chip; only ones pushed later are announced.
     for (const v of newlyStreamed(this.versions, this.#seenStreams)) this.#seenStreams.add(v.label);

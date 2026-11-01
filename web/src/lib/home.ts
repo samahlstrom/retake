@@ -26,13 +26,30 @@ export interface Card {
   thumb: string;
 }
 
+/** A computer that edits (C5). In local mode, the server's own worker, online. */
+export interface Machine {
+  id: string;
+  name: string;
+  online: boolean;
+  agents: { id: string; name: string }[];
+}
+
 export interface HomeResponse {
   title: string;
   folder?: string;
   role: string;
   projects: Card[];
   workspace?: Workspace;
+  /** C5: the editing computers. Absent on an older server. */
+  machines?: Machine[];
+  /** The signed-in person on a hosted server (the team server). Its presence means hosted mode. */
+  user?: { email: string; name: string };
 }
+
+/** Hosted (the team server, signed in): an owner there connects their computer from the home when none is online.
+ * Local mode never shows it (the computer is the server). */
+export const needsComputer = (h: Pick<HomeResponse, 'user' | 'role' | 'machines'>): boolean =>
+  !!h.user && h.role === 'owner' && Array.isArray(h.machines) && !h.machines.some((m) => m.online);
 
 export interface WorkspaceProject {
   id: string;
@@ -66,6 +83,25 @@ export const STATUS_TEXT: Record<Status, string> = {
 };
 
 export const NO_MORE = 'No more videos to review';
+
+/** A card's one status: rendering wins (it can't be reviewed yet), then the review status. `tone` picks its dot. */
+export function cardStatus(c: Pick<Card, 'status' | 'stream'>): { text: string; tone: string } {
+  const stream = streamText(c.stream);
+  if (stream) return { text: stream, tone: 'rendering' };
+  return { text: STATUS_TEXT[c.status], tone: c.status };
+}
+
+/** Where a video can be moved: every project and group but the one it's in ("Launch · Shorts"). */
+export function moveTargets(w: Workspace, video: string): { value: string; label: string }[] {
+  const here = placementOf(w, video);
+  const many = w.projects.length > 1;
+  return w.projects
+    .flatMap((p) => [
+      { value: `${p.id}/`, label: many ? (p.groups.length ? `${p.title} · Ungrouped` : p.title) : 'Ungrouped' },
+      ...p.groups.map((g) => ({ value: `${p.id}/${g.id}`, label: many ? `${p.title} · ${g.title}` : g.title })),
+    ])
+    .filter((t) => t.value !== `${here.project}/${here.group}`);
+}
 
 /** The streaming chip: "Rendering 3/12", "Not rendered yet", or nothing once it's complete. */
 export function streamText(s: Stream | null | undefined): string | null {
@@ -108,6 +144,25 @@ export function normalizeHome(body: unknown): HomeResponse {
   const result: HomeResponse = { title: str(b.title), folder: str(b.folder) || undefined, role: str(b.role), projects };
   const w = b.workspace as Workspace | undefined;
   if (w && Array.isArray(w.projects) && Array.isArray(w.placements)) result.workspace = w;
+  if (b.user && typeof b.user === 'object') {
+    const u = b.user as Record<string, unknown>;
+    result.user = { email: str(u.email), name: str(u.name) };
+  }
+  if (Array.isArray(b.machines)) {
+    result.machines = (b.machines as unknown[]).flatMap((x) => {
+      if (!x || typeof x !== 'object') return [];
+      const m = x as Record<string, unknown>;
+      const agents = Array.isArray(m.agents) ? (m.agents as Record<string, unknown>[]) : [];
+      return [
+        {
+          id: str(m.id),
+          name: str(m.name) || str(m.id),
+          online: m.online === true,
+          agents: agents.filter((a) => a && typeof a === 'object').map((a) => ({ id: str(a.id), name: str(a.name) })),
+        },
+      ];
+    });
+  }
   return result;
 }
 

@@ -1,4 +1,5 @@
 import './app.css';
+import './ui.css';
 import './phone.css';
 import { flushSync, hydrate, mount } from 'svelte';
 import App from './App.svelte';

@@ -1,13 +1,16 @@
 <script lang="ts">
-  // The bar under the video, left to right: play, time, timeline, version, pen colors, then the voice box (live
-  // waveform, REC, Done). A red top edge while recording. A viewer's share link has no pen and no voice box.
+  // The bar under the video, left to right: play, time, timeline, version, pen colors, then Record, the one action
+  // (Send N to agent / Finish review) and the agent's status; ? for the keys. A red top edge while recording. A
+  // viewer's share link has no pen, no Record and no action.
   import type { Review } from '../lib/review.svelte';
   import VersionPicker from './VersionPicker.svelte';
-  import AgentPanel from './AgentPanel.svelte';
   import PlayButton from './PlayButton.svelte';
   import Timeline from './Timeline.svelte';
   import PenColors from './PenColors.svelte';
-  import VoiceBox from './VoiceBox.svelte';
+  import RecordButton from './RecordButton.svelte';
+  import SendButton from './SendButton.svelte';
+  import AgentStatus from './AgentStatus.svelte';
+  import KeysSheet from './KeysSheet.svelte';
 
   let { review }: { review: Review } = $props();
 </script>
@@ -19,9 +22,13 @@
   </div>
   <Timeline {review} />
   <VersionPicker {review} />
-  <AgentPanel {review} />
   {#if review.canRecord}
     <PenColors color={review.penColor} onpick={review.setColor} eraser={review.eraser} onerase={review.toggleEraser} />
-    <VoiceBox {review} />
+    <div id="voicebox">
+      <RecordButton {review} />
+      <SendButton {review} />
+      {#if review.agent.available}<AgentStatus {review} />{/if}
+    </div>
   {/if}
+  <KeysSheet {review} />
 </div>

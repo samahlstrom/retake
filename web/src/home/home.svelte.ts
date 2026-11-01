@@ -28,8 +28,16 @@ export class Home {
   get workspace(): Workspace {
     return workspaceOf(this.res);
   }
+  /** The project on screen: the one in the URL, or the only one there is (a home with one project opens straight to
+   * its videos). */
   get project() {
-    return this.workspace.projects.find((p) => p.id === this.selected);
+    const projects = this.workspace.projects;
+    if (this.selected) return projects.find((p) => p.id === this.selected);
+    return projects.length === 1 ? projects[0] : undefined;
+  }
+  /** There is one project, so there is no Projects page. */
+  get single(): boolean {
+    return this.workspace.projects.length === 1;
   }
   videos(project: string, group?: string): Card[] {
     return this.res.projects.filter((v) => {

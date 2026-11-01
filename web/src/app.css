@@ -117,9 +117,9 @@ body {
   grid-column: 1 / -1;
   display: flex;
   align-items: center;
-  gap: 22px;
+  gap: 18px;
   height: 64px;
-  padding: 0 28px;
+  padding: 0 24px;
   background: var(--bar);
   border-top: 1px solid var(--hair);
   transition: box-shadow 0.2s ease;
@@ -304,37 +304,45 @@ button {
       12 12,
     cell;
 }
+/* Record, the one action and the agent's status: a group at the right end of the bar. Every width here is fixed, so
+   a label that changes ("Record" → "REC 0:12", "Send to agent" → "Send 12 to agent") moves nothing else. */
 #voicebox {
   flex: none;
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding-left: 22px;
+  gap: 10px;
+  padding-left: 18px;
   border-left: 1px solid var(--hair);
-}
-#wave {
-  width: 150px;
-  height: 26px;
-  display: block;
 }
 #rec {
   flex: none;
   display: flex;
   align-items: center;
   gap: 8px;
-  min-width: 116px;
-  padding: 6px 12px;
-  border-radius: 8px;
+  width: 172px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 9px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: transparent;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 #rec .dot {
   width: 9px;
   height: 9px;
   border-radius: 50%;
-  background: #55555c;
+  background: var(--live);
   flex: none;
+}
+#rec #wave {
+  display: none;
+  flex: 1;
+  min-width: 0;
+  height: 22px;
+}
+#rec.on #wave {
+  display: block;
 }
 #rec .k {
   color: var(--dim);
@@ -351,25 +359,102 @@ button {
   font-weight: 600;
 }
 #rec.on .dot {
-  background: var(--live);
+  border-radius: 2px; /* a stop square */
 }
 #rec.wait .dot {
   background: #d9a441;
 }
 #done {
   flex: none;
+  min-width: 136px;
+  height: 36px;
+  padding: 0 14px;
   background: transparent;
   border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 8px;
-  padding: 7px 16px;
+  border-radius: 9px;
   font-weight: 500;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 #done:hover {
   border-color: rgba(255, 255, 255, 0.32);
 }
+#done.primary {
+  border-color: transparent;
+  background: #ececef;
+  color: #111114;
+  font-weight: 600;
+}
+#done.primary:hover {
+  background: #fff;
+}
 #done.saved {
   color: var(--dim);
   border-color: var(--hair);
+  background: transparent;
+  font-weight: 500;
+}
+#done[aria-busy='true'] {
+  opacity: 0.7;
+  cursor: progress;
+}
+/* The agent's status: a dot and its name, no box. */
+.agent-status {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  width: 140px;
+  height: 36px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #b9b9c4;
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+.agent-status .name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.agent-status:hover,
+.agent-status[data-state='open'] {
+  color: var(--text);
+}
+.agent-status .dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #5c5c66;
+}
+.agent-status.ok .dot {
+  background: var(--st-done);
+}
+.agent-status.busy .dot {
+  background: var(--st-working);
+  animation: dot-pulse 1.4s ease-in-out infinite;
+}
+.agent-status.off {
+  color: #8e8e99;
+}
+#keys {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  margin-right: -10px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #6f6f7a;
+  font-size: 14px;
+  font-weight: 600;
+}
+#keys:hover,
+#keys[data-state='open'] {
+  color: var(--text);
 }
 @media (min-width: 2200px) {
   body {
@@ -387,10 +472,6 @@ button {
   #time {
     min-width: 120px;
   }
-  #wave {
-    width: 190px;
-    height: 30px;
-  }
   .sw {
     width: 16px;
     height: 16px;
@@ -399,75 +480,38 @@ button {
     font-size: 14.5px;
   }
   #rec {
-    min-width: 132px;
+    width: 188px;
   }
 }
 
-/* Timeline comment markers also work with keyboard focus and touch. */
+/* One marker per comment, above the track, in its status color. They work with keyboard focus and touch. */
 #timeline .comment-marker {
   position: absolute;
-  top: calc(50% - 18px);
-  width: 12px;
-  height: 12px;
+  top: calc(50% - 17px);
+  width: 11px;
+  height: 11px;
   padding: 0;
   transform: translateX(-50%);
   border: 2px solid var(--bar);
   border-radius: 50%;
-  background: #b7a2ff;
+  background: #c9c9d1;
   z-index: 2;
+  animation: comment-arrive 220ms ease-out;
 }
-#timeline .comment-marker.resolved {
-  background: #79b696;
+#timeline .comment-marker.working {
+  background: var(--st-working);
+}
+#timeline .comment-marker.question {
+  background: var(--st-question);
+}
+#timeline .comment-marker.done {
+  background: var(--st-done);
 }
 #timeline .comment-marker:hover,
 #timeline .comment-marker:focus-visible {
-  outline: 2px solid #e5dfff;
-  outline-offset: 2px;
+  outline: 2px solid #fff;
+  outline-offset: 1px;
   z-index: 3;
-}
-#timeline #tip {
-  z-index: 10;
-  max-width: min(320px, 80vw);
-  width: max-content;
-  padding: 10px 12px;
-  border: 1px solid #414149;
-  border-radius: 8px;
-  background: #222226;
-  color: #e1e1e8;
-  box-shadow: 0 8px 28px #0008;
-  white-space: normal;
-  text-align: left;
-  font:
-    12px/1.5 Inter,
-    system-ui,
-    sans-serif;
-}
-#tip .tip-time {
-  color: #c5baff;
-  font-variant-numeric: tabular-nums;
-}
-#tip .tip-comment {
-  width: 280px;
-  max-width: 65vw;
-  padding-top: 8px;
-}
-#tip .tip-comment > span {
-  display: block;
-  color: #a3a3af;
-  font-size: 11px;
-}
-#tip .tip-comment p {
-  margin: 5px 0 0;
-  display: -webkit-box;
-  -webkit-line-clamp: 4;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  overflow-wrap: anywhere;
-}
-
-/* Audio and comments share the upper lane; pen marks keep their own lower lane. */
-#timeline .comment-marker {
-  animation: comment-arrive 220ms ease-out;
 }
 @keyframes comment-arrive {
   from {
@@ -479,34 +523,79 @@ button {
     scale: 1;
   }
 }
-#timeline .drawing-marker {
-  position: absolute;
-  top: calc(50% + 4px);
-  width: 10px;
-  height: 14px;
-  padding: 0;
-  transform: translateX(-50%);
-  border: 0;
-  background: transparent;
-  z-index: 2;
+#timeline #tip {
+  z-index: 10;
+  max-width: min(320px, 80vw);
+  width: max-content;
+  padding: 10px 12px;
+  border: 1px solid #34343b;
+  border-radius: 9px;
+  background: #1d1d21;
+  color: #e1e1e8;
+  box-shadow: 0 8px 28px #0008;
+  white-space: normal;
+  text-align: left;
+  font:
+    12px/1.5 Inter,
+    system-ui,
+    sans-serif;
 }
-#timeline .drawing-marker::after {
+#tip .tip-time {
+  color: #fff;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+#tip .tip-comment {
+  width: 280px;
+  max-width: 65vw;
+  padding-top: 8px;
+}
+#tip .tip-state {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #a3a3af;
+  font-size: 11px;
+}
+#tip .tip-state::before {
   content: '';
-  position: absolute;
-  left: 4px;
-  top: 2px;
-  width: 2px;
-  height: 7px;
-  background: var(--drawing-color);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--st-open);
 }
-#timeline .drawing-marker:hover,
-#timeline .drawing-marker:focus-visible {
-  outline: 1px solid #e5dfff;
-  border-radius: 3px;
-  z-index: 3;
+#tip .tip-state.working::before {
+  background: var(--st-working);
+}
+#tip .tip-state.question::before {
+  background: var(--st-question);
+}
+#tip .tip-state.done::before {
+  background: var(--st-done);
+}
+#tip .tip-comment p {
+  margin: 4px 0 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
 }
 @media (prefers-reduced-motion: reduce) {
   #timeline .comment-marker {
     animation: none;
   }
+}
+
+/* The agent's drafts (contract C4): the version they head for, with a quiet tag. */
+#verBtn .draft,
+#verList .draft {
+  margin-left: 6px;
+  color: var(--dim);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+#verList .is-draft {
+  color: #b9b9c4;
 }
