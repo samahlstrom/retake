@@ -32,7 +32,9 @@
   </p>
   {#if command}
     <div class="cmd">
-      <code bind:this={code}>{command}</code>
+      <code bind:this={code}
+        >{#each command.split(' ') as part, i (i)}{#if i}{' '}{/if}<span class="arg">{part}</span>{/each}</code
+      >
       <button onclick={copy} aria-label="Copy the command">{copied ? 'Copied' : 'Copy'}</button>
     </div>
   {:else}
@@ -75,8 +77,12 @@
       Menlo,
       monospace;
     color: #e2e2e8;
-    overflow-wrap: anywhere;
+    overflow-x: auto;
     user-select: all;
+  }
+  .arg {
+    /* wrap between arguments only, never inside --token or the URL */
+    white-space: nowrap;
   }
   .loading code {
     color: #7d7d88;
