@@ -1,11 +1,15 @@
 <script lang="ts">
-  // The comments, beside the video (desktop) or under the controls (phone): two tabs, To do and Done, and a search
-  // behind its icon. Progress (recording, transcribing, an undo after a delete) floats at the bottom of the column, so
-  // nothing in the list moves. N or the › hides it (remembered); a quiet pill over the video brings it back.
+  // The comments, beside the video (desktop) or under the controls (phone): the versions (a strip, with what's to do on
+  // each), two tabs, To do and Done, and a search behind its icon. Each version shows its own comments only; the latest
+  // says in one quiet line what's still open on earlier ones. Progress (recording, transcribing, an undo after a
+  // delete) floats at the bottom of the column, so nothing in the list moves. N or the › hides it (remembered); a
+  // quiet pill over the video brings it back.
   import { Collapsible, ScrollArea, Tooltip } from 'bits-ui';
   import { tick } from 'svelte';
   import type { Review } from '../../lib/review.svelte';
   import SidebarItem from './SidebarItem.svelte';
+  import VersionStrip from './VersionStrip.svelte';
+  import EarlierOpen from './EarlierOpen.svelte';
   import './sidebar.css';
 
   let { review }: { review: Review } = $props();
@@ -20,10 +24,10 @@
         ? '1 to do'
         : review.todoCount
           ? `${review.todoCount} to do`
-          : `${review.rows.length} comments`,
+          : `${review.versionRows.length} comments`,
   );
-  const asking = $derived(review.rows.some((row) => review.statusOf(row).state === 'question'));
-  const working = $derived(review.rows.some((row) => review.statusOf(row).state === 'working'));
+  const asking = $derived(review.versionRows.some((row) => review.statusOf(row).state === 'question'));
+  const working = $derived(review.versionRows.some((row) => review.statusOf(row).state === 'working'));
   const setOpen = (v: boolean) => {
     if (v !== view.panel) review.toggleSidebar();
   };
@@ -125,6 +129,7 @@
               </Collapsible.Trigger>
             {/if}
           </header>
+          <VersionStrip {review} />
           <div class="tabs" role="tablist" aria-label="Comments">
             <button
               role="tab"
@@ -139,6 +144,7 @@
               onclick={() => (review.commentFilter = 'done')}>Done <b>{review.doneCount}</b></button
             >
           </div>
+          <EarlierOpen {review} />
           <ScrollArea.Root class="scroll" type="hover">
             <ScrollArea.Viewport class="vp">
               {#if view.rows.length}
@@ -153,7 +159,7 @@
                 <p class="empty">Nothing done yet<span>Comments the agent finishes land here.</span></p>
               {:else if !job}
                 <p class="empty">
-                  {review.rows.length ? 'All done' : 'No comments yet'}<span
+                  {review.versionRows.length ? 'All done' : 'No comments yet'}<span
                     >{review.canRecord
                       ? review.touch
                         ? 'Tap ● and talk to leave one at this moment.'

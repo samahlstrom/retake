@@ -226,10 +226,6 @@
 #side .status.done .dot {
   background: var(--st-done);
 }
-#side .origin {
-  color: #6f6f7a;
-  font-size: 11.5px;
-}
 #side .text {
   margin: 6px 0 0;
   font-size: 13.5px;
