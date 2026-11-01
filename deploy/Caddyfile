@@ -1,0 +1,19 @@
+# HTTPS for Retake with Caddy (https://caddyserver.com), on the same machine as `docker compose up`. Caddy gets and
+# renews the certificate on its own. Change the hostname to yours: it must match RETAKE_PUBLIC_URL in deploy/.env.
+#
+#   caddy run --config deploy/Caddyfile        (or copy the block into /etc/caddy/Caddyfile)
+#
+# What Retake needs from any proxy, which Caddy does by default:
+#   - the live updates (/api/events and /p/<project>/api/events, server-sent events) passed through unbuffered;
+#   - responses that take 30 seconds or more: video relayed from your computer, agents waiting for notes;
+#   - request bodies of any size (retake push --remote sends 8 MiB pieces).
+# With nginx that is `proxy_buffering off; proxy_read_timeout 120s; client_max_body_size 0;`.
+#
+# Seen from inside the container, Caddy is the docker bridge, so also set RETAKE_TRUSTED_PROXIES=172.16.0.0/12 in
+# deploy/.env: then failed sign-in links and tokens are counted per visitor, not per proxy.
+
+review.example.com {
+	reverse_proxy 127.0.0.1:8080 {
+		flush_interval -1
+	}
+}

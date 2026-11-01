@@ -188,8 +188,8 @@ without a token per project.
 | POST | `/api/machine/projects` | `{name, title}`: makes the project when it doesn't exist (201), else 200. Answers `{name, title, url, created}` |
 | PUT | `/api/machine/projects/<name>/poster` | The project's poster: a JPEG (`Content-Type: image/jpeg`) of at most 2 MiB. 204 |
 
-- The machine routes need a machine token; anything else gets 401 `{"error":"machine token required"}`. A project
-  token isn't one.
+- The machine routes need a machine token: without a Bearer token they answer 401 `{"error":"machine token
+  required"}`, and with any other one (a project's token too) 401 `{"error":"bad token"}`, a failed attempt.
 - A project made this way has no members: admins own it, as they own every project. Its name follows the project
   rule above (400 otherwise); the title is at most 200 characters.
 - The poster is kept as `.retake/poster.jpg` in the project's workspace. Until the project's page has a version,

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Smoke test of the Docker Compose stack (retake + Postgres + MinIO), end to end, then teardown.
+# Smoke test of the Docker Compose stack with its scale profile (retake + Postgres + MinIO), end to end, then teardown.
 #
 #   deploy/smoke.sh            # builds the image, runs the test, removes containers, volumes and the image
 #   KEEP=1 deploy/smoke.sh     # leaves the stack running
@@ -30,6 +30,9 @@ services:
 EOF
 
 export RETAKE_PORT=$PORT RETAKE_PUBLIC_URL=$BASE
+# The scale profile: Postgres and MinIO, with the compose file's default passwords.
+export COMPOSE_PROFILES=scale RETAKE_S3_ENDPOINT=minio:9000 \
+  RETAKE_DATABASE_URL="postgres://retake:${POSTGRES_PASSWORD:-retake}@postgres:5432/retake?sslmode=disable"
 compose() { docker compose -p "$PROJECT" -f deploy/docker-compose.yml -f "$WORK/compose.override.yml" "$@"; }
 down() {
   if [ "${KEEP:-}" = 1 ]; then
