@@ -43,27 +43,42 @@ to the others). The comment turns Done once that video plays.
 ## When the agent is unsure
 
 The agent never asks in its terminal. When a note is unclear, it asks about the moment of the video it's unsure of,
-and carries on with the rest of its work:
+and carries on with the rest of its work. It can draw to show what it means:
 
 ```bash
-retake ask --note 12 --at 1:23 --box 0.1,0.6,0.4,0.3 "Which logo: the old one or the new one?"
+retake ask --note 12 --from 1:20 --to 1:26 --at 1:23 \
+  --box 0.1,0.6,0.4,0.3:"this logo" --arrow 0.8,0.2,0.55,0.45:"or this one?" \
+  --option "Old logo@old.png" --option "New logo@new.png" \
+  "Which logo should stay here?"
 ```
 
-The question shows on the review page under comment 12 (which turns Question) and as a marker on the timeline at
-1:23. Click the marker to jump there and see the box it drew. Answer under the comment, typed or out loud. The answer
-goes back to the same task:
+The question shows on the review page under comment 12 (which turns Question), with a still of that frame and the
+agent's drawing on it, and as a marker on the timeline at 1:23. Click the marker to jump there: the agent's boxes,
+arrows and images show on the video, dashed and in the Question violet with an "Agent" chip, so you never mistake them
+for your own pen. Answer under the comment: tap a choice, type, or answer out loud (and draw over the video while you
+do, as in any recording). The answer goes back to the same task:
 
 - In herdr or tmux, if the agent is still working, it gets the answer as a new message in its session: "Answer to
-  your question on note 12 at 1:23: the new one". If it had already finished, the task starts again in the same
-  session with the answer.
+  your question on note 12 at 1:23: New logo". If it had already finished, the task starts again in the same session
+  with the answer.
 - In the background, the task starts again with the answer in its context once the agent's current run ends.
 
 A task can finish with some notes Done and others still waiting on their answer. The command needs no video or
 token: the worker gives each task its own local address and secret (`RETAKE_ASK_URL` and `RETAKE_ASK_TOKEN`, or
-`.retake/worker/ask.json` in herdr and tmux), and passes the question on to the review. `--note` can be left out
-when the task has one note; `--at` is seconds (`83.5`) or `m:ss` on the version the note was made on (`--version
-v4-draft2` for a time on a draft); `--box` is `x,y,w,h` from 0 to 1, from the top left of the frame. A background
-agent that writes `{"state": "question", ...}` as its report still works too.
+`.retake/worker/ask.json` in herdr and tmux), and passes the question on to the review, images and all, so it works
+the same with a hosted server.
+
+| Flag | Means |
+|---|---|
+| `--note ID` | The comment it's about. Can be left out when the task has one. |
+| `--at T`, `--from T --to T` | The moment, and the shot: seconds (`83.5`) or `m:ss`, on the version the note was made on (`--version v4-draft2` for a draft). |
+| `--box X,Y,W,H[:LABEL]` | A box, from 0 to 1 from the top left of the frame (`--px` for pixels). Up to 10. |
+| `--arrow X1,Y1,X2,Y2[:LABEL]` | An arrow from the first point to the second. Up to 10. |
+| `--draw FILE` | Freehand lines: `[{"points": [[x, y], ...]}]`, like a take's `strokes.json`. |
+| `--image FILE[@X,Y,W,H]` | A PNG, JPEG, WebP or GIF (8 MiB at most): placed on the frame with a box, else shown in the card. Up to 4. |
+| `--option TEXT[@FILE]` | A choice to answer with one tap, with an optional image. Up to 6. |
+
+A background agent that writes `{"state": "question", ...}` as its report still works too.
 
 Reviewing on a hosted server instead? Run `retake connect` and the same worker connects out to it: [hosting.md](hosting.md).
 

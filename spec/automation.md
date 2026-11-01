@@ -110,22 +110,40 @@ An agent runs unattended, so the built-in profiles never stop for a permission p
 
 ## Questions from inside a task: `retake ask`
 
-An agent that is unsure about a note asks about a moment of the video, and keeps working. The question shows on the
-review page under its comment and on the timeline at that moment; the answer comes back to the same task.
+An agent that is unsure about a note asks about a moment of the video, and keeps working. It can draw to make the
+question clear: boxes and arrows with labels, freehand lines, images it made, and choices to tap. The question shows on
+the review page under its comment and on the timeline at that moment; the answer comes back to the same task.
 
 ```
-retake ask [--note ID] [--at TIME] [--box X,Y,W,H] [--version LABEL] [--json] "question"
+retake ask [--note ID] [--at TIME] [--from TIME --to TIME] [--version LABEL] [--px]
+           [--box X,Y,W,H[:LABEL]]... [--arrow X1,Y1,X2,Y2[:LABEL]]... [--draw FILE]
+           [--image FILE[@X,Y,W,H]]... [--option TEXT[@FILE]]... [--json] "question"
 ```
 
 - With one positional argument it asks from inside the running task: no video path and no token. (Three, `retake ask
-  <video> <note> "question"`, is the project-level command of spec/notes.md, unchanged.)
-- `--note` is one of the task's notes (`task.notes`); it may be left out when the task has one. `--at` is seconds
+  <video> <note> "question"`, is the project-level command of spec/notes.md, unchanged; `--option` there is still a
+  version label.)
+- `--note` is one of the task's notes (`task.notes`); it may be left out when the task has one. Times are seconds
   (`83`, `83.5`) or `m:ss` (`1:23`) on `--version`, which defaults to the note's version (the times in the task
-  context; a draft label such as `v4-draft2` points at a render of this task). Without `--at` the question is at the
-  note's start. `--box` is a region of the frame, normalized 0–1 with (0, 0) at the top left, like a stroke's box.
+  context; a draft label such as `v4-draft2` points at a render of this task). `--from` and `--to` (both or neither,
+  `from < to`) are the shot the question is about; `--at` is its moment, by default `--from`, else the note's start.
+- **Visuals** (all optional, all repeatable but `--draw`). Coordinates are normalized 0–1 to the frame with (0, 0) at
+  the top left, or pixels of the version's frame with `--px` (the server divides by its width and height, and refuses
+  `--px` when it doesn't know them).
+  - `--box X,Y,W,H[:LABEL]`: a rectangle, inside the frame, with a size. At most 10.
+  - `--arrow X1,Y1,X2,Y2[:LABEL]`: from the first point to the second, both inside the frame. At most 10.
+  - `--draw FILE`: freehand lines, a JSON list in the take's stroke format (spec/take-format.md, `strokes.json`):
+    `[{"points": [[x, y], ...]}, ...]`; other fields are ignored. At most 50 lines and 5000 points.
+  - `--image FILE[@X,Y,W,H]`: a PNG, JPEG, WebP or GIF the agent made (a mockup, a still), 8 MiB at most, its type
+    checked from its bytes. With a rectangle it is placed on the frame; without, it shows in the question card. At
+    most 4.
+  - `--option TEXT[@FILE]`: a choice the reviewer can answer with one tap, optionally with an image of it (as
+    `--image`). At most 6; `@FILE` is read as an image only when FILE ends in `.png`, `.jpg`, `.jpeg`, `.webp` or
+    `.gif`.
+  - A label is at most 40 characters, an option's text 120, the question 2000.
 - It prints `asked about #12 at 1:23 (question 7)` (with `--json`, the question) and exits 0 at once. It never waits
-  for the answer. Exit 1 when the question is refused, with the reason; exit 2 for a usage error, or when it isn't run
-  inside a task ("not inside a Retake task: …").
+  for the answer. Exit 1 when the question is refused, with the reason; exit 2 for a usage error (a bad flag, a
+  missing or oversized file), or when it isn't run inside a task ("not inside a Retake task: …").
 - **Finding the worker.** `RETAKE_ASK_URL` and `RETAKE_ASK_TOKEN` in its environment, else the file
   `.retake/worker/ask.json` (`{"url", "token"}`) in the current folder or the nearest parent that has one. A
   background agent gets both variables. An agent in herdr or tmux gets the file: its session's environment is fixed
@@ -133,23 +151,36 @@ retake ask [--note ID] [--at TIME] [--box X,Y,W,H] [--version LABEL] [--json] "q
 - **The worker's endpoint.** At its first task a worker listens on `127.0.0.1` (a free port) for its whole life.
   Each attempt gets a fresh random secret (32 hex), which ends with the attempt; the worker writes `ask.json` (mode
   0600) when the attempt starts and deletes it when it ends. `POST <url>/ask` with `Authorization: Bearer <secret>`
-  and `{"note", "at", "box", "version", "text"}` answers 200 with the question `{"id", "note", "version", "at", "box",
-  "text"}`, 403 for a wrong or stale secret or when no task is running, 400 for a malformed request, and the server's
-  status and reason when it refuses. The worker's own host token never reaches the agent.
-- The worker forwards it as `POST /api/worker/ask` `{"task", "lease", "note", "at", "box", "version", "text"}` with
-  its own credentials (in process in Local mode, over HTTP to a hosted server), fenced like a report. The server
-  checks the note is the task's (`note` 0 with one note means that one), the version is in the family or is a render,
-  `at` is 0 or more, the box is inside the frame with a positive size, and the text is 1–2000 characters. It stores
-  a question thread (spec/notes.md; `by` "agent", `t` = `at`), records it on the task (`asked: [{"id", "note",
-  "box"}]`), and moves the note to `question`. The attempt keeps running: asking doesn't end it.
+  and `{"note", "at", "from", "to", "version", "px", "text", "boxes": [{"box", "label"}], "arrows": [{"from", "to",
+  "label"}], "strokes": [{"points"}], "images": [{"name", "data", "box"}], "options": [{"text", "image": {"name",
+  "data"}}]}` (`data` base64, 48 MiB in all) answers 200 with the question (`TaskQuestion` below), 403 for a wrong or
+  stale secret or when no task is running, 400 for a malformed request, and the server's status and reason when it
+  refuses. The worker's own host token never reaches the agent.
+- **The frame.** The worker adds a still of the question's moment, `frame` (a JPEG at most 480 px wide, from the
+  version's file or render on this machine, made with ffmpeg in at most 15 s). Without ffmpeg, or for a moment it
+  can't read, there is none, and the page draws the visuals on a plain frame.
+- The worker forwards it as `POST /api/worker/ask` (the same body plus `"task"`, `"lease"` and `"frame"`) with its own
+  credentials (in process in Local mode, over HTTP to a hosted server), fenced like a report. The server checks the
+  note is the task's (`note` 0 with one note means that one), the version is in the family or is a render, the times,
+  the visuals and their limits, the images' types (from their bytes, against their names) and sizes, and the text,
+  and refuses with 409 and the reason. It stores a question thread (spec/notes.md; `by` "agent", `t` = `at`), records
+  it on the task (`asked: [{"id", "note"}]`), moves the note to `question`, and keeps the visuals with the question on
+  the server: `.retake/questions/<id>/visuals.json` and its images `img_1.png`, ..., `option_1.png`, ...,
+  `frame.jpg` beside it, served at `GET /api/questions/<id>/<file>` with the viewing permissions of the take images.
+  So they work the same in Local mode and hosted. The attempt keeps running: asking doesn't end it.
+- `TaskQuestion` (the endpoint's answer, and the poll's `questions`): `{"id", "note", "version", "at", "from", "to",
+  "text", "visuals": {"boxes", "arrows", "strokes", "images": [{"url", "box"}], "options": [{"text", "image"}],
+  "frame"}, "answer": {"id", "by", "text"}}`, normalized, with `url`s on the server.
 
 **Answers.**
 
-- The comment shows the question under its text, with the reply box: typed, or recorded with the existing voice
-  reply. A typed answer is `POST /api/automation/tasks/<id>/answer` `{"question": <thread id>, "message"}` (any role
-  that can record); a recorded one is a segment whose `answer_to` is the thread id, as for any question. Either way
-  it becomes an answer thread (`by` the person's name), and the note goes back to `open`, so the comment is Working
-  again (its task owns it).
+- The comment shows the question under its text, with the reply box: typed, a tap on one of its choices, or recorded
+  with the existing voice reply. A typed or tapped answer is `POST /api/automation/tasks/<id>/answer` `{"question":
+  <thread id>, "message"}` (a tap sends the choice's text; any role that can record); a recorded one is a segment
+  whose `answer_to` is the thread id, as for any question, and the reviewer may draw over the agent's visuals while
+  recording it, as on any take. Either way it becomes an answer thread (`by` the person's name), and the note goes
+  back to `open`, so the comment is Working again (its task owns it). The answer's strokes stay the take's, as
+  today; the agent's visuals never become a reviewer's note or stroke.
 - The poll answer lists the task's questions in `questions`: `[{"id", "note", "version", "at", "box", "text",
   "answer": {"id", "by", "text"}}]` (`answer` once there is one). The worker says which answers reached the agent
   with `told: [<answer thread id>, ...]` in its next poll; the task keeps them in `told`.
@@ -160,6 +191,14 @@ retake ask [--note ID] [--at TIME] [--box X,Y,W,H] [--version LABEL] [--json] "q
   attempt's context has it in `questions`, and every answer there is told. In herdr or tmux the attempt's line then
   starts with the answers: `Answer to your question on note 12 at 1:23: <answer>. Carry on with Retake task <id>
   (attempt <n>): follow the instructions in <prompt file>`.
+
+**What the page shows.** The agent's visuals are drawn in one style of their own, never in a pen colour: the Question
+violet, dashed outlines, a small chip on each box and arrow with its label (or "Agent"), freehand lines dashed, and
+its images in a framed card. They show on the video while the playhead is inside the question's range (`from`–`to`,
+else 1.5 s around `at`) and whenever the question is selected (clicking its marker or its time seeks to `at`
+and selects it, until the reviewer selects something else or plays out of the range). Entering the range highlights
+them once, briefly. The question's card under its comment shows a thumbnail: the frame still with the visuals drawn
+on it, then the question, its unplaced images and choices (with their images, in framed cards), and the reply box.
 
 **How a task ends.** A note of a task is *held* while its newest question from that task has no answer (waiting for
 the person), or has one that wasn't told to an agent yet.
@@ -383,10 +422,10 @@ its version files and runs the agent, and the agent makes the next version howev
   fallback ("Pause and ask me" by default) and the computer there; everyone else sees the agent, or the one line
   "Waiting for the editing computer". Per-comment actions are in the card's ⋯ menu: send one, retry, history and
   delete as the role allows; switch agent and pause for the owner; reopen for approvers. A question an agent asked
-  from inside its task (`retake ask`) shows under its comment, with a reply box that takes typed words (`…/answer`
-  with `question`) or a recorded answer (`answer_to`), and as a marker on the timeline at its moment, in the
-  Question color; clicking the marker (or the question's time) seeks there and outlines its box on the video, when
-  it has one, until playback moves on. A report's question (the fallback) takes a typed answer (`…/answer`); a
+  from inside its task (`retake ask`) shows under its comment, with a reply box that takes typed words or a tapped
+  choice (`…/answer` with `question`) or a recorded answer (`answer_to`), and as a marker on the timeline at its
+  moment, in the Question color; clicking the marker (or the question's time) seeks there and shows its visuals
+  ("What the page shows"). A report's question (the fallback) takes a typed answer (`…/answer`); a
   question asked through the notes takes a recorded one (`answer_to`), in the same reply box. Comment cards show
   current task state and result links regardless of which version is selected.
 
@@ -400,8 +439,10 @@ submissions, Send by every recording role (a share link too) with no worker onli
 `/done` with and without `send`, a sent take queuing without a worker poll, drafts versus versions, a worker restart
 with unchanged source, profile `env` expansion, Local mode's in-process worker and `blocked` reasons, the exact herdr
 and tmux commands (fake binaries on `PATH` that log their argv), completion by report with no agent output, stop
-closing the pane, and two projects' tasks running at the same time. For `retake ask`: the built-in profiles' argv, a
-fake agent that asks mid-task and then completes (Local mode and hosted), a wrong or stale secret refused, an answer
-reaching a herdr and a tmux session (fake binaries) and a background attempt's context, a task ending with some notes
-Done and some Question, and the question's timeline marker (a web unit test and an e2e test). Provider adapters are tested with deterministic executables; live paid-provider execution is reported
+closing the pane, and two projects' tasks running at the same time. For `retake ask`: the built-in profiles' argv, the
+CLI's parsing and validation of visuals, their persistence and the hosted relay of their images, a fake agent that
+asks mid-task and then completes (Local mode and hosted), a wrong or stale secret refused, an answer reaching a herdr
+and a tmux session (fake binaries) and a background attempt's context, a task ending with some notes Done and some
+Question, the agent's visuals drawn in their own style (a web unit test), and an e2e test where an agent's question
+with a box, an arrow and two image choices is answered with one tap. Provider adapters are tested with deterministic executables; live paid-provider execution is reported
 separately if it is not exercised.

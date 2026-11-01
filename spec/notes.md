@@ -60,9 +60,12 @@ that aren't done (`{id, kind, state, attempts, error?, hint?, take?}`), so a pag
   images?: [{url, box}], ask?}`. For a question item, `id` is the thread id (what `answer_to` takes), `text` is the
   question, and an optional `note` is the id of the note it's about.
 - **A task's question.** A note in `question` whose newest question an agent asked from inside its editing task
-  (`retake ask`) carries it as `ask: {id, task, t, box?, version, text}`: the thread id, the task that asked, the
-  question's time (mapped onto the shown version like the note's own times, else on `version`'s clock) and its box.
-  That question isn't also listed as a question item: it shows under its comment.
+  (`retake ask`) carries it as `ask: {id, task, t, from?, to?, version, text, visuals}`: the thread id, the task that
+  asked, the question's time and range (mapped onto the shown version like the note's own times, else on
+  `version`'s clock) and the agent's visuals (spec/automation.md, `TaskQuestion`). That question isn't also listed as
+  a question item: it shows under its comment.
+- `GET /api/questions/<id>/<file>` serves a task question's images (`img_N`, `option_N`, `frame.jpg`), with the
+  viewing permissions of `/api/takes/…`.
 
 ## Take format additions (v1.1; readers ignore unknown fields)
 
@@ -134,7 +137,7 @@ Every command has `--json`. `retake mcp <video>` serves the same tools over stdi
 | `notes_wait` | `retake notes wait <video> [--since SEQ] [--timeout S]` | Blocks until there are new notes or answers. Returns them and the new cursor. |
 | `notes_list` | `retake notes list <video> [--status open] [--version vN]` | Notes with text, times, author, strokes (shape, color, box), images, the snapshot path and the answers. |
 | `note_ask` | `retake ask <video> <note> "text" [--option v8a ...]` | Asks a question about a note. |
-| | `retake ask [--note ID] [--at TIME] [--box X,Y,W,H] [--version L] "text"` | From inside a running editing task, without the video: asks about a moment of the video through the worker (spec/automation.md, "Questions from inside a task"). |
+| | `retake ask [--note ID] [--at T] [--from T --to T] [--box …] [--arrow …] [--draw F] [--image F] [--option TEXT[@F]] "text"` | From inside a running editing task, without the video: asks about a moment of the video through the worker, with visuals (spec/automation.md, "Questions from inside a task"). |
 | `note_set` | `retake note <video> <id> --status S [--in vN] [--change "..."]` | Changes one note. |
 | `version_push` | `retake push <video> <file> --parent vN --change ID="summary"... --ask ID="question"...` | Copies or moves the file into the family as the next `v<N>`, or takes `--label vN` (labels are `v<N>`: the page finds versions by the `_v<N>` in their names). Records sha256, parent and changelog, enforces the push rule, and emits a `version` event. |
 | `versions_list` | `retake versions <video>` | Versions, parents, changelogs. |
