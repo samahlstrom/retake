@@ -210,7 +210,7 @@ func TestOpenPlainFolderSendsToItsAgent(t *testing.T) {
 	url, stop, done := w.serve(t, env, "open", dir, "--port", "0", "--no-open")
 	var v view
 	deadline := time.Now().Add(30 * time.Second)
-	for !(v.Local && v.Blocked == "" && len(v.Workers) == 1 && v.Config.Agent == "fake") {
+	for !v.Local || v.Blocked != "" || len(v.Workers) != 1 || v.Config.Agent != "fake" {
 		if time.Now().After(deadline) {
 			t.Fatalf("no local worker: %+v\n%s", v, w.stderr)
 		}
