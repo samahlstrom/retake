@@ -369,7 +369,7 @@ func (s *Store) SetDisabled(email string, disabled bool) (User, error) {
 	return userByID(s.db, u.ID)
 }
 
-// RemoveUser deletes a user, with their memberships, links and sessions.
+// RemoveUser deletes a user, with their memberships, links, sessions and machine tokens.
 func (s *Store) RemoveUser(email string) error {
 	u, err := s.User(email)
 	if err != nil {
@@ -377,7 +377,8 @@ func (s *Store) RemoveUser(email string) error {
 	}
 	return s.write(func(tx *sqldb.Tx) error {
 		for _, q := range []string{`DELETE FROM sessions WHERE user_id = ?`, `DELETE FROM signin_links WHERE user_id = ?`,
-			`DELETE FROM members WHERE user_id = ?`, `DELETE FROM users WHERE id = ?`} {
+			`DELETE FROM members WHERE user_id = ?`, `DELETE FROM machine_tokens WHERE created_by = ?`,
+			`DELETE FROM users WHERE id = ?`} {
 			if _, err := tx.Exec(q, u.ID); err != nil {
 				return err
 			}
