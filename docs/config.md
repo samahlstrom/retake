@@ -112,6 +112,7 @@ s3_region = "us-east-1"                  # RETAKE_S3_REGION, --s3-region
 s3_insecure = false                      # RETAKE_S3_INSECURE=1, --s3-insecure: plain HTTP to the S3 endpoint
 smtp_url = ""                            # RETAKE_SMTP_URL: smtp://user:pass@host:587 (STARTTLS) or smtps://...:465
 smtp_from = ""                           # RETAKE_SMTP_FROM, --smtp-from: default retake@<public host>
+relay_cache = "20GB"                     # RETAKE_RELAY_CACHE, --relay-cache: relayed video kept on the server; "0" = none
 ```
 
 Without `public_url` any Host is accepted and the CLI makes links for `http://localhost:<port>`; set it in production.
@@ -129,7 +130,7 @@ only by you. `retake push --remote` remembers unfinished uploads in `$XDG_STATE_
 | `XDG_DATA_HOME` | retake | Where `scripts/install-whisper.sh` installs whisper.cpp, and where retake looks for it. |
 | `XDG_CACHE_HOME` | retake | Where whisper models are downloaded (`retake/models`). |
 | `RETAKE_WHISPER_THREADS` | retake | whisper.cpp's CPU threads. |
-| `RETAKE_DATA`, `RETAKE_LISTEN`, `RETAKE_PUBLIC_URL`, `RETAKE_TRUSTED_PROXIES`, `RETAKE_DATABASE_URL`, `RETAKE_S3_*`, `RETAKE_SMTP_URL`, `RETAKE_SMTP_FROM` | retake serve, user, project | The team server's settings ([server] above). |
+| `RETAKE_DATA`, `RETAKE_LISTEN`, `RETAKE_PUBLIC_URL`, `RETAKE_TRUSTED_PROXIES`, `RETAKE_DATABASE_URL`, `RETAKE_S3_*`, `RETAKE_SMTP_URL`, `RETAKE_SMTP_FROM`, `RETAKE_RELAY_CACHE` | retake serve, user, project | The team server's settings ([server] above). |
 | `RETAKE_TOKEN` | retake remote add | The agent token, when `--token` isn't given. |
 | `XDG_STATE_HOME` | retake push --remote | Where unfinished uploads are remembered (`retake/uploads.json`). |
 | `RETAKE_PROMPT`, `RETAKE_LANGUAGE` | your command engine | Set by retake for the program it runs. |

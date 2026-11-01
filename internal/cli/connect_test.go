@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -29,34 +30,7 @@ var jpegBytes = string([]byte{0xff, 0xd8, 0xff, 0xe0, 0, 16, 'J', 'F', 'I', 'F',
 func TestConnectRegistersProjectsAndRunsWorkers(t *testing.T) {
 	w := newWorld(t)
 	data := filepath.Join(w.root, "data")
-	base, _, done := w.serve(t, w.environment(nil), "serve", "--data", data, "--listen", "127.0.0.1:0")
-	base = strings.Replace(strings.TrimSuffix(base, "/"), "localhost", "127.0.0.1", 1)
-
-	// The setup link is printed once, with its one-time code.
-	m := regexp.MustCompile(`/setup\?code=(su_[A-Za-z0-9_-]{43})`).FindStringSubmatch(w.stdout.String())
-	if m == nil {
-		t.Fatalf("no setup link:\n%s", w.stdout)
-	}
-	req, _ := http.NewRequest(http.MethodPost, base+"/setup", strings.NewReader(url.Values{"code": {m[1]},
-		"name": {"Owner"}, "email": {"owner@example.com"}}.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Origin", base)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	page, _ := io.ReadAll(resp.Body)
-	_ = resp.Body.Close()
-	var session string
-	for _, c := range resp.Cookies() {
-		if c.Name == "retake_session" {
-			session = c.Value
-		}
-	}
-	line := regexp.MustCompile(`retake connect (\S+) --token (rk_[A-Za-z0-9_-]{43})`).FindStringSubmatch(string(page))
-	if resp.StatusCode != http.StatusOK || session == "" || line == nil || line[1] != base {
-		t.Fatalf("setup: %d %q\n%s", resp.StatusCode, session, page)
-	}
+	base, session, line, done := hosted(t, w, data)
 
 	// A folder: a timeline project with a version (and its poster), a new timeline project, and a plain video.
 	folder := filepath.Join(w.root, "Projects")
@@ -147,10 +121,11 @@ func TestConnectRegistersProjectsAndRunsWorkers(t *testing.T) {
 		}
 	}
 	h := waitFor("the projects and the machine", func(h home.Response) bool {
-		return len(h.Projects) == 2 && len(h.Machines) == 1 && h.Machines[0].Online
+		return len(h.Projects) == 3 && len(h.Machines) == 1 && h.Machines[0].Online
 	})
-	if names(h) != "fresh intro-cut" && names(h) != "intro-cut fresh" {
-		t.Fatalf("projects: %s", names(h))
+	if got := strings.Fields(names(h)); !slices.Contains(got, "fresh") || !slices.Contains(got, "intro-cut") ||
+		!slices.Contains(got, "plain") {
+		t.Fatalf("projects: %s", names(h)) // the plain folder too: retake open shows it
 	}
 	for _, c := range h.Projects {
 		if c.Name == "intro-cut" && (c.Title != "Intro Cut" || c.Thumb != "p/intro-cut/api/poster") {
@@ -158,7 +133,7 @@ func TestConnectRegistersProjectsAndRunsWorkers(t *testing.T) {
 		}
 	}
 	// The poster is the version's first frame, sent from here.
-	req, _ = http.NewRequest(http.MethodGet, base+"/p/intro-cut/api/poster", nil)
+	req, _ := http.NewRequest(http.MethodGet, base+"/p/intro-cut/api/poster", nil)
 	req.AddCookie(&http.Cookie{Name: "retake_session", Value: session})
 	if resp, err := http.DefaultClient.Do(req); err != nil {
 		t.Fatal(err)
@@ -172,8 +147,8 @@ func TestConnectRegistersProjectsAndRunsWorkers(t *testing.T) {
 	if mc := h.Machines[0]; mc.Name != "test-pc" || len(mc.Agents) != 1 || mc.Agents[0].Name != "Fake agent" {
 		t.Fatalf("machine: %+v", mc)
 	}
-	if !strings.Contains(w.stdout.String(), "plain: skipped") {
-		t.Errorf("the plain project wasn't reported:\n%s", w.stdout)
+	if !strings.Contains(w.stdout.String(), "plain: on "+base+"/p/plain/") {
+		t.Errorf("the plain project wasn't connected:\n%s", w.stdout)
 	}
 
 	// The connection is saved, privately.
@@ -187,7 +162,7 @@ func TestConnectRegistersProjectsAndRunsWorkers(t *testing.T) {
 
 	// A project made later is picked up.
 	writeFile(t, filepath.Join(folder, "later", "edit", "timeline.json"), fakeTimeline)
-	waitFor("the new project", func(h home.Response) bool { return len(h.Projects) == 3 })
+	waitFor("the new project", func(h home.Response) bool { return len(h.Projects) == 4 })
 	stop()
 
 	// Nothing but the poster reached the server: no footage, source or renders.
@@ -227,6 +202,40 @@ func TestConnectRegistersProjectsAndRunsWorkers(t *testing.T) {
 		t.Fatalf("a project URL: %d", code)
 	}
 	_ = done
+}
+
+// hosted starts retake serve with its data in data, makes the owner as the browser's setup page does, and returns
+// the server's address, the owner's session and the Connect your computer line (its address and token).
+func hosted(t *testing.T, w *world, data string, args ...string) (base, session string, line []string, done <-chan int) {
+	t.Helper()
+	base, _, done = w.serve(t, w.environment(nil), append([]string{"serve", "--data", data, "--listen", "127.0.0.1:0"},
+		args...)...)
+	base = strings.Replace(strings.TrimSuffix(base, "/"), "localhost", "127.0.0.1", 1)
+	// The setup link is printed once, with its one-time code.
+	m := regexp.MustCompile(`/setup\?code=(su_[A-Za-z0-9_-]{43})`).FindStringSubmatch(w.stdout.String())
+	if m == nil {
+		t.Fatalf("no setup link:\n%s", w.stdout)
+	}
+	req, _ := http.NewRequest(http.MethodPost, base+"/setup", strings.NewReader(url.Values{"code": {m[1]},
+		"name": {"Owner"}, "email": {"owner@example.com"}}.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Origin", base)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	for _, c := range resp.Cookies() {
+		if c.Name == "retake_session" {
+			session = c.Value
+		}
+	}
+	line = regexp.MustCompile(`retake connect (\S+) --token (rk_[A-Za-z0-9_-]{43})`).FindStringSubmatch(string(page))
+	if resp.StatusCode != http.StatusOK || session == "" || line == nil || line[1] != base {
+		t.Fatalf("setup: %d %q\n%s", resp.StatusCode, session, page)
+	}
+	return base, session, line, done
 }
 
 func TestConnectProjects(t *testing.T) {

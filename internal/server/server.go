@@ -120,6 +120,11 @@ type Options struct {
 	// "Local mode"). New starts it once with the project root and WorkerHandler; Close cancels ctx and waits for it.
 	// It calls blocked with why it can't run ("" once it runs).
 	LocalWorker func(ctx context.Context, root string, h http.Handler, blocked func(string))
+
+	// MediaCache keeps the chunks this Server relays from workers, under CacheScope (the project's name), so a later
+	// viewer doesn't cost the worker's upload again (spec/automation.md, "The server's cache"). nil caches nothing.
+	MediaCache *relay.Cache
+	CacheScope string
 }
 
 // Server serves one version family.
@@ -503,7 +508,7 @@ func (s *Server) get(w http.ResponseWriter, r *http.Request, parts []string) {
 			return
 		}
 		ctype, ok := family.ContentTypes[strings.ToLower(family.Suffix(v.Name))]
-		if s.remoteMedia(w, r, v.Label, "index.m3u8") {
+		if s.remoteMedia(w, r, v, "") {
 			return
 		}
 		if !ok {
@@ -511,7 +516,7 @@ func (s *Server) get(w http.ResponseWriter, r *http.Request, parts []string) {
 		}
 		s.serveFile(w, r, v.Path, ctype)
 	case parts[0] == "video" && len(parts) == 3:
-		if s.remoteMedia(w, r, parts[1], parts[2]) {
+		if v, ok := s.version(parts[1]); ok && s.remoteMedia(w, r, v, parts[2]) {
 			return
 		}
 		s.playlistFile(w, r, parts[1], parts[2])

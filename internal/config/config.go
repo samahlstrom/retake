@@ -49,6 +49,7 @@ type Server struct {
 	S3Insecure     *bool    `toml:"s3_insecure"`
 	SMTPURL        *string  `toml:"smtp_url"`
 	SMTPFrom       *string  `toml:"smtp_from"`
+	RelayCache     *string  `toml:"relay_cache"`
 }
 
 // Agent is one [[agents]] entry (docs/config.md): a program the editing worker runs for a task. Env is added to its

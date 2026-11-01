@@ -17,6 +17,8 @@ import (
 	"time"
 
 	"github.com/samahlstrom/retake/internal/bridge"
+	"github.com/samahlstrom/retake/internal/family"
+	"github.com/samahlstrom/retake/internal/probe"
 	"github.com/samahlstrom/retake/internal/project"
 )
 
@@ -43,6 +45,8 @@ type Options struct {
 	// Handler serves the project's /api/worker/* routes in this process (retake open: spec/automation.md, "Local
 	// mode"). Requests go straight to it, with no network and no token; URL, Token and HTTP are then unused.
 	Handler http.Handler
+	// Prober probes the project's version files; nil = ffprobe.
+	Prober family.Prober
 }
 
 // Errors that say why a project can't be edited here (Reason turns them into a sentence for the page).
@@ -65,6 +69,12 @@ type runner struct {
 	finalTask             string
 	versions              int             // the family's versions, from the last poll: outside a task, render only while 0
 	warned                map[string]bool // profiles already logged as having no interactive command
+
+	famMu  sync.Mutex
+	fam    []family.Version // the project's versions at famAt (family)
+	famAt  time.Time
+	sent   []project.FileVersion // what the server was told last, at sentAt
+	sentAt time.Time
 }
 
 type httpError struct {
@@ -145,14 +155,22 @@ func Run(ctx context.Context, o Options) error {
 	if e != nil {
 		return e
 	}
+	if o.Prober == nil {
+		o.Prober = probe.New(io.Discard)
+	}
 	r := &runner{opts: o, dir: filepath.Join(o.Root, ".retake", "worker")}
+	// A project without a timeline is a plain one (spec/automation.md, "Plain projects"): no renderer.
 	r.timeline, e = bridge.FindTimeline(o.Root)
+	if errors.Is(e, bridge.ErrNoTimeline) {
+		r.timeline, e = "", nil
+	}
 	if e != nil {
 		return e
 	}
-	r.editor, e = o.Editor.Find()
-	if e != nil {
-		return e
+	if r.timeline != "" {
+		if r.editor, e = o.Editor.Find(); e != nil {
+			return e
+		}
 	}
 	if e = os.MkdirAll(r.dir, 0o700); e != nil {
 		return e
@@ -188,9 +206,11 @@ func Run(ctx context.Context, o Options) error {
 		seen[p.ID] = true
 		r.identity.Agents = append(r.identity.Agents, p.AgentProfile)
 	}
-	if len(seen) == 0 {
-		return ErrNoAgents
+	if len(seen) == 0 && o.Handler != nil {
+		return ErrNoAgents // in process the server reads the folder itself: a worker without an agent adds nothing
 	}
+	// Without an agent, a worker that talks to a server still relays the project's video, so it plays there as it
+	// does in retake open; it just never takes a task.
 	r.render = lastRender(r.dir) // a restart with unchanged source renders and registers nothing
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -198,7 +218,12 @@ func Run(ctx context.Context, o Options) error {
 	for range 4 {
 		wg.Go(func() { r.mediaLoop(ctx) })
 	}
-	wg.Go(func() { r.renderLoop(ctx) })
+	if r.timeline != "" {
+		wg.Go(func() { r.renderLoop(ctx) })
+	}
+	if o.Handler == nil {
+		wg.Go(func() { r.filesLoop(ctx) })
+	}
 	defer wg.Wait()
 	defer cancel()
 	if o.Handler == nil {
@@ -209,6 +234,7 @@ func Run(ctx context.Context, o Options) error {
 
 type outcome struct {
 	state, message, result string
+	version                string // a plain task's new version file
 	usage                  *project.AgentUsage
 }
 
@@ -313,7 +339,7 @@ func (r *runner) controlLoop(ctx context.Context) error {
 				if stopping {
 					result = outcome{state: "stopped", message: "Agent process stopped; working files retained"}
 				}
-				report := project.WorkReport{Worker: r.identity.ID, Task: current.ID, Lease: current.Lease, State: result.state, Message: result.message, Result: result.result, Usage: result.usage}
+				report := project.WorkReport{Worker: r.identity.ID, Task: current.ID, Lease: current.Lease, State: result.state, Message: result.message, Result: result.result, Version: result.version, Usage: result.usage}
 				if r.call(ctx, "/api/worker/report", report, nil) == nil {
 					cancel()
 					current = nil

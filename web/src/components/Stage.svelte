@@ -33,5 +33,23 @@
   {/if}
   <div id="toast" class="float" class:show={review.toast.show}>{review.toast.msg}</div>
   <div id="fatal" style:display={review.fatal ? 'flex' : null}>{review.fatal}</div>
+  {#if review.offline}<div id="offline" role="status">The editing computer is offline</div>{/if}
   <HomeNav {review} />
 </main>
+
+<style>
+  /* Over the poster of a version whose computer is offline: a caption, not a broken player. */
+  #offline {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    padding: 8px 14px;
+    border-radius: 999px;
+    background: rgb(0 0 0 / 0.66);
+    color: #e8e8ec;
+    font-size: 14px;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+</style>

@@ -25,8 +25,9 @@ import (
 	"github.com/samahlstrom/retake/internal/worker"
 )
 
-// retake connect (spec/automation.md, "Connect your computer"): put a folder's timeline projects on a hosted server
-// and run one worker per project in this process, with the machine token from the browser's Connect your computer.
+// retake connect (spec/automation.md, "Connect your computer"): put a folder's projects on a hosted server, the
+// ones retake open <folder> shows, and run one worker per project in this process, with the machine token from the
+// browser's Connect your computer. A worker relays its project's versions; the files never upload.
 
 // DefaultConnectEvery is how often retake connect looks for new projects in its folder.
 const DefaultConnectEvery = 10 * time.Second
@@ -239,7 +240,7 @@ func (cn *connector) check(ctx context.Context) error {
 	return err
 }
 
-// connectProject is a project of the folder, and whether it can stream from this computer.
+// connectProject is a project of the folder, and whether it has a native timeline (else it's a plain one).
 type connectProject struct {
 	home.Found
 	timeline bool
@@ -331,10 +332,6 @@ func (cn *connector) run(ctx context.Context) {
 		seen := map[string]bool{}
 		for _, p := range connectProjects(cn.c.Folder) {
 			seen[p.Name] = true
-			if !p.timeline {
-				trouble(p.Name, "skipped: it has no edit timeline, so its video can't stream from this computer")
-				continue
-			}
 			rw := workers[p.Name]
 			if rw != nil && rw.root != p.Root { // another folder has the name now
 				rw.cancel()

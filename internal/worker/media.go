@@ -1,73 +1,176 @@
 package worker
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/samahlstrom/retake/internal/family"
 	"github.com/samahlstrom/retake/internal/project"
 	"github.com/samahlstrom/retake/internal/relay"
 )
 
-// readMedia opens only retained render output, with traversal and symlink containment enforced by os.Root.
-func readMedia(dir string, request relay.Request) relay.Response {
-	missing := relay.Response{Status: 404, Type: "text/plain", Body: []byte("media is not available yet")}
+// media is a worker's answer to one relay request: the part of the file it sends.
+type media struct {
+	relay.Response
+	file *os.File // nil when there is no body
+}
+
+func (m media) close() {
+	if m.file != nil {
+		_ = m.file.Close()
+	}
+}
+
+func missing() media { return media{Response: relay.Response{Status: http.StatusNotFound}} }
+
+// readMedia opens what a relay request asks for (spec/automation.md, "What a worker reads"): a retained render's
+// flat media file, with traversal and symlink containment enforced by os.Root, or a version file of the project's
+// current family, or a regular media file beside a playlist version. Anything else is 404.
+func (r *runner) readMedia(request relay.Request) media {
+	switch {
+	case request.Render != "":
+		return readRender(r.dir, request)
+	case request.Version != "":
+		return r.readVersion(request)
+	}
+	return missing()
+}
+
+func readRender(dir string, request relay.Request) media {
 	if !project.ValidWorkID(request.Render) || !relay.ValidFile(request.File) {
-		return missing
+		return missing()
 	}
 	root, e := os.OpenRoot(filepath.Join(dir, "renders", request.Render))
 	if e != nil {
-		return missing
+		return missing()
 	}
 	defer func() { _ = root.Close() }()
 	// state.json is written locally before registration, so arbitrary directories cannot be exposed.
 	state, e := root.Open("state.json")
 	if e != nil {
-		return missing
+		return missing()
 	}
 	var v project.LiveRender
 	e = json.NewDecoder(io.LimitReader(state, 8<<20)).Decode(&v)
 	_ = state.Close()
 	if e != nil || v.ID != request.Render {
-		return missing
+		return missing()
 	}
 	stat, e := root.Lstat(request.File)
-	if e != nil || !stat.Mode().IsRegular() || stat.Size() > relay.MaxBody {
-		return missing
+	if e != nil || !stat.Mode().IsRegular() {
+		return missing()
 	}
 	f, e := root.Open(request.File)
 	if e != nil {
-		return missing
+		return missing()
 	}
-	defer func() { _ = f.Close() }()
-	method := http.MethodGet
-	if request.Head {
-		method = http.MethodHead
+	return part(f, request, 0)
+}
+
+// readVersion opens a file of a version of the project's family as it is now.
+func (r *runner) readVersion(request relay.Request) media {
+	var v *family.Version
+	for _, x := range r.onDisk(true) {
+		if x.Label == request.Version {
+			v = &x
+			break
+		}
 	}
-	req := httptest.NewRequest(method, "/"+request.File, nil)
-	req.Header.Set("Range", request.Range)
-	w := httptest.NewRecorder()
-	ctype := "video/mp4"
-	if strings.HasSuffix(request.File, ".m3u8") {
-		ctype = "application/vnd.apple.mpegurl"
+	if v == nil {
+		return missing()
 	}
-	if strings.HasSuffix(request.File, ".ts") {
-		ctype = "video/mp2t"
+	var f *os.File
+	var e error
+	if request.File == "" || request.File == filepath.Base(v.Path) {
+		f, e = os.Open(v.Path) // the version's own file, as retake open serves it
+	} else {
+		if !family.IsPlaylist(v.Path) || !relay.ValidFile(request.File) {
+			return missing()
+		}
+		var root *os.Root
+		if root, e = os.OpenRoot(filepath.Dir(v.Path)); e != nil {
+			return missing()
+		}
+		defer func() { _ = root.Close() }()
+		stat, err := root.Lstat(request.File)
+		if err != nil || !stat.Mode().IsRegular() {
+			return missing() // never a symlink or a folder beside a playlist
+		}
+		f, e = root.Open(request.File)
 	}
-	w.Header().Set("Content-Type", ctype)
-	http.ServeContent(w, req, request.File, stat.ModTime(), f)
-	return relay.Response{Status: w.Code, Type: w.Header().Get("Content-Type"), Range: w.Header().Get("Content-Range"), Body: w.Body.Bytes()}
+	if e != nil {
+		return missing()
+	}
+	stat, e := f.Stat()
+	if e != nil || !stat.Mode().IsRegular() {
+		_ = f.Close()
+		return missing()
+	}
+	return part(f, request, stat.ModTime().UnixMilli())
+}
+
+// part answers the request's range of an open file: at most one chunk (relay.Plan). A HEAD gets the headers only,
+// with the whole file's length when it asked for no range.
+func part(f *os.File, request relay.Request, modified int64) media {
+	stat, e := f.Stat()
+	if e != nil {
+		_ = f.Close()
+		return missing()
+	}
+	size := stat.Size()
+	m := media{Response: relay.Response{Type: contentType(request.File), Modified: modified}}
+	if _, ranged := relay.ParseRange(request.Range); request.Head && !ranged {
+		_ = f.Close()
+		m.Status, m.Length = http.StatusOK, size
+		return m
+	}
+	start, end, status := relay.Plan(request.Range, size, relay.Chunk)
+	m.Status = status
+	switch status {
+	case http.StatusRequestedRangeNotSatisfiable:
+		_ = f.Close()
+		m.Range = "bytes */" + strconv.FormatInt(size, 10)
+		return m
+	case http.StatusPartialContent:
+		m.Range = relay.ContentRange(start, end, size)
+	}
+	m.Length = end - start + 1
+	if request.Head || m.Length == 0 {
+		_ = f.Close()
+		return m
+	}
+	m.file = f
+	m.Body = io.NewSectionReader(f, start, m.Length)
+	return m
+}
+
+// contentType is a relayed file's type; the server sets its own by name, so this is only informative.
+func contentType(name string) string {
+	switch strings.ToLower(filepath.Ext(name)) {
+	case ".m3u8":
+		return "application/vnd.apple.mpegurl"
+	case ".ts":
+		return "video/mp2t"
+	case ".m4s":
+		return "video/iso.segment"
+	}
+	if t, ok := family.ContentTypes[strings.ToLower(filepath.Ext(name))]; ok {
+		return t
+	}
+	return "application/octet-stream"
 }
 
 func (r *runner) mediaLoop(ctx context.Context) {
+	// An answer can take longer than a poll's timeout to upload: its own client, bounded by its context.
+	client := *r.opts.HTTP
+	client.Timeout = 0
 	for ctx.Err() == nil {
 		response, e := r.request(ctx, http.MethodGet, "/api/worker/media", nil)
 		var request relay.Request
@@ -87,24 +190,47 @@ func (r *runner) mediaLoop(ctx context.Context) {
 			}
 			continue
 		}
-		if request.ID == "" {
+		if request.ID == "" || !project.ValidWorkID(request.ID) {
 			continue
 		}
-		body := readMedia(r.dir, request)
-		req, e := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(r.opts.URL, "/")+"/api/worker/media/"+request.ID, bytes.NewReader(body.Body))
-		if e != nil {
-			continue
-		}
-		req.Header.Set("Authorization", "Bearer "+r.opts.Token)
-		req.Header.Set("X-Retake-Worker", r.identity.ID)
-		req.Header.Set("X-Retake-Session", r.identity.Session)
-		req.Header.Set("X-Media-Status", strconv.Itoa(body.Status))
-		req.Header.Set("Content-Type", body.Type)
-		req.Header.Set("Content-Range", body.Range)
-		resp, e := r.opts.HTTP.Do(req)
-		if e == nil {
-			_, _ = io.Copy(io.Discard, resp.Body)
-			_ = resp.Body.Close()
-		}
+		r.answer(ctx, &client, request)
+	}
+}
+
+// answer sends one relay request's answer, its body streamed from the file.
+func (r *runner) answer(ctx context.Context, client *http.Client, request relay.Request) {
+	m := r.readMedia(request)
+	defer m.close()
+	ctx, cancel := context.WithTimeout(ctx, relay.Hold)
+	defer cancel()
+	body := io.Reader(http.NoBody)
+	if m.Body != nil {
+		body = m.Body
+	}
+	req, e := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(r.opts.URL, "/")+"/api/worker/media/"+request.ID, body)
+	if e != nil {
+		return
+	}
+	if m.Body != nil {
+		req.ContentLength = m.Length
+	} else {
+		req.ContentLength = 0
+	}
+	req.Header.Set("Authorization", "Bearer "+r.opts.Token)
+	req.Header.Set("X-Retake-Worker", r.identity.ID)
+	req.Header.Set("X-Retake-Session", r.identity.Session)
+	req.Header.Set("X-Media-Status", strconv.Itoa(m.Status))
+	req.Header.Set("X-Media-Length", strconv.FormatInt(m.Length, 10))
+	if m.Modified > 0 {
+		req.Header.Set("X-Media-Modified", strconv.FormatInt(m.Modified, 10))
+	}
+	req.Header.Set("Content-Type", m.Type)
+	if m.Range != "" {
+		req.Header.Set("Content-Range", m.Range)
+	}
+	resp, e := client.Do(req)
+	if e == nil {
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
+		_ = resp.Body.Close()
 	}
 }

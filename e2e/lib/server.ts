@@ -100,6 +100,22 @@ async function startProcess(name: string, cmd: string, args: string[], port: num
   throw new Error(`${name} server did not answer /api/ping within 20 s:\n${server.logTail()}`);
 }
 
+/** Starts a process that serves nothing itself (`retake connect`), logged and stopped like a server. */
+export function startDaemon(name: string, cmd: string, args: string[]): Server {
+  mkdirSync(LOGS, { recursive: true });
+  mkdirSync(PIDS, { recursive: true });
+  const log = join(LOGS, `${name}.log`);
+  const fd = openSync(log, 'a');
+  const proc = spawn(cmd, args, {
+    detached: true,
+    stdio: ['ignore', fd, fd],
+    env: { ...process.env, XDG_CONFIG_HOME: CONFIG_HOME },
+  });
+  closeSync(fd);
+  if (proc.pid) writeFileSync(join(PIDS, `${name}.pid`), String(proc.pid));
+  return new Server(name, 0, proc, log);
+}
+
 /** Kills servers a crashed run left behind (from their pid files). */
 export function killLeftovers(): void {
   if (!existsSync(PIDS)) return;

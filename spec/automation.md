@@ -13,16 +13,18 @@ upload or an inbound connection to the worker. This is an addition to the existi
   name is the machine's hostname. Its agents are the user config's `[[agents]]` plus Claude Code and Codex found
   on `PATH` (docs/config.md). The first poll selects it and its first agent, as for any first worker.
 - A project that can't be edited doesn't fail the server. The worker doesn't start, and `GET /api/automation` says
-  why in `blocked`, one short sentence for the page: no native timeline, `retake-edit` not found, no agent found
+  why in `blocked`, one short sentence for the page: `retake-edit` not found (a timeline project), no agent found
   ("No agent found. Install Claude Code or Codex."), or another worker already holds the project's lock. It checks
-  again every 15 seconds, so installing the missing piece needs no restart.
+  again every 15 seconds, so installing the missing piece needs no restart. A project without a timeline isn't
+  blocked: its worker runs as a plain project's ("Plain projects" below).
 - `retake worker --remote` (and a hosted server) keep the remote model below. One project folder is edited by one
   worker at a time: a local and a remote worker on the same folder share its lock, and the second one waits.
 
 ## Ownership and execution
 
 - `retake worker --remote NAME --project DIR --name NAME` connects to a remote registered by `retake remote add`.
-  The project must contain a native timeline. The worker advertises locally installed Claude Code and Codex
+  The project is a folder with a native timeline or with versioned videos ("Plain projects" below). The worker
+  advertises locally installed Claude Code and Codex
   profiles. Local configuration (`[[agents]]` in the user config, or `--profiles FILE`) can define additional
   executable argv profiles, each with an optional `env` map whose values may name the worker's own environment
   variables (`$VAR`, `${VAR}`), so keys need not be written into files. A configured profile replaces a built-in
@@ -94,20 +96,109 @@ the browser's Connect your computer card prints the line). It is `retake worker`
 
 - The folder is `--folder`, else the current folder. It checks the token first (`GET /api/machine`; a bad token or
   URL stops it with exit 1).
-- It finds the projects as `retake open <folder>` does (spec/home.md), and keeps those with a native timeline
-  (spec/bridge.md). A candidate folder (the folder itself or one directly in it, not hidden) with a timeline but no
-  version yet counts too, named by the same rule. Projects without a timeline are listed once as skipped: the worker
-  streams timeline renders only, so their videos can't play from this computer.
+- It finds the projects as `retake open <folder>` does (spec/home.md): every folder with a versioned video, with or
+  without a native timeline (spec/bridge.md), so the server lists what `retake open <folder>` lists. A candidate
+  folder (the folder itself or one directly in it, not hidden) with a timeline but no version yet counts too, named
+  by the same rule.
 - For each project it sends its name and title (`POST /api/machine/projects`, which makes it when it's missing) and,
   when it has a version, that version's first frame as the poster (`PUT .../poster`, the JPEG of spec/home.md's
-  poster). Nothing else leaves the computer: no footage, source or renders. Video plays through the worker's relay.
+  poster). Nothing else is uploaded: no footage, source or renders. The worker then tells the server which version
+  files it has (metadata only, "Version files" below), and their video plays through the worker's relay.
 - Then it runs one worker per project (as `retake worker`: the project URL is `<server URL>/p/<name>`, the machine
   token is its agent token, `--name` and `--profiles` as there). A worker that stops with an error (another worker
-  holds the project, the renderer is missing) is started again at the next look, and the same error is printed once.
+  holds the project, the renderer is missing for a timeline project) is started again at the next look, and the
+  same error is printed once.
 - It looks at the folder again every 10 s: a new project is sent and started; a project that is gone is stopped.
 - It saves the server URL, the token and the folder in `$XDG_CONFIG_HOME/retake/connect.toml` (mode 0600), so a bare
   `retake connect`, from any folder, connects the same folder to the same server again. Ctrl+C stops every worker.
 - `retake worker --remote NAME --project DIR` stays, for one project with that project's agent token.
+
+## Version files
+
+A connected computer's version files (the family of spec/api.md, "Versions": `clip_v1.mp4`, `v2/clip_v2.mov`, an
+`.m3u8` playlist with its segments) play on the server as they do in `retake open`, without being uploaded.
+
+- A worker that talks to a server over HTTP (not Local mode, whose server reads the folder itself) detects its
+  project's family from the project's anchor (spec/home.md) every 2 seconds, and sends it when it changed, and at
+  least every minute: `POST /api/worker/files` `{"files": [{"label", "n", "name", "size", "modified", "duration",
+  "fps", "width", "height"}]}`. `name` is the file's name, `size` its bytes, `modified` its mtime (Unix ms). Only
+  versions that probe with a duration are sent (as `retake open` lists them); a streamed version
+  (spec/bridge.md, "Streaming") only once it's complete. At most 1000; a label is `v<N>`, a name a plain file name
+  with a family video extension. Nothing but this metadata is sent.
+- The server keeps the list per worker in the automation state (`files`, each with its `worker`) and answers 200
+  `{"ok": true}`. When it changed, the page gets the `push` version event for each new label. The family lists the
+  files of the selected worker (`config.worker`), else of the worker seen last that has files, as versions with
+  `"relay": true`, unless the server has a version of that label itself (an uploaded one wins). Their takes live on
+  the server, under `.retake/remote/<label>/`.
+- They count as versions everywhere: the numbering of renders (`v<N>` continues after them), the poll answer's
+  `versions`, and the page's "follow latest".
+
+## The media relay
+
+Relayed versions (a worker's renders and its version files) play from the worker on request. The page uses the
+usual URLs: `/video/<label>`, and `/video/<label>/<file>` for a playlist and the files beside it.
+
+- The server asks the worker (`GET /api/worker/media`, a long poll of up to 15 s that answers 204 when there is
+  nothing) with `{"id", "render" | "version", "file", "range", "head"}`: `render` is a render's id, `version` a
+  version file's label; `file` is the render's media file, or for a version file `""`/its own name, or a plain name
+  beside its playlist. `range` is the aligned chunk the server wants (below); for a HEAD, the browser's `Range` as
+  sent.
+- The worker answers `POST /api/worker/media/<id>` with the bytes as the body and `X-Media-Status` (200, 206, 404,
+  416 or 503), `Content-Type`, `Content-Range`, `X-Media-Length` (the length the browser is told: the body's, or
+  the file's for a HEAD) and, for a version file, `X-Media-Modified` (its mtime, Unix ms). The body streams through
+  to the browser as it arrives; the server keeps only what its cache keeps (below). The server sets the content type
+  from the file's name, not the worker's.
+- **Chunks.** No response carries more than 8 MiB. The worker reads one range: `bytes=a-b`, `bytes=a-` or
+  `bytes=-n` (anything else, or none, is `bytes=0-`). A range that starts past the end is 416 with `bytes */<size>`.
+  Otherwise it sends at most 8 MiB from its start: 206 with `Content-Range: bytes a-b/<size>`, or 200 when no range
+  was asked and the whole file fits. So an open-ended `bytes=0-` of a 2 GB file gets its first 8 MiB, and the
+  browser asks for the rest as it plays or seeks. The server sends the browser what the worker sent, with
+  `Accept-Ranges: bytes` and `Content-Length`. A request without a range for a file larger than a chunk is answered
+  200 with the whole file: the server asks for one chunk after another and streams them in order.
+- **What a worker reads.** Only a render's own directory (`.retake/worker/renders/<id>/`, flat media names), or a
+  file of its project's current family: the version's file itself, or for a playlist version a regular file
+  directly beside it with a media extension (`.m3u8`, `.m4s`, `.mp4`, `.ts`). Never a path with a separator or
+  `..`, a symlink beside a playlist, or anything else in the project: those are 404. The server only asks for
+  labels it lists for that worker.
+- **The server's cache.** A hosted server (`retake serve`) keeps what it relayed once and won't change: a render's
+  media files (its segments, init and other files; its playlist only once the render is complete), and every file
+  of a version file except a playlist. They are cached in aligned 8 MiB chunks (chunk `k` is bytes `k·8 MiB` to
+  `(k+1)·8 MiB − 1`; a version file's chunks are keyed by its size and mtime too, so a changed file is new). The
+  server always asks the worker for whole aligned chunks and cuts the browser's range out of them, so a later
+  viewer of the same bytes is answered from the server's disk without asking the worker, and 5 viewers cost the
+  worker's upload once. Concurrent misses of one chunk make one worker request; the others wait for it. A growing
+  playlist (a draft's, or any render's before it completes) is never cached. The cache is
+  `DIR/relay-cache/<project>/` under the data folder, least recently used first out once it's over its size
+  (`--relay-cache SIZE`, `RETAKE_RELAY_CACHE`, `relay_cache`; default `20GB`, `0` turns it off). Deleting a project
+  deletes its cache. It holds rendered and exported video only, never source footage, and it sits behind the same
+  viewing permissions as the video URLs. A cached chunk is served even while the worker is offline.
+- **Offline.** When the worker hasn't polled for 10 s, the server answers 503 `{"error":"editing machine is
+  offline"}` with `Retry-After: 3`, without asking. A request no worker takes within 10 s, or that its worker
+  doesn't start answering within 30 s, gets the browser a 503 too. The page then shows the version's poster with "The editing computer is offline" on the video (not a broken
+  player), checks again every 5 s, and plays once it's back.
+
+## Plain projects
+
+A project without a native timeline is a folder of finished videos. Its worker runs without a renderer: it relays
+its version files and runs the agent, and the agent makes the next version however it can.
+
+- The worker needs no `retake-edit`, and renders nothing. A worker without any agent (in any project) still
+  connects and relays the project's video, so it plays on the server as in `retake open`; it never takes a task.
+- A task's prompt says the project has no timeline and names its newest version; the task context lists every
+  version under `family`, each with its path relative to the project. The prompt asks the agent to make the change
+  with the tools it has (ffmpeg, say), starting from the version the notes were made on, and to write the result as
+  one video file to `$RETAKE_OUTPUT` (`.retake/worker/tasks/<id>/output.mp4`). It never edits or deletes the
+  existing versions.
+- When the agent reports `completed`, the worker pushes the result as the next version, by the rule of
+  `version_push` (spec/notes.md): named after the newest version with the next `v<N>`, in a sibling `v<N>/` folder
+  when the family uses version folders. A video the agent wrote as that next version itself counts as well. The
+  version must probe with a duration; otherwise the task pauses ("The agent's video doesn't play"). Without a
+  result the task pauses too ("The agent finished without writing a new version").
+- Then the worker sends its files (hosted), and reports `completed` with `"version": "<label>"` instead of a render.
+  The server takes it once that label is a version file of its family that isn't a render: the task's notes become
+  Done, answered in that version, with the agent's message as the change. Questions work as for timeline projects.
+- The agent doesn't run `retake push`: the worker's push puts the file into the project folder, and the server only
+  gets its metadata.
 
 ## Submission and comment state
 
@@ -158,10 +249,11 @@ the browser's Connect your computer card prints the line). It is `retake worker`
 - The host registers each immutable render revision in the video family as above. Pending/progressive render
   metadata reaches browsers through the existing events API. Following latest switches to the new revision once
   it can play the current position; recording and an explicit historical selection remain pinned.
-- Browser media requests are relayed to the connected worker over worker-initiated HTTP requests. Only registered
-  revision directories and relative, regular media files are readable. Traversal, symlink escapes, arbitrary URLs,
-  and executable paths are rejected. The relay is bounded, cancellable, expires unanswered requests and returns
-  an offline error when no worker is available. No original footage or project directory is exposed.
+- Browser media requests are relayed to the connected worker over worker-initiated HTTP requests ("The media
+  relay" above). Only registered revision directories, the project's version files, and relative, regular media
+  files beside a playlist version are readable. Traversal, symlink escapes, arbitrary URLs, and executable paths
+  are rejected. The relay is bounded (8 MiB per response), cancellable, expires unanswered requests and returns an
+  offline error when no worker is available. No source or other project file is exposed.
 - Metadata and version identity persist at the host. Rendered segments remain on the worker. Historical output is
   retained there; offline machines cannot serve uncached media. A server restart reconnects the same worker and
   continues serving retained revisions.
@@ -179,7 +271,9 @@ the browser's Connect your computer card prints the line). It is `retake worker`
 - `POST /api/automation/tasks` (submit feedback), `.../tasks/<id>/answer` and `.../tasks/<id>/retry`: any role that
   can record. A retry's `agent` counts only from the owner. Switching, pausing and the config are owner actions.
 - `/api/worker/*`: Bearer agent token only, including local requests. Worker registration, polling/heartbeats,
-  attempt reports, render registration/progress, note artifacts and relay response endpoints. The poll answer has
+  attempt reports, render registration/progress, version files (`files`), note artifacts and relay response
+  endpoints. An attempt's `completed` report names a render (`result`) or, in a plain project, a version file
+  (`version`). The poll answer has
   `config`, `task`, `notes` and `versions` (how many versions the family has, drafts not counted). In Local mode
   the in-process worker reaches these handlers without HTTP or a token.
 - Existing video URLs serve remote versions through the relay. Existing viewing permissions apply to all media.

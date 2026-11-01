@@ -90,6 +90,9 @@ type Version struct {
 	// ones from its push record, and Poster is the URL of its first frame.
 	Stream *StreamState `json:"stream,omitempty"`
 	Poster string       `json:"poster,omitempty"`
+	// Relay says the version plays from a connected computer through the server's relay (spec/automation.md):
+	// a worker's render or one of its version files. It can't play while that computer is offline.
+	Relay bool `json:"relay,omitempty"`
 }
 
 // Prober is what Detect needs from probe.Prober.
