@@ -300,11 +300,7 @@ describe("an agent's question from inside its task", () => {
 });
 
 describe("a drawing's thumbnail frame", () => {
-  const fam = [
-    { label: 'v1' },
-    { label: 'v2', poster: 'video/v2/index.poster.jpg' },
-    { label: 'v3', relay: true },
-  ];
+  const fam = [{ label: 'v1' }, { label: 'v2', poster: 'video/v2/index.poster.jpg' }, { label: 'v3', relay: true }];
   const snapshot = 'api/notes/4/snapshot?m=1';
   it("is the note's snapshot, the still of its moment, when the server has one", () => {
     const [row] = sidebarRows(

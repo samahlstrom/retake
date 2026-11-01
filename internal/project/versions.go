@@ -230,6 +230,7 @@ func (s *Store) RecordPush(p Push) (PushResult, error) {
 			t.emit(EventNotes, NotesEvent{Why: "push", Version: p.Label, Notes: unique(ids), Questions: res.Questions})
 		}
 		res.Version, err = scanVersion(t.QueryRow(`SELECT `+versionCols+` FROM versions WHERE label = ?`, p.Label))
+		res.Version.Path = s.Abs(res.Version.Path)
 		return err
 	})
 	return res, err

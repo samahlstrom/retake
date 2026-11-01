@@ -70,9 +70,11 @@ func openFile(path, root string, ms []string) (*Store, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("project store %s: %w", path, err)
 	}
-	if err := s.relocatePaths(); err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("project store %s: making its paths relative: %w", path, err)
+	if len(ms) == len(migrations) { // the whole schema: a test's partial one has no notes to relocate
+		if err := s.relocatePaths(); err != nil {
+			_ = db.Close()
+			return nil, fmt.Errorf("project store %s: making its paths relative: %w", path, err)
+		}
 	}
 	return s, nil
 }

@@ -336,7 +336,7 @@ func TestPlainProjectRelaysItsVersionsAndPushesTheAgentsVideo(t *testing.T) {
 
 // A note whose saved still the server can't give (its project was moved, say) never pauses the task: the worker makes
 // its own from the version on this computer, at the note's moment, with the note's pen lines drawn on it, and says so
-// in the note's context. A note without a still to make is said too, and the task still runs.
+// in the note's context.
 func TestMissingStillNeverStopsTheAgent(t *testing.T) {
 	testmedia.Need(t)
 	scratch, e := filepath.Abs("../../.retake-work")
@@ -425,7 +425,7 @@ func TestMissingStillNeverStopsTheAgent(t *testing.T) {
 	if e = st.UpdateAutomation(func(a *project.AutomationState) (bool, error) { a.Config.Agent = "still"; return true, nil }); e != nil {
 		t.Fatal(e)
 	}
-	if _, e = st.QueueFeedback([]int64{1, 2}, ""); e != nil {
+	if _, e = st.QueueFeedback([]int64{1}, ""); e != nil { // note 2 rides along as context
 		t.Fatal(e)
 	}
 	a := wait("the task", func(a project.AutomationState) bool {

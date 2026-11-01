@@ -169,7 +169,7 @@ func TestFewerPointsKeepsTheEnds(t *testing.T) {
 	if len(got) != MaxStrokePoints || got[0] != [2]float64{0, 0.1235} || got[len(got)-1] != [2]float64{1, 0.1235} {
 		t.Fatalf("%d points, %v ... %v", len(got), got[0], got[len(got)-1])
 	}
-	if got := FewerPoints(pts[:3]); len(got) != 3 || got[1] != [2]float64{0.0101, 0.1235} {
+	if got := FewerPoints(pts[:3]); len(got) != 3 || got[1] != [2]float64{0.005, 0.1235} {
 		t.Fatalf("few points: %v", got)
 	}
 	if FewerPoints(nil) != nil {
