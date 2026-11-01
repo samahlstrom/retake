@@ -70,8 +70,11 @@ describe('keys', () => {
       expect(keyAction(k(key, { repeat: true }))?.act).not.toBeNull();
   });
 
-  it('does not expose version switching shortcuts', () => {
-    for (const key of ['c', '[', ']']) expect(keyAction(k(key))).toBeNull();
+  it('C flips the version, once per press; [ and ] are not keys any more', () => {
+    expect(keyAction(k('c'))).toEqual({ act: 'flip', stop: true });
+    expect(keyAction(k('C'))).toEqual({ act: 'flip', stop: true });
+    expect(keyAction(k('c', { repeat: true }))).toEqual({ act: null, stop: true });
+    for (const key of ['[', ']']) expect(keyAction(k(key))).toBeNull();
   });
 
   it('ignores inherited object keys', () => {
@@ -87,8 +90,9 @@ describe('? and the hint that shows once', () => {
   });
   it('the sheet lists every key the player handles', () => {
     const listed = KEY_SHEET.flatMap((s) => s.keys);
-    for (const key of ['R', 'Space', '←', '→', ',', '.', '1', '4', 'E', 'Z', 'C', '[', ']', 'N', '>', 'F', '?'])
+    for (const key of ['R', 'Space', '←', '→', ',', '.', '1', '4', 'E', 'Z', 'C', 'N', '>', 'F', '?'])
       expect(listed).toContain(key);
+    for (const key of ['[', ']']) expect(listed).not.toContain(key);
   });
   it('remembers the dismissal, and survives blocked storage', () => {
     const store = new Map<string, string>();

@@ -1,6 +1,6 @@
-// The time map between two versions (spec/bridge.md, "The time map"): C, [ ], a question's chips and "see it in vN"
-// show the other version at the matching moment instead of the same clock time. The server builds the map from the
-// versions' render manifests; without them its segments are empty and the time stays as it is.
+// The time map between two versions (spec/bridge.md, "The time map"): C, the version picker, a question's chips and
+// "see it in vN" show the other version at the matching moment instead of the same clock time. The server builds the
+// map from the versions' render manifests; without them its segments are empty and the time stays as it is.
 
 /** One linear piece: A's seconds a[0]..a[1] show at B's b[0]..b[1]. */
 export interface Segment {

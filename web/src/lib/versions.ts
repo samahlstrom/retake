@@ -1,4 +1,5 @@
-// Version family logic: [ ] step the base version, C flips to its comparison partner. Pure, so it is unit-tested.
+// Version family logic: C flips to the base's comparison partner, and showing a version lands on the matching moment.
+// Pure, so it is unit-tested.
 import { mapTime, type Segment } from './timemap';
 import type { StreamState, Version } from './types';
 import { fmt } from './util';
@@ -31,7 +32,7 @@ export const covers = (v: Span, t: number): boolean => {
   return !v.duration || t <= v.duration - 0.05;
 };
 
-/** The refusal toast when a version doesn't reach the playhead (C or ] past a preview's end). */
+/** The refusal toast when a version doesn't reach the playhead (C, or the picker, past a preview's end). */
 export const coverMessage = (v: Pick<Version, 'label' | 'duration'>): string =>
   `${v.label} only covers 0:00–${fmt(v.duration || 0, false)}`;
 
@@ -62,21 +63,35 @@ export function withStream<T extends V>(vs: readonly T[], label: string, s: Stre
 export const newlyStreamed = <T extends V>(vs: readonly T[], known: ReadonlySet<string>): T[] =>
   vs.filter((v) => incomplete(v) && !known.has(v.label));
 
-/** The toast when a streamed version is pushed: how to get to it from where the reviewer is. */
-export function readyToast(vs: readonly V[], base: string | null, label: string, touch: boolean): string {
-  if (touch) return `${label} is ready, tap the version to watch`;
-  return neighbor(vs, base, 1)?.label === label
-    ? `${label} is ready, press ] to watch`
-    : `${label} is ready, pick it in the version list`;
-}
-
 /** The toast when a streamed version's render failed (it stays; the next watch tries again). */
 export const failedToast = (label: string, error?: string): string =>
   error ? `${label}'s render failed: ${error}` : `${label}'s render failed`;
 
-/** C compares the base with its partner: the next newer version if there is one (v6 <-> v7), else the previous one. */
-export const partner = <T extends V>(vs: readonly T[], label: string | null): T | null =>
-  neighbor(vs, label, 1) || neighbor(vs, label, -1);
+/** The newest version or draft that can play the moment `t`: what following the latest shows (spec/automation.md,
+ * "Versions versus drafts"). A stopped stream is skipped, and so is an incomplete one that hasn't rendered `t` yet. */
+export const latestPlayable = <T extends V>(vs: readonly T[], t: number): T | undefined =>
+  [...vs].reverse().find((v) => v.stream?.state !== 'stopped' && (!incomplete(v) || (renderedEnd(v) ?? 0) > t));
+
+/** Where C back lands when it isn't simply the base (spec/bridge.md, "The page"): following the latest, or with a
+ * base the family no longer lists (a replaced draft), the newest version or draft that plays `t`, unless that is the
+ * base. null: back to the base. */
+export function catchUp<T extends V>(vs: readonly T[], base: string | null, following: boolean, t: number): T | null {
+  if (!following && byLabel(vs, base)) return null;
+  const latest = latestPlayable(vs, t);
+  return latest && latest.label !== base ? latest : null;
+}
+
+/** C compares the base with its partner: the next newer version if there is one (v6 <-> v7), else the previous one.
+ * A draft (`v5-draft2`, the agent's work heading for v5) compares with the version it is an edit of, the newest
+ * listed version before it that isn't a draft (v4): following the agent's work live, C shows what it changed. */
+export function partner<T extends V>(vs: readonly T[], label: string | null): T | null {
+  const i = vs.findIndex((v) => v.label === label);
+  if (i > 0 && draftOf(label)) {
+    const from = vs.slice(0, i).findLast((v) => !draftOf(v.label));
+    if (from) return from;
+  }
+  return neighbor(vs, label, 1) || neighbor(vs, label, -1);
+}
 
 /** Where C goes: back to the base when flipped, else to the partner. */
 export const flipTarget = <T extends V>(vs: readonly T[], base: string | null, flipped: boolean): T | null =>
@@ -123,16 +138,12 @@ export function flipPair(vs: readonly V[], base: string | null): [string, string
   return base && pt ? [base, pt.label] : null;
 }
 
-/** The toast after a successful flip: `v7 (newer)` / `v5 (previous)` while flipped, just the label when back. */
+/** The toast after a successful flip: `v7 (newer)` / `v5 (previous)` while flipped, just the label when back. A
+ * draft reads as on screen elsewhere: `v5 draft`. */
 export function flipToast(vs: readonly V[], base: string | null, target: V, nowFlipped: boolean): string {
-  if (!nowFlipped) return target.label;
+  if (!nowFlipped) return verName(target.label);
   const b = byLabel(vs, base);
-  return `${target.label} (${b && target.n > b.n ? 'newer' : 'previous'})`;
-}
-
-/** What [ or ] would do: the neighbor to step to, or the toast that refuses it. */
-export function stepTarget<T extends V>(vs: readonly T[], base: string | null, dir: number): T | string {
-  return neighbor(vs, base, dir) ?? (dir < 0 ? 'No earlier version' : 'No later version');
+  return `${verName(target.label)} (${b && target.n > b.n ? 'newer' : 'previous'})`;
 }
 
 /** The version button's tooltip. */
@@ -140,7 +151,7 @@ export function versionTitle(vs: readonly V[], base: string | null, shown: strin
   const pt = base ? partner(vs, base) : null;
   return flipped
     ? `Comparing: showing ${shown}. C goes back to ${base}.`
-    : `Version ${base}. [ and ] step${pt ? `, C flips to ${pt.label}` : ''}`;
+    : `Version ${base}${pt ? `. C flips to ${pt.label}` : ''}`;
 }
 
 /** A draft render (contract C4): `v5-draft2` is the agent's second draft heading for v5. Drafts aren't versions of

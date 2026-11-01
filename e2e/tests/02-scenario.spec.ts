@@ -4,9 +4,12 @@
 //  A:  play WITHOUT recording, drag on the video: nothing is drawn, no take starts.
 //  S1: R on, talk while playing, pause, draw (red), talk, R off. Then an unrecorded loop of the same clip, with speech
 //      and a drag that must both be dropped.
-//  S2: R on, talk, R off. C flips v6 -> v7 (the newer 0:10 preview) at the same frame, and back.
-//  S3: flipped to v7, R on, talk, R off, C back to v6.   S4: R on, talk, draw (green), R off.   Done.
-//  Versions: [ ] keep time and play state; ] and C past the preview's end are refused; inside it, ] switches.
+//  S2: R on, talk, R off. C flips v6 to its partner at the same frame, and back: v7 (the newer 0:10 preview) on the
+//      legacy player; v5 (the previous version) on this one, which opens the newest version, so its family has no
+//      preview past v6.
+//  S3: flipped to the partner, R on, talk, R off, C back to v6.   S4: R on, talk, draw (green), R off.   Done.
+//  Versions: on the legacy player [ ] keep time and play state, and ] and C past the preview's end are refused; on
+//  this one [ and ] are not keys.
 //  Reload: the take's strokes come back as history.
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import { existsSync } from 'node:fs';
@@ -38,6 +41,8 @@ let take: Take;
 let audio: SegmentAudio[] = [];
 
 const recording = () => !!window.__review.seg;
+/** Where C goes from v6: the newer preview on the legacy player, the previous version here. */
+const PARTNER = LEGACY ? 'v7' : 'v5';
 const v6Review = () => join(fam.dir, 'v6', 'clip_v6.review');
 
 async function shot(info: TestInfo, name: string): Promise<void> {
@@ -118,14 +123,14 @@ test('S1-S4: R-gated recording and pen, an unrecorded loop, C flips, then Done',
   // S2
   await s.at(12.5); await ui.key('r'); await ui.waitFor(recording); await mark('S2 on');
   await s.at(15.5); await ui.key('r'); await mark('S2 off');
-  // C flips to v7 and back, paused: the same frame time.
+  // C flips to the partner and back, paused: the same frame time.
   await s.at(16.0);
   const before = await ui.state();
   await ui.key('c'); await ui.settle(); await sleep(300);
   c.flip = { before, after: await ui.state() };
   await s.at(16.8); await shot(info, 'ui_flipped.png');
   await s.at(17.2); await ui.key('c'); await ui.settle(); c.flipBack = await ui.state();
-  // S3 while flipped to v7
+  // S3 while flipped to the partner
   await s.at(18.0); await ui.key('c'); await ui.settle();
   await s.at(18.6); await ui.key('r'); await ui.waitFor(recording); await mark('S3 on (flipped)');
   await s.at(21.0); await ui.key('r'); await s.at(21.3); await ui.key('c'); await ui.settle();
@@ -146,22 +151,22 @@ test('S1-S4: R-gated recording and pen, an unrecorded loop, C flips, then Done',
   expect(marks['S1 off']!.rec).toBe(false);
   expect(c.afterUnrecordedLoopDrag!.strokes, 'the unrecorded drag drew nothing').toBe(1);
   expect(c.afterUnrecordedLoopDrag!.rec).toBe(false);
-  expect(marks['S3 on (flipped)']).toMatchObject({ rec: true, shown: LEGACY ? 'v7' : 'v6', base: 'v6', flipped: LEGACY });
+  expect(marks['S3 on (flipped)']).toMatchObject({ rec: true, shown: PARTNER, base: 'v6', flipped: true });
   expect(marks['S3 off, back on v6']).toMatchObject({ rec: false, shown: 'v6', flipped: false });
   expect(marks['S4 stroke']!.strokes).toBe(2);
   expect(marks.done!.rec).toBe(false);
   for (const m of ['S2 on', 'S3 on (flipped)', 'S4 on']) expect(marks[m]!.take, m).toBe(marks['S1 on']!.take);
 
-  // C flips to the newer version at the same frame, then back
+  // C flips to the partner at the same frame, then back
   const { before: f0, after: f1 } = c.flip;
-  expect(f1).toMatchObject({ shown: LEGACY ? 'v7' : 'v6', flipped: LEGACY, base: 'v6', paused: true });
+  expect(f1).toMatchObject({ shown: PARTNER, flipped: true, base: 'v6', paused: true });
   expect(Math.abs(f1.t - f0.t)).toBeLessThan(0.04);
   expect(c.flipBack).toMatchObject({ shown: 'v6', flipped: false });
 
-  // The take as the page sees it: 4 segments on v6 (S3 while flipped to v7), 2 strokes
+  // The take as the page sees it: 4 segments on v6 (S3 while flipped to the partner), 2 strokes
   const sv = c.saved!;
   expect(sv.segments.map((x) => x.id)).toEqual(['S1', 'S2', 'S3', 'S4']);
-  expect(sv.segments.map((x) => [x.version, x.flip])).toEqual([['v6', false], ['v6', false], [LEGACY ? 'v7' : 'v6', LEGACY],
+  expect(sv.segments.map((x) => [x.version, x.flip])).toEqual([['v6', false], ['v6', false], [PARTNER, true],
     ['v6', false]]);
   expect(sv.strokes.map((x) => [x.id, x.seg, x.color, x.version, x.flip])).toEqual([
     [1, 'S1', 'red', 'v6', false], [2, 'S4', 'green', 'v6', false]]);
@@ -170,9 +175,10 @@ test('S1-S4: R-gated recording and pen, an unrecorded loop, C flips, then Done',
 
 test('[ ] keep time and play state; ] and C past the preview\'s end are refused', async () => {
   if (!LEGACY) {
+    // [ and ] are not keys here: the version picker and the comments' version strip switch versions.
     const before = await ui.state();
-    await ui.key('['); await ui.key(']'); await ui.key('c');
-    expect(await ui.state()).toMatchObject({shown: before.shown, base: before.base, flipped: false});
+    await ui.key('['); await ui.key(']'); await sleep(300);
+    expect(await ui.state()).toMatchObject({ shown: before.shown, base: before.base, flipped: false });
     return;
   }
   await ui.key(' ');
@@ -302,13 +308,13 @@ test('on disk: strokes with colors, versions, flips and their moments; event kin
   expect(ev[0]).toMatchObject({ event: 'start', session_t: 0 });
   expect(ev.map((e) => e.session_t)).toEqual([...ev.map((e) => e.session_t)].sort((a, b) => a - b));
   expect(new Set(ev.map((e) => e.event))).toEqual(new Set(['start', 'rec_start', 'rec_stop', 'play', 'pause', 'seek',
-    'tick', 'draw_start', 'draw_end', ...(LEGACY ? ['version'] : [])]));
+    'tick', 'draw_start', 'draw_end', 'version']));
   expect({ start: count('start'), rec_start: count('rec_start'), rec_stop: count('rec_stop'),
     draw_start: count('draw_start'), draw_end: count('draw_end'), version: count('version') })
-    .toEqual({ start: 1, rec_start: 4, rec_stop: 4, draw_start: 2, draw_end: 2, version: LEGACY ? 4 : 0 });
+    .toEqual({ start: 1, rec_start: 4, rec_stop: 4, draw_start: 2, draw_end: 2, version: 4 });
   expect(ev.filter((e) => e.event === 'rec_start').map((e) => e.seg)).toEqual(['S1', 'S2', 'S3', 'S4']);
-  expect(ev.filter((e) => e.event === 'version').map((e) => [e.shown, e.base, e.flip])).toEqual(LEGACY ? [
-    ['v7', 'v6', true], ['v6', 'v6', false], ['v7', 'v6', true], ['v6', 'v6', false]] : []);
+  expect(ev.filter((e) => e.event === 'version').map((e) => [e.shown, e.base, e.flip])).toEqual([
+    [PARTNER, 'v6', true], ['v6', 'v6', false], [PARTNER, 'v6', true], ['v6', 'v6', false]]);
   for (const s of take.segments) {
     const on = ev.find((e) => e.event === 'rec_start' && e.seg === s.id)!;
     const off = ev.find((e) => e.event === 'rec_stop' && e.seg === s.id)!;

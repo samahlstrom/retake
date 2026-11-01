@@ -49,12 +49,14 @@ without it. The full walkthrough is in [docs/quickstart.md](docs/quickstart.md).
 | 1 2 3 4 | Pen color: red, yellow, green, white. |
 | E | Eraser: swipe over any line on screen to remove it, recording or not. A pen color (1–4) switches back to the pen. |
 | Z (or Ctrl+Z) | Undo the last stroke or image, or bring back the last line you erased. |
-| **C** | Flip to the comparison version at the same moment, and back. |
-| [ / ] | Step to the previous or next version, keeping the time. |
+| **C** | Flip to the comparison version at the same moment, and back. Its comments and markers come with it. |
 | N | Show or hide the notes sidebar. |
 | F | Fullscreen. |
 | Ctrl+S | Save now. The page also saves on its own. |
 | Esc | Cancel a stroke, close the version list. |
+
+To switch to any other version, use the version list in the bar or the row of versions over the comments. `[` and
+`]` are not keys any more.
 
 While recording you can also drag or paste an image onto the video. It's pinned to that moment and spot.
 
@@ -74,8 +76,8 @@ While recording you can also drag or paste an image onto the video. It's pinned 
 
 ## On a phone
 
-The review page has a phone layout, portrait and landscape, with big buttons for record, flip, undo and the pen
-colors. Safari records AAC (`seg_NN.m4a`), which retake reads like any other segment.
+The review page has a phone layout, portrait and landscape, with big buttons for record, Send, undo and the pen
+colors, and the version list to switch versions. Safari records AAC (`seg_NN.m4a`), which retake reads like any other segment.
 
 A browser only allows the microphone on a secure page: `http://127.0.0.1` on the same machine, or HTTPS. To review
 from a phone, run `retake share clip_v2.mp4`: it opens an HTTPS tunnel and prints a link with a QR code. Only people
@@ -110,7 +112,7 @@ retake push how-to/v2/how-to_v2.mp4 --render --parent v2             # registers
 - `retake open <folder>` shows the folder as a tree on the left (folders, projects, their videos) and the videos as
   thumbnails with their review status, and Next video. `retake share <folder>` shares that home screen.
 - Notes point at the timeline elements under their strokes, so an agent knows what to patch.
-- C, `[` and `]` land on the matching moment when a trim moved things, not on the same clock time.
+- C and the version list land on the matching moment when a trim moved things, not on the same clock time.
 - The newest version shows the parent's notes as unchanged, answered (check it), or context changed.
 
 [docs/timeline.md](docs/timeline.md) explains the format and the loop.

@@ -28,6 +28,10 @@ export interface ReviewHook {
   hist: { strokes: unknown[]; images?: unknown[] };
   serialize: (take: unknown) => Record<string, unknown>;
   save: (take: unknown) => Promise<unknown>;
+  /** New page only: refetch the family, as a version event does (spec/bridge.md, "Streaming"). */
+  refreshFamily?: (e?: { why?: string; label?: string }) => Promise<void>;
+  /** New page only: catch up with the latest version, as following the latest does after any change. */
+  followCurrent?: () => Promise<void>;
 }
 declare global {
   interface Window { __review: ReviewHook }
@@ -166,7 +170,7 @@ export class Review {
     });
   }
 
-  /** Waits until a version switch (C, [ or ]) has finished. */
+  /** Waits until a version switch (C, or the picker) has finished. */
   async settle(): Promise<void> {
     await this.waitFor(() => !window.__review.view.switching, 8000);
   }

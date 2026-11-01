@@ -193,8 +193,9 @@ heads for (`v5`), so they are still there once the draft becomes that version.
   version: To do (Open, Working, Question) and Done (resolved, with the change and "See vN" when another version holds
   it). Timeline markers follow the tab, one per comment, in its status color, at the comment's own time on its own
   version; a comment's pen strokes and voice fold into its marker once it is transcribed. Transcription completion is
-  independent of resolution. Switching the version, however it is switched (the picker, the strip below), switches
-  the comments, the markers and the drawings on the video with it.
+  independent of resolution. Switching the version, however it is switched (the picker, the strip below, C),
+  switches the comments, the markers and the drawings on the video with it; flipped with C, the open take's own
+  lines show only on the version they were drawn on (spec/bridge.md, "The page").
 - **The page reads the whole family once.** `GET /api/notes?v=<label>&scope=video` returns every version's comments
   with their `version`, also those recorded on a draft the family no longer lists (an older draft, or a promoted
   draft's old label) while its version is listed (with `scope=review`, within the same version limit). The page keeps the shown version's for the list and the markers, and counts the rest per

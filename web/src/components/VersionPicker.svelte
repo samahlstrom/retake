@@ -1,6 +1,6 @@
 <script lang="ts">
   // The version label; click it for the compact list (newest first, the base marked ✓). Hidden for a single version.
-  // Keys ([ ] C) are handled globally; focus never moves into the list. ContentStatic: Bits UI's popover behavior
+  // C is handled globally; focus never moves into the list. ContentStatic: Bits UI's popover behavior
   // (outside click and Escape close it) with the legacy CSS placement, 12px above the button, centered.
   // A streamed version that isn't complete (spec/bridge.md, "Streaming") has a chip in the list ("pending",
   // "rendering 12/50"), and the button has a dot while it's on screen (drawn over the border, so nothing moves).

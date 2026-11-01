@@ -35,9 +35,13 @@ test('opens the latest version with done feedback separate and lets an older cut
   await page.locator('[data-ver="v5"]').click();
   await expect.poll(() => page.evaluate(() => window.__review.view.shown)).toBe('v5');
   await page.waitForTimeout(1500);
-  await page.keyboard.press('c');
   await page.keyboard.press('[');
-  expect(await page.evaluate(() => window.__review.view.shown)).toBe('v5');
+  expect(await page.evaluate(() => window.__review.view.shown)).toBe('v5'); // not a key
+  // C compares the pinned cut with the newer one, and comes back to it.
+  await page.keyboard.press('c');
+  await expect.poll(() => page.evaluate(() => window.__review.view)).toMatchObject({ base: 'v5', shown: 'v6', flipped: true, switching: false });
+  await page.keyboard.press('c');
+  await expect.poll(() => page.evaluate(() => window.__review.view)).toMatchObject({ base: 'v5', shown: 'v5', flipped: false, switching: false });
 });
 
 test('search behind its icon and the two tabs work without firing player shortcuts', async ({ page }) => {
