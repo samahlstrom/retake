@@ -131,8 +131,12 @@ describe('home', () => {
   });
 
   it('names a video, and where it is', () => {
-    expect(videoName({ video: 'itemshop', title: 'item-shop', name: 'item-shop' })).toBe('itemshop');
-    expect(videoName({ video: '', title: 'Intro Cut', name: 'intro-cut' })).toBe('Intro Cut');
+    // A video's folder goes by the folder's name; a project's own video by its family's.
+    const shop = { video: 'itemshop', title: 'item-shop', name: 'item-shop' };
+    expect(videoName({ ...shop, path: 'item-shop', project: '' })).toBe('item-shop');
+    expect(videoName({ ...shop, path: 'deadlock/item-shop', project: 'deadlock' })).toBe('item-shop');
+    expect(videoName({ ...shop, path: 'item-shop', project: 'item-shop' })).toBe('itemshop');
+    expect(videoName({ video: '', title: 'Intro Cut', name: 'intro-cut', path: '', project: '' })).toBe('Intro Cut');
     expect(crumb('item-shop', 'itemshop')).toEqual(['item-shop']);
     expect(crumb('Item Shop', 'item_shop')).toEqual(['Item Shop']);
     expect(crumb('item-shop', 'honored-one')).toEqual(['item-shop', 'honored-one']);

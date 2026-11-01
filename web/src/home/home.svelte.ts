@@ -25,6 +25,8 @@ export interface HomeHook {
 /** What is kept in localStorage, per home. */
 interface Saved {
   selected: string;
+  /** The top row (the opened folder) is open. */
+  top: boolean;
   expanded: string[];
   width: number;
   hidden: boolean;
@@ -61,8 +63,9 @@ export class Home {
   error = $state('');
   /** The selected folder or project's path; "" is the top. */
   selected = $state('');
-  /** The opened folders and projects. */
+  /** The opened folders and projects, and the top row (the opened folder). */
   readonly expanded = new SvelteSet<string>();
+  topOpen = $state(true);
   /** The tree's filter text. */
   filter = $state('');
   /** The column's width (desktop), and whether it's hidden. */
@@ -152,6 +155,7 @@ export class Home {
       if (!s || typeof s !== 'object') return;
       if (typeof s.selected === 'string') this.selected = s.selected;
       if (Array.isArray(s.expanded)) for (const p of s.expanded) if (typeof p === 'string') this.expanded.add(p);
+      this.topOpen = s.top !== false;
       if (typeof s.width === 'number' && isFinite(s.width)) this.width = clampWidth(s.width);
       this.hidden = s.hidden === true;
     } catch {
@@ -160,7 +164,13 @@ export class Home {
   }
 
   #save(): void {
-    const s: Saved = { selected: this.selected, expanded: [...this.expanded], width: this.width, hidden: this.hidden };
+    const s: Saved = {
+      selected: this.selected,
+      top: this.topOpen,
+      expanded: [...this.expanded],
+      width: this.width,
+      hidden: this.hidden,
+    };
     try {
       this.#storage?.setItem(this.#key, JSON.stringify(s));
     } catch {
@@ -193,6 +203,7 @@ export class Home {
    * (replaced, so Back doesn't step through selections). */
   select(path: string, writeHash = true): void {
     this.selected = path;
+    if (path) this.topOpen = true;
     for (const p of [...ancestors(path), path]) if (p) this.expanded.add(p);
     if (writeHash && typeof history !== 'undefined' && typeof location !== 'undefined') {
       const url = location.pathname + location.search + hashOf(path);
@@ -206,6 +217,12 @@ export class Home {
   toggle(path: string, open = !this.expanded.has(path)): void {
     if (open) this.expanded.add(path);
     else this.expanded.delete(path);
+    this.#save();
+  }
+
+  /** Opens or closes the top row (the opened folder). */
+  toggleTop(open = !this.topOpen): void {
+    this.topOpen = open;
     this.#save();
   }
 

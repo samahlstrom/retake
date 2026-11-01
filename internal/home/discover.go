@@ -23,15 +23,15 @@ type Found struct {
 	Anchor string // the video its family is detected from; "" for a timeline project without a version yet
 	// Path is Root relative to the scanned folder, with "/" between names; "" for the folder itself.
 	Path string
-	// Project is the folder of the project it belongs to, relative like Path: Path itself, or a folder above it
-	// (item-shop for item-shop/shorts).
+	// Project is the folder of the project it belongs to, relative like Path: the folder above it when its folder
+	// holds just this video (deadlock for deadlock/item-shop), else its own folder.
 	Project string
 }
 
 // The scan's limits (spec/home.md).
 const (
 	MaxDepth     = 6     // folders below the scanned one where projects are looked for
-	ProjectDepth = 2     // folders below a project where more of its videos are looked for
+	ProjectDepth = 2     // folders below a video's folder where more videos are looked for
 	MaxDirs      = 20000 // folders one scan reads at most
 )
 
@@ -90,6 +90,7 @@ type scanner struct {
 	top    string // the scanned folder, absolute, symlinks resolved
 	lists  map[string][]os.DirEntry
 	subs   map[string][]subdir
+	fams   map[string]int // how many families have their root at a folder
 	dirs   int
 	capped bool
 	linked map[string]bool // the real folders reached through links, so each is entered once
@@ -99,7 +100,7 @@ type scanner struct {
 
 func newScanner(top string) *scanner {
 	return &scanner{top: filepath.Clean(top), lists: map[string][]os.DirEntry{}, subs: map[string][]subdir{},
-		linked: map[string]bool{}}
+		fams: map[string]int{}, linked: map[string]bool{}}
 }
 
 // list returns a folder's entries, reading it at most once and at most MaxDirs folders in all.
@@ -182,8 +183,11 @@ func (s *scanner) timeline(dir string) bool {
 
 // anchor returns the video the family held by the folder root is detected from: of the versioned videos in root and
 // in its own subfolders (one level) whose project root is root, the highest version number, a plain name before one
-// with more after the number, then the newest. "" when root holds no video.
+// with more after the number, then the newest. "" when root holds no video. It also counts the families whose root
+// is root (fams).
 func (s *scanner) anchor(root string) string {
+	families := map[string]bool{}
+	defer func() { s.fams[root] = len(families) }()
 	type pick struct {
 		path  string
 		n     int
@@ -216,6 +220,7 @@ func (s *scanner) anchor(root string) string {
 			if !family.SamePath(r, root) {
 				continue
 			}
+			families[strings.ToLower(nm.Prefix)] = true
 			c := pick{path: p, n: nm.N, plain: nm.Rest == "", mtime: st.ModTime().UnixNano()}
 			switch {
 			case best == nil, c.n > best.n,
@@ -242,8 +247,8 @@ func joinRel(rel, name string) string {
 	return rel + "/" + name
 }
 
-func (s *scanner) add(dir, rel, proj, anchor string) {
-	f := Found{Root: dir, Anchor: anchor, Path: rel, Project: proj}
+func (s *scanner) add(dir, rel, anchor string) {
+	f := Found{Root: dir, Anchor: anchor, Path: rel}
 	if anchor == "" {
 		s.empty = append(s.empty, f)
 	} else {
@@ -251,17 +256,15 @@ func (s *scanner) add(dir, rel, proj, anchor string) {
 	}
 }
 
-// walk looks for projects in dir, depth folders below the scanned one. A project is not looked into for more
-// projects: only for more of its own videos (inner).
+// walk looks for videos in dir, depth folders below the scanned one. In a video's folder it only looks
+// ProjectDepth folders further (inner): the rest of it is the video's own (assets, work, renders).
 func (s *scanner) walk(dir, rel string, depth int) {
-	anchor := s.anchor(dir)
-	if depth > 0 && (anchor != "" || s.timeline(dir)) {
-		s.add(dir, rel, rel, anchor)
-		s.inner(dir, rel, rel, 1, depth+1)
-		return
-	}
-	if depth == 0 && (anchor != "" || s.timeline(dir)) {
-		s.add(dir, "", "", anchor) // the scanned folder's own video: at the top, not a project
+	if anchor := s.anchor(dir); anchor != "" || s.timeline(dir) {
+		s.add(dir, rel, anchor)
+		if depth > 0 {
+			s.inner(dir, rel, 1, depth+1)
+			return
+		}
 	}
 	if depth >= MaxDepth {
 		return
@@ -271,10 +274,10 @@ func (s *scanner) walk(dir, rel string, depth int) {
 	}
 }
 
-// inner adds the videos held by the folders in a project, up to ProjectDepth folders below it and MaxDepth below the
-// scanned folder, version folders left out (their videos are the family of the folder above them). in is how far
-// below the project the folders in dir are, at how far below the scanned folder.
-func (s *scanner) inner(dir, rel, proj string, in, at int) {
+// inner adds the videos held by the folders in a video's folder, up to ProjectDepth folders below it and MaxDepth
+// below the scanned folder, version folders left out (their videos are the family of the folder above them). in is
+// how far below the video's folder the folders in dir are, at how far below the scanned folder.
+func (s *scanner) inner(dir, rel string, in, at int) {
 	if at > MaxDepth {
 		return
 	}
@@ -284,12 +287,41 @@ func (s *scanner) inner(dir, rel, proj string, in, at int) {
 		}
 		r := joinRel(rel, d.name)
 		if a := s.anchor(d.path); a != "" {
-			s.add(d.path, r, proj, a)
+			s.add(d.path, r, a)
 		}
 		if in < ProjectDepth {
-			s.inner(d.path, r, proj, in+1, at+1)
+			s.inner(d.path, r, in+1, at+1)
 		}
 	}
+}
+
+// place sets each video's project (spec/home.md): a folder that holds just one video (its family, directly or in
+// vN/ folders, and no other video inside it) is that video, and the folder above it is the project; a folder with
+// more (two families side by side, or videos in folders inside it) is a project itself, holding its own video. The
+// scanned folder's own video is at the top.
+func place(list []Found, fams map[string]int, all []Found) {
+	for i := range list {
+		f := &list[i]
+		f.Project = parentOf(f.Path)
+		if f.Path == "" || fams[f.Root] > 1 {
+			f.Project = f.Path
+			continue
+		}
+		for _, o := range all {
+			if strings.HasPrefix(o.Path, f.Path+"/") {
+				f.Project = f.Path
+				break
+			}
+		}
+	}
+}
+
+// parentOf is the folder above a relative path ("" above a top-level one).
+func parentOf(rel string) string {
+	if i := strings.LastIndexByte(rel, '/'); i >= 0 {
+		return rel[:i]
+	}
+	return ""
 }
 
 // ScanDir scans a folder's tree for its folders, projects and videos (spec/home.md). dir must be absolute with
@@ -300,6 +332,9 @@ func ScanDir(dir string) Scan {
 	if st, err := os.Stat(s.top); err == nil && st.IsDir() { //nolint:gosec // the folder being opened
 		s.walk(s.top, "", 0)
 	}
+	all := slices.Concat(s.videos, s.empty)
+	place(s.videos, s.fams, all)
+	place(s.empty, s.fams, all)
 	used := map[string]bool{}
 	name := func(list []Found) []Found {
 		slices.SortStableFunc(list, func(a, b Found) int {

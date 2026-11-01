@@ -1,15 +1,16 @@
 // New (spec/home.md, "Folders, projects and videos"): the home's folder tree. `retake open <folder>` serves a
 // nested folder:
 //
-//   2026-10-19/fullgame/fullgame_v2.mp4            a project in a dated folder, to review
-//   2026-10-19/shorts/aura_v1.mp4                  a project, reviewed (a closed take is there)
-//   item-shop/v1/itemshop_v1.mp4, v2/itemshop_v2   a project with versions in vN folders
-//   item-shop/shorts/honored/v1/honored_v1.mp4     a video of item-shop, two folders down
+//   macro/macro_v4_roughcut.mp4                    a video's folder in the opened one: shows is its project
+//   2026-10-19/fullgame/fullgame_v2.mp4            a video of the project 2026-10-19, to review
+//   2026-10-19/shorts/aura_v1.mp4                  another one, reviewed (a closed take is there)
+//   item-shop/v1/itemshop_v1.mp4, v2/itemshop_v2   versions in vN folders, and more inside, so item-shop is a
+//   item-shop/shorts/honored/v1/honored_v1.mp4     project: its own video, and the project item-shop/shorts
 //   item-shop/assets/logo.png, broll/sunset.mp4    not videos
 //
-// The left column shows the tree; a chevron opens a folder, a name selects it and the main area shows its videos; a
-// video opens its review, whose "← Project › video" goes back to the same place; a hash link opens a place; the
-// filter, the resize handle and ☰ work; on a phone the column is a drawer.
+// The left column shows the tree under the opened folder; a chevron opens a folder, a name selects it and the main
+// area shows its videos; a video opens its review, whose "← Project › video" goes back to the same place; a hash
+// link opens a place; the filter, the resize handle and ☰ work; on a phone the column is a drawer.
 import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { copyFileSync, mkdirSync, utimesSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -40,6 +41,7 @@ function put(src: string, rel: string, minutes: number): string {
 
 test.beforeAll(async () => {
   const m = mediaLayout(WORK);
+  put(m.v5, 'macro/macro_v4_roughcut.mp4', 5);
   put(m.v6, '2026-10-19/fullgame/fullgame_v2.mp4', 50);
   const aura = put(m.v5, '2026-10-19/shorts/aura_v1.mp4', 40);
   put(m.v5, 'item-shop/v1/itemshop_v1.mp4', 10);
@@ -106,25 +108,32 @@ test('the tree: open a folder, select a project, open a video, and come back to 
   const { context, page } = await newPage(browser);
   try {
     await openHome(page);
-    // Folders and projects, closed, with the most pressing dot inside; broll (no videos) isn't there.
+    // The opened folder, a project with its video macro, and the projects in it, closed, with the most pressing
+    // dot inside; broll (no videos) isn't there.
     expect(await rows(page)).toEqual([
-      'All videos',
-      '▸ 2026-10-19 ·to_review',
-      '▸ item-shop ·to_review',
+      '▾ shows',
+      '  macro ·to_review',
+      '  ▸ 2026-10-19 ·to_review',
+      '  ▸ item-shop ·to_review',
     ]);
     await expect(page.locator('h1')).toHaveText('shows');
-    expect(await cardNames(page)).toHaveLength(4);
+    expect(await cardNames(page)).toHaveLength(5);
 
-    // The chevron opens without selecting.
+    // The chevron opens without selecting. Video folders are videos, named after the folder.
     await row(page, '2026-10-19').locator('.chev').click();
     expect(await rows(page)).toEqual([
-      'All videos',
-      '▾ 2026-10-19',
-      '  ▸ fullgame ·to_review',
-      '  ▸ shorts',
-      '▸ item-shop ·to_review',
+      '▾ shows',
+      '  macro ·to_review',
+      '  ▾ 2026-10-19',
+      '    fullgame ·to_review',
+      '    shorts',
+      '  ▸ item-shop ·to_review',
     ]);
     await expect(page.locator('h1')).toHaveText('shows');
+    // The top row closes and opens everything.
+    await row(page, '').locator('.chev').click();
+    expect(await rows(page)).toEqual(['▸ shows ·to_review']);
+    await row(page, '').locator('.chev').click();
 
     // A name selects: its videos in the main area, the hash, the breadcrumb.
     await row(page, 'item-shop').locator('.label').click();
@@ -133,21 +142,26 @@ test('the tree: open a folder, select a project, open a video, and come back to 
     expect(await cardNames(page)).toEqual(['item-shop', 'item-shop-shorts-honored']);
     await expect(page.locator('#todo')).toHaveText('2 videos · 2 to review');
     await expect(row(page, 'item-shop')).toHaveAttribute('aria-selected', 'true');
-    expect((await rows(page)).slice(-3)).toEqual(['▾ item-shop', '  itemshop ·to_review', '  honored ·to_review']);
+    expect((await rows(page)).slice(-3)).toEqual(['  ▾ item-shop', '    itemshop ·to_review',
+      '    ▸ shorts ·to_review']);
     await expect(page.locator('main a.card[data-name="item-shop"] .title')).toHaveText('itemshop');
 
-    // A folder shows every video in it, each card naming its project when that says more.
+    // A project's cards; at the top, each card names its project when that says more.
     await row(page, '2026-10-19').locator('.label').click();
     expect(await cardNames(page)).toEqual(['2026-10-19-fullgame', '2026-10-19-shorts']);
+    await expect(page.locator('main a.card[data-name="2026-10-19-fullgame"] .title')).toHaveText('fullgame');
     await expect(page.locator('main a.card[data-name="2026-10-19-fullgame"] .where')).toHaveCount(0);
+    await row(page, '').locator('.label').click();
+    await expect(page.locator('main a.card[data-name="2026-10-19-fullgame"] .where')).toHaveText('2026-10-19');
     await row(page, 'item-shop').locator('.label').click();
 
-    // A video in the column opens its review; its back link names the project and goes back to it.
+    // A video in the column opens its review; its back link names the project and goes back to where it was.
+    await row(page, 'item-shop/shorts').locator('.chev').click();
     await nav(page).locator('a[data-name="item-shop-shorts-honored"]').click();
     await page.waitForURL(`${server.url}p/item-shop-shorts-honored/`);
     await page.waitForFunction(READY, null, { timeout: 20_000, polling: 80 });
     const back = page.locator('#allVideos');
-    await expect(back).toHaveText('item-shop › honored');
+    await expect(back).toHaveText('shorts › honored');
     await expect(back).toHaveAttribute('href', '/#/item-shop');
     await back.click();
     await page.waitForURL(`${server.url}#/item-shop`);
@@ -162,6 +176,10 @@ test('the tree: open a folder, select a project, open a video, and come back to 
     await page.goBack();
     await page.waitForURL(`${server.url}#/item-shop`);
     await expect(page.locator('h1')).toHaveText('item-shop');
+    // A video's folder in the opened folder: "shows › macro".
+    await page.goto(`${server.url}p/macro/`);
+    await page.waitForFunction(READY, null, { timeout: 20_000, polling: 80 });
+    await expect(page.locator('#allVideos')).toHaveText('shows › macro');
   } finally {
     await context.close();
   }
@@ -170,12 +188,12 @@ test('the tree: open a folder, select a project, open a video, and come back to 
 test('a link with a hash opens that place; the rest is remembered', async ({ browser }) => {
   const { context, page } = await newPage(browser);
   try {
-    await openHome(page, '#/2026-10-19/fullgame');
-    await expect(page.locator('h1')).toHaveText('fullgame');
-    expect(await cardNames(page)).toEqual(['2026-10-19-fullgame']);
-    await expect(row(page, '2026-10-19/fullgame')).toHaveAttribute('aria-selected', 'true');
-    await expect(row(page, '2026-10-19')).toHaveAttribute('aria-expanded', 'true');
-    await expect(page.locator('.breadcrumbs')).toHaveText(/Retake\s*\/\s*2026-10-19\s*\/\s*fullgame/);
+    await openHome(page, '#/item-shop/shorts');
+    await expect(page.locator('h1')).toHaveText('shorts');
+    expect(await cardNames(page)).toEqual(['item-shop-shorts-honored']);
+    await expect(row(page, 'item-shop/shorts')).toHaveAttribute('aria-selected', 'true');
+    await expect(row(page, 'item-shop')).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.locator('.breadcrumbs')).toHaveText(/Retake\s*\/\s*item-shop\s*\/\s*shorts/);
 
     // A place that's gone shows everything.
     await page.goto(`${server.url}#/nope`);
@@ -185,7 +203,7 @@ test('a link with a hash opens that place; the rest is remembered', async ({ bro
     // The filter: matches and the way to them.
     await page.goto(server.url);
     await page.locator('[data-part="nav-search"]').fill('HONOR');
-    expect(await rows(page)).toEqual(['All videos', '▾ item-shop', '  honored ·to_review']);
+    expect(await rows(page)).toEqual(['▾ shows', '  ▾ item-shop', '    ▾ shorts', '      honored ·to_review']);
     await page.locator('[data-part="nav-search"]').fill('zzz');
     await expect(nav(page).getByText('Nothing matches “zzz”.')).toBeVisible();
     await page.locator('[data-part="nav-search"]').fill('');
@@ -197,10 +215,12 @@ test('a link with a hash opens that place; the rest is remembered', async ({ bro
     await expect(folder).toHaveAttribute('aria-expanded', 'false');
     await page.keyboard.press('ArrowRight');
     await expect(folder).toHaveAttribute('aria-expanded', 'true');
-    await page.keyboard.press('ArrowUp');
+    await page.keyboard.press('ArrowUp'); // macro, a video
+    await expect(nav(page).locator('a[data-name="macro"]')).toBeFocused();
+    await page.keyboard.press('Home');
     await page.keyboard.press('Enter');
     await expect(page.locator('h1')).toHaveText('shows');
-    await page.keyboard.press('ArrowDown');
+    await folder.focus();
     await page.keyboard.press('Enter');
     await expect(page.locator('h1')).toHaveText('2026-10-19');
 

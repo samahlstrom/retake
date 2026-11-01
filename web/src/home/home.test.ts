@@ -140,17 +140,28 @@ describe('the folder tree', () => {
     home.toggle('2026-10-19');
     home.toggle('item-shop'); // closes it
     home.resize(9999);
-    expect(storage.saved()).toEqual({ selected: 'item-shop', expanded: ['2026-10-19'], width: NAV_MAX, hidden: false });
+    expect(storage.saved()).toEqual({
+      selected: 'item-shop',
+      top: true,
+      expanded: ['2026-10-19'],
+      width: NAV_MAX,
+      hidden: false,
+    });
     home.resize(10);
     expect(home.width).toBe(NAV_MIN);
     home.toggleNav();
     expect(home.hidden).toBe(true);
+    home.toggleTop();
+    expect(home.topOpen).toBe(false);
 
     const again = new Home({ storage });
+    expect(again.topOpen).toBe(false);
     expect(again.selected).toBe('item-shop');
     expect([...again.expanded]).toEqual(['2026-10-19']);
     expect(again.width).toBe(NAV_MIN);
     expect(again.hidden).toBe(true);
+    again.select('item-shop'); // selecting something inside opens the top again
+    expect(again.topOpen).toBe(true);
 
     // Another home (path) has its own; a broken entry leaves the defaults.
     const other = new Home({ storage, path: '/other/' });

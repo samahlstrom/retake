@@ -72,7 +72,6 @@ type Folder struct {
 
 	mu      sync.Mutex
 	found   []home.Found // the videos
-	empty   []home.Found // the timeline projects without a version yet
 	scanned time.Time
 	took    time.Duration             // how long the last scan took
 	open    map[string]*folderProject // by root
@@ -154,19 +153,8 @@ func (f *Folder) rescan(force bool) []home.Found {
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.found, f.empty, f.scanned, f.took = scan.Videos, scan.Empty, f.opts.Now(), scan.Took
+	f.found, f.scanned, f.took = scan.Videos, f.opts.Now(), scan.Took
 	return scan.Videos
-}
-
-// emptyProjects returns the folders of the projects without a version yet, from the last scan.
-func (f *Folder) emptyProjects() []string {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	out := make([]string, 0, len(f.empty))
-	for _, e := range f.empty {
-		out = append(out, e.Path)
-	}
-	return out
 }
 
 // projectNamed returns a project by name, scanning the folder again when it doesn't know the name.
@@ -646,11 +634,7 @@ func (f *Folder) apiHome(w http.ResponseWriter, r *http.Request, role team.Role,
 	}
 	visible := layout.Visible(scope, videos)
 	title := filepath.Base(f.opts.Dir)
-	var empty []string
-	if scope == "" {
-		empty = f.emptyProjects()
-	}
-	res := home.Response{Title: title, Role: string(role), Projects: cards, Tree: home.BuildTree(title, cards, empty),
+	res := home.Response{Title: title, Role: string(role), Projects: cards, Tree: home.BuildTree(title, cards, nil),
 		Workspace: &visible}
 	res.Machines = []home.Machine{}
 	if role == team.Owner {

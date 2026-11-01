@@ -7,7 +7,7 @@ import (
 )
 
 // Node is a folder of the home's tree (spec/home.md, "GET /api/home"): a folder that organizes, or a project with its
-// videos. The top node is the home's folder; its videos are the ones it holds itself.
+// videos. The top node is the home's folder: a project when it holds videos itself.
 type Node struct {
 	Title    string  `json:"title"`
 	Path     string  `json:"path"`
@@ -75,5 +75,6 @@ func BuildTree(title string, cards []Card, projects []string) *Node {
 		}
 	}
 	sortNode(top)
+	top.Project = len(top.Videos) > 0
 	return top
 }

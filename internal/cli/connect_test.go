@@ -129,13 +129,13 @@ func TestConnectRegistersProjectsAndRunsWorkers(t *testing.T) {
 	}
 	for _, c := range h.Projects {
 		if c.Name == "intro-cut" && (c.Title != "Intro Cut" || c.Thumb != "p/intro-cut/api/poster" ||
-			c.Path != "Intro Cut" || c.Project != "Intro Cut") {
+			c.Path != "Intro Cut" || c.Project != "") {
 			t.Errorf("intro-cut: %+v", c)
 		}
 	}
 	// The server's tree is the folder's, as retake open shows it.
-	if h.Tree == nil || len(h.Tree.Children) != 3 || h.Tree.Children[0].Title != "fresh" ||
-		h.Tree.Children[1].Title != "Intro Cut" || !h.Tree.Children[1].Project || len(h.Tree.Children[1].Videos) != 1 {
+	// Each folder holds one video, so they are the videos of the connected folder's own project.
+	if h.Tree == nil || len(h.Tree.Children) != 0 || !h.Tree.Project || len(h.Tree.Videos) != 3 {
 		b, _ := json.Marshal(h.Tree)
 		t.Errorf("tree: %s", b)
 	}
@@ -265,8 +265,8 @@ func TestConnectProjects(t *testing.T) {
 		}
 		got = append(got, s)
 	}
-	if strings.Join(got, " ") != "a=a@a:a+timeline b=b@b:b 2026-jump=jump@2026/jump:2026/jump "+
-		"b-shorts=shorts@b/shorts:b a-2=A@A:A+timeline drafts-next=next@drafts/next:drafts/next+timeline" {
+	if strings.Join(got, " ") != "a=a@a:+timeline b=b@b:b 2026-jump=jump@2026/jump:2026 "+
+		"b-shorts=shorts@b/shorts:b a-2=A@A:+timeline drafts-next=next@drafts/next:drafts+timeline" {
 		t.Fatalf("%v", got)
 	}
 }

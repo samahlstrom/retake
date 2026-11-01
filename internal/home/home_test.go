@@ -71,20 +71,21 @@ func TestDiscover(t *testing.T) {
 	touch(t, filepath.Join(dir, ".cache", "x_v1.mp4"), old)
 	touch(t, filepath.Join(dir, "notes.review", "y_v1.mp4"), old)
 	touch(t, filepath.Join(dir, "deep", "readme_v1.txt"), old)
-	// A family two levels down whose root is its own folder: a project in the folder deep, named by its path.
+	// A family two levels down whose root is its own folder: a video in the project deep, named by its path. The
+	// videos directly in the folder (each folder holds one) are in the folder's own project, the top.
 	touch(t, filepath.Join(dir, "deep", "sub", "w_v1.mp4"), old)
 
 	got := Discover(dir)
 	want := []Found{
 		{Name: "shows", Title: "Shows", Root: dir, Anchor: filepath.Join(dir, "intro_v1.mp4")},
 		{Name: "bravo-cut", Title: "Bravo Cut", Root: filepath.Join(dir, "Bravo Cut"),
-			Anchor: filepath.Join(dir, "Bravo Cut", "bravo_v3.mp4"), Path: "Bravo Cut", Project: "Bravo Cut"},
+			Anchor: filepath.Join(dir, "Bravo Cut", "bravo_v3.mp4"), Path: "Bravo Cut"},
 		{Name: "alpha", Title: "alpha", Root: filepath.Join(dir, "alpha"),
-			Anchor: filepath.Join(dir, "alpha", "v2", "alpha_v2.mp4"), Path: "alpha", Project: "alpha"},
+			Anchor: filepath.Join(dir, "alpha", "v2", "alpha_v2.mp4"), Path: "alpha"},
 		{Name: "bravo-cut-2", Title: "bravo-cut", Root: filepath.Join(dir, "bravo-cut"),
-			Anchor: filepath.Join(dir, "bravo-cut", "other_v1.m3u8"), Path: "bravo-cut", Project: "bravo-cut"},
+			Anchor: filepath.Join(dir, "bravo-cut", "other_v1.m3u8"), Path: "bravo-cut"},
 		{Name: "deep-sub", Title: "sub", Root: filepath.Join(dir, "deep", "sub"),
-			Anchor: filepath.Join(dir, "deep", "sub", "w_v1.mp4"), Path: "deep/sub", Project: "deep/sub"},
+			Anchor: filepath.Join(dir, "deep", "sub", "w_v1.mp4"), Path: "deep/sub", Project: "deep"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Discover:\n got %+v\nwant %+v", got, want)
