@@ -55,13 +55,13 @@
 <style>
   .sketch {
     display: block;
-    width: 132px;
+    width: 120px;
     margin: 10px 0 0;
     padding: 0;
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 7px;
     overflow: hidden;
-    background: #0c0c0f;
+    background: #18181c;
     cursor: pointer;
     transition: border-color 0.15s ease;
   }
