@@ -124,7 +124,17 @@ func (h *Hub) Fetch(ctx context.Context, worker string, r Request) (Response, er
 	close(h.bell)
 	h.bell = make(chan struct{})
 	h.mu.Unlock()
-	defer func() { h.mu.Lock(); delete(h.pending, r.ID); h.mu.Unlock() }()
+	defer func() {
+		h.mu.Lock()
+		delete(h.pending, r.ID)
+		h.mu.Unlock()
+		// An answer that came in as this gave up: nobody reads it, so let the worker's request end now.
+		select {
+		case v := <-p.reply:
+			v.Close()
+		default:
+		}
+	}()
 	wait := h.Pickup
 	if wait <= 0 {
 		wait = Pickup

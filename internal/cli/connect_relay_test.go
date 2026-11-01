@@ -46,6 +46,9 @@ func TestConnectRelaysAFolderOfPlainVideos(t *testing.T) {
 	if out, err := ff.CombinedOutput(); err != nil {
 		t.Fatalf("ffmpeg: %v\n%s", err, out)
 	}
+	// And a project whose version is an HLS playlist with its segments.
+	teaser := filepath.Join(dir, "Videos", "Teaser", "v1")
+	testmedia.HLS(t, teaser, "teaser_v1.m3u8", 3)
 	video, err := os.ReadFile(v2)
 	if err != nil {
 		t.Fatal(err)
@@ -142,6 +145,31 @@ func TestConnectRelaysAFolderOfPlainVideos(t *testing.T) {
 	// Only the versions' own files.
 	for _, path := range []string{"/p/launch-promo/video/v2/..%2Fclip_v1.mp4", "/p/launch-promo/video/v1/clip_v2.mp4",
 		"/p/launch-promo/video/v3"} {
+		if code, _, _ = get(path, nil); code != http.StatusNotFound {
+			t.Errorf("%s: %d", path, code)
+		}
+	}
+
+	// The playlist version: its playlist and the segments beside it, by name, and nothing else.
+	deadline = time.Now().Add(30 * time.Second)
+	for code, _, _ = get("/p/teaser/api/info", nil); code != http.StatusOK; code, _, _ = get("/p/teaser/api/info", nil) {
+		if time.Now().After(deadline) {
+			t.Fatalf("the teaser never reached the server: %d", code)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	code, h, b = get("/p/teaser/video/v1/teaser_v1.m3u8", nil)
+	if code != http.StatusOK || h.Get("Content-Type") != "application/vnd.apple.mpegurl" || !bytes.Contains(b, []byte("seg_000.ts")) {
+		t.Fatalf("playlist: %d %s", code, b)
+	}
+	segment, err := os.ReadFile(filepath.Join(teaser, "seg_000.ts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code, _, b = get("/p/teaser/video/v1/seg_000.ts", nil); code != http.StatusOK || !bytes.Equal(b, segment) {
+		t.Fatalf("segment: %d (%d bytes)", code, len(b))
+	}
+	for _, path := range []string{"/p/teaser/video/v1/..%2F..%2FLaunch%20Promo%2Fclip_v1.mp4", "/p/teaser/video/v1/notes.txt"} {
 		if code, _, _ = get(path, nil); code != http.StatusNotFound {
 			t.Errorf("%s: %d", path, code)
 		}
