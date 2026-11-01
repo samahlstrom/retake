@@ -5,7 +5,10 @@
 # a running interactive agent gets it. It never talks to a tmux server.
 set -u
 D=$FAKE_TMUX_DIR
-until mkdir "$D/lock" 2>/dev/null; do sleep 0.01; done
+until mkdir "$D/lock" 2>/dev/null; do
+	[ -d "$D" ] || exit 1 # the test is over and its folder is gone: never spin
+	sleep 0.01
+done
 trap 'rmdir "$D/lock"' EXIT
 printf '%s\037' "$@" >>"$D/argv.log"
 printf '\n' >>"$D/argv.log"
