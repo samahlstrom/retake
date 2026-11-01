@@ -201,12 +201,17 @@ test('long recording publishes a completed clip while the next clip keeps record
   expect(await page.evaluate(() => window.__review.take.segments.every(s => s.rec.state === 'inactive'))).toBe(true);
 });
 
-test('reloaded completed audio stays gone while original carried drawings remain visible', async ({page}) => {
-  await page.route('**/api/notes?*', r => json(r, {version:'v6',newest:true,scope:'review',items:[{id:9,version:'v5',take:'old-take',seg:'S1',kind:'note',status:'open',text:'Move this title.',t0:3,t1:3,drawings:['red']}],jobs:[]}));
-  await page.route('**/api/history?*', r => json(r, {label:'v6',history:[{id:'old-take',source_version:'v5',transcribed:true,voice:{bin:0.25,bins:[[12,1],[13,1],[14,1],[15,1],[16,1]]},strokes:[{id:1,video_t:3,color:'red',points:[[0.3,0.3],[0.6,0.6]]}]}]}));
+test('an earlier version\'s open comment stays on it: the line goes there, its drawing shows, its audio stays gone', async ({page}) => {
+  const v = (r: Route) => new URL(r.request().url()).searchParams.get('v');
+  await page.route('**/api/notes?*', r => json(r, {version:v(r),newest:v(r)==='v6',scope:'video',items:[{id:9,version:'v5',take:'old-take',seg:'S1',kind:'note',status:'open',text:'Move this title.',t0:3,t1:3,drawings:['red']}],jobs:[]}));
+  await page.route('**/api/history?*', r => json(r, {label:v(r),history:v(r)!=='v5'?[]:[{id:'old-take',transcribed:true,voice:{bin:0.25,bins:[[12,1],[13,1],[14,1],[15,1],[16,1]]},strokes:[{id:1,video_t:3,color:'red',points:[[0.3,0.3],[0.6,0.6]]}]}]}));
   await page.reload(); await page.waitForFunction(READY);
-  // An earlier cut's open note is still to do, tagged with its version.
-  await expect(page.locator('#side .item .origin')).toHaveText('v5');
+  // Not on v6: the newest version has none of its own, and one quiet line says v5 still has one.
+  await expect(page.locator('#side .item')).toHaveCount(0);
+  await expect(page.locator('.comment-marker')).toHaveCount(0);
+  await page.locator('[data-part="earlier-versions"]').getByRole('button', {name:'v5 · 1'}).click();
+  await expect.poll(() => page.evaluate(() => window.__review.view.shown)).toBe('v5');
+  await expect(page.locator('#side .item')).toHaveCount(1);
   await page.locator('#side .time').click();
   await expect.poll(() => page.locator('#ink').evaluate((canvas:HTMLCanvasElement) => {
     const d=canvas.getContext('2d')!.getImageData(0,0,canvas.width,canvas.height).data;

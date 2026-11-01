@@ -69,8 +69,8 @@ While recording you can also drag or paste an image onto the video. It's pinned 
   and a snapshot of the frame. They're kept in `<project>/.retake/project.db`.
 - An agent reads the notes, makes the next version with any tool, and pushes it with a changelog. A push is refused
   until every open note is either answered or asked about ([docs/agents.md](docs/agents.md)).
-- The sidebar on the newest version shows only the agent's questions. On older versions it shows how each note was
-  resolved.
+- Each version keeps its own comments. The comments panel shows the version on screen, with a strip of versions and
+  what's still to do on each; the newest one says what's still open on earlier versions.
 
 ## On a phone
 
