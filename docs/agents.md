@@ -23,8 +23,7 @@ missing, the agent menu next to Send says what, and it picks the fix up within 1
   settings.
 - While it works, the page follows its drafts (`v4-draft1`, `v4-draft2`, ...). Only a finished task makes a version
   (`v4`), and restarting `retake open` makes none.
-- **Send other reviewers' comments automatically** (in the agent menu) only sends other people's finished reviews.
-  Send always works.
+- Anyone you share the review with (`retake share`) has the same Send button, and their comments go to this agent.
 - Each task's prompt, context, log and report are in `.retake/worker/tasks/<task>/`.
 
 Reviewing on a hosted server instead? Run `retake connect` and the same worker connects out to it: [hosting.md](hosting.md).

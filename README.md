@@ -135,7 +135,7 @@ A component change re-renders only the elements that use it, and upgrades are pe
 
 `retake share clip_v6.mp4 --label alex` puts the review behind an HTTPS tunnel (cloudflared, or `--tunnel tailscale`)
 and prints a link with a QR code. A link is a viewer, reviewer (the default) or approver; it expires (24 h by default),
-and `retake share revoke` ends it early. Agents elsewhere use `/mcp` with `retake token create --role agent`. Local use
+and `retake share revoke` ends it early. Reviewers press the same Send you do, and their comments go to your agent. Agents elsewhere use `/mcp` with `retake token create --role agent`. Local use
 needs no token. See [`docs/sharing.md`](docs/sharing.md).
 
 ## Hosting

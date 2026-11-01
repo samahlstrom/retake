@@ -41,7 +41,7 @@ Options:
 | Role | Can |
 |---|---|
 | viewer | Watch the versions, flip between them, read the notes. No Record and no pen; the page says "View only". |
-| reviewer | Everything above, and record: talk and draw over the video, and answer the agent's questions. |
+| reviewer | Everything above, and record: talk and draw over the video, Send the comments to your agent, and answer its questions. |
 | approver | Everything a reviewer can, and approve a version or reopen a note. |
 
 On your own machine (`http://127.0.0.1:…`) nothing changes: no token, everything allowed.

@@ -63,7 +63,8 @@ The page opens in your browser. `retake` found v1 by its name. Leave the server 
 2. Press **R** to start recording. The browser asks for the microphone the first time.
 3. Say "The labels at the bottom are too small. Make them bigger, please."
 4. Draw a loop around the "STEP 2" label. The pen only draws while you're recording.
-5. Press **R** to stop, then click **Done**.
+5. Press **R** to stop, then click **Send to agent**. Without an agent it just saves the take, and the agent menu
+   next to it says what's missing.
 
 The take is saved in `how-to/v2/how-to_v2.review/<timestamp>/`.
 
@@ -72,7 +73,7 @@ with exactly this note on v2, recorded with a synthetic voice.
 
 ## 4. Turn the take into notes
 
-If transcription is set up, Done already queued this in the server, and the note shows up on its own. Otherwise, or
+If transcription is set up, Send already queued this in the server, and the note shows up on its own. Otherwise, or
 to see it happen:
 
 ```bash

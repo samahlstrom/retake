@@ -53,8 +53,10 @@ That's it. Open a project on the server, record a review, press Send.
 
 ## How a review moves
 
-A comment is **Open** until it goes to the agent: press **Send to agent**. Other reviewers press **Finish review**, and their comments go to the agent when you send them or when "Send other reviewers' comments automatically" is on. It is **Working**
-while the agent edits, **Question** when the agent needs you (answer it and it goes back to Working), and **Done**
+A comment is **Open** until it goes to the agent: press **Send to agent**. Everyone who can review the project has
+the same button, members and share links alike, and their comments go to your agent too. It is **Working** while the
+agent edits (sent while your computer is offline, it says "Waiting for the editing computer" and starts by itself
+when you connect), **Question** when the agent needs you (answer it and it goes back to Working), and **Done**
 once a new version rendered. The new version streams from your computer while it renders, and the page follows it.
 Pause, retry or switch the agent from the comment's ⋯ menu; switching keeps the files and the history.
 
