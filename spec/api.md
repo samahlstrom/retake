@@ -168,7 +168,7 @@ retake version
 ```
 
 - Without `--no-open`, the page opens with the OS opener: `xdg-open`, `open` or `start`.
-- With a folder, every project in it is served, with a home screen at `/` (spec/home.md).
+- With a folder, every video in its tree of folders and projects is served, with a home screen at `/` (spec/home.md).
 - Exit code 2 for a missing file, a busy `--port`, or no free port.
 - The startup lines match the legacy ones (video, versions, page URL, where takes are saved).
 

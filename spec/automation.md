@@ -229,11 +229,12 @@ the browser's Connect your computer card prints the line). It is `retake worker`
 
 - The folder is `--folder`, else the current folder. It checks the token first (`GET /api/machine`; a bad token or
   URL stops it with exit 1).
-- It finds the projects as `retake open <folder>` does (spec/home.md): every folder with a versioned video, with or
-  without a native timeline (spec/bridge.md), so the server lists what `retake open <folder>` lists. A candidate
-  folder (the folder itself or one directly in it, not hidden) with a timeline but no version yet counts too, named
-  by the same rule.
-- For each project it sends its name and title (`POST /api/machine/projects`, which makes it when it's missing) and,
+- It finds the projects as `retake open <folder>` does (spec/home.md, "Folders, projects and videos"): the same scan
+  of the folder's tree, every video with or without a native timeline (spec/bridge.md), so the server lists what
+  `retake open <folder>` lists. A project with a timeline but no version yet counts too (one video, named by the
+  same rule, so its worker can render the first version).
+- For each video it sends its name, title, `path` and `project` (`POST /api/machine/projects`, which makes it when
+  it's missing; the two paths put it in the same place of the home's tree as `retake open` does) and,
   when it has a version, that version's first frame as the poster (`PUT .../poster`, the JPEG of spec/home.md's
   poster). Nothing else is uploaded: no footage, source or renders. The worker then tells the server which version
   files it has (metadata only, "Version files" below), and their video plays through the worker's relay.
