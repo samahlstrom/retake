@@ -21,6 +21,9 @@ const (
 	Chunk = 8 << 20
 	// Wait is how long the host waits for a worker to start answering a request.
 	Wait = 30 * time.Second
+	// Pickup is how long a request may wait for a worker to take it: a worker that polls takes it at once, unless all
+	// of its media loops are busy, so one that doesn't has gone away.
+	Pickup = 10 * time.Second
 	// Hold is how long a worker's answer may take to stream through to the browser.
 	Hold = 5 * time.Minute
 )
@@ -83,6 +86,9 @@ type pending struct {
 
 // Hub matches reviewer requests with outbound worker polls.
 type Hub struct {
+	// Pickup overrides the package's Pickup (tests); 0 = Pickup.
+	Pickup time.Duration
+
 	mu      sync.Mutex
 	pending map[string]*pending
 	bell    chan struct{}
@@ -95,11 +101,14 @@ func (h *Hub) init() {
 	}
 }
 
-// ErrBusy is Fetch's error while too many requests wait for workers.
-var ErrBusy = errors.New("media relay busy")
+// Fetch's errors: too many requests wait for workers, or no worker took this one (within Pickup).
+var (
+	ErrBusy     = errors.New("media relay busy")
+	ErrNoWorker = errors.New("no worker took the media request")
+)
 
-// Fetch waits for a worker's answer, releasing its queue slot on cancellation or after Wait. The caller must Close
-// the response.
+// Fetch waits for a worker's answer, releasing its queue slot on cancellation, when no worker takes it within
+// Pickup, or after Wait. The caller must Close the response.
 func (h *Hub) Fetch(ctx context.Context, worker string, r Request) (Response, error) {
 	ctx, cancel := context.WithTimeout(ctx, Wait)
 	defer cancel()
@@ -116,11 +125,26 @@ func (h *Hub) Fetch(ctx context.Context, worker string, r Request) (Response, er
 	h.bell = make(chan struct{})
 	h.mu.Unlock()
 	defer func() { h.mu.Lock(); delete(h.pending, r.ID); h.mu.Unlock() }()
-	select {
-	case v := <-p.reply:
-		return v, nil
-	case <-ctx.Done():
-		return Response{}, ctx.Err()
+	wait := h.Pickup
+	if wait <= 0 {
+		wait = Pickup
+	}
+	pickup := time.NewTimer(wait)
+	defer pickup.Stop()
+	for {
+		select {
+		case v := <-p.reply:
+			return v, nil
+		case <-ctx.Done():
+			return Response{}, ctx.Err()
+		case <-pickup.C:
+			h.mu.Lock()
+			taken := p.delivered
+			h.mu.Unlock()
+			if !taken {
+				return Response{}, ErrNoWorker
+			}
+		}
 	}
 }
 

@@ -2,6 +2,7 @@ package relay
 
 import (
 	"context"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -43,6 +44,12 @@ func TestRelayCorrelatesResponsesAndDropsCancelledRequests(t *testing.T) {
 	}
 	if _, ok := h.Reply("sam", r.ID, Response{Status: 200}); ok {
 		t.Fatal("reply after request finished")
+	}
+	// A request no worker takes gives up soon: its computer has gone.
+	h.Pickup = 50 * time.Millisecond
+	started := time.Now()
+	if _, e = h.Fetch(context.Background(), "gone", Request{}); !errors.Is(e, ErrNoWorker) || time.Since(started) > 5*time.Second {
+		t.Fatal("waited for a worker that never came", e)
 	}
 	cancelled, c := context.WithCancel(context.Background())
 	c()

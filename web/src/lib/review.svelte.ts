@@ -164,6 +164,9 @@ export interface ReviewHook {
   save(t?: Take): Promise<void> | undefined;
 }
 
+/** How often a page whose video's computer is offline looks again. */
+const OFFLINE_RETRY_MS = 5000;
+
 const FATAL = (name: string) =>
   `This file won't play in the browser. Make an H.264 copy first: ffmpeg -i "${name}" -c:v libx264 -crf 18 -c:a aac review.mp4`;
 
@@ -190,6 +193,10 @@ export class Review {
   hintGone = $state(true);
   doneSaved = $state(false);
   fatal = $state('');
+  /** The version on screen plays from the editing computer, which is offline (spec/automation.md, "Offline"): the
+   * stage shows the poster and says so, and the page looks again every 5 s. */
+  offline = $state(false);
+  #offlineTimer: ReturnType<typeof setTimeout> | null = null;
   freezeShown = $state(false);
   tip = $state<{ show: boolean; left: number | null; text: string }>({ show: false, left: null, text: '' });
   hoverRows = $state.raw<Row[]>([]);
@@ -980,13 +987,56 @@ export class Review {
   }
   onVideoError = (): void => {
     const v = this.shownVersion();
+    if (v?.relay) {
+      if (!this.switching) void this.#checkOffline(v); // a switch that fails checks its own version
+      return;
+    }
+    this.#videoFailed(v);
+  };
+
+  /** A relayed version that won't play: when its computer is offline (its video answers 503), the poster stays with
+   * "The editing computer is offline" and the page looks again every 5 s, then plays it once it's back. Anything else
+   * is the usual failure. */
+  async #checkOffline(v: Version): Promise<void> {
+    if (this.#offlineTimer) clearTimeout(this.#offlineTimer);
+    this.#offlineTimer = null;
+    const status = await fetch(`video/${encodeURIComponent(v.label)}`, { method: 'HEAD' }).then(
+      (r) => r.status,
+      () => 0,
+    );
+    if (this.shown !== v.label) return; // the page moved on meanwhile
+    if (status === 0) {
+      this.#offlineTimer = setTimeout(() => void this.#checkOffline(v), OFFLINE_RETRY_MS); // the server is unreachable
+      return;
+    }
+    if (status === 503) {
+      if (!this.offline) {
+        this.offline = true;
+        if (this.#posterOnly?.label !== v.label)
+          this.#posterOnly = { label: v.label, t: this.video.currentTime, play: false };
+        this.paused = true;
+        this.#source.clear(); // the poster shows instead of a broken player
+        this.syncDuration();
+      }
+      this.#offlineTimer = setTimeout(() => void this.#checkOffline(v), OFFLINE_RETRY_MS);
+      return;
+    }
+    if (this.offline) {
+      this.offline = false;
+      void this.#loadWaiting(); // it's back: play from where it was
+      return;
+    }
+    this.#videoFailed(v);
+  }
+
+  #videoFailed(v: Version | undefined): void {
     if (incomplete(v)) {
       // Its render may have just failed (the `failed` event says so): not a file that won't play.
       if (v) this.toast.say(`Could not play ${v.label} yet`, 3000);
       return;
     }
     this.fatal = FATAL(this.info.name);
-  };
+  }
 
   // ---------------------------------------------------------------- pen (only while recording)
   layout = (): void => {
@@ -1643,6 +1693,7 @@ export class Review {
     this.#landNote = land.note ?? null;
     this.frozenT = from;
     this.#posterOnly = null;
+    this.offline = false; // the other version may play; if it's offline too, its error says so
     this.#setPoster(v);
     if (incomplete(v) && (renderedEnd(v) ?? 0) <= 0) {
       // A stream with nothing rendered yet (spec/bridge.md, "Streaming"): its poster at once, and watching it starts
@@ -1675,6 +1726,15 @@ export class Review {
       this.#prefetchMaps();
       if (wasPlaying) await video.play().catch(() => {});
     } catch {
+      if (v.relay) {
+        // It plays from the editing computer, which may be offline: it's on screen with its poster, saying so.
+        this.#posterOnly = { label, t, play: false };
+        this.shown = label;
+        this.#watched.add(label);
+        void this.notes.load(label);
+        void this.#checkOffline(v);
+        return true;
+      }
       this.toast.say(`Could not load ${label}`, 3000);
       return false;
     } finally {
@@ -1705,7 +1765,7 @@ export class Review {
   async #loadWaiting(): Promise<void> {
     const wait = this.#posterOnly,
       v = wait && byLabel(this.versions, wait.label);
-    if (!wait || !v || this.shown !== wait.label || this.#loadingWait || this.switching) return;
+    if (!wait || !v || this.shown !== wait.label || this.#loadingWait || this.switching || this.offline) return;
     this.#loadingWait = true;
     const video = this.video;
     try {

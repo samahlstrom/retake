@@ -37,19 +37,22 @@ cd ~/Videos
 retake connect https://review.example.com --token rk_…
 ```
 
-Each project shows up on the server with its name and first frame, nothing else. Its agents and renders run here.
-Leave it running while people review; new project folders are picked up on their own. Next time, plain
+Every project `retake open ~/Videos` would show is listed on the server, with or without an edit timeline: a folder
+of finished `clip_v1.mp4`, `clip_v2.mp4` works too. The server gets each project's name, first frame and the list of
+its versions, nothing else; the video plays from your computer when someone watches it. Its agents and renders run
+here. Leave it running while people review; new project folders are picked up on their own. Next time, plain
 `retake connect` reconnects. **Connect your computer** on the home page makes a new line any time.
 
 That's it. Open a project on the server, record a review, press Send.
 
 ## What your computer needs
 
-- `retake` and `retake-edit` (the renderer), and Claude Code or Codex, signed in. Their own logins and settings are
-  used; nothing is copied to the server.
-- Projects with an edit timeline (`edit/timeline.json`, or `[edit] timeline` in `retake.toml`). A folder of finished
-  videos without one is skipped; `retake push --remote` uploads a version of those instead.
-- Linux or macOS. Keep `retake connect` running: while your computer is offline, the server can't play its video.
+- `retake`, and Claude Code or Codex, signed in. Their own logins and settings are used; nothing is copied to the
+  server. Projects with an edit timeline (`edit/timeline.json`, or `[edit] timeline` in `retake.toml`) also need
+  `retake-edit`, the renderer. Without a timeline, the agent edits the video however it can (ffmpeg, say) and its
+  result becomes the next version file.
+- Linux or macOS. Keep `retake connect` running: while your computer is offline, the page shows the video's first
+  frame with "The editing computer is offline", and plays it once your computer is back.
 
 ## How a review moves
 
@@ -70,6 +73,9 @@ from this file, never from the server. Task logs and renders stay in each projec
 - Invite people per project: an account (`docker compose exec retake retake user add EMAIL`, then
   `retake project member add`) or a share link (`retake project token create PROJECT --role reviewer`).
 - One server process holds a project's video relay: don't run replicas behind a load balancer.
+- Video plays in ranges of at most 8 MiB, so seeking a 2 GB file only fetches the part you watch. The server keeps
+  what it relayed (rendered or exported video only, never your source footage) in `relay-cache/` under its data
+  folder, up to 20 GB (`--relay-cache`), so five people watching cost your upload once.
 - `retake worker --remote NAME --project DIR` still connects a single project with that project's agent token.
 
 Postgres and MinIO, transcription, mail, backups and upgrades: [`deploy/README.md`](../deploy/README.md). The

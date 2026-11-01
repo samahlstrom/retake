@@ -29,7 +29,8 @@ Run it through mise (`mise exec -- npm test`) to use the pinned node. Needs `ffm
 | `RETAKE_E2E_SHOTS` | unset | A folder: `05-sidebar` writes its screenshots there (1920×1080 and phone size). |
 
 Ports: the servers use 8831–8840 (scenario 8831, crash safety 8832 behind a proxy on 8834, HLS 8833, sidebar 8835,
-phone layout 8836, sharing 8837 behind a proxy on 8838, time map 8839, the team server 8840). The browser talks to
+phone layout 8836, sharing 8837 behind a proxy on 8838, time map 8839, the team server 8840; the relay's server
+reuses 8837). The browser talks to
 Playwright over a pipe, so it opens no devtools port. Each server is started
 for its spec file, waited on
 through `/api/ping`, and always stopped. Its log is in `<work>/logs/`.
@@ -174,3 +175,13 @@ CLI.
   the account's name as `author.name`, and validates.
 - A viewer watches without Record, and the server refuses their POST (403). Signing out ends the session: the API
   answers 401.
+
+**`14-relay`** (new only; `spec/automation.md`, "Version files" and "The media relay"): `retake serve`, and
+`retake connect` (with a fake agent profile) on a folder with no timeline: `Promo/promo_v1.mp4` (4 s) and
+`promo_v2.mp4` (16 s at a constant 14 Mbit/s, about 28 MB: four relay chunks). Nothing is uploaded.
+- The project and both versions reach the server, marked as relayed. The page plays v2 from the computer, then seeks
+  to 13 s (a part it hasn't loaded) and plays on. Every video answer is a 206 byte range of at most 8 MiB, and one
+  starts past the first chunk. The server's relay cache holds the chunks, and its project has no copy of the file.
+- `retake connect` stops. Once the server calls the computer offline, choosing v1 (never played, so not cached)
+  shows its poster with "The editing computer is offline", not the "won't play" message. When `retake connect` runs
+  again the caption goes within a few seconds and v1 plays. `RETAKE_E2E_SHOTS` gets a screenshot of the offline page.

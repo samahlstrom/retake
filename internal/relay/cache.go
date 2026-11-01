@@ -72,7 +72,7 @@ func OpenCache(dir string, size int64) (*Cache, error) {
 		}
 		rel, _ := filepath.Rel(dir, p)
 		if strings.HasPrefix(d.Name(), ".") || strings.Count(rel, string(filepath.Separator)) != 1 {
-			_ = os.Remove(p) // an unfinished chunk, or nothing of ours
+			_ = os.Remove(p) //nolint:gosec // the cache's own folder, which only the server writes: an unfinished chunk
 			return nil
 		}
 		info, err := d.Info()

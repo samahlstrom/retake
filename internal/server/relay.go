@@ -227,7 +227,7 @@ func (s *Server) ask(ctx context.Context, t mediaTarget, rng string, head bool) 
 	req.Range, req.Head = rng, head
 	reply, err := s.mediaRelay.Fetch(ctx, t.worker, req)
 	if err != nil {
-		return relay.Response{}, fmt.Errorf("%w: %v", errNoAnswer, err)
+		return relay.Response{}, fmt.Errorf("%w: %w", errNoAnswer, err)
 	}
 	return reply, nil
 }

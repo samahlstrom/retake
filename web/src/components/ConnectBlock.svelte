@@ -4,6 +4,7 @@
   let { command, title = 'Connect your computer' }: { command: string; title?: string } = $props();
   let copied = $state(false);
   let code = $state<HTMLElement | null>(null);
+  const space = ' '; // between the arguments, so the line wraps there and copies with its spaces
 
   async function copy() {
     try {
@@ -33,7 +34,7 @@
   {#if command}
     <div class="cmd">
       <code bind:this={code}
-        >{#each command.split(' ') as part, i (i)}{#if i}{' '}{/if}<span class="arg">{part}</span>{/each}</code
+        >{#each command.split(' ') as part, i (i)}{#if i}{space}{/if}<span class="arg">{part}</span>{/each}</code
       >
       <button onclick={copy} aria-label="Copy the command">{copied ? 'Copied' : 'Copy'}</button>
     </div>

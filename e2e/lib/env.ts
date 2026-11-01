@@ -55,6 +55,7 @@ export const PORTS = {
   eraser: PORT_BASE + 5, // 10, after 06-mobile
   home: PORT_BASE + 2, // 12, after 11-stream
   stream: PORT_BASE + 2, // 11, after 04-hls
+  relay: PORT_BASE + 6, // 14, after 07-share
 } as const;
 
 /** retake-edit, for the specs that render with the editor: $RETAKE_EDIT, else the repo's release build, else $PATH. */

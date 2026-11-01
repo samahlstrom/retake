@@ -117,8 +117,8 @@ type plainVersion struct {
 // plainContext is a plain task's durable context: the assignment, the versions, and where the result goes.
 type plainContext struct {
 	project.WorkAssignment
-	Family   []plainVersion `json:"family"`
-	Output   string         `json:"output"`
+	Family []plainVersion `json:"family"`
+	Output string         `json:"output"`
 }
 
 func (r *runner) plainContext(a project.WorkAssignment, vs []family.Version, output string) plainContext {

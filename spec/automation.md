@@ -129,8 +129,8 @@ usual URLs: `/video/<label>`, and `/video/<label>/<file>` for a playlist and the
   deletes its cache. It holds rendered and exported video only, never source footage, and it sits behind the same
   viewing permissions as the video URLs. A cached chunk is served even while the worker is offline.
 - **Offline.** When the worker hasn't polled for 10 s, the server answers 503 `{"error":"editing machine is
-  offline"}` with `Retry-After: 3`, without asking. A worker that doesn't answer within 60 s gets the browser a 503
-  too. The page then shows the version's poster with "The editing computer is offline" on the video (not a broken
+  offline"}` with `Retry-After: 3`, without asking. A request no worker takes within 10 s, or that its worker
+  doesn't start answering within 30 s, gets the browser a 503 too. The page then shows the version's poster with "The editing computer is offline" on the video (not a broken
   player), checks again every 5 s, and plays once it's back.
 
 ## Plain projects
@@ -138,11 +138,13 @@ usual URLs: `/video/<label>`, and `/video/<label>/<file>` for a playlist and the
 A project without a native timeline is a folder of finished videos. Its worker runs without a renderer: it relays
 its version files and runs the agent, and the agent makes the next version however it can.
 
-- The worker needs an agent, not `retake-edit`. It renders nothing.
-- A task's prompt says the project has no timeline, lists the versions (also in the task context, `family`, with
-  each one's path relative to the project), and asks the agent to make the change with the tools it has (ffmpeg,
-  say), starting from the version the notes were made on, and to write the result as one video file to
-  `$RETAKE_OUTPUT` (`.retake/worker/tasks/<id>/output.mp4`). It never edits or deletes the existing versions.
+- The worker needs no `retake-edit`, and renders nothing. A worker without any agent (in any project) still
+  connects and relays the project's video, so it plays on the server as in `retake open`; it never takes a task.
+- A task's prompt says the project has no timeline and names its newest version; the task context lists every
+  version under `family`, each with its path relative to the project. The prompt asks the agent to make the change
+  with the tools it has (ffmpeg, say), starting from the version the notes were made on, and to write the result as
+  one video file to `$RETAKE_OUTPUT` (`.retake/worker/tasks/<id>/output.mp4`). It never edits or deletes the
+  existing versions.
 - When the agent reports `completed`, the worker pushes the result as the next version, by the rule of
   `version_push` (spec/notes.md): named after the newest version with the next `v<N>`, in a sibling `v<N>/` folder
   when the family uses version folders. A video the agent wrote as that next version itself counts as well. The

@@ -21,6 +21,9 @@ export interface Version {
   stream?: StreamState;
   /** A streamed version's first frame: a URL relative to the page. */
   poster?: string;
+  /** It plays from the editing computer through the server's relay (spec/automation.md), so only while that computer
+   * is online. */
+  relay?: boolean;
 }
 
 /** A streamed version's state: pending (nothing renders it), rendering, or complete; units published of all, and the

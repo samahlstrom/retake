@@ -200,9 +200,11 @@ func Run(ctx context.Context, o Options) error {
 		seen[p.ID] = true
 		r.identity.Agents = append(r.identity.Agents, p.AgentProfile)
 	}
-	if len(seen) == 0 {
-		return ErrNoAgents
+	if len(seen) == 0 && o.Handler != nil {
+		return ErrNoAgents // in process the server reads the folder itself: a worker without an agent adds nothing
 	}
+	// Without an agent, a worker that talks to a server still relays the project's video, so it plays there as it
+	// does in retake open; it just never takes a task.
 	r.render = lastRender(r.dir) // a restart with unchanged source renders and registers nothing
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()

@@ -15,9 +15,14 @@ comment turns Done when the new version is ready. If the agent is unsure, the co
 and the agent carries on. There is nothing else to start: `retake open` runs the editing worker itself, one per
 project, named after this computer.
 
-What it needs: a timeline project (`edit/timeline.json`, or `[edit] timeline` in the project's `retake.toml`),
-`retake-edit` ([timeline.md](timeline.md)), and Claude Code or Codex installed and signed in. When something is
-missing, the agent menu next to Send says what, and it picks the fix up within 15 seconds without a restart.
+What it needs: Claude Code or Codex installed and signed in. A timeline project (`edit/timeline.json`, or
+`[edit] timeline` in the project's `retake.toml`) also needs `retake-edit` ([timeline.md](timeline.md)). When
+something is missing, the agent menu next to Send says what, and it picks the fix up within 15 seconds without a
+restart.
+
+A folder of finished videos with no timeline (`clip_v1.mp4`, `clip_v2.mp4`) works too: the agent makes the change
+however it can (ffmpeg, say) and writes one video file, and Retake adds it as the next version (`clip_v3.mp4`, next
+to the others). The comment turns Done once that video plays.
 
 - One task runs at a time; each Send queues one. The agent works in the project folder with its own sign-in and
   settings.
@@ -35,6 +40,9 @@ The worker runs the agent's command in the project folder, with the task prompt 
 JSON file with the task and its notes (text, times, strokes, snapshots and images), and the agent writes its answer
 to `RETAKE_REPORT`: `{"state": "completed", "message": "what changed"}` or `{"state": "question", "message": "..."}`.
 A completed task still waits for a checked, playable render of the agent's final source before the comment is Done.
+In a project without a timeline, `RETAKE_OUTPUT` names the file the agent writes its video to
+(`.retake/worker/tasks/<task>/output.mp4`), and the context lists the versions under `family`; the worker moves that
+file in as the next version once it plays.
 
 The built-in agents are these commands, with your installed CLI's own sign-in and model settings:
 
