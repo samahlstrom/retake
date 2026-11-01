@@ -2,13 +2,12 @@
 // markup shows are runes ($state); the hot per-frame data (take, strokes, voice bins, waveform) stays plain, and the
 // canvases are drawn every animation frame, as before.
 import { memoryChunkStore, openChunkStore, recoverPending, type ChunkStore } from './audio-buffer';
+import { Automation } from './automation.svelte';
 import {
   AUTOSAVE_MS,
   HINT_DRAW,
   HINT_DRAW_TOUCH,
   MSG_SAVE_FAILED,
-  MSG_SAVED,
-  MSG_SAVED_TOUCH,
   PING_MS,
   SEEK,
   TICK_MS,
@@ -31,14 +30,26 @@ import {
   resizeBox,
 } from './images';
 import { ERASE_RADIUS, strokesHit, sweep, undoTarget } from './eraser';
-import { homeContext, nextToReview, NO_MORE, normalizeHome, projectUrl, unwatchUrl, viewerId, type Card } from './home';
+import {
+  homeContext,
+  nextToReview,
+  NO_MORE,
+  normalizeHome,
+  projectUrl,
+  unwatchUrl,
+  viewerId,
+  placementOf,
+  workspaceUrl,
+  type WorkspaceProject,
+  type Card,
+} from './home';
 import { Scrubber } from './scrub';
 import { keyAction, type Action } from './keys';
 import { layoutMode, type LayoutMode } from './layout';
 import { closeMic, MIC_BLOCKED, MIC_BLOCKED_TOUCH, openMic, pickMime, recorderMime, type Mic } from './mic';
 import { Notes } from './notes/notes.svelte';
 import type { NoteItem } from './notes/types';
-import { activeKey, PHONE_QUERY, presence, sidebarRows, type Row } from './notes/view';
+import { activeKey, inCurrentReview, PHONE_QUERY, presence, sidebarRows, type Row } from './notes/view';
 import { addPoint, alphaAt, fitFrame, isClick, renderInk } from './pen';
 import { Saver } from './saver';
 import { VideoSource } from './source';
@@ -53,7 +64,7 @@ import {
   serialize as serializeTake,
   settleMime,
 } from './take';
-import { drawTimeline, tlT } from './timeline';
+import { drawTimeline, pendingVoiceBins, tlT, type VoiceTrack } from './timeline';
 import { Toast } from './toast.svelte';
 import type {
   Box,
@@ -84,7 +95,6 @@ import {
   landing,
   neighbor,
   newlyStreamed,
-  readyToast,
   renderedEnd,
   stepTarget,
   withStream,
@@ -151,6 +161,7 @@ export class Review {
   paused = $state(true);
   curText = $state('0:00.0');
   durText = $state('0:00');
+  timelineDuration = $state(0);
   /** The recording segment in progress. */
   seg = $state.raw<Segment | null>(null);
   starting = $state(false);
@@ -168,6 +179,13 @@ export class Review {
   fatal = $state('');
   freezeShown = $state(false);
   tip = $state<{ show: boolean; left: number | null; text: string }>({ show: false, left: null, text: '' });
+  hoverRows = $state.raw<Row[]>([]);
+  commentSearch = $state('');
+  commentFilter = $state<'all' | 'open' | 'resolved'>('open');
+  commentScope = $state<'current' | 'earlier' | 'all'>('current');
+  followLatest = true;
+  finishing = $state(false);
+  #historyRequest = 0;
   readonly toast = new Toast();
   /** The shown video frame inside the stage (the pen canvas's box), for the image layer. */
   frame = $state({ left: 0, top: 0, width: 0, height: 0 });
@@ -184,7 +202,17 @@ export class Review {
     return this.role === null || this.role === 'owner' || this.role === 'approver';
   }
   /** The notes sidebar: agent questions on the newest version, resolved notes on older ones. */
-  readonly notes = new Notes({ onVersion: (e) => this.onVersionEvent(e) });
+  readonly notes = new Notes({
+    review: true,
+    onVersion: (e) => this.onVersionEvent(e),
+    onAutomation: () => {
+      void this.automation.refresh();
+    },
+    onLoad: (label) => {
+      void this.loadHistory(label);
+    },
+  });
+  readonly automation = new Automation();
   /** Time maps between versions: switching versions lands on the matching moment (spec/bridge.md). */
   readonly maps = new TimeMaps();
   readonly rows = $derived(
@@ -196,6 +224,28 @@ export class Review {
     }),
   );
   /** The sidebar row under the playhead. */
+  historyVoice = $state.raw<VoiceTrack[]>([]);
+  transcribedTakes = $state.raw<string[]>([]);
+  transcribedClips = $state.raw<string[]>([]);
+  readonly pendingHistoryVoice = $derived(pendingVoiceBins(this.historyVoice, this.rows));
+  readonly timelineComments = $derived(this.sidebar.rows.filter((row) => row.kind === 'question' || row.text.trim()));
+  readonly earlierCount = $derived(
+    this.rows.filter((row) => !inCurrentReview(row, this.shown) && row.mark !== 'answered').length,
+  );
+  readonly resolvedCount = $derived(this.rows.filter((row) => row.mark === 'answered').length);
+  readonly currentOpenCount = $derived(
+    this.rows.filter((row) => inCurrentReview(row, this.shown) && row.mark !== 'answered').length,
+  );
+  // Loaded take histories provide exact pen ticks; other cuts' annotations use their mapped comment anchor.
+  historyTakeIds = $state.raw<string[]>([]);
+  readonly timelineDrawings = $derived(
+    this.sidebar.rows.filter(
+      (row) =>
+        (row.drawings.length || !row.text.trim()) &&
+        !this.historyTakeIds.includes(row.take ?? '') &&
+        row.take !== this.take.id,
+    ),
+  );
   activeRow = $state<string | null>(null);
   /**
    * The sidebar's phone mode (a list under the controls, behind a toggle): narrow windows (PHONE_QUERY) and the phone
@@ -216,12 +266,16 @@ export class Review {
   homeAvailable = $state(false);
   /** The next project to review, from the home. */
   homeNext = $state.raw<Card | null>(null);
+  homeProject = $state.raw<WorkspaceProject | null>(null);
   /** Where the page sits in its home, from its path; null outside one. */
   homeCtx: { home: string; project: string } | null = null;
   /** This page load's id for the unwatch call. */
   readonly viewer = viewerId();
   get homeHref(): string {
     return this.homeCtx?.home ?? '/';
+  }
+  get projectHref(): string {
+    return this.homeProject ? workspaceUrl(this.homeHref, this.homeProject.id) : this.homeHref;
   }
   get nextHref(): string {
     return this.homeCtx && this.homeNext ? projectUrl(this.homeCtx.home, this.homeNext.name) : '';
@@ -305,7 +359,31 @@ export class Review {
   /** The last Done's POST /done, which "Next video" waits for before it leaves. */
   #doneCall: Promise<void> = Promise.resolve();
   #leaving = false;
+  readonly #clipRequests = new WeakMap<Take, string>();
   readonly #saver = new Saver({
+    onSaved: (t, data) => {
+      const completed = data.segments
+        .filter((s) => !s.recording)
+        .map((s) => s.file)
+        .join('|');
+      if (!completed || this.#clipRequests.get(t) === completed) return;
+      this.#clipRequests.set(t, completed);
+      void fetch(
+        `api/session/${encodeURIComponent(t.id ?? '')}/transcribe?v=${encodeURIComponent(String(t.version))}`,
+        { method: 'POST' },
+      )
+        .then((r) => {
+          if (!r.ok) {
+            this.#clipRequests.delete(t);
+            t.dirty = true;
+          }
+          return r.body?.cancel();
+        })
+        .catch(() => {
+          this.#clipRequests.delete(t);
+          t.dirty = true;
+        });
+    },
     serialize: (t) => this.serialize(t),
     toast: (m, ms) => this.toast.say(m, ms),
     store: () => this.#store,
@@ -378,7 +456,7 @@ export class Review {
     const v = this.shownVersion();
     if (v?.duration && (incomplete(v) || this.#seenStreams.has(v.label))) return v.duration;
     const d = this.video?.duration;
-    return (d && isFinite(d) ? d : 0) || this.info.duration || 0;
+    return (d && isFinite(d) ? d : 0) || v?.duration || this.info.duration || 0;
   }
 
   newTake(): void {
@@ -388,6 +466,15 @@ export class Review {
 
   ensureTake(): void {
     if (this.take.closed) {
+      this.historyVoice = [
+        ...this.historyVoice,
+        ...this.take.segments.map((seg) => ({
+          take: this.take.id ?? '',
+          seg: seg.id,
+          bins: seg.voiceBins ?? new Float32Array(0),
+        })),
+      ];
+      if (this.take.id) this.historyTakeIds = [...this.historyTakeIds, this.take.id];
       archive(this.take, this.hist, this.nBins());
       this.newTake();
     }
@@ -513,6 +600,12 @@ export class Review {
     if (res.retry) setTimeout(() => void this.recover().catch(() => {}), AUTOSAVE_MS);
   }
 
+  #recordingIntent = false;
+  #recordingStart = 0;
+  #startOperation: Promise<void> = Promise.resolve();
+  #silenceSeconds = 0;
+  #rotateAfter = 0;
+
   // ---------------------------------------------------------------- recording: R toggles a segment
   async openMic(): Promise<boolean> {
     try {
@@ -531,8 +624,16 @@ export class Review {
   }
 
   /** R on. `answerTo`: the question thread this segment answers (Answer in the sidebar). */
-  startRec = async (answerTo: number | null = null): Promise<void> => {
-    if (this.seg || this.starting) return;
+  startRec = (answerTo: number | null = null): Promise<void> => {
+    if (this.seg || this.starting || this.switching || this.finishing) return Promise.resolve();
+    this.#recordingIntent = true;
+    this.#recordingStart = now();
+    this.#startOperation = this.#beginClip(answerTo);
+    return this.#startOperation;
+  };
+
+  async #beginClip(answerTo: number | null): Promise<void> {
+    const previous = this.seg;
     if (!this.canRecord) {
       this.toast.say(VIEW_ONLY, 2600);
       return;
@@ -566,9 +667,13 @@ export class Review {
       s.p0 = now();
       t.segments.push(s);
       this.seg = s;
+      // Start the next encoder before stopping the previous one, keeping the microphone continuous.
+      if (previous) void this.#finishClip(t, previous);
+      this.#rotateAfter = now() + 10;
+      this.#silenceSeconds = 0;
       this.#keepAwake(true);
-      this.bars = [];
-      this.recElapsed = fmt(0, false);
+      if (!previous) this.bars = [];
+      this.recElapsed = fmt(now() - this.#recordingStart, false);
       this.logEv(
         'rec_start',
         {
@@ -581,29 +686,43 @@ export class Review {
         },
         t,
       );
+      if (!this.#recordingIntent) {
+        this.seg = null;
+        this.#keepAwake(false);
+        await this.#finishClip(t, s);
+      }
     } catch (err) {
+      this.#rotateAfter = now() + 5;
+      if (!previous) this.#recordingIntent = false;
       this.toast.say('Could not start recording: ' + ((err as Error)?.message || err), 6000);
     } finally {
       this.starting = false;
     }
-  };
+  }
 
-  stopRec = (): Promise<unknown> | null => {
-    const s = this.seg,
-      t = this.take;
-    if (!s) return null;
+  stopRec = (): Promise<unknown> => {
+    this.#recordingIntent = false;
+    const s = this.seg;
     this.seg = null;
     this.#keepAwake(false);
+    return Promise.all([s ? this.#finishClip(this.take, s) : Promise.resolve(), this.#startOperation]);
+  };
+
+  #finishClip(t: Take, s: Segment): Promise<unknown> {
+    if (s.stopped) return s.stopped;
     s.p1 = now();
     s.v1 = this.video.currentTime;
     this.logEv('rec_stop', { seg: s.id }, t);
     s.stopped = new Promise((res) => {
       s.rec.onstop = res;
+    }).then(() => {
+      s.finalized = true;
+      void this.save(t);
+      if (!this.#recordingIntent) void this.followCurrent();
     });
     s.rec.stop();
-    void s.stopped.then(() => this.save(t));
     return s.stopped;
-  };
+  }
 
   #keepAwake(on: boolean): void {
     this.#awake = on && this.touch;
@@ -622,7 +741,7 @@ export class Review {
   }
 
   toggleRec = (): void => {
-    if (this.seg) this.stopRec();
+    if (this.seg || this.starting) void this.stopRec();
     else void this.startRec();
   };
 
@@ -637,6 +756,17 @@ export class Review {
       s.vmin = Math.min(s.vmin, vt);
       s.vmax = Math.max(s.vmax, vt);
       this.bars = pushBars(this.bars, this.acc, dt, level, this.vad.active);
+      this.#silenceSeconds = this.vad.active ? 0 : this.#silenceSeconds + dt;
+      const age = now() - s.p0;
+      if (
+        this.#recordingIntent &&
+        !this.starting &&
+        !this.drawing &&
+        now() >= this.#rotateAfter &&
+        (age >= 20 || (age >= 10 && this.#silenceSeconds >= 0.6))
+      ) {
+        this.#startOperation = this.#beginClip(s.answer_to ?? null);
+      }
     } else {
       this.vad.active = false;
       this.acc = newAcc();
@@ -644,6 +774,10 @@ export class Review {
     if (this.vad.active && this.mediaDuration()) {
       this.take.bins = grow(this.take.bins, this.nBins());
       addVoice(this.take.bins, dt, vt, this.prevVT, !video.paused, video.seeking);
+      if (s) {
+        s.voiceBins = grow(s.voiceBins ?? new Float32Array(0), this.nBins());
+        addVoice(s.voiceBins, dt, vt, this.prevVT, !video.paused, video.seeking);
+      }
     }
   }
 
@@ -723,7 +857,8 @@ export class Review {
   };
   /** The duration shown and the voice bins follow mediaDuration. */
   syncDuration(): void {
-    this.durText = fmt(this.mediaDuration(), false);
+    this.timelineDuration = this.mediaDuration();
+    this.durText = fmt(this.timelineDuration, false);
     this.take.bins = grow(this.take.bins, this.nBins());
     this.hist.bins = grow(this.hist.bins, this.nBins());
   }
@@ -897,7 +1032,9 @@ export class Review {
       from = this.#eraseLast ?? p;
     this.#eraseLast = p;
     const own = t.id && !t.closed ? t.strokes : [];
-    const hist = this.hist.strokes.filter((st) => typeof st.id === 'number' && !!st.take && !st.undone);
+    const hist = this.hist.strokes.filter(
+      (st) => typeof st.id === 'number' && !!st.take && !st.undone && !st.sourceVersion,
+    );
     // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local scratch sets, not state
     const ownHits = new Set<number>(),
       // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local scratch sets, not state
@@ -1081,7 +1218,7 @@ export class Review {
   /** The image cards to show at playhead `vt`: like strokes, within ±SHOW s of their time, dimmer when not recording.
    * Only assigned when something changed, so the layer re-renders only then. */
   #updateCards(vt: number): void {
-    const dim = this.seg ? 1 : 0.55,
+    const dim = this.seg ? 1 : 0.85,
       out: ImageCard[] = [],
       t = this.take;
     const add = (im: HistoryImage, key: string, id: number | null) => {
@@ -1104,14 +1241,24 @@ export class Review {
     return {
       ...presence({
         available: n.available,
-        content: rows.length > 0 || !!n.job,
+        content: true,
         everShown: n.everShown,
         open: n.open,
         phoneOpen: n.phoneOpen,
         phone: this.phone,
       }),
       phone: this.phone,
-      rows,
+      rows: rows.filter((row) => {
+        const query = this.commentSearch.trim().toLowerCase();
+        return (
+          (!query || `${row.text} ${row.by} ${row.change ?? ''}`.toLowerCase().includes(query)) &&
+          (this.commentFilter === 'all' || (row.mark === 'answered') === (this.commentFilter === 'resolved')) &&
+          (this.commentScope === 'all' ||
+            (this.commentScope === 'earlier'
+              ? !inCurrentReview(row, this.shown) && row.mark !== 'answered'
+              : inCurrentReview(row, this.shown)))
+        );
+      }),
       active: this.activeRow,
     };
   }
@@ -1203,6 +1350,7 @@ export class Review {
     const vs = withStream(this.versions, label, s);
     if (vs !== this.versions) this.versions = this.info.versions = vs as Version[];
     this.#afterStream();
+    void this.followCurrent();
   }
 
   /** After the family's stream states changed: load a version that waited for its first segment, and watch what's on
@@ -1211,7 +1359,10 @@ export class Review {
     const v = this.shownVersion();
     const wait = this.#posterOnly;
     if (wait && v && wait.label === v.label && (!incomplete(v) || (renderedEnd(v) ?? 0) > 0)) void this.#loadWaiting();
-    this.watcher.watch(v && incomplete(v) ? v.label : null);
+    const latest = this.versions.at(-1);
+    this.watcher.watch(
+      this.followLatest && latest && incomplete(latest) ? latest.label : v && incomplete(v) ? v.label : null,
+    );
   }
 
   /** The family changed (a version was pushed, or a stream started, stopped, completed or failed). The video on
@@ -1242,6 +1393,7 @@ export class Review {
       this.#announceStreams();
       if (this.video?.readyState >= 1) this.syncDuration();
       this.#afterStream();
+      await this.followCurrent();
       if (!light) this.#prefetchMaps();
     } catch {
       /* server gone */
@@ -1254,11 +1406,33 @@ export class Review {
     const fresh = newlyStreamed(this.versions, this.#seenStreams);
     for (const v of fresh) this.#seenStreams.add(v.label);
     const v = fresh[fresh.length - 1];
-    if (v) this.toast.say(readyToast(this.versions, this.base, v.label, this.touch), 4000);
+    if (v) this.toast.say('Updating video…', 2500);
+  }
+
+  async followCurrent(): Promise<void> {
+    while (this.followLatest && !this.finishing && !this.seg && !this.starting && !this.switching) {
+      const current = [...this.versions]
+        .reverse()
+        .find(
+          (v) => v.stream?.state !== 'stopped' && (!incomplete(v) || (renderedEnd(v) ?? 0) > this.video.currentTime),
+        );
+      if (!current || current.label === this.shown) return;
+      await this.setBase(current.label);
+      if (this.shown !== current.label) return;
+      // More segments or a newer revision can arrive while the media element is switching. Catch up now;
+      // those events already happened, so waiting for another event can leave the viewer on the old cut.
+    }
   }
 
   async #postDone(t: Take): Promise<void> {
-    if (t.id) await this.notes.postDone(t.id, t.version);
+    if (!t.id) return;
+    const status = await this.notes.postDone(t.id, t.version);
+    if (status < 200 || status >= 300) {
+      this.#donePending.add(t);
+      this.#unsaved.add(t);
+      throw new Error('Feedback saved; processing could not start. Retrying…');
+    }
+    if (t === this.take && t.closed && !t.saveErr) this.doneSaved = true;
   }
 
   // ---------------------------------------------------------------- timeline: playhead, where you talked and drew
@@ -1269,6 +1443,7 @@ export class Review {
 
   attachTimeline = (el: HTMLElement) => {
     const down = (e: PointerEvent) => {
+      if ((e.target as Element).closest('button')) return;
       this.scrubbing = true;
       el.setPointerCapture(e.pointerId);
       this.scrubber.start(this.#clampT(this.#tlT(e.clientX)));
@@ -1276,8 +1451,23 @@ export class Review {
     const move = (e: PointerEvent) => {
       const r = this.el.tl.getBoundingClientRect();
       this.tip.show = true;
-      this.tip.left = clamp(e.clientX - r.left, 24, r.width - 24);
-      this.tip.text = fmt(this.#tlT(e.clientX));
+      const time = this.#tlT(e.clientX);
+      const key = (e.target as Element).closest<HTMLElement>('[data-comment]')?.dataset.comment;
+      const candidates =
+        e.clientY - r.top > r.height / 2 + 3
+          ? this.sidebar.rows.filter((row) => row.drawings.length || !row.text.trim())
+          : this.timelineComments;
+      this.hoverRows = candidates
+        .filter(
+          (row) =>
+            time >= row.t0 - (this.mediaDuration() * 9) / r.width &&
+            time <= row.t1 + (this.mediaDuration() * 9) / r.width,
+        )
+        .sort((a, b) => Number(b.key === key) - Number(a.key === key) || Math.abs(a.t0 - time) - Math.abs(b.t0 - time))
+        .slice(0, 3);
+      const half = Math.min(160, r.width / 2);
+      this.tip.left = clamp(e.clientX - r.left, half, r.width - half);
+      this.tip.text = fmt(time);
       if (this.scrubbing) this.scrubber.to(this.#clampT(this.#tlT(e.clientX)));
     };
     const up = () => {
@@ -1287,6 +1477,7 @@ export class Review {
     };
     const leave = () => {
       this.tip.show = false;
+      this.hoverRows = [];
     };
     el.addEventListener('pointerdown', down);
     el.addEventListener('pointermove', move);
@@ -1459,7 +1650,7 @@ export class Review {
     this.newTake();
     void this.loadHistory(label);
     const note = this.#landNote;
-    this.toast.say(note ?? `Now on ${label}`, note ? 3200 : 1400);
+    this.toast.say(note ?? 'Video updated', note ? 3200 : 1400);
   }
 
   stepBase(dir: number): void {
@@ -1470,27 +1661,72 @@ export class Review {
 
   pickVersion = (label: string): void => {
     this.verOpen = false;
+    this.followLatest = label === this.versions.at(-1)?.label;
     void this.setBase(label);
   };
 
+  jumpToComment = (row: Row): void => {
+    this.video.pause();
+    const strokes = [...this.hist.strokes, ...this.take.strokes].filter(
+      (st) =>
+        (st.take === row.take || (row.take === this.take.id && !st.take)) &&
+        !st.undone &&
+        st.video_t >= row.t0 - 2.5 &&
+        st.video_t <= row.t1 + 2.5,
+    );
+    const closest = strokes.sort((a, b) => Math.abs(a.video_t - row.t0) - Math.abs(b.video_t - row.t0))[0];
+    this.jumpTo(row.drawings.length && closest ? closest.video_t : row.t0);
+  };
+
+  get visibleHistoryStrokes(): HistoryStroke[] {
+    const rows = this.sidebar.rows;
+    return this.hist.strokes.filter(
+      (st) =>
+        !this.rows.some((row) => row.take === st.take) ||
+        rows.some((row) => row.take === st.take && st.video_t >= row.t0 - 2.5 && st.video_t <= row.t1 + 2.5),
+    );
+  }
+
   async loadHistory(label: string): Promise<void> {
-    this.hist.strokes = [];
-    this.hist.images = [];
-    this.hist.bins = new Float32Array(this.nBins());
+    const request = ++this.#historyRequest;
     try {
-      const d = (await (await fetch(`api/history?v=${encodeURIComponent(label)}`)).json()) as {
-        history?: HistoryEntry[];
-      };
-      this.addHistory(d.history);
+      const res = await fetch(`api/history?v=${encodeURIComponent(label)}&scope=review`);
+      if (!res.ok) return;
+      const d = (await res.json()) as { history?: HistoryEntry[] };
+      if (request !== this.#historyRequest || label !== this.shown) return;
+      this.hist.strokes = [];
+      this.hist.images = [];
+      this.hist.bins = new Float32Array(this.nBins());
+      this.historyVoice = [];
+      this.historyTakeIds = [];
+      this.transcribedTakes = (d.history ?? []).filter((h) => h.transcribed).map((h) => h.id);
+      this.transcribedClips = (d.history ?? []).flatMap((h) =>
+        (h.voice_tracks ?? []).filter((track) => track.transcribed).map((track) => `${h.id}/${track.seg}`),
+      );
+      this.addHistory(d.history?.filter((h) => h.id !== this.take.id));
     } catch {
-      /* server gone */
+      /* retain the previous history while offline */
     }
   }
 
   addHistory(list: HistoryEntry[] | undefined): void {
     const hist = this.hist;
+    const voices: VoiceTrack[] = [];
+    const ids: string[] = [];
     for (const h of list || []) {
-      for (const st of h.strokes || []) hist.strokes.push({ ...st, take: h.id });
+      ids.push(h.id);
+      const pairs = h.voice?.bins ?? [];
+      const count = pairs.reduce((n, [i]) => Math.max(n, i + 1), this.nBins());
+      const bins = new Float32Array(count);
+      for (const [i, v] of pairs) bins[i] += v;
+      if (h.voice_tracks?.length) {
+        for (const track of h.voice_tracks) {
+          const trackBins = new Float32Array(count);
+          for (const [i, v] of track.voice.bins ?? []) if (i < count) trackBins[i] = v;
+          voices.push({ take: h.id, seg: track.seg, bins: trackBins, transcribed: track.transcribed });
+        }
+      } else voices.push({ take: h.id, bins, transcribed: h.transcribed });
+      for (const st of h.strokes || []) hist.strokes.push({ ...st, take: h.id, sourceVersion: h.source_version });
       for (const im of h.images || []) if (im && im.url && Array.isArray(im.box)) hist.images.push(im);
       for (const [i, v] of (h.voice && h.voice.bins) || []) {
         if (i >= hist.bins.length) {
@@ -1501,6 +1737,8 @@ export class Review {
         hist.bins[i] += v;
       }
     }
+    this.historyVoice = [...this.historyVoice, ...voices];
+    this.historyTakeIds = [...this.historyTakeIds, ...ids];
   }
 
   // ---------------------------------------------------------------- chrome
@@ -1532,24 +1770,44 @@ export class Review {
   };
 
   done = async (): Promise<void> => {
+    if (this.finishing) return;
     const t = this.take;
     if (!t.id || t.closed) {
-      this.toast.say('Nothing recorded yet');
+      const open = this.rows.filter((row) => row.mark !== 'answered').length;
+      this.toast.say(
+        this.notes.job
+          ? 'Your feedback is saved. Transcription is still processing.'
+          : this.rows.length
+            ? `Your feedback is already saved. ${open} comments still need edits.`
+            : 'Press Record to leave feedback. It saves automatically.',
+        5000,
+      );
       return;
     }
-    this.video.pause();
-    if (this.seg) await this.stopRec();
-    t.closed = true; // before the final save, so session.json says so (take format v1.1)
-    await this.save(t);
-    while (t.saving) await t.saving; // a save that was already running queued one more: wait for the last
-    if (t.saveErr) {
-      this.#unsaved.add(t);
-      this.#donePending.add(t);
-    } else this.#doneCall = this.#postDone(t).catch(() => {}); // the server transcribes it and writes up the notes
-    this.closeMic();
-    this.doneSaved = true;
-    this.toast.say(t.saveErr ? MSG_SAVE_FAILED : this.touch ? MSG_SAVED_TOUCH : MSG_SAVED, 4000);
-    if (this.homeCtx) void this.loadHome(); // "Next video" shows the next one to review
+    this.finishing = true;
+    try {
+      this.video.pause();
+      if (this.seg || this.starting) await this.stopRec();
+      t.closed = true;
+      await this.save(t);
+      while (t.saving) await t.saving;
+      if (t.saveErr) {
+        this.#unsaved.add(t);
+        this.#donePending.add(t);
+        this.toast.say(MSG_SAVE_FAILED, 5000);
+        return;
+      }
+      this.#doneCall = this.#postDone(t);
+      await this.#doneCall;
+      this.doneSaved = true;
+      this.toast.say('Feedback saved. Transcription continues; comments stay open until edited.', 5000);
+      if (this.homeCtx) void this.loadHome();
+    } catch (err) {
+      this.toast.say((err as Error).message, 5000);
+    } finally {
+      this.closeMic();
+      this.finishing = false;
+    }
   };
 
   // ---------------------------------------------------------------- the home (spec/home.md)
@@ -1561,7 +1819,17 @@ export class Review {
       const r = await fetch(`${ctx.home}api/home`);
       if (!r.ok) return;
       const h = normalizeHome(await r.json());
-      this.homeNext = nextToReview(h.projects, ctx.project);
+      if (h.workspace) {
+        const placement = placementOf(h.workspace, ctx.project);
+        this.homeProject = h.workspace.projects.find((p) => p.id === placement.project) ?? null;
+        this.homeNext = nextToReview(
+          h.projects.filter((v) => placementOf(h.workspace!, v.name).project === placement.project),
+          ctx.project,
+        );
+      } else {
+        this.homeProject = null;
+        this.homeNext = nextToReview(h.projects, ctx.project);
+      }
       this.homeAvailable = true;
     } catch {
       /* no home here, or the server is gone */
@@ -1658,6 +1926,15 @@ export class Review {
 
   /** window keydown, capture phase: the player's keys work whatever has focus. */
   onKeydown = (e: KeyboardEvent): void => {
+    const target = e.target as Element | null;
+    if (
+      target?.closest?.(
+        'input, textarea, select, [contenteditable=true], [role=combobox], [role=listbox], [role=option]',
+      ) &&
+      !((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's')
+    )
+      return;
+    if (target?.closest?.('.comment-marker, .drawing-marker') && e.key === ' ') return;
     const r = keyAction(e);
     if (!r) return;
     e.preventDefault();
@@ -1667,7 +1944,13 @@ export class Review {
 
   /** Clicking a button must not focus it, so Space and the other keys keep working. */
   onDocMousedown = (e: MouseEvent): void => {
-    if ((e.target as Element | null)?.closest?.('button')) e.preventDefault();
+    const target = e.target as Element | null;
+    if (target?.closest?.('[data-select-trigger], [data-select-content]')) return;
+    // Player buttons deliberately keep focus off themselves. Release a previously focused menu
+    // so clicking Record or a timecode also restores the player's keyboard shortcuts.
+    const focused = document.activeElement;
+    if (focused instanceof HTMLElement && focused.matches('[data-select-trigger]')) focused.blur();
+    if (target?.closest?.('button')) e.preventDefault();
   };
 
   // ---------------------------------------------------------------- frame loop and timers
@@ -1692,9 +1975,20 @@ export class Review {
       rendered,
       vt,
       recording: !!this.seg,
-      takeBins: this.take.bins,
-      histBins: this.hist.bins,
-      histStrokes: this.hist.strokes,
+      takeBins: pendingVoiceBins(
+        this.take.segments.map((seg) => ({
+          take: this.take.id ?? '',
+          seg: seg.id,
+          bins: seg.voiceBins ?? new Float32Array(0),
+          active: seg === this.seg,
+          transcribed:
+            this.transcribedTakes.includes(this.take.id ?? '') ||
+            this.transcribedClips.includes(`${this.take.id}/${seg.id}`),
+        })),
+        this.rows,
+      ),
+      histBins: this.pendingHistoryVoice,
+      histStrokes: this.visibleHistoryStrokes,
       takeStrokes: this.take.strokes,
       knob: this.touch ? 8 : undefined,
     });
@@ -1732,9 +2026,9 @@ export class Review {
       this.#lctx,
       ink.width,
       ink.height,
-      [...this.hist.strokes, ...this.take.strokes],
+      [...this.visibleHistoryStrokes, ...this.take.strokes],
       vt,
-      this.seg ? 1 : 0.55,
+      this.seg ? 1 : 0.85,
       this.drawing,
     );
     this.#drawTimeline(vt);
@@ -1749,7 +2043,7 @@ export class Review {
         mapTime(this.maps.peek(this.shown, label), t),
       );
     this.curText = fmt(vt);
-    if (this.seg) this.recElapsed = fmt(t - this.seg.p0, false);
+    if (this.seg) this.recElapsed = fmt(t - this.#recordingStart, false);
     requestAnimationFrame(this.loop);
   };
 
@@ -1777,7 +2071,7 @@ export class Review {
         if (c.saveErr) void this.save(c);
         else {
           this.#unsaved.delete(c);
-          if (this.#donePending.delete(c)) void this.#postDone(c);
+          if (this.#donePending.delete(c)) void this.#postDone(c).catch(() => {});
         }
       }
     }, AUTOSAVE_MS);
@@ -1799,10 +2093,14 @@ export class Review {
     this.versions = this.info.versions || [];
     // Streams already there when the page opens show their chip; only ones pushed later are announced.
     for (const v of newlyStreamed(this.versions, this.#seenStreams)) this.#seenStreams.add(v.label);
-    this.base = this.shown = this.info.label || null;
+    this.base = this.shown =
+      [...this.versions].reverse().find((v) => !incomplete(v) || (renderedEnd(v) ?? 0) > 0)?.label ||
+      this.info.label ||
+      null;
     if (this.base) this.#watched.add(this.base);
     this.take.version = this.base;
-    this.addHistory(this.info.history);
+    if (this.base === this.info.label) this.addHistory(this.info.history);
+    else if (this.base) void this.loadHistory(this.base);
     const curV = byLabel(this.versions, this.base);
     const cur = curV ?? (this.base ? { label: this.base, name: this.info.name } : null);
     this.#setPoster(curV);

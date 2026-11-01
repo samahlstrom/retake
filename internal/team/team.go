@@ -47,6 +47,7 @@ const (
 	PermRecord              // take writes
 	PermApprove             // approve a version, reopen a note
 	PermAgent               // /mcp
+	PermManage              // owner-only worker assignment and execution controls
 )
 
 func (p Perm) String() string {
@@ -61,6 +62,8 @@ func (p Perm) String() string {
 		return "approve"
 	case PermAgent:
 		return "agent"
+	case PermManage:
+		return "manage"
 	}
 	return fmt.Sprintf("perm(%d)", int(p))
 }
@@ -78,6 +81,8 @@ func (r Role) Can(p Perm) bool {
 		return r == Approver || r == Owner
 	case PermAgent:
 		return r == Agent
+	case PermManage:
+		return r == Owner
 	}
 	return false
 }

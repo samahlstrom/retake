@@ -27,6 +27,7 @@ import (
 	"github.com/samahlstrom/retake/internal/jobs"
 	"github.com/samahlstrom/retake/internal/jsonx"
 	"github.com/samahlstrom/retake/internal/project"
+	"github.com/samahlstrom/retake/internal/relay"
 	"github.com/samahlstrom/retake/internal/store"
 	"github.com/samahlstrom/retake/internal/stream"
 	"github.com/samahlstrom/retake/internal/team"
@@ -118,13 +119,14 @@ type Options struct {
 
 // Server serves one version family.
 type Server struct {
-	opts    Options
-	origins map[string]bool // our own origins, and https://<h> of each AllowHosts name
-	local   map[string]bool // the local Host headers: 127.0.0.1:<port>, localhost:<port>
-	allow   map[string]bool // AllowHosts, lower case; with the hosts table, the shared ones. Any other Host is refused.
-	limiter *team.Limiter
-	fam     atomic.Pointer[[]family.Version]
-	writeMu sync.Mutex // serializes every take write
+	mediaRelay relay.Hub
+	opts       Options
+	origins    map[string]bool // our own origins, and https://<h> of each AllowHosts name
+	local      map[string]bool // the local Host headers: 127.0.0.1:<port>, localhost:<port>
+	allow      map[string]bool // AllowHosts, lower case; with the hosts table, the shared ones. Any other Host is refused.
+	limiter    *team.Limiter
+	fam        atomic.Pointer[[]family.Version]
+	writeMu    sync.Mutex // serializes every take write
 
 	contactMu sync.Mutex
 	contact   time.Time // zero until the first request
@@ -259,7 +261,11 @@ func (s *Server) stopStreams() { s.quitOnce.Do(func() { close(s.quit) }) }
 
 // Rescan detects the family again and returns it. Only GET /api/info rescans; other routes use the last scan.
 func (s *Server) Rescan() []family.Version {
-	f := family.Detect(s.opts.Video, s.opts.Explicit, s.opts.Prober)
+	f := []family.Version{}
+	if s.opts.Video != "" {
+		f = family.Detect(s.opts.Video, s.opts.Explicit, s.opts.Prober)
+	}
+	f = s.remoteFamily(f)
 	if s.opts.FollowNewest && len(f) > 0 {
 		for i := range f {
 			f[i].Current = i == len(f)-1
@@ -418,6 +424,10 @@ func (s *Server) serveGranted(w http.ResponseWriter, r *http.Request) {
 
 // route sends an authorized request to its handler.
 func (s *Server) route(w http.ResponseWriter, r *http.Request, parts []string) {
+	if len(parts) >= 2 && parts[0] == "api" && (parts[1] == "automation" || parts[1] == "worker") {
+		s.automationRoute(w, r, parts)
+		return
+	}
 	if len(parts) == 1 && parts[0] == "mcp" {
 		s.mcpRoute(w, r)
 		return
@@ -483,11 +493,17 @@ func (s *Server) get(w http.ResponseWriter, r *http.Request, parts []string) {
 			return
 		}
 		ctype, ok := family.ContentTypes[strings.ToLower(family.Suffix(v.Name))]
+		if s.remoteMedia(w, r, v.Label, "index.m3u8") {
+			return
+		}
 		if !ok {
 			ctype = "application/octet-stream"
 		}
 		s.serveFile(w, r, v.Path, ctype)
 	case parts[0] == "video" && len(parts) == 3:
+		if s.remoteMedia(w, r, parts[1], parts[2]) {
+			return
+		}
 		s.playlistFile(w, r, parts[1], parts[2])
 	case is(parts, "api", "ping"):
 		s.json(w, r, http.StatusOK, map[string]bool{"ok": true})
@@ -499,7 +515,11 @@ func (s *Server) get(w http.ResponseWriter, r *http.Request, parts []string) {
 			s.fail(w, r, http.StatusNotFound, "no such version")
 			return
 		}
-		s.json(w, r, http.StatusOK, historyResponse{Label: v.Label, History: s.history(v)})
+		history := s.history(v)
+		if query(r, "scope") == "review" {
+			history = s.reviewHistory(v, history)
+		}
+		s.json(w, r, http.StatusOK, historyResponse{Label: v.Label, History: history})
 	case is(parts, "favicon.ico"):
 		w.Header().Set("Cache-Control", "no-store")
 		w.WriteHeader(http.StatusNoContent)
@@ -573,11 +593,12 @@ func (s *Server) json(w http.ResponseWriter, r *http.Request, code int, v any) {
 	}
 	h := w.Header()
 	h.Set("Content-Type", "application/json")
+	h.Set("X-Content-Type-Options", "nosniff")
 	h.Set("Content-Length", strconv.Itoa(len(body)))
 	h.Set("Cache-Control", "no-store")
 	w.WriteHeader(code)
 	if r.Method != http.MethodHead {
-		_, _ = w.Write(body)
+		_, _ = w.Write(body) //nolint:gosec // encoded JSON with application/json and nosniff, never HTML
 	}
 }
 
@@ -634,6 +655,10 @@ func (s *Server) post(w http.ResponseWriter, r *http.Request, parts []string) {
 		s.reopen(w, r, parts[2])
 		return
 	}
+	if len(parts) == 4 && parts[0] == "api" && parts[1] == "notes" && (parts[3] == "delete" || parts[3] == "restore") {
+		s.deleteComment(w, r, parts[2], parts[3] == "restore")
+		return
+	}
 	if len(parts) == 4 && parts[0] == "api" && parts[1] == "versions" && parts[3] == "watch" {
 		s.watch(w, r, parts[2], true)
 		return
@@ -663,6 +688,8 @@ func (s *Server) post(w http.ResponseWriter, r *http.Request, parts []string) {
 		s.saveAudio(w, r, dir, body)
 	case "image":
 		s.saveImage(w, r, dir, body)
+	case "transcribe":
+		s.transcribeClips(w, r, v, parts[2], dir)
 	case "done":
 		s.done(w, r, v, parts[2], dir)
 	default:

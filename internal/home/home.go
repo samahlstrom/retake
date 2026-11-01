@@ -13,6 +13,7 @@ import (
 
 	"github.com/samahlstrom/retake/internal/project"
 	"github.com/samahlstrom/retake/internal/store"
+	"github.com/samahlstrom/retake/internal/workspace"
 )
 
 // Status is where a project's newest version is in the review loop.
@@ -68,11 +69,12 @@ type User struct {
 
 // Response is GET /api/home.
 type Response struct {
-	Title    string `json:"title"`
-	Folder   string `json:"folder,omitempty"` // the owner's only
-	Role     string `json:"role"`
-	User     *User  `json:"user,omitempty"` // the team server's
-	Projects []Card `json:"projects"`
+	Title     string            `json:"title"`
+	Folder    string            `json:"folder,omitempty"` // the owner's only
+	Role      string            `json:"role"`
+	User      *User             `json:"user,omitempty"` // the team server's
+	Projects  []Card            `json:"projects"`
+	Workspace *workspace.Layout `json:"workspace,omitempty"`
 }
 
 // Source is what a card is made from.

@@ -1035,3 +1035,30 @@ func TestAttachImages(t *testing.T) {
 		}
 	}
 }
+
+func TestClipSnapshotsDoNotSuppressLaterClipsOrFinalPass(t *testing.T) {
+	st, _ := newStore(t)
+	first, err := st.QueueClips("v7", take1, "/x/take", "clip1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := st.QueueClips("v7", take1, "/x/take", "clip1")
+	if err != nil || again[0].ID != first[0].ID {
+		t.Fatalf("duplicate clip: %v %v", again, err)
+	}
+	next, err := st.QueueClips("v7", take1, "/x/take", "clip1+clip2")
+	if err != nil || next[0].ID == first[0].ID {
+		t.Fatalf("new clip: %v %v", next, err)
+	}
+	final, err := st.QueueTake("v7", take1, "/x/take")
+	if err != nil || final[0].ID == next[0].ID || final[0].Args.Revision != "" {
+		t.Fatalf("final: %v %v", final, err)
+	}
+}
+
+func TestCommentTimelineOriginsAndDrawingColors(t *testing.T) {
+	item := ItemOf(Note{Take: "take-a", Seg: "S2", Detail: Detail{Strokes: []Stroke{{Color: "red"}, {Color: "blue"}, {Color: "red"}}}})
+	if item.Take != "take-a" || item.Seg != "S2" || !slices.Equal(item.Drawings, []string{"red", "blue"}) {
+		t.Fatalf("timeline metadata: %+v", item)
+	}
+}

@@ -60,6 +60,8 @@ export function newSegment(
     id: `S${n}`,
     ...(at.answerTo != null ? { answer_to: at.answerTo } : {}),
     rec,
+    finalized: false,
+    voiceBins: new Float32Array(t.bins.length),
     mime,
     version: at.version,
     flip: at.flip,
@@ -180,12 +182,22 @@ export function serialize(t: Take, c: SaveClock): TakeData {
     flip: s.flip,
     t_start: st(s.p0),
     t_end: st(s.p1 ?? c.now),
-    recording: s.p1 == null,
+    recording: s.p1 == null || s.finalized === false || s.uploaded < Math.max(s.size, s.stored),
     video_start: r3(s.v0),
     video_end: r3(s.v1 ?? c.videoTime),
     video_min: r3(s.vmin),
     video_max: r3(s.vmax),
     ...(s.answer_to != null ? { answer_to: s.answer_to } : {}),
+    ...(s.voiceBins
+      ? {
+          voice: {
+            bin: BIN,
+            bins: Array.from(s.voiceBins.entries())
+              .filter(([, v]) => v > 0.001)
+              .map(([i, v]) => [i, r3(v)] as [number, number]),
+          },
+        }
+      : {}),
   }));
   const bins: [number, number][] = [];
   t.bins.forEach((v, i) => {

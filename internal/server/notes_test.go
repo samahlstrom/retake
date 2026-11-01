@@ -378,7 +378,7 @@ func TestSidebarRoute(t *testing.T) {
 		t.Fatalf("v6 sidebar = %s", r.body)
 	}
 	it := older.Items[0]
-	if it.Kind != "note" || it.Status != project.StatusAnswered || it.Change != "title at 120%" || it.AnsweredIn != "v7" ||
+	if it.Take != take || it.Seg != "S1" || it.Kind != "note" || it.Status != project.StatusAnswered || it.Change != "title at 120%" || it.AnsweredIn != "v7" ||
 		it.By != "Ana" || len(it.Images) != 1 || it.Images[0].Box != [4]float64{0.1, 0.2, 0.3, 0.4} {
 		t.Fatalf("answered item = %+v", it)
 	}
@@ -621,5 +621,63 @@ func TestEventStreamKeepAlive(t *testing.T) {
 	}
 	if lines[0] != "retry: 2000" || lines[2] != ": keep-alive" {
 		t.Fatalf("stream starts %q", lines)
+	}
+}
+
+func TestContinuousDiscussionIncludesResolvedComments(t *testing.T) {
+	h, f := startM2(t, Options{})
+	seed(t, f)
+	r := h.get("/api/notes?v=v7&scope=video", nil)
+	var res sidebarResponse
+	if err := json.Unmarshal(r.body, &res); err != nil || r.code != 200 {
+		t.Fatalf("%s", r.body)
+	}
+	if res.Scope != "video" || len(res.Items) != 4 {
+		t.Fatalf("missing discussion: %s", r.body)
+	}
+	seen := map[string]bool{}
+	for _, it := range res.Items {
+		key := fmt.Sprintf("%s:%d", it.Kind, it.ID)
+		if seen[key] {
+			t.Fatalf("duplicate %s", key)
+		}
+		seen[key] = true
+	}
+}
+
+func TestTranscribeBeforeDoneIsIdempotentAndKeepsTakeOpen(t *testing.T) {
+	h, _ := startM2(t, Options{})
+	root := "/api/session/" + take
+	data := `{"session":{"format":3},"segments":[{"id":"S1","file":"seg_01.webm","recording":false},{"id":"S2","file":"seg_02.webm","recording":true}],"strokes":[]}`
+	if r := h.post(root+"/data?v=v6", data, nil); r.code != 200 {
+		t.Fatal(string(r.body))
+	}
+	if r := h.post(root+"/audio?v=v6&name=seg_01.webm&offset=0", "audio", nil); r.code != 200 {
+		t.Fatal(string(r.body))
+	}
+	for range 2 {
+		if r := h.post(root+"/transcribe?v=v6", "", nil); r.code != 200 {
+			t.Fatal(string(r.body))
+		}
+	}
+	st, err := h.srv.store(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	all, err := st.Jobs(0)
+	if err != nil || len(all) != 2 {
+		t.Fatalf("jobs: %v %v", all, err)
+	}
+	for _, j := range all {
+		if j.Kind == project.JobTranscribe && takeClosed(j.Args.Dir) {
+			t.Fatal("clip closed the take")
+		}
+	}
+	if r := h.post(root+"/done?v=v6", "", nil); r.code != 200 {
+		t.Fatal(string(r.body))
+	}
+	all, err = st.Jobs(0)
+	if err != nil || len(all) != 4 {
+		t.Fatalf("final jobs: %v %v", all, err)
 	}
 }

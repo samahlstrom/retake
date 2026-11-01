@@ -52,6 +52,10 @@ func (s *Server) watch(w http.ResponseWriter, r *http.Request, label string, on 
 		s.fail(w, r, http.StatusBadRequest, "not a streamed version")
 		return
 	}
+	if v, ok := s.remoteRender(label); ok {
+		s.json(w, r, http.StatusOK, watchResponse{Label: label, Stream: remoteStream(v)})
+		return
+	}
 	m := s.streamsFor()
 	var st family.StreamState
 	var err error

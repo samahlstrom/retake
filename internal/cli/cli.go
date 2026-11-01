@@ -137,6 +137,8 @@ the team server (spec/server.md; settings also come from RETAKE_* variables and 
       a share link, or an agent token with its remote and MCP setup (also token list, token revoke <id>)
       every server command takes --data DIR and the database flags of retake serve
   retake remote add <name> <project URL> --token <agent token>   (also remote list, remote remove <name>)
+  retake worker --remote NAME --project DIR [--name NAME] [--profiles FILE]
+      connect this editing machine: run assigned agents and stream live source edits through the hosted project
   retake push --remote <name> <file> [--parent vN] [--label vN] [--change ID="summary"]... [--ask ID="q"]...
       upload <file> to the team server (resumable) and push it, with the same push rule
 
@@ -210,6 +212,8 @@ func Main(ctx context.Context, args []string, env Env) int {
 		return projectCmd(ctx, args[1:], env)
 	case "remote":
 		return remoteCmd(ctx, args[1:], env)
+	case "worker":
+		return workerCmd(ctx, args[1:], env)
 	case "version", "--version":
 		_, _ = fmt.Fprintf(env.Stdout, "retake %s\n", Version())
 		return ExitOK

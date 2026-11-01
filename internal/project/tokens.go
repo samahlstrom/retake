@@ -13,6 +13,7 @@ import (
 
 // Token is one row of the tokens table.
 type Token struct {
+	Scope   string `json:"scope,omitempty"`
 	ID      int64  `json:"id"`
 	Role    string `json:"role"`
 	Label   string `json:"label"`
@@ -55,16 +56,17 @@ func (t Token) ExpiresAt() (time.Time, bool) {
 	return exp, true
 }
 
-const tokenCols = `id, role, label, created, expires, revoked` //nolint:gosec // column names, not a credential
+const tokenCols = `id, role, label, created, expires, revoked, scope` //nolint:gosec // column names, not a credential
 
 func scanToken(r scanner) (Token, error) {
 	var t Token
-	err := r.Scan(&t.ID, &t.Role, &t.Label, &t.Created, &t.Expires, &t.Revoked)
+	err := r.Scan(&t.ID, &t.Role, &t.Label, &t.Created, &t.Expires, &t.Revoked, &t.Scope)
 	return t, err
 }
 
 // NewToken is a token to store: its hash (never the token), role, label and lifetime.
 type NewToken struct {
+	Scope string
 	Hash  string
 	Role  string
 	Label string
@@ -77,13 +79,13 @@ func (s *Store) CreateToken(n NewToken) (Token, error) {
 		return Token{}, errors.New("a token needs its hash")
 	}
 	now := s.Now().UTC()
-	t := Token{Role: n.Role, Label: n.Label, Created: now.Format(timeFormat)}
+	t := Token{Role: n.Role, Label: n.Label, Scope: n.Scope, Created: now.Format(timeFormat)}
 	if n.TTL > 0 {
 		t.Expires = now.Add(n.TTL).Format(timeFormat)
 	}
 	err := s.write(func(tx *tx) error {
-		return tx.QueryRow(`INSERT INTO tokens (hash, role, label, created, expires) VALUES (?, ?, ?, ?, ?) RETURNING id`,
-			n.Hash, t.Role, t.Label, t.Created, t.Expires).Scan(&t.ID)
+		return tx.QueryRow(`INSERT INTO tokens (hash, role, label, created, expires, scope) VALUES (?, ?, ?, ?, ?, ?) RETURNING id`,
+			n.Hash, t.Role, t.Label, t.Created, t.Expires, t.Scope).Scan(&t.ID)
 	})
 	if err != nil {
 		return Token{}, fmt.Errorf("storing the token: %w", err)

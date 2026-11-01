@@ -6,12 +6,12 @@
   // "rendering 12/50"), and the button has a dot while it's on screen (drawn over the border, so nothing moves).
   import { Popover } from 'bits-ui';
   import type { Review } from '../lib/review.svelte';
-  import { byLabel, incomplete, streamChip, versionTitle } from '../lib/versions';
+  import { byLabel, incomplete, streamChip } from '../lib/versions';
   import { fmt } from '../lib/util';
 
   let { review }: { review: Review } = $props();
 
-  const title = $derived(versionTitle(review.versions, review.base, review.shown, review.flipped));
+  const title = $derived(`Review ${review.shown}. Choose a version to see its feedback and completed changes.`);
   const newestFirst = $derived([...review.versions].reverse());
   const shownStreaming = $derived(incomplete(byLabel(review.versions, review.shown)));
   const keepFocus = (e: Event) => e.preventDefault();
@@ -22,7 +22,7 @@
     <Popover.Trigger
       id="verBtn"
       class={[review.flipped && 'flipped', shownStreaming && 'rendering'].filter(Boolean).join(' ')}
-      {title}>{review.shown || ''}</Popover.Trigger
+      {title}>{review.shown || ''}<span class="version-chevron">⌄</span></Popover.Trigger
     >
     <Popover.ContentStatic id="verList" trapFocus={false} onOpenAutoFocus={keepFocus} onCloseAutoFocus={keepFocus}>
       {#each newestFirst as v (v.label)}
@@ -32,7 +32,9 @@
           class={v.label === review.base ? 'on' : ''}
           onclick={() => review.pickVersion(v.label)}
           ><span
-            >{v.label}{v.label === review.base ? ' ·' : ''}{#if chip}<span class="stream">{chip}</span>{/if}</span
+            >{v.label}{v.label === review.base ? ' ✓' : ''}{v.label === newestFirst[0]?.label
+              ? ' · Latest'
+              : ''}{#if chip}<span class="stream">{chip}</span>{/if}</span
           ><span class="d">{fmt(v.duration || 0, false)}</span></button
         >
       {/each}

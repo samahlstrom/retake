@@ -51,9 +51,10 @@ async function serve(slow: boolean, folder = false): Promise<Server> {
 }
 
 async function openPage(browser: Browser, path = ''): Promise<void> {
-  context = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
+  context = await browser.newContext({ viewport: { width: 1920, height: 1080 }, permissions: ['microphone'] });
   page = await context.newPage();
   page.on('pageerror', (e) => pageErrors.push(`${e.name}: ${e.message}`));
+  await page.route("**/api/session/*/transcribe?*", r => r.fulfill({contentType: "application/json", body: JSON.stringify({ok:true})}));
   ui = new Review(page);
   await ui.open(new URL(path, server.url).href);
 }
@@ -109,8 +110,10 @@ test.afterAll(async () => {
   await server?.stop();
 });
 
-test('a streamed push is ready at once, pending, with a poster, and renders nothing', async () => {
+test('a pushed edit starts rendering automatically while feedback stays on its original frame', async () => {
   expect(await page.evaluate(() => window.__review.info.versions?.map((v) => v.label))).toEqual(['v1']);
+  await ui.key('r');
+  await ui.waitFor(() => !!window.__review.seg, 5000);
   const p = await push();
   expect(p.code, p.out).toBe(0);
   expect(p.out).toContain('pushed v2 from v1');
@@ -119,33 +122,31 @@ test('a streamed push is ready at once, pending, with a poster, and renders noth
   await ui.waitFor(() => !!window.__review.info.versions?.some((v) => v.label === 'v2'), 10_000);
   const v = await page.evaluate(v2);
   expect(v).toMatchObject({ name: 'demo_v2.m3u8', poster: 'video/v2/demo_v2.poster.jpg' });
-  expect(v!.stream).toMatchObject({ state: 'pending', done: 0, total: 6 });
+  expect(v!.stream!.total).toBe(6);
   expect(v!.duration).toBeCloseTo(FULL, 1);
   const poster = await fetch(new URL(v!.poster!, server.url));
   expect(poster.status).toBe(200);
   expect(Buffer.from(await poster.arrayBuffer()).subarray(0, 2)).toEqual(Buffer.from([0xff, 0xd8]));
-  await ui.waitFor(() => document.querySelector('#toast')?.textContent?.includes('v2 is ready'), 5000);
-  expect((await ui.state()).toast).toBe('v2 is ready, press ] to watch');
-  await ui.click('#verBtn');
-  await expect(page.locator('#verList [data-ver="v2"] .stream')).toHaveText('pending');
-  await page.keyboard.press('Escape');
-  await sleep(1500);
-  expect(renders(), 'nobody watches it, so nothing renders').toBe(0);
-  expect(await state()).toBe('pending');
+  await expect(page.locator('#verBtn')).toBeVisible();
+  await expect.poll(renders).toBe(1);
+  expect((await ui.state()).shown).toBe('v1');
+  expect(await page.evaluate(() => !!window.__review.seg)).toBe(true);
+
 });
 
-test('] shows the poster at once, renders, and plays from 0 while the playlist grows; it waits at the rendered end', async () => {
+test('stopping feedback follows the edited video and plays while its playlist grows', async () => {
   const t0 = Date.now();
-  await ui.key(']'); await ui.settle();
+  await ui.key('r');
+  await ui.waitFor(() => window.__review.view.shown === 'v2' && !window.__review.view.switching, 20000);
   const switched = (Date.now() - t0) / 1000;
   expect(await ui.state()).toMatchObject({ base: 'v2', shown: 'v2', flipped: false });
   expect(await page.evaluate(() => document.querySelector('video')!.getAttribute('poster'))).toContain('demo_v2.poster.jpg');
-  expect(await page.locator('#verBtn').getAttribute('class')).toContain('rendering');
+  await expect(page.locator('#verBtn')).toBeVisible();
   await ui.key(' '); // play: remembered until the first segment is out
   await ui.waitFor(() => (document.querySelector('video')?.readyState ?? 0) >= 2
     && !document.querySelector('video')!.paused, 20_000);
   const firstFrame = (Date.now() - t0) / 1000;
-  console.log(`] switched in ${switched.toFixed(2)} s; playing ${firstFrame.toFixed(1)} s after ] (render started then)`);
+  console.log(`edit followed in ${switched.toFixed(2)} s; playing ${firstFrame.toFixed(1)} s after feedback stopped`);
   expect(renders()).toBe(1);
   const start = (await ui.video()).t;
   expect(start).toBeLessThan(0.5); // from the start, not the live edge
@@ -169,20 +170,13 @@ test('] shows the poster at once, renders, and plays from 0 while the playlist g
   }
 });
 
-test('C flips to v1 at the same moment while v2 renders, and back', async () => {
-  await ui.key(' '); // pause
+test('removed comparison shortcuts leave the evolving video and playhead alone', async () => {
+  await ui.key(' ');
   await page.evaluate(() => { document.querySelector('video')!.currentTime = 3; });
   await ui.waitFor(() => !document.querySelector('video')!.seeking, 5000);
-  const before = await ui.state();
-  expect(playlist()).not.toContain('#EXT-X-ENDLIST');
-  await ui.key('c'); await ui.settle(); await sleep(200);
-  const flipped = await ui.state();
-  expect(flipped).toMatchObject({ shown: 'v1', base: 'v2', flipped: true });
-  expect(Math.abs(flipped.t - before.t)).toBeLessThan(0.05);
-  await ui.key('c'); await ui.settle(); await sleep(200);
-  const back = await ui.state();
-  expect(back).toMatchObject({ shown: 'v2', flipped: false });
-  expect(Math.abs(back.t - before.t)).toBeLessThan(0.05);
+  await ui.key('c'); await ui.key('[');
+  expect(await ui.state()).toMatchObject({ shown: 'v2', flipped: false, paused: true });
+  expect((await ui.state()).t).toBeCloseTo(3, 1);
 });
 
 test('closing the page stops the render; what it published stays', async () => {
@@ -212,7 +206,7 @@ test('opened again (another server), it resumes from the cache and completes', a
   await openPage(browser);
   const published = units();
   const t0 = Date.now();
-  await ui.key(']'); await ui.settle();
+  await ui.waitFor(() => window.__review.view.shown === 'v2', 20000);
   await ui.key(' ');
   await ui.waitFor(() => (document.querySelector('video')?.readyState ?? 0) >= 2
     && !document.querySelector('video')!.paused, 20_000);
@@ -233,19 +227,9 @@ test('opened again (another server), it resumes from the cache and completes', a
   expect(after.paused).toBe(false);
   // The completion event can arrive before the player's next playlist reload (one target duration).
   await expect.poll(async () => (await ui.video()).duration, { timeout: 10_000 }).toBeCloseTo(FULL, 0);
-  await expect(page.locator('#verBtn')).not.toHaveClass(/rendering/);
-  await ui.click('#verBtn');
-  await expect(page.locator('#verList [data-ver="v2"]')).toBeVisible();
-  await expect(page.locator('#verList [data-ver="v2"] .stream')).toHaveCount(0);
-  await page.keyboard.press('Escape');
-  // With both manifests now, C maps through the time map: the pop's patch moves nothing, so the same moment.
+  await expect(page.locator('#verBtn')).toBeVisible();
   await ui.key(' ');
-  const before = await ui.state();
-  await ui.key('c'); await ui.settle(); await sleep(200);
-  const flipped = await ui.state();
-  expect(flipped).toMatchObject({ shown: 'v1', flipped: true });
-  expect(Math.abs(flipped.t - before.t)).toBeLessThan(0.05);
-  await ui.key('c'); await ui.settle();
+  expect((await ui.state()).shown).toBe('v2');
   await sleep(500);
   expect(renders(), 'a complete version never renders again').toBe(0);
 });
@@ -258,7 +242,7 @@ test('a home project streams on open and returning to All videos stops it', asyn
   expect(p.out).toContain('pushed v3 from v2');
   server = await serve(true, true);
   await openPage(browser, 'p/stream/');
-  expect((await ui.state()).shown).toBe('v3');
+  await ui.waitFor(() => window.__review.view.shown === 'v3' && !window.__review.view.switching, 20000);
   await ui.key(' ');
   await ui.waitFor(() => (document.querySelector('video')?.readyState ?? 0) >= 2
     && !document.querySelector('video')!.paused, 20_000);

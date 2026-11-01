@@ -45,7 +45,7 @@ async function shot(info: TestInfo, name: string): Promise<void> {
 }
 
 test.beforeAll(async ({ browser }) => {
-  fam = family('scenario', ['v5', 'v6', 'v7']);
+  fam = family('scenario', LEGACY ? ['v5', 'v6', 'v7'] : ['v5', 'v6']);
   server = await startServer('scenario', fam.files.v6!, PORTS.scenario);
   const context = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
   await context.grantPermissions(['microphone'], { origin: server.url.replace(/\/$/, '') });
@@ -69,11 +69,11 @@ test('family: v5, v6 and the v7 preview; the newer v5 draft decoy is skipped', a
   expect(info.label).toBe('v6');
   expect(info.name).toBe('clip_v6.mp4');
   expect(info.versions.map(([l, n]) => [l, n])).toEqual([
-    ['v5', 'clip_v5.mp4'], ['v6', 'clip_v6.mp4'], ['v7', 'clip_v7_0-010_preview.mp4']]);
+    ['v5', 'clip_v5.mp4'], ['v6', 'clip_v6.mp4'], ...(LEGACY ? [['v7', 'clip_v7_0-010_preview.mp4']] : [])]);
   const d = Object.fromEntries(info.versions.map(([l, , dur]) => [l, dur as number]));
   expect(d.v5).toBeCloseTo(40, 0);
   expect(d.v6).toBeCloseTo(40, 0);
-  expect(d.v7).toBeCloseTo(10, 0);
+  if (LEGACY) expect(d.v7).toBeCloseTo(10, 0);
 });
 
 test('A: without recording, playing works and the pen draws nothing', async ({}, info) => {
@@ -146,7 +146,7 @@ test('S1-S4: R-gated recording and pen, an unrecorded loop, C flips, then Done',
   expect(marks['S1 off']!.rec).toBe(false);
   expect(c.afterUnrecordedLoopDrag!.strokes, 'the unrecorded drag drew nothing').toBe(1);
   expect(c.afterUnrecordedLoopDrag!.rec).toBe(false);
-  expect(marks['S3 on (flipped)']).toMatchObject({ rec: true, shown: 'v7', base: 'v6', flipped: true });
+  expect(marks['S3 on (flipped)']).toMatchObject({ rec: true, shown: LEGACY ? 'v7' : 'v6', base: 'v6', flipped: LEGACY });
   expect(marks['S3 off, back on v6']).toMatchObject({ rec: false, shown: 'v6', flipped: false });
   expect(marks['S4 stroke']!.strokes).toBe(2);
   expect(marks.done!.rec).toBe(false);
@@ -154,14 +154,14 @@ test('S1-S4: R-gated recording and pen, an unrecorded loop, C flips, then Done',
 
   // C flips to the newer version at the same frame, then back
   const { before: f0, after: f1 } = c.flip;
-  expect(f1).toMatchObject({ shown: 'v7', flipped: true, base: 'v6', paused: true });
+  expect(f1).toMatchObject({ shown: LEGACY ? 'v7' : 'v6', flipped: LEGACY, base: 'v6', paused: true });
   expect(Math.abs(f1.t - f0.t)).toBeLessThan(0.04);
   expect(c.flipBack).toMatchObject({ shown: 'v6', flipped: false });
 
   // The take as the page sees it: 4 segments on v6 (S3 while flipped to v7), 2 strokes
   const sv = c.saved!;
   expect(sv.segments.map((x) => x.id)).toEqual(['S1', 'S2', 'S3', 'S4']);
-  expect(sv.segments.map((x) => [x.version, x.flip])).toEqual([['v6', false], ['v6', false], ['v7', true],
+  expect(sv.segments.map((x) => [x.version, x.flip])).toEqual([['v6', false], ['v6', false], [LEGACY ? 'v7' : 'v6', LEGACY],
     ['v6', false]]);
   expect(sv.strokes.map((x) => [x.id, x.seg, x.color, x.version, x.flip])).toEqual([
     [1, 'S1', 'red', 'v6', false], [2, 'S4', 'green', 'v6', false]]);
@@ -169,6 +169,12 @@ test('S1-S4: R-gated recording and pen, an unrecorded loop, C flips, then Done',
 });
 
 test('[ ] keep time and play state; ] and C past the preview\'s end are refused', async () => {
+  if (!LEGACY) {
+    const before = await ui.state();
+    await ui.key('['); await ui.key(']'); await ui.key('c');
+    expect(await ui.state()).toMatchObject({shown: before.shown, base: before.base, flipped: false});
+    return;
+  }
   await ui.key(' ');
   await sleep(1500);
   const b1 = await ui.state();
@@ -220,7 +226,7 @@ test('on disk: one take on v6, nothing for v5 or v7; the files are what the page
   take = readTake(takes[0]!);
   expect(take.session.session).toBe(marks['S1 on']!.take);
   expect(take.session.version).toBe('v6');
-  expect(take.session.versions.map((v) => v.label)).toEqual(['v5', 'v6', 'v7']);
+  expect(take.session.versions.map((v) => v.label)).toEqual(LEGACY ? ['v5', 'v6', 'v7'] : ['v5', 'v6']);
   expect(take.session.video).toMatchObject({ name: 'clip_v6.mp4', width: 1280, height: 720, fps: 30 });
   expect(take.session.video.duration).toBeCloseTo(40, 0);
   // Done saved the final state: the server wrote exactly what the page serialized.
@@ -296,13 +302,13 @@ test('on disk: strokes with colors, versions, flips and their moments; event kin
   expect(ev[0]).toMatchObject({ event: 'start', session_t: 0 });
   expect(ev.map((e) => e.session_t)).toEqual([...ev.map((e) => e.session_t)].sort((a, b) => a - b));
   expect(new Set(ev.map((e) => e.event))).toEqual(new Set(['start', 'rec_start', 'rec_stop', 'play', 'pause', 'seek',
-    'tick', 'draw_start', 'draw_end', 'version']));
+    'tick', 'draw_start', 'draw_end', ...(LEGACY ? ['version'] : [])]));
   expect({ start: count('start'), rec_start: count('rec_start'), rec_stop: count('rec_stop'),
     draw_start: count('draw_start'), draw_end: count('draw_end'), version: count('version') })
-    .toEqual({ start: 1, rec_start: 4, rec_stop: 4, draw_start: 2, draw_end: 2, version: 4 });
+    .toEqual({ start: 1, rec_start: 4, rec_stop: 4, draw_start: 2, draw_end: 2, version: LEGACY ? 4 : 0 });
   expect(ev.filter((e) => e.event === 'rec_start').map((e) => e.seg)).toEqual(['S1', 'S2', 'S3', 'S4']);
-  expect(ev.filter((e) => e.event === 'version').map((e) => [e.shown, e.base, e.flip])).toEqual([
-    ['v7', 'v6', true], ['v6', 'v6', false], ['v7', 'v6', true], ['v6', 'v6', false]]);
+  expect(ev.filter((e) => e.event === 'version').map((e) => [e.shown, e.base, e.flip])).toEqual(LEGACY ? [
+    ['v7', 'v6', true], ['v6', 'v6', false], ['v7', 'v6', true], ['v6', 'v6', false]] : []);
   for (const s of take.segments) {
     const on = ev.find((e) => e.event === 'rec_start' && e.seg === s.id)!;
     const off = ev.find((e) => e.event === 'rec_stop' && e.seg === s.id)!;

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,10 +10,12 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/samahlstrom/retake/internal/bridge"
 	"github.com/samahlstrom/retake/internal/family"
 	"github.com/samahlstrom/retake/internal/jobs"
 	"github.com/samahlstrom/retake/internal/jsonx"
@@ -102,13 +105,65 @@ func (s *Server) done(w http.ResponseWriter, r *http.Request, v family.Version, 
 		return
 	}
 	refs := make([]jobRef, len(queued))
+	dependencies := make([]int64, len(queued))
 	for i, j := range queued {
 		refs[i] = jobRef{j.ID, j.Kind, j.State}
+		dependencies[i] = j.ID
+	}
+	if err := st.SubmitReview(v.Label, take, dependencies); err != nil {
+		s.storeFailed(w, r, err)
+		return
 	}
 	s.json(w, r, http.StatusOK, struct {
 		OK   bool     `json:"ok"`
 		Jobs []jobRef `json:"jobs"`
 	}{true, refs})
+}
+
+// transcribeClips starts work as soon as a completed recording is safely saved.
+func (s *Server) transcribeClips(w http.ResponseWriter, r *http.Request, v family.Version, take, dir string) {
+	s.writeMu.Lock()
+	raw, err := os.ReadFile(filepath.Join(dir, "segments.json")) //nolint:gosec // validated take folder of the family
+	var segments []struct {
+		File      string `json:"file"`
+		Recording bool   `json:"recording"`
+	}
+	if err == nil {
+		err = json.Unmarshal(raw, &segments)
+	}
+	hash := sha256.New()
+	count := 0
+	if err == nil {
+		for _, seg := range segments {
+			if seg.Recording || !store.ValidSegName(seg.File) {
+				continue
+			}
+			info, statErr := os.Stat(filepath.Join(dir, seg.File))
+			if statErr != nil || info.Size() == 0 {
+				continue
+			}
+			_, _ = fmt.Fprintf(hash, "%s:%d\n", seg.File, info.Size())
+			count++
+		}
+	}
+	s.writeMu.Unlock()
+	if err != nil {
+		s.fail(w, r, http.StatusNotFound, "no saved clips")
+		return
+	}
+	if count == 0 {
+		s.json(w, r, http.StatusOK, map[string]bool{"ok": true})
+		return
+	}
+	st, err := s.store(true)
+	if err == nil {
+		_, err = st.QueueClips(v.Label, take, dir, fmt.Sprintf("%x", hash.Sum(nil)))
+	}
+	if err != nil {
+		s.storeFailed(w, r, err)
+		return
+	}
+	s.json(w, r, http.StatusOK, map[string]bool{"ok": true})
 }
 
 // saveImage is POST /api/session/<take>/image?name=img_NN.ext: one image dropped on the video while recording.
@@ -153,7 +208,10 @@ type historyImage struct {
 // as in milestone 1.
 type historyEntry struct {
 	store.HistoryEntry
-	Images []historyImage `json:"images,omitempty"`
+	Images        []historyImage      `json:"images,omitempty"`
+	SourceVersion string              `json:"source_version,omitempty"`
+	Transcribed   bool                `json:"transcribed,omitempty"`
+	VoiceTracks   []historyVoiceTrack `json:"voice_tracks,omitempty"`
 }
 
 // history is store.History with each take's images. Carried-over takes keep the images inside their ranges, like
@@ -173,6 +231,7 @@ func (s *Server) history(v family.Version) []historyEntry {
 		if label == "" || !store.ValidTakeID(e.ID) {
 			continue // not a take the /api/takes route can serve
 		}
+		out[i].Transcribed, out[i].VoiceTracks = completedVoice(dir)
 		for _, img := range project.ReadImages(dir) {
 			if ranges != nil && !inAny(img.VideoT, ranges) {
 				continue
@@ -220,6 +279,7 @@ type jobView struct {
 }
 
 type sidebarResponse struct {
+	Scope   string         `json:"scope,omitempty"`
 	Version string         `json:"version"`
 	Newest  bool           `json:"newest"`
 	Items   []project.Item `json:"items"`
@@ -235,6 +295,9 @@ func (s *Server) sidebar(w http.ResponseWriter, r *http.Request) {
 	}
 	fam := s.Family()
 	resp := sidebarResponse{Version: v.Label, Items: []project.Item{}, Jobs: []jobView{}}
+	if scope := query(r, "scope"); scope == "video" || scope == "review" {
+		resp.Scope = scope
+	}
 	resp.Newest = len(fam) == 0 || fam[len(fam)-1].Label == v.Label
 	st, err := s.store(false)
 	if errors.Is(err, project.ErrNoProject) {
@@ -249,24 +312,124 @@ func (s *Server) sidebar(w http.ResponseWriter, r *http.Request) {
 		ImageURL: func(n project.Note, img project.TakeImage) string {
 			return s.opts.BasePath + "/api/takes/" + n.Take + "/" + img.File + "?v=" + url.QueryEscape(n.Version)
 		}}
-	if resp.Newest {
-		if row, err := st.Version(v.Label); err == nil {
-			q.PushedAt, _ = project.ParseTime(row.Created)
+	if resp.Scope != "" {
+		seen := map[string]bool{}
+		target := s.manifestOf(v)
+		for _, source := range fam {
+			if resp.Scope == "review" && source.N > v.N {
+				continue
+			}
+			q.Version, q.Newest = source.Label, false
+			items, readErr := st.Sidebar(q)
+			if readErr != nil {
+				s.storeFailed(w, r, readErr)
+				return
+			}
+			var tm *bridge.TimeMap
+			if source.Label != v.Label && target != nil {
+				if origin := s.manifestOf(source); origin != nil {
+					m := bridge.BuildTimeMap(source.Label, v.Label, origin, target)
+					tm = &m
+				}
+			}
+			for _, item := range items {
+				if resp.Scope == "review" && source.Label != v.Label && item.Status != project.StatusOpen && item.Status != project.StatusQuestion && item.AnsweredIn != v.Label {
+					continue
+				}
+				key := fmt.Sprintf("%s:%d", item.Kind, item.ID)
+				if seen[key] {
+					continue
+				}
+				seen[key] = true
+				if tm != nil {
+					if item.T0 != nil {
+						t := tm.Map(*item.T0)
+						item.T0 = &t
+					}
+					if item.T1 != nil {
+						t := tm.Map(*item.T1)
+						item.T1 = &t
+					}
+				}
+				resp.Items = append(resp.Items, item)
+			}
+			pending, readErr := pendingJobs(st, source.Label)
+			if readErr != nil {
+				s.storeFailed(w, r, readErr)
+				return
+			}
+			resp.Jobs = append(resp.Jobs, pending...)
 		}
-	}
-	if resp.Items, err = st.Sidebar(q); err != nil {
-		s.storeFailed(w, r, err)
-		return
-	}
-	if resp.Newest {
-		if resp.Items, err = s.carry(st, v, fam, resp.Items); err != nil {
+
+		q.Version, q.Newest = v.Label, true
+		questions, readErr := st.Sidebar(q)
+		if readErr != nil {
+			s.storeFailed(w, r, readErr)
+			return
+		}
+		for _, item := range questions {
+			if resp.Scope == "review" {
+				if origin, ok := s.version(item.Version); ok && origin.N > v.N {
+					continue
+				}
+				if item.Note != nil && !seen[fmt.Sprintf("note:%d", *item.Note)] {
+					continue
+				}
+			}
+			key := fmt.Sprintf("%s:%d", item.Kind, item.ID)
+			if item.Kind != "question" || seen[key] {
+				continue
+			}
+			if item.Note != nil {
+				for _, note := range resp.Items {
+					if note.Kind == "note" && note.ID == *item.Note {
+						item.T0, item.T1 = note.T0, note.T1
+						break
+					}
+				}
+			}
+			seen[key] = true
+			resp.Items = append(resp.Items, item)
+		}
+	} else {
+		if resp.Newest {
+			if row, err := st.Version(v.Label); err == nil {
+				q.PushedAt, _ = project.ParseTime(row.Created)
+			}
+		}
+		if resp.Items, err = st.Sidebar(q); err != nil {
+			s.storeFailed(w, r, err)
+			return
+		}
+		if resp.Newest {
+			if resp.Items, err = s.carry(st, v, fam, resp.Items); err != nil {
+				s.storeFailed(w, r, err)
+				return
+			}
+		}
+		if resp.Jobs, err = pendingJobs(st, v.Label); err != nil {
 			s.storeFailed(w, r, err)
 			return
 		}
 	}
-	if resp.Jobs, err = pendingJobs(st, v.Label); err != nil {
-		s.storeFailed(w, r, err)
-		return
+	if automation, e := st.Automation(); e == nil {
+		for i := range resp.Items {
+			item := &resp.Items[i]
+			if item.Kind != "note" {
+				continue
+			}
+			for j := len(automation.Tasks) - 1; j >= 0; j-- {
+				task := automation.Tasks[j]
+				if item.Status == project.StatusOpen && task.State == "completed" {
+					continue
+				}
+				if slices.Contains(task.Notes, item.ID) {
+					task.Lease = ""
+					item.Work = &task
+					break
+				}
+			}
+		}
 	}
 	s.json(w, r, http.StatusOK, resp)
 }

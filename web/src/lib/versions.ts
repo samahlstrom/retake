@@ -44,6 +44,7 @@ export function streamChip(v: Pick<Version, 'stream'>): string | null {
   const s = v.stream;
   if (!s || s.state === 'complete') return null;
   if (s.state === 'pending') return 'pending';
+  if (s.state === 'stopped') return 'stopped';
   return s.total > 0 ? `rendering ${s.done}/${s.total}` : 'rendering';
 }
 

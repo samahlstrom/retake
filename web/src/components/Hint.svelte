@@ -6,28 +6,24 @@
     gone,
     touch = false,
     inline = false,
-    compare = true,
     viewOnly = false,
-  }: { gone: boolean; touch?: boolean; inline?: boolean; compare?: boolean; viewOnly?: boolean } = $props();
-
-  const sep = ' · '; // an expression: Svelte would trim it as leading whitespace of the {#if} block
+  }: { gone: boolean; touch?: boolean; inline?: boolean; viewOnly?: boolean } = $props();
 </script>
 
 {#if !touch}
   <div id="hint" class="float" class:gone>
     {#if viewOnly}
-      <b>View only</b> · <b>Space</b> play · <b>←/→</b> 5 s · <b>C</b> compare version
+      <b>View only</b> · <b>Space</b> play · <b>←/→</b> 5 s
     {:else}
-      <b>R</b> record · <b>Space</b> play · <b>←/→</b> 5 s · <b>1–4</b> pen color · <b>E</b> eraser · <b>Z</b> undo ·
-      <b>C</b> compare version
+      <b>R</b> record · <b>Space</b> play · <b>←/→</b> 5 s · <b>1–4</b> pen color · <b>E</b> eraser · <b>Z</b> undo
     {/if}
   </div>
 {:else}
   <div id="hint" class={inline ? 'touch inline' : 'float touch'} class:gone>
     {#if viewOnly}
-      <b>View only</b>{#if compare}{sep}<b>⇄</b> compare{/if}
+      <b>View only</b>
     {:else}
-      Tap <b class="recdot">●</b> to record · draw while recording{#if compare}{sep}<b>⇄</b> compare{/if}
+      Tap <b class="recdot">●</b> to record · draw while recording
     {/if}
   </div>
 {/if}

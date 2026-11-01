@@ -433,3 +433,30 @@ func TestDefaultBackoff(t *testing.T) {
 		t.Fatalf("backoff = %v, %v", DefaultBackoff(1), DefaultBackoff(2))
 	}
 }
+
+type clipTranscriber struct{ *fakeTranscriber }
+
+func (f clipTranscriber) CompletedTake(_ context.Context, dir string) error {
+	f.w.note("clip " + filepath.Base(dir))
+	return nil
+}
+
+func TestClipJobUsesCompletedAudioAndFinalJobUsesWholeTake(t *testing.T) {
+	w := newWorld(t)
+	tr := clipTranscriber{&fakeTranscriber{w: w}}
+	stop := start(t, w.runner(Engines{Notes: fakeNotes{w}, Transcriber: func() (TakeTranscriber, error) { return tr, nil }}))
+	defer stop()
+	first, err := w.st.QueueClips("v7", take, w.dir, "first-clip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitState(t, w.st, first[1].ID, project.JobDone)
+	final, err := w.st.QueueTake("v7", take, w.dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitState(t, w.st, final[1].ID, project.JobDone)
+	if got := w.ran(); !slices.Equal(got, []string{"clip " + take, "notes v7", "transcribe " + take, "notes v7"}) {
+		t.Fatalf("wrong pipeline: %v", got)
+	}
+}

@@ -18,5 +18,11 @@
     ><span class="dot"></span><span id="recLabel">{label}</span><span class="k" id="recKey">{seg ? seg.id : 'R'}</span
     ></button
   >
-  <button id="done" class:saved={review.doneSaved} onclick={review.done}>{review.doneSaved ? 'Saved' : 'Done'}</button>
+  <button
+    id="done"
+    class:saved={review.doneSaved}
+    disabled={review.finishing}
+    title="Stop and save feedback. Comments stay open until their edits are completed."
+    onclick={review.done}>{review.finishing ? 'Saving…' : review.doneSaved ? 'Saved' : 'Finish review'}</button
+  >
 </div>

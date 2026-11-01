@@ -7,11 +7,11 @@
   //    round Record at the right edge, and a slim bar at the bottom with play, time, the timeline, version and flip.
   // A viewer's share link has no pen, undo, Record or Done; the hint says "View only".
   import type { Review } from '../lib/review.svelte';
+  import VersionPicker from './VersionPicker.svelte';
+  import AgentPanel from './AgentPanel.svelte';
   import PlayButton from './PlayButton.svelte';
   import Timeline from './Timeline.svelte';
-  import VersionPicker from './VersionPicker.svelte';
   import PenColors from './PenColors.svelte';
-  import FlipButton from './FlipButton.svelte';
   import UndoButton from './UndoButton.svelte';
   import PhoneRecord from './PhoneRecord.svelte';
   import Hint from './Hint.svelte';
@@ -25,7 +25,13 @@
   </div>
 {/snippet}
 {#snippet done()}
-  <button id="done" class:saved={review.doneSaved} onclick={review.done}>{review.doneSaved ? 'Saved' : 'Done'}</button>
+  <button
+    id="done"
+    class:saved={review.doneSaved}
+    disabled={review.finishing}
+    title="Stop and save feedback. Comments stay open until their edits are completed."
+    onclick={review.done}>{review.finishing ? 'Saving…' : review.doneSaved ? 'Saved' : 'Finish review'}</button
+  >
 {/snippet}
 
 {#if review.layoutMode === 'portrait'}
@@ -34,9 +40,9 @@
     <div class="prow">
       <PlayButton paused={review.paused} onclick={review.togglePlay} />
       {@render time()}
-      <span class="grow"></span>
       <VersionPicker {review} />
-      <FlipButton {review} />
+      <AgentPanel {review} />
+      <span class="grow"></span>
     </div>
     {#if review.canRecord}
       <div class="prow">
@@ -52,7 +58,7 @@
     {/if}
   </div>
   <div id="precord">
-    <Hint gone={review.hintGone} touch inline compare={review.versions.length > 1} viewOnly={!review.canRecord} />
+    <Hint gone={review.hintGone} touch inline viewOnly={!review.canRecord} />
     {#if review.canRecord}
       <div class="prow">
         <PhoneRecord {review} />
@@ -84,6 +90,6 @@
     {@render time()}
     <Timeline {review} />
     <VersionPicker {review} />
-    <FlipButton {review} />
+    <AgentPanel {review} />
   </div>
 {/if}

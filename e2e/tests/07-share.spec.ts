@@ -96,7 +96,7 @@ test('a viewer link: the review plays, with no Record, no pen and a "View only" 
     await expect(page.locator('#rec')).toHaveCount(0);
     await expect(page.locator('#done')).toHaveCount(0);
     await expect(page.locator('.sw')).toHaveCount(0);
-    await expect(page.locator('#hint')).toHaveText('View only · Space play · ←/→ 5 s · C compare version');
+    await expect(page.locator('#hint')).toHaveText('View only · Space play · ←/→ 5 s');
     await expect(page.locator('#hint')).not.toHaveClass(/gone/);
 
     // R only says so, and a drag over the video draws nothing.

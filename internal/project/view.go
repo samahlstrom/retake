@@ -8,6 +8,11 @@ import (
 
 // Item is one entry of the review page's sidebar (GET /api/notes, spec/notes.md "What the sidebar shows").
 type Item struct {
+	Work       *EditingTask `json:"work,omitempty"`
+	Version    string       `json:"version,omitempty"`
+	Take       string       `json:"take,omitempty"`
+	Seg        string       `json:"seg,omitempty"`
+	Drawings   []string     `json:"drawings,omitempty"`
 	ID         int64        `json:"id"`   // the note's id, or the question thread's id (answer_to of an answer)
 	Kind       string       `json:"kind"` // note | question
 	Status     Status       `json:"status"`
@@ -41,7 +46,12 @@ type CarriedFrom struct {
 func ItemOf(n Note) Item {
 	t0, t1 := n.T0, n.T1
 	it := Item{ID: n.ID, Kind: "note", Status: n.Status, T0: &t0, T1: &t1, Text: n.Text, By: n.Author,
-		Targets: n.Detail.Targets}
+		Targets: n.Detail.Targets, Take: n.Take, Seg: n.Seg, Version: n.Version}
+	for _, stroke := range n.Detail.Strokes {
+		if !slices.Contains(it.Drawings, stroke.Color) {
+			it.Drawings = append(it.Drawings, stroke.Color)
+		}
+	}
 	if n.Status == StatusAnswered || n.Status == StatusAccepted {
 		it.Change, it.AnsweredIn = n.Change, n.AnsweredIn
 	}
@@ -176,7 +186,7 @@ func (s *Store) questionItem(th Thread) (Item, error) {
 		t = *th.T
 	}
 	it := Item{ID: th.ID, Kind: "question", Status: StatusQuestion, T0: &t, T1: &t, Text: th.Text, By: th.By,
-		Options: th.Options, Note: th.Note}
+		Options: th.Options, Note: th.Note, Version: th.Version}
 	if th.Note != nil {
 		n, err := s.Note(*th.Note)
 		if err != nil {

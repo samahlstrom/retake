@@ -48,6 +48,7 @@ var ErrNoTakes = errors.New("no review takes")
 
 // Options tune a build.
 type Options struct {
+	Live            bool    // return comments immediately without generating snapshots or writing artifacts
 	Window          float64 // 0 = DefaultWindow
 	MaxSpan         float64 // 0 = DefaultMaxSpan
 	VideoTranscript string  // the edit's own VO words (JSON), quoted under (audio) comments
@@ -304,6 +305,23 @@ func run(ctx context.Context, in input, opts Options) (*Result, error) {
 
 	window, maxSpan := opts.window(), opts.maxSpan()
 	moments, comments, flags := build(takes, video, window, maxSpan)
+	if opts.Live {
+		recording := map[string]bool{}
+		for _, t := range takes {
+			for _, sg := range t.segments {
+				if truthy(sg.get("recording")) {
+					recording[t.folder+"/"+sg.id] = true
+				}
+			}
+		}
+		keep := comments[:0:0]
+		for _, c := range comments {
+			if !recording[c.TakeFolder()+"/"+c.SegID()] {
+				keep = append(keep, c)
+			}
+		}
+		moments, comments, flags = rebuild(keep, window, maxSpan)
+	}
 	dropped := 0
 	for _, t := range takes {
 		if !t.inherited {
@@ -329,8 +347,10 @@ func run(ctx context.Context, in input, opts Options) (*Result, error) {
 		attachVO(comments, vw)
 	}
 
-	if err := snapshots(ctx, in.out, video, moments, opts); err != nil {
-		return nil, err
+	if !opts.Live {
+		if err := snapshots(ctx, in.out, video, moments, opts); err != nil {
+			return nil, err
+		}
 	}
 
 	res := &Result{Dir: in.out, MDPath: filepath.Join(in.out, "notes.md"), JSONPath: filepath.Join(in.out, "notes.json"),
@@ -373,6 +393,9 @@ func run(ctx context.Context, in input, opts Options) (*Result, error) {
 	}
 	for _, c := range comments {
 		res.Doc.Chronological = append(res.Doc.Chronological, c.Order)
+	}
+	if opts.Live {
+		return res, nil
 	}
 	raw, err := jsonx.Marshal(res.Doc)
 	if err == nil {

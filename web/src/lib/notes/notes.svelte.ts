@@ -28,6 +28,10 @@ export interface EventSourceLike {
 }
 
 export interface NotesDeps {
+  onAutomation?: () => void;
+  continuous?: boolean;
+  review?: boolean;
+  onLoad?: (label: string) => void;
   fetch?: typeof fetch;
   eventSource?: (url: string) => EventSourceLike;
   storage?: () => Pick<Storage, 'getItem' | 'setItem'> | null;
@@ -58,6 +62,7 @@ export function normalize(body: Partial<NotesResponse> | null, label: string): N
   return {
     version: typeof body?.version === 'string' ? body.version : label,
     newest: body?.newest === true,
+    ...(body?.scope === 'video' || body?.scope === 'review' ? { scope: body.scope } : {}),
     items: items.filter(
       (it): it is NoteItem => !!it && typeof it.id === 'number' && typeof it.t0 === 'number' && isFinite(it.t0),
     ),
@@ -78,6 +83,9 @@ export class Notes {
   phoneOpen = $state(false);
   /** The sidebar has had something to show on this page (it then stays, see view.presence). */
   everShown = $state(false);
+  deleting = $state(false);
+  deleteError = $state('');
+  deleted = $state<number[]>([]);
 
   #label: string | null = null;
   #req = 0;
@@ -125,7 +133,9 @@ export class Notes {
     if (!label) return;
     const req = ++this.#req;
     try {
-      const r = await this.#fetch(notesUrl(label));
+      const r = await this.#fetch(
+        notesUrl(label) + (this.deps.review ? '&scope=review' : this.deps.continuous ? '&scope=video' : ''),
+      );
       if (req !== this.#req) return;
       if (!r.ok) {
         await r.body?.cancel().catch(() => {});
@@ -135,6 +145,8 @@ export class Notes {
       const body = parse<NotesResponse>(await r.text());
       if (req !== this.#req) return;
       this.res = normalize(body, label);
+      this.deps.onLoad?.(label);
+      if (Array.isArray(body?.jobs)) this.jobs = body.jobs;
       if (!this.available) {
         this.available = true;
         this.connect();
@@ -172,6 +184,10 @@ export class Notes {
       const j = parse<Job>(e.data);
       if (j && j.id != null && typeof j.kind === 'string') this.onJob(j);
     });
+    es.addEventListener('automation', (e) => {
+      seen(e);
+      this.deps.onAutomation?.();
+    });
     es.addEventListener('version', (e) => {
       seen(e);
       const d = parse<VersionEvent>(e.data);
@@ -193,6 +209,7 @@ export class Notes {
 
   onJob(j: Job): void {
     this.jobs = applyJob(this.jobs, j);
+    if (j.kind === 'notes' && j.state === 'done') void this.refresh();
   }
 
   /** Dismiss a shown failure. */
@@ -211,6 +228,33 @@ export class Notes {
       return false;
     }
   }
+
+  /** Delete only after the server accepts it; preserve an undo stack for several quick deletions. */
+  async deleteComment(id: number, restore = false): Promise<boolean> {
+    if (this.deleting) return false;
+    this.deleting = true;
+    this.deleteError = '';
+    try {
+      const r = await this.#fetch(`api/notes/${enc(String(id))}/${restore ? 'restore' : 'delete'}`, { method: 'POST' });
+      await r.body?.cancel().catch(() => {});
+      if (!r.ok) throw new Error('request failed');
+      this.deleted = restore ? this.deleted.filter((n) => n !== id) : [...this.deleted.filter((n) => n !== id), id];
+      await this.refresh();
+      return true;
+    } catch {
+      this.deleteError = restore
+        ? 'Could not restore this comment. Try Undo again.'
+        : 'Could not delete this comment. Try again.';
+      return false;
+    } finally {
+      this.deleting = false;
+    }
+  }
+
+  undoDelete = async (): Promise<void> => {
+    const id = this.deleted.at(-1);
+    if (id !== undefined) await this.deleteComment(id, true);
+  };
 
   /** Done: the take is closed; the server queues its transcription and notes. Resolves to the HTTP status (0 when
    * unreachable). */

@@ -96,6 +96,15 @@ func (s *Server) classify(r *http.Request) (shared, ok bool) {
 
 // permFor is what a route needs (spec/team.md's route table).
 func permFor(method string, parts []string) team.Perm {
+	if len(parts) >= 2 && parts[0] == "api" && parts[1] == "worker" {
+		return team.PermAgent
+	}
+	if method == http.MethodPost && len(parts) >= 2 && parts[0] == "api" && parts[1] == "automation" {
+		if is(parts, "api", "automation", "tasks") || len(parts) == 5 && parts[4] == "answer" {
+			return team.PermRecord
+		}
+		return team.PermManage
+	}
 	if len(parts) == 1 && parts[0] == "mcp" {
 		return team.PermAgent
 	}
@@ -110,7 +119,7 @@ func permFor(method string, parts []string) team.Perm {
 			return team.PermWatch // a viewer's page watches a streamed version (spec/bridge.md, "Streaming")
 		}
 		if len(parts) == 4 && parts[0] == "api" &&
-			(parts[1] == "notes" && parts[3] == "reopen" || parts[1] == "versions" && parts[3] == "approve") {
+			(parts[1] == "notes" && (parts[3] == "reopen" || parts[3] == "delete" || parts[3] == "restore") || parts[1] == "versions" && parts[3] == "approve") {
 			return team.PermApprove
 		}
 		return team.PermRecord

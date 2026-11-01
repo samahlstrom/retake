@@ -109,6 +109,7 @@ func (s *Store) Threads(ids []int64) ([]Thread, error) {
 // Unanswered returns the questions that have no answer yet, oldest first.
 func (s *Store) Unanswered() ([]Thread, error) {
 	return queryThreads(s.db, `WHERE kind = 'question'
+		AND NOT EXISTS (SELECT 1 FROM note_deletions d WHERE d.note = threads.note)
 		AND NOT EXISTS (SELECT 1 FROM threads a WHERE a.answer_to = threads.id) ORDER BY id`)
 }
 

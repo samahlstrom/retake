@@ -295,10 +295,15 @@ func (f *Folder) Serve(ctx context.Context, ln net.Listener) (idle bool, err err
 }
 
 // Cards returns the home's cards, in the home's order (spec/home.md, "GET /api/home").
-func (f *Folder) Cards() []home.Card {
+func (f *Folder) Cards() []home.Card { return f.cards(nil) }
+
+func (f *Folder) cards(allowed func(string) bool) []home.Card {
 	found := f.rescan(false)
 	cards := make([]home.Card, 0, len(found))
 	for _, fd := range found {
+		if allowed != nil && !allowed(fd.Name) {
+			continue
+		}
 		fp := f.projectOf(fd)
 		if fp == nil {
 			continue
@@ -319,13 +324,8 @@ func (f *Folder) classify(r *http.Request) (shared, ok bool) {
 	if f.local[host] {
 		return server.Forwarded(r), true
 	}
-	if f.allow[host] {
+	if f.shareHost(host) {
 		return true, true
-	}
-	if st := f.homeStore(); st != nil {
-		if ok, err := st.HostAllowed(host); err == nil && ok {
-			return true, true
-		}
 	}
 	return false, false
 }
@@ -345,13 +345,7 @@ func (f *Folder) originOK(r *http.Request) bool {
 			return false
 		}
 		h = strings.ToLower(h)
-		if f.allow[h] {
-			return true
-		}
-		if st := f.homeStore(); st != nil {
-			ok, err := st.HostAllowed(h)
-			return err == nil && ok
-		}
+		return f.shareHost(h)
 	}
 	return false
 }
@@ -392,7 +386,10 @@ func (f *Folder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if len(parts) == 2 && parts[0] == "api" && parts[1] == "ping" {
 		perm = team.PermAny
 	}
-	role, _, ok := f.identify(w, r, shared, nil, perm, page)
+	if r.URL.Path == "/api/workspace" && r.Method == http.MethodPost {
+		perm = team.PermManage
+	}
+	role, _, scope, ok := f.identify(w, r, shared, nil, perm, page)
 	if !ok {
 		return
 	}
@@ -401,7 +398,9 @@ func (f *Folder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case page:
 		f.homePage(w, r)
 	case len(parts) == 2 && parts[0] == "api" && parts[1] == "home" && get:
-		f.apiHome(w, r, role)
+		f.apiHome(w, r, role, scope)
+	case r.URL.Path == "/api/workspace" && r.Method == http.MethodPost:
+		f.saveWorkspace(w, r)
 	case len(parts) == 2 && parts[0] == "api" && parts[1] == "ping" && get:
 		writeJSON(w, r, http.StatusOK, map[string]bool{"ok": true})
 	case len(parts) == 1 && parts[0] == "favicon.ico" && get:
@@ -418,7 +417,7 @@ func (f *Folder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // the request is for (nil on the home's own routes): its own store's Bearer tokens count there too. It answers a
 // refused request itself and returns ok false.
 func (f *Folder) identify(w http.ResponseWriter, r *http.Request, shared bool, fp *folderProject, perm team.Perm,
-	page bool) (role team.Role, author string, ok bool) {
+	page bool) (role team.Role, author, scope string, ok bool) {
 	tok, isBearer := "", false
 	if b := bearer(r); b != "" {
 		tok, isBearer = b, true
@@ -431,25 +430,31 @@ func (f *Folder) identify(w http.ResponseWriter, r *http.Request, shared bool, f
 		if shared || perm == team.PermAgent {
 			w.Header().Set("WWW-Authenticate", "Bearer")
 			f.refuse(w, r, http.StatusUnauthorized, "token required", page)
-			return "", "", false
+			return "", "", "", false
 		}
 		role = team.Owner
 	} else {
 		t, found := f.check(w, r, tok, isBearer, fp, page)
 		if !found {
-			return "", "", false
+			return "", "", "", false
 		}
-		role, author = team.Role(t.Role), t.Label
+		role, author, scope = team.Role(t.Role), t.Label, t.Scope
 	}
 	if !role.Can(perm) {
 		f.refuse(w, r, http.StatusForbidden, "not allowed", page)
-		return "", "", false
+		return "", "", "", false
 	}
-	return role, author, true
+	if scope != "" && fp != nil {
+		layout, err := f.workspace()
+		if err != nil || !layout.Allows(scope, fp.found.Name) {
+			f.refuse(w, r, http.StatusForbidden, "not allowed", page)
+			return "", "", "", false
+		}
+	}
+	return role, author, scope, true
 }
 
-// check looks a token up under the rate limit: the folder's home store, then (a Bearer token on a project's routes)
-// the project's own store.
+// check looks up folder and legacy video tokens under the same rate limit. Video tokens always carry a video scope.
 func (f *Folder) check(w http.ResponseWriter, r *http.Request, tok string, isBearer bool, fp *folderProject,
 	page bool) (project.Token, bool) {
 	key, now := server.ClientKey(r), f.opts.Now()
@@ -458,17 +463,35 @@ func (f *Folder) check(w http.ResponseWriter, r *http.Request, tok string, isBea
 		f.refuse(w, r, http.StatusTooManyRequests, "too many attempts", page)
 		return project.Token{}, false
 	}
-	stores := []*project.Store{f.homeStore()}
-	if fp != nil && isBearer {
-		stores = append(stores, fp.projectStore())
+	type tokenStore struct {
+		st    *project.Store
+		video string
+	}
+	stores := []tokenStore{{st: f.homeStore()}}
+	if fp != nil {
+		stores = append(stores, tokenStore{fp.projectStore(), fp.found.Name})
 	}
 	if team.WellFormed(tok) {
-		for _, st := range stores {
+		for _, fd := range f.rescan(false) {
+			if fp != nil && fd.Name == fp.found.Name {
+				continue
+			}
+			if video := f.projectOf(fd); video != nil {
+				stores = append(stores, tokenStore{video.projectStore(), fd.Name})
+			}
+		}
+	}
+	if team.WellFormed(tok) {
+		for _, entry := range stores {
+			st := entry.st
 			if st == nil {
 				continue
 			}
 			t, err := st.TokenByHash(team.Hash(tok))
 			if err == nil && t.Valid(now) {
+				if entry.video != "" {
+					t.Scope = "video:" + entry.video
+				}
 				return t, true
 			}
 			if err != nil && !errors.Is(err, project.ErrNotFound) {
@@ -551,7 +574,7 @@ func (f *Folder) projectRoute(w http.ResponseWriter, r *http.Request, shared boo
 	parts := splitPath(rest)
 	page := (r.Method == http.MethodGet || r.Method == http.MethodHead) &&
 		(len(parts) == 0 || len(parts) == 1 && parts[0] == "index.html")
-	role, author, ok := f.identify(w, r, shared, fp, server.PermFor(r.Method, rest), page)
+	role, author, _, ok := f.identify(w, r, shared, fp, server.PermFor(r.Method, rest), page)
 	if !ok {
 		return
 	}
@@ -563,8 +586,20 @@ func (f *Folder) projectRoute(w http.ResponseWriter, r *http.Request, shared boo
 }
 
 // apiHome is GET /api/home.
-func (f *Folder) apiHome(w http.ResponseWriter, r *http.Request, role team.Role) {
-	res := home.Response{Title: filepath.Base(f.opts.Dir), Role: string(role), Projects: f.Cards()}
+func (f *Folder) apiHome(w http.ResponseWriter, r *http.Request, role team.Role, scope string) {
+	layout, err := f.workspace()
+	if err != nil {
+		f.logf("workspace: %v", err)
+		writeJSON(w, r, http.StatusInternalServerError, map[string]string{"error": "could not load projects"})
+		return
+	}
+	cards := f.cards(func(video string) bool { return layout.Allows(scope, video) })
+	videos := make([]string, 0, len(cards))
+	for _, card := range cards {
+		videos = append(videos, card.Name)
+	}
+	visible := layout.Visible(scope, videos)
+	res := home.Response{Title: filepath.Base(f.opts.Dir), Role: string(role), Projects: cards, Workspace: &visible}
 	if role == team.Owner {
 		res.Folder = f.opts.Dir
 	}

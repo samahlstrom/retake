@@ -389,17 +389,18 @@ func TestFolderShareTokens(t *testing.T) {
 	if r := other.get("/api/home", shared(), cookie(ShareCookie, reviewer)); r.code != 401 {
 		t.Errorf("this folder's token there: %d", r.code)
 	}
-	// A project's own token: its project only (as Bearer), never the home or the other projects.
-	if r := x.get("/p/alpha/api/info", shared(), bearerTok(alphaOnly)); r.code != 200 {
-		t.Errorf("alpha's token on alpha: %d %s", r.code, r.body)
+	// A video's own token opens a filtered home and its video, never a different video.
+	scoped := x.home(t, shared(), bearerTok(alphaOnly))
+	if len(scoped.Projects) != 1 || scoped.Projects[0].Name != "alpha" {
+		t.Fatal(scoped)
 	}
-	for _, p := range []string{"/api/home", "/p/bravo/api/info"} {
-		if r := x.get(p, shared(), bearerTok(alphaOnly)); r.code != 401 {
-			t.Errorf("alpha's token on %s: %d", p, r.code)
+	for _, credential := range []reqOpt{bearerTok(alphaOnly), cookie(ShareCookie, alphaOnly)} {
+		if r := x.get("/p/alpha/api/info", shared(), credential); r.code != 200 {
+			t.Errorf("alpha's token on alpha: %d %s", r.code, r.body)
 		}
-	}
-	if r := x.get("/p/alpha/api/info", shared(), cookie(ShareCookie, alphaOnly)); r.code != 401 {
-		t.Errorf("alpha's token as a cookie: %d", r.code)
+		if r := x.get("/p/bravo/api/info", shared(), credential); r.code != 403 {
+			t.Errorf("alpha's token on bravo: %d %s", r.code, r.body)
+		}
 	}
 	// Locally, nothing is needed: the owner.
 	if h := x.home(t); h.Role != "owner" {

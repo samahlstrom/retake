@@ -26,6 +26,10 @@ Permissions by route:
 | `POST /api/session/<take>/data`, `/audio`, `/image`, `/done`, unknown POST paths (still 404) | record |
 | `POST /api/notes/<id>/reopen`, `POST /api/versions/<label>/approve` | approve |
 | `/mcp` (any method) | agent, by Bearer token only, local requests too |
+| `/api/worker/*` | agent, by Bearer token only, local requests too (spec/automation.md) |
+| `GET /api/automation` | watch |
+| `POST /api/automation/tasks`, `POST /api/automation/tasks/<id>/answer` | record |
+| `POST /api/automation`, other `POST /api/automation/tasks/<id>/<action>` | owner only |
 | `GET /s/<token>` | nothing: it is how a token arrives |
 
 A role without the permission gets 403 `{"error":"not allowed"}`.
@@ -200,3 +204,10 @@ The list as it stood:
   redacted.
 - Several projects on one server, with per-project share paths and cookies.
 - A named, fixed Cloudflare tunnel (`cloudflared tunnel run`), and an audit log of who used which token.
+
+### Share controls in the review UI
+
+Owners can create viewer/reviewer links from the player or project workspace, without using the CLI. Links last seven days. Folder links can be scoped to a named project, group or video (spec/home.md); the token's optional `scope` is enforced for every request. Older unscoped tokens retain their existing access. Tokens remain hashed and revocable. UI-created tunnels live with the serving process and stop when it stops. A link is reported ready only after the public host is available. No email or invitation is sent automatically.
+
+Comment deletion and restoration (`POST /api/notes/<id>/delete|restore`) require approve permission, like reopening
+feedback. Viewers, reviewer-only links and editing agents cannot delete other people's review history.

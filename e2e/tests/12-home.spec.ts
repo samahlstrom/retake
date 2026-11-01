@@ -74,6 +74,9 @@ async function openHome(page: Page): Promise<HomeCard[]> {
   if (page.url() !== server.url) await page.goto(server.url);
   await page.waitForFunction(() => window.__home?.loaded && window.__home.projects.length > 0, null,
     { timeout: 20_000, polling: 80 });
+  await page.locator('a.project-card[data-project="default"]').click();
+  await page.waitForURL(`${server.url}?project=default`);
+  await page.waitForFunction(() => window.__home?.loaded && window.__home.projects.length > 0);
   return page.evaluate(() => window.__home.projects);
 }
 
@@ -132,6 +135,26 @@ async function record(ui: Review, page: Page, touch = false): Promise<void> {
   await ui.waitFor(() => !window.__review.seg, 8000);
 }
 
+test('the main route opens Projects, then a project, then a video', async ({ page }) => {
+  await page.goto(server.url);
+  await expect(page.getByRole('heading', {name:'Projects',exact:true})).toBeVisible();
+  await expect(page.locator('video')).toHaveCount(0);
+  await expect(page.locator('a.card')).toHaveCount(0);
+  await page.locator('a.project-card[data-project="default"]').click();
+  await page.waitForURL(`${server.url}?project=default`);
+  await expect(page.locator('a.card')).toHaveCount(3);
+  await page.reload();
+  await expect(page.getByRole('heading', {name:'home-folder',exact:true})).toBeVisible();
+  await page.locator('a.card[data-name="alpha"]').click();
+  await page.waitForFunction(READY);
+  await page.getByRole('link',{name:'Back to home-folder',exact:true}).click();
+  await page.waitForURL(`${server.url}?project=default`);
+  await expect(page.locator('a.card')).toHaveCount(3);
+  await page.getByRole('link',{name:'Projects',exact:true}).click();
+  await page.waitForURL(server.url);
+  await expect(page.locator('a.project-card')).toHaveCount(1);
+});
+
 test('the home lists the projects with their first frames and statuses, to review first', async ({ browser }) => {
   const { context, page } = await newPage(browser);
   try {
@@ -142,7 +165,7 @@ test('the home lists the projects with their first frames and statuses, to revie
       ['charlie', 'v3', 'reviewed', 'p/charlie/api/poster'],
     ]);
     expect(await cards(page)).toEqual(['alpha v2 To review', 'bravo v1 To review', 'charlie v3 Reviewed']);
-    await expect(page.locator('#todo')).toHaveText('2 to review');
+    await expect(page.locator('#todo')).toContainText('2 to review');
     await expect(page.locator('h1')).toHaveText('home-folder');
     await expect(page.locator('a.card[data-name="alpha"] .len')).toHaveText('0:40');
     await thumbsLoaded(page);
@@ -160,6 +183,49 @@ test('the home lists the projects with their first frames and statuses, to revie
   } finally {
     await context.close();
   }
+});
+
+test('project dropdowns have styled menus and support keyboard selection', async ({page}) => {
+  await openHome(page);
+  const filter=page.getByRole('combobox',{name:'Review status',exact:true});
+  await filter.focus();
+  await page.keyboard.press('Space');
+  const menu=page.getByRole('listbox',{name:'Review status',exact:true});
+  await expect(menu).toBeVisible();
+  const style=await menu.evaluate(el=>({background:getComputedStyle(el).backgroundColor,radius:getComputedStyle(el).borderRadius}));
+  expect(style).toEqual({background:'rgb(36, 36, 40)',radius:'10px'});
+  await page.keyboard.press('End');
+  await page.keyboard.press('Enter');
+  await expect(filter).toHaveText('Being edited');
+  await expect(page.getByText('No videos match these filters.')).toBeVisible();
+  await filter.click();
+  await page.getByRole('option',{name:'All statuses',exact:true}).click();
+  await expect(page.locator('a.card')).toHaveCount(3);
+  await page.setViewportSize({width:390,height:844});
+  await page.getByRole('combobox',{name:'Move alpha',exact:true}).click();
+  const move=page.getByRole('listbox',{name:'Move alpha',exact:true});
+  await expect(move).toBeVisible();
+  const bounds=await move.boundingBox();
+  expect(bounds!.x).toBeGreaterThanOrEqual(0);
+  expect(bounds!.x+bounds!.width).toBeLessThanOrEqual(390);
+  await page.keyboard.press('Escape');
+  await expect(move).toHaveCount(0);
+  await page.route('**/api/home', async route => {
+    const response = await route.fetch();
+    const body = await response.json();
+    body.workspace.projects[0].groups = Array.from({length: 24}, (_, i) => ({id: `group-${i}`, title: `Group ${i + 1}`}));
+    await route.fulfill({response, json: body});
+  });
+  await page.reload();
+  await page.getByRole('combobox',{name:'Move alpha',exact:true}).click();
+  await page.keyboard.press('End');
+  const viewport = move.locator('[data-select-viewport]');
+  await expect.poll(() => viewport.evaluate(el => el.scrollTop)).toBeGreaterThan(0);
+  const last = await page.getByRole('option',{name:'home-folder · Group 24',exact:true}).boundingBox();
+  const scroller = await viewport.boundingBox();
+  expect(last!.y).toBeGreaterThanOrEqual(scroller!.y);
+  expect(last!.y + last!.height).toBeLessThanOrEqual(scroller!.y + scroller!.height + 1);
+  await page.keyboard.press('Escape');
 });
 
 test('a card opens its review page with the poster; Done makes it Reviewed; Next video goes on', async ({ browser }) => {
@@ -186,7 +252,9 @@ test('a card opens its review page with the poster; Done makes it Reviewed; Next
     await ui.waitFor(() => window.__review.take.closed && !window.__review.take.saving, 15_000);
     await expect(page.locator('#nextVideo')).toBeVisible();
     await expect(page.locator('#nextVideo')).toHaveText(/Next video/);
-    expect(await homeStatus(page)).toMatchObject({ alpha: 'reviewed', bravo: 'to_review', charlie: 'reviewed' });
+    const statuses = await homeStatus(page);
+    expect(statuses).toMatchObject({ bravo: 'to_review', charlie: 'reviewed' });
+    expect(['reviewed', 'being_edited']).toContain(statuses.alpha); // Notes may finish processing before the next read.
 
     await page.locator('#nextVideo').click();
     await page.waitForURL(`${server.url}p/bravo/`);
@@ -199,7 +267,7 @@ test('a card opens its review page with the poster; Done makes it Reviewed; Next
     await page.locator('#allVideos').click();
     await page.waitForURL(server.url);
     await openHome(page);
-    expect(await cards(page)).toEqual(['bravo v1 To review', 'alpha v2 Reviewed', 'charlie v3 Reviewed']);
+    expect(await cards(page)).toEqual(['bravo v1 To review', expect.stringMatching(/^alpha v2 (Reviewed|Being edited)$/), 'charlie v3 Reviewed']);
   } finally {
     await context.close();
   }
@@ -279,6 +347,44 @@ test('outside a home the review page is as it was', async () => {
   // other specs' pages, which never show #allVideos); here, the folder server's own 404s.
   const res = await fetch(`${server.url}p/nope/api/info`);
   expect(res.status).toBe(404);
+});
+
+test('owners organize projects and groups without moving their videos', async ({ page }) => {
+  await page.goto(server.url);
+  await page.getByRole('button',{name:'New project',exact:true}).click();
+  await page.getByLabel('Project name',{exact:true}).fill('Launch');
+  await page.getByRole('button',{name:'Create',exact:true}).click();
+  await page.locator('a.project-card').filter({hasText:'Launch'}).click();
+  await page.getByRole('button',{name:'New group',exact:true}).click();
+  await page.getByLabel('Group name',{exact:true}).fill('Shorts');
+  await page.getByRole('button',{name:'Create',exact:true}).click();
+  await expect(page.getByRole('region',{name:'Shorts',exact:true})).toBeVisible();
+  await page.goto(`${server.url}?project=default`);
+  await page.getByRole('combobox',{name:'Move alpha',exact:true}).click();
+  await page.getByRole('option',{name:'Launch · Shorts',exact:true}).click();
+  await expect(page.locator('a.card[data-name="alpha"]')).toHaveCount(0);
+  await page.goto(server.url);
+  await page.locator('a.project-card').filter({hasText:'Launch'}).click();
+  await page.reload();
+  await expect(page.getByRole('region',{name:'Shorts',exact:true}).locator('a.card[data-name="alpha"]')).toBeVisible();
+  await page.locator('a.card[data-name="alpha"]').click();
+  await page.waitForURL(`${server.url}p/alpha/`);
+  await page.waitForFunction(READY);
+  await expect(page.getByRole('link',{name:'Back to Launch',exact:true})).toBeVisible();
+});
+
+test('a failed move keeps the saved dropdown selection', async ({page}) => {
+  await page.goto(server.url);
+  await page.locator('a.project-card').filter({hasText:'Launch'}).click();
+  const move=page.getByRole('combobox',{name:'Move alpha',exact:true});
+  await expect(move).toHaveText('Launch · Shorts');
+  await page.route('**/api/workspace',route=>route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:'Could not save projects'})}));
+  await move.click();
+  await page.getByRole('option',{name:'home-folder · Ungrouped',exact:true}).click();
+  await expect(page.getByRole('alert')).toHaveText('Could not save projects');
+  await expect(move).toHaveText('Launch · Shorts');
+  await move.click();
+  await expect(page.getByRole('option',{name:'Launch · Shorts',exact:true})).toHaveAttribute('aria-selected','true');
 });
 
 test('no uncaught page errors', async () => {

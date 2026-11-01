@@ -402,3 +402,111 @@ button {
     min-width: 132px;
   }
 }
+
+/* Timeline comment markers also work with keyboard focus and touch. */
+#timeline .comment-marker {
+  position: absolute;
+  top: calc(50% - 18px);
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  transform: translateX(-50%);
+  border: 2px solid var(--bar);
+  border-radius: 50%;
+  background: #b7a2ff;
+  z-index: 2;
+}
+#timeline .comment-marker.resolved {
+  background: #79b696;
+}
+#timeline .comment-marker:hover,
+#timeline .comment-marker:focus-visible {
+  outline: 2px solid #e5dfff;
+  outline-offset: 2px;
+  z-index: 3;
+}
+#timeline #tip {
+  z-index: 10;
+  max-width: min(320px, 80vw);
+  width: max-content;
+  padding: 10px 12px;
+  border: 1px solid #414149;
+  border-radius: 8px;
+  background: #222226;
+  color: #e1e1e8;
+  box-shadow: 0 8px 28px #0008;
+  white-space: normal;
+  text-align: left;
+  font:
+    12px/1.5 Inter,
+    system-ui,
+    sans-serif;
+}
+#tip .tip-time {
+  color: #c5baff;
+  font-variant-numeric: tabular-nums;
+}
+#tip .tip-comment {
+  width: 280px;
+  max-width: 65vw;
+  padding-top: 8px;
+}
+#tip .tip-comment > span {
+  display: block;
+  color: #a3a3af;
+  font-size: 11px;
+}
+#tip .tip-comment p {
+  margin: 5px 0 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+/* Audio and comments share the upper lane; pen marks keep their own lower lane. */
+#timeline .comment-marker {
+  animation: comment-arrive 220ms ease-out;
+}
+@keyframes comment-arrive {
+  from {
+    opacity: 0;
+    scale: 0.5;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+  }
+}
+#timeline .drawing-marker {
+  position: absolute;
+  top: calc(50% + 4px);
+  width: 10px;
+  height: 14px;
+  padding: 0;
+  transform: translateX(-50%);
+  border: 0;
+  background: transparent;
+  z-index: 2;
+}
+#timeline .drawing-marker::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 2px;
+  width: 2px;
+  height: 7px;
+  background: var(--drawing-color);
+}
+#timeline .drawing-marker:hover,
+#timeline .drawing-marker:focus-visible {
+  outline: 1px solid #e5dfff;
+  border-radius: 3px;
+  z-index: 3;
+}
+@media (prefers-reduced-motion: reduce) {
+  #timeline .comment-marker {
+    animation: none;
+  }
+}

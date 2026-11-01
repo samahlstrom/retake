@@ -46,3 +46,30 @@ describe('the home state', () => {
     expect([...home.broken]).toEqual(['a']);
   });
 });
+
+it('keeps project organization on save and refreshes conflicts without overwriting', async () => {
+  let conflict = false;
+  const layout = { revision: 3, projects: [{ id: 'default', title: 'Shows', groups: [] }], placements: [] };
+  const home = new Home({
+    fetch: (async (_url: string, init?: RequestInit) => {
+      if (init?.method === 'POST')
+        return conflict
+          ? answer(409, { error: 'Changed in another window' })
+          : answer(200, { ...JSON.parse(String(init.body)), revision: 4 });
+      return answer(200, { title: 'Shows', role: 'owner', projects: [{ name: 'alpha' }], workspace: layout });
+    }) as typeof fetch,
+  });
+  await home.refresh();
+  expect(home.videos('default')).toHaveLength(1);
+  expect(await home.save((w) => w.projects.push({ id: 'launch', title: 'Launch', groups: [] }))).toBe(true);
+  expect(home.workspace.projects).toHaveLength(2);
+  expect(home.workspace.revision).toBe(4);
+  conflict = true;
+  expect(
+    await home.save((w) => {
+      w.projects[0].title = 'My title';
+    }),
+  ).toBe(false);
+  expect(home.saveError).toBe('Changed in another window');
+  expect(home.workspace.projects[0].title).toBe('Shows');
+});

@@ -35,6 +35,7 @@ function sampleTake(): Take {
   const s1 = newSegment(t, rec, 'audio/webm;codecs=opus', { version: 'v6', flip: false, videoTime: 8.1973 });
   s1.p0 = 100.0491;
   s1.p1 = 108.1244;
+  s1.finalized = true;
   s1.v1 = 10.2391;
   s1.vmax = 10.2391;
   t.segments.push(s1);
@@ -110,6 +111,7 @@ describe('serialize (the POST /data body)', () => {
       'video_end',
       'video_min',
       'video_max',
+      'voice',
     ]);
     expect(Object.keys(d.strokes[0])).toEqual([
       'id',
@@ -188,6 +190,7 @@ describe('serialize (the POST /data body)', () => {
       video_end: 7.25,
       video_min: 5,
       video_max: 5,
+      voice: { bin: 0.25, bins: [] },
     });
     expect(d.segments[0].recording).toBe(false);
     expect(d.session.recorded).toBe(10.575); // 8.0753 + 2.5
@@ -362,7 +365,8 @@ describe('take format v1.1: images, answers, closed', () => {
       ['S2', undefined],
       ['S3', 21],
     ]);
-    expect(Object.keys(d.segments[2]).at(-1)).toBe('answer_to');
+    expect(d.segments[2].answer_to).toBe(21);
+    expect(d.segments[2].voice).toEqual({ bin: 0.25, bins: [] });
   });
 
   it('a closed take says so in its session', () => {
@@ -380,4 +384,19 @@ describe('take format v1.1: images, answers, closed', () => {
     archive(t, hist, binCount(40));
     expect(hist.images).toEqual([{ url: 'blob:x', video_t: 9.123456, box: [0.123456, 0.2, 0.3, 0.16875] }]);
   });
+});
+
+it('keeps stopped audio in progress until the recorder and final upload finish', () => {
+  const t = sampleTake();
+  const seg = t.segments[0];
+  seg.finalized = false;
+  expect(serialize(t, clock).segments[0].recording).toBe(true);
+  seg.finalized = true;
+  seg.stored = 100;
+  seg.uploaded = 99;
+  expect(serialize(t, clock).segments[0].recording).toBe(true);
+  seg.uploaded = 100;
+  expect(serialize(t, clock).segments[0].recording).toBe(false);
+  seg.size = 101; // final recorder chunk is still waiting for the local buffer
+  expect(serialize(t, clock).segments[0].recording).toBe(true);
 });

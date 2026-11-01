@@ -41,7 +41,7 @@ function audioOnDisk(): { dir: string; file: string; size: number }[] {
 }
 
 test.beforeAll(async ({ browser }) => {
-  fam = family('crash', ['v5', 'v6', 'v7']);
+  fam = family('crash', ['v5', 'v6']);
   server = await startServer('crash', fam.files.v6!, PORTS.crash);
   proxy = new FailingProxy(PORTS.crashProxy, PORTS.crash);
   await proxy.start();

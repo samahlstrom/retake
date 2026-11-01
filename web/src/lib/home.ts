@@ -31,7 +31,33 @@ export interface HomeResponse {
   folder?: string;
   role: string;
   projects: Card[];
+  workspace?: Workspace;
 }
+
+export interface WorkspaceProject {
+  id: string;
+  title: string;
+  groups: { id: string; title: string }[];
+}
+
+export interface Workspace {
+  revision: number;
+  projects: WorkspaceProject[];
+  placements: { video: string; project: string; group: string }[];
+}
+
+/** Project organization, independent of where each video's files live. */
+export const workspaceOf = (home: HomeResponse): Workspace =>
+  home.workspace ?? {
+    revision: 0,
+    projects: [{ id: 'default', title: home.title || 'My project', groups: [] }],
+    placements: [],
+  };
+
+export const placementOf = (workspace: Workspace, video: string) =>
+  workspace.placements.find((p) => p.video === video) ?? { video, project: 'default', group: '' };
+
+export const workspaceUrl = (home: string, id: string): string => `${home}?project=${encodeURIComponent(id)}`;
 
 export const STATUS_TEXT: Record<Status, string> = {
   to_review: 'To review',
@@ -79,7 +105,10 @@ export function normalizeHome(body: unknown): HomeResponse {
       thumb: str(c.thumb),
     });
   }
-  return { title: str(b.title), folder: str(b.folder) || undefined, role: str(b.role), projects };
+  const result: HomeResponse = { title: str(b.title), folder: str(b.folder) || undefined, role: str(b.role), projects };
+  const w = b.workspace as Workspace | undefined;
+  if (w && Array.isArray(w.projects) && Array.isArray(w.placements)) result.workspace = w;
+  return result;
 }
 
 /** Where a review page sits in a home: its path ends in /p/<name>/ (or /p/<name>/index.html). null: not in one. */

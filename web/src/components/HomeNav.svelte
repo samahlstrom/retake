@@ -12,7 +12,7 @@
 </script>
 
 {#if review.homeAvailable}
-  <a id="allVideos" class="navpill back" href={review.homeHref} aria-label="All videos" title="All videos"
+  <a id="allVideos" class="navpill back" href={review.homeHref} aria-label="Projects" title="Projects"
     ><svg viewBox="0 0 24 24" aria-hidden="true"
       ><path
         d="M14.5 6 8.5 12l6 6"
@@ -22,8 +22,13 @@
         stroke-linecap="round"
         stroke-linejoin="round"
       /></svg
-    ><span class="label">All videos</span></a
+    ><span class="label">Projects</span></a
   >
+  {#if review.homeProject}
+    <a class="navpill containing" href={review.projectHref} aria-label={`Back to ${review.homeProject.title}`}
+      >{review.homeProject.title}</a
+    >
+  {/if}
   {#if review.doneSaved && review.homeNext}
     <a
       id="nextVideo"
@@ -74,6 +79,14 @@
     width: 16px;
     height: 16px;
   }
+  .containing {
+    top: 14px;
+    left: 120px;
+    max-width: calc(100vw - 270px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+  }
   .next {
     right: 18px;
     bottom: 22px;
@@ -104,6 +117,12 @@
   :global(html[data-phone]) .back svg {
     width: 22px;
     height: 22px;
+  }
+  :global(html[data-phone]) .containing {
+    left: 58px;
+    top: 8px;
+    max-width: calc(100vw - 180px);
+    line-height: 30px;
   }
   :global(html[data-phone]) .next {
     right: 10px;

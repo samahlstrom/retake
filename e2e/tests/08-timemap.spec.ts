@@ -82,32 +82,13 @@ async function press(key: string) {
   return ui.state();
 }
 
-test('C flips to the matching moment, and back', async () => {
+test('current video opens at the mapped timeline without history controls', async () => {
   await ui.open(server.url);
-  expect(await page.evaluate(() => window.__review.view)).toMatchObject({ base: 'v2', shown: 'v2' });
+  expect(await page.evaluate(() => window.__review.view)).toMatchObject({base:'v2', shown:'v2'});
   await seek(8.7);
-  const flipped = await press('c');
-  expect(flipped).toMatchObject({ shown: 'v1', base: 'v2', flipped: true });
-  expect(flipped.t).toBeCloseTo(9, 1); // the same moment: 0.3 s later on v1, not the same clock time
-  expect(Math.abs(flipped.t - 9)).toBeLessThan(0.05);
-  const back = await press('c');
-  expect(back).toMatchObject({ shown: 'v2', flipped: false });
-  expect(Math.abs(back.t - 8.7)).toBeLessThan(0.05);
-  // Before the trim nothing moved: the same time.
-  await seek(1);
-  const early = await press('c');
-  expect(early.shown).toBe('v1');
-  expect(Math.abs(early.t - 1)).toBeLessThan(0.05);
-  await press('c');
-});
-
-test('[ and ] step the base to the matching moment too', async () => {
-  await seek(12.7);
-  const prev = await press('[');
-  expect(prev).toMatchObject({ base: 'v1', shown: 'v1', flipped: false });
-  expect(Math.abs(prev.t - 13)).toBeLessThan(0.05);
-  const next = await press(']');
-  expect(next).toMatchObject({ base: 'v2', shown: 'v2' });
-  expect(Math.abs(next.t - 12.7)).toBeLessThan(0.05);
+  await press('c'); await press('[');
+  expect((await ui.state()).t).toBeCloseTo(8.7, 1);
+  expect((await ui.state()).shown).toBe('v2');
+  await expect(page.locator('#verBtn')).toBeVisible();
   expect(pageErrors).toEqual([]);
 });

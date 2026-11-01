@@ -112,12 +112,20 @@ func (p *proj) server() *server.Server {
 }
 
 func (p *proj) serverLocked() *server.Server {
+	return p.makeServerLocked(false)
+}
+
+// An outbound worker can provide the first version without uploading any media to the host.
+func (p *proj) makeServerLocked(allowEmpty bool) *server.Server {
 	if p.srv != nil {
 		return p.srv
 	}
 	anchor := Anchor(p.root)
-	if anchor == "" {
-		return nil
+	if anchor == "" && !allowEmpty {
+		a, err := p.store.Automation()
+		if err != nil || len(a.Renders) == 0 {
+			return nil
+		}
 	}
 	o := p.h.opts
 	so := server.Options{Video: anchor, Root: p.root, Store: p.store, External: true, BasePath: p.base,
@@ -198,12 +206,22 @@ func (h *Hub) projectRoute(w http.ResponseWriter, r *http.Request, ri reqInfo, n
 		return
 	}
 	isMCP := len(parts) == 1 && parts[0] == "mcp"
-	who, err := h.identify(w, r, ri, p, page, isMCP)
+	isWorker := len(parts) >= 2 && parts[0] == "api" && parts[1] == "worker"
+	who, err := h.identify(w, r, ri, p, page, isMCP || isWorker)
 	if err != nil || !h.allowed(w, r, who, server.PermFor(r.Method, rest), page) {
 		return
 	}
 	srv := p.server()
+	if srv == nil && isWorker {
+		p.mu.Lock()
+		srv = p.makeServerLocked(true)
+		p.mu.Unlock()
+	}
 	if srv == nil {
+		h.noVersions(w, r, page)
+		return
+	}
+	if !isWorker && len(srv.Family()) == 0 {
 		h.noVersions(w, r, page)
 		return
 	}
@@ -234,8 +252,9 @@ func (h *Hub) allowed(w http.ResponseWriter, r *http.Request, who who, perm team
 // noVersions answers a project that has no version yet.
 func (h *Hub) noVersions(w http.ResponseWriter, r *http.Request, page bool) {
 	if page {
-		h.page(w, r, http.StatusOK, "Retake", "<h1>No versions yet</h1><p class=\"muted\">The first version arrives "+
-			"with <code>retake push --remote</code>. This page then shows it.</p>"+backHome)
+		h.page(w, r, http.StatusOK, "Retake", "<h1>No versions yet</h1><p class=\"muted\">Connect your editing machine with "+
+			"<code>retake worker --remote NAME --project DIR</code> to stream its video here, or use <code>retake push --remote</code>. "+
+			"This page shows the first playable version when it arrives.</p><script>setTimeout(()=>location.reload(),5000)</script>"+backHome)
 		return
 	}
 	h.fail(w, r, http.StatusNotFound, "no versions yet")

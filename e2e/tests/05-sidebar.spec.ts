@@ -40,7 +40,7 @@ const NEWEST: Item[] = [
     text: 'Keep the zoom on the shop, or cut to the wide shot?', options: ['v5', 'v6'] },
   { id: 102, kind: 'question', status: 'question', t0: 12.5, t1: 12.5, by: 'agent',
     text: 'Is the music still too loud under the voice here?' },
-  { id: 103, kind: 'question', status: 'answered', t0: 20, t1: 20, by: 'agent', text: 'Answered already (hidden)' },
+  { id: 103, kind: 'question', status: 'retracted', t0: 20, t1: 20, by: 'agent', text: 'Answered already (hidden)' },
   { id: 7, kind: 'note', status: 'retracted', t0: 25, t1: 26, by: AUTHOR, text: 'Scrap that (hidden)' },
 ];
 const OLDER: Item[] = [
@@ -70,7 +70,7 @@ async function mockRoutes(p: Page): Promise<void> {
   await p.route((u) => u.pathname === '/api/notes', (route) => {
     const v = new URL(route.request().url()).searchParams.get('v') ?? '';
     const items = notes[v];
-    return items ? json(route, 200, { version: v, newest: v === 'v6', items }) : json(route, 400, { error: 'bad version' });
+    return items ? json(route, 200, { version: v, newest: v === 'v6', scope:'video', items }) : json(route, 400, { error: 'bad version' });
   });
   await p.route((u) => /^\/api\/notes\/\d+\/reopen$/.test(u.pathname), (route) => {
     reopened.push(Number(new URL(route.request().url()).pathname.split('/')[3]));
@@ -192,7 +192,7 @@ test.afterAll(async () => {
 });
 
 // ------------------------------------------------------------------ newest version
-test('newest version: only the open questions, at their times, with their version chips', async () => {
+test('open questions have readable comments, timecodes and reply controls', async () => {
   await ui.open(server.url);
   await ui.waitFor(() => window.__review.sidebar!.panel, 8000);
   const sb = await sidebar();
@@ -200,15 +200,15 @@ test('newest version: only the open questions, at their times, with their versio
   expect(sb.rows.map((r) => [r.key, r.time, r.mark, r.answer])).toEqual([
     ['question:101', '0:04', 'question', 101], ['question:102', '0:12', 'question', 102]]);
   await expect(page.locator('#side li.item')).toHaveCount(2);
-  await expect(page.locator('#side header')).toHaveText('Questions');
+  await expect(page.locator('#side header')).toContainText('Comments');
   await expect(item('question:101').locator('.text')).toHaveText(/Keep the zoom on the shop/);
   await expect(item('question:101').locator('.time')).toHaveText('0:04');
-  await expect(item('question:101').locator('.chip')).toHaveText(['v5', 'v6']);
-  await expect(item('question:101').locator('.answer')).toHaveText('Answer');
+  await expect(item('question:101').locator('.chip')).toHaveCount(0);
+  await expect(item('question:101').locator('.answer')).toHaveText('Record reply');
   await expect(page.locator('#side')).not.toContainText('hidden');
   // A right-hand column next to the video; the bar stays full width under both.
   const side = await box('#side'), stage = await box('#stage'), bar = await box('#bar');
-  expect(side.width).toBeCloseTo(320, 0);
+  expect(side.width).toBeCloseTo(360, 0);
   expect(stage.width + side.width).toBeCloseTo(1920, 0);
   expect(side.x).toBeCloseTo(stage.x + stage.width, 0);
   expect(bar.width).toBeCloseTo(1920, 0);
@@ -225,29 +225,17 @@ test('click an item: the video jumps to its moment, and the row under the playhe
 });
 
 // ------------------------------------------------------------------ older version
-test('a version chip flips to it at the same time; the sidebar then shows that version\'s notes as resolved', async () => {
-  await item('question:101').locator('.jump').click();
-  await ui.waitFor(() => Math.abs(document.querySelector('video')!.currentTime - 4) < 0.05, 5000);
-  await item('question:101').locator('.chip', { hasText: 'v5' }).click();
-  await ui.settle();
-  await ui.waitFor(() => window.__review.notes!.version === 'v5', 5000);
-  const st = await ui.state();
-  expect(st).toMatchObject({ base: 'v6', shown: 'v5', flipped: true });
-  expect(Math.abs(st.t - 4)).toBeLessThan(0.1);
-  const rows = await rowsOf();
-  expect(rows.map((r) => [r.key, r.mark, r.reopen, r.see])).toEqual([
-    ['note:1', 'answered', true, 'v6'], ['note:2', 'question', false, null], ['note:4', 'answered', false, 'v6']]);
-  await expect(page.locator('#side header')).toHaveText('Notes on v5');
-  await expect(item('note:1').locator('.mark')).toHaveText('✓');
+test('All comments includes resolved changes alongside open questions', async () => {
+  notes.v6 = [...OLDER, ...NEWEST]; push('notes', {});
+  await page.getByRole('combobox', {name:'Filter comments',exact:true}).click();
+  await page.getByRole('option', {name:'All comments',exact:true}).click();
+  await expect(page.locator('#side .item')).toHaveCount(5);
+  await expect(item('note:1').locator('.resolved')).toContainText('Resolved');
   await expect(item('note:1').locator('.change')).toHaveText('Title now lands on the first beat');
-  await expect(item('note:1').locator('.meta')).toHaveText('answered in v6');
-  await expect(item('note:1').locator('.see')).toHaveText('see it in v6');
-  await expect(item('note:2').locator('.mark')).toHaveText('?');
-  await expect(item('note:2').locator('.asked')).toHaveText('Keep the zoom on the shop, or cut to the wide shot?');
-  await expect(item('note:2').locator('.chip.on')).toHaveText('v5');
+  await expect(item('note:2').locator('.asked')).toContainText('Keep the zoom');
   await expect(item('note:4').locator('.reopen')).toHaveCount(0);
+  expect((await ui.state()).shown).toBe('v6');
   await expect(page.locator('#side')).not.toContainText('hidden');
-  await shot('sidebar-older-1920.png');
 });
 
 test('Reopen posts to the notes route', async () => {
@@ -255,21 +243,24 @@ test('Reopen posts to the notes route', async () => {
   await expect.poll(() => reopened).toEqual([1]);
 });
 
-test('"see it in v6" goes to the note\'s moment in the version that answered it', async () => {
-  await item('note:1').locator('.see').click();
-  await ui.settle();
-  await ui.waitFor(() => window.__review.notes!.version === 'v6', 5000);
-  const st = await ui.state();
-  expect(st).toMatchObject({ base: 'v6', shown: 'v6', flipped: false });
-  expect(Math.abs(st.t - 3)).toBeLessThan(0.1);
+test('resolved comment timecodes seek on the current video', async () => {
+  await item('note:1').locator('.jump').click();
+  await ui.waitFor(() => Math.abs(document.querySelector('video')!.currentTime - 3) < 0.1, 5000);
+  expect((await ui.state()).shown).toBe('v6');
+  notes.v6 = NEWEST; push('notes', {});
+  await page.getByRole('combobox', {name:'Filter comments',exact:true}).click();
+  await page.getByRole('option', {name:'Open',exact:true}).click();
+  await expect(page.locator('#side .item')).toHaveCount(2);
 });
 
 test('N hides the sidebar (the page looks as before), remembered across a reload; N brings it back', async () => {
+  // Leave the filter's keyboard focus before using a player shortcut.
+  await item('question:102').locator('.jump').click();
   await ui.key('n');
   await ui.waitFor(() => !window.__review.sidebar!.panel, 3000);
   await expect(page.locator('#side')).toBeHidden();
   await expect(page.locator('#sideToggle')).toBeVisible();
-  await expect(page.locator('#sideToggle')).toHaveText('2 questions');
+  await expect(page.locator('#sideToggle')).toHaveText('2 comments');
   expect((await box('#stage')).width).toBeCloseTo(1920, 0);
   await page.reload();
   await ui.waitFor(READY, 20_000);
@@ -306,7 +297,7 @@ test('Answer: jumps to the question and records, exactly like R, with answer_to 
   });
   expect(s.seg).toMatchObject({ id: 'S1', answer_to: 101 });
   expect(Math.abs(s.t - 4)).toBeLessThan(0.1);
-  await expect(item('question:101').locator('.answer')).toHaveText('Answering');
+  await expect(item('question:101').locator('.answer')).toHaveText('Stop reply');
   await expect(page.locator('#bar')).toHaveClass(/recording/);
 });
 
@@ -416,12 +407,13 @@ test('live updates: job progress, a failure with the server\'s hint, then the ne
   notes.v6 = [...NEWEST, { id: 8, kind: 'note', status: 'open', t0: 4.1, t1: 7, by: AUTHOR, text: 'Wide shot, definitely.' }];
   push('notes', {});
   await expect(item('note:8')).toBeVisible({ timeout: 8000 });
-  await expect(item('note:8').locator('.mark')).toHaveText('•');
+  await expect(item('note:8').locator('.text')).toHaveText('Wide shot, definitely.');
 });
 
 test('history: an earlier take\'s image shows near its time, like a stroke', async () => {
   // The take's image comes back from the server's history when it lists images (spec/notes.md); until then, add one.
-  await page.route((u) => u.pathname === '/api/info', async (route) => {
+  const historyRoute = (u: URL) => u.pathname === '/api/info' || u.pathname === '/api/history';
+  await page.route(historyRoute, async (route) => {
     const r = await route.fetch();
     const info = (await r.json()) as { history: unknown[] };
     const earlier = { id: '2000-01-01_00-00-00', inherited_from: null, voice: { bin: 0.25, bins: [] }, strokes: [],
@@ -435,10 +427,10 @@ test('history: an earlier take\'s image shows near its time, like a stroke', asy
   await expect(page.locator('#images .card')).toHaveCount(1);
   await expect(page.locator('#images .card .grip')).toHaveCount(0); // not this take's: no resizing
   const op = await page.locator('#images .card img').first().evaluate((el) => Number(getComputedStyle(el).opacity));
-  expect(op).toBeCloseTo(0.55, 1); // dimmed like earlier strokes while not recording
+  expect(op).toBeCloseTo(0.85, 1); // earlier annotations remain readable while not recording
   await seek(25);
   await expect(page.locator('#images .card')).toHaveCount(0);
-  await page.unroute((u) => u.pathname === '/api/info');
+  await page.unroute(historyRoute);
 });
 
 // ------------------------------------------------------------------ phone
@@ -461,13 +453,7 @@ test('phone: the list sits under the controls behind a toggle', async () => {
   await seek(4);
   await sleep(300);
   await shot('sidebar-newest-phone.png');
-  await ui.key('c');
-  await ui.settle();
-  await ui.waitFor(() => window.__review.notes!.version === 'v5', 5000);
-  await sleep(300);
-  await shot('sidebar-older-phone.png');
-  await ui.key('c');
-  await ui.settle();
+  expect((await ui.state()).shown).toBe('v6');
   await ui.key('r');
   await ui.waitFor(recording, 8000);
   await dropImage(0.5, 0.45);

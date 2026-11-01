@@ -12,6 +12,7 @@ export const dataUrl = (take: string, version: string | null): string =>
 
 export interface SaverDeps {
   serialize: (t: Take) => TakeData;
+  onSaved?: (t: Take, data: TakeData) => void;
   toast: (msg: string, ms?: number) => void;
   store: () => ChunkStore;
   /** The image buffer (memory when left out). */
@@ -60,16 +61,18 @@ export class Saver {
           }
         }
         for (const img of t.images) if (img.upload === 'pending') await this.#sendImage(t, img);
+        const data = this.deps.serialize(t);
         const r = await this.#fetch(dataUrl(t.id ?? '', t.version), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(this.deps.serialize(t)),
+          body: JSON.stringify(data),
         });
         if (!r.ok) throw new Error(`data ${r.status}`);
         t.dirty = false;
         t.lastSave = Date.now();
         if (t.saveErr) this.deps.toast('Saving again');
         t.saveErr = null;
+        this.deps.onSaved?.(t, data);
       } catch (err) {
         if (!t.saveErr) this.deps.toast(MSG_SAVE_FAILED, 6000);
         t.saveErr = String((err as Error)?.message || err);

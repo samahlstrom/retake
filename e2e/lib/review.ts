@@ -11,7 +11,7 @@ export interface SidebarRow {
 
 /** The parts of the page's test hook this suite reads. */
 export interface ReviewHook {
-  take: { id: string | null; closed: boolean; saving: unknown; strokes: { id: number; undone?: boolean }[];
+  take: { segments: {id:string; p0:number; p1:number|null; size:number; finalized?:boolean; rec:MediaRecorder}[]; id: string | null; closed: boolean; saving: unknown; strokes: { id: number; undone?: boolean }[];
     /** Milestone 2 (new page only). */
     images?: { id: number; file: string; mime: string; video_t: number; box: [number, number, number, number];
       undone?: boolean; upload: string }[] };

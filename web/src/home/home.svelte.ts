@@ -1,7 +1,7 @@
 // The home screen's state (spec/home.md): GET api/home on load, every REFRESH_MS while the page is visible, and when
 // it comes back into view (a tab switched back, or Back from a review).
-import { SvelteSet } from 'svelte/reactivity';
-import { normalizeHome, type Card, type HomeResponse } from '../lib/home';
+import { SvelteSet, SvelteURLSearchParams } from 'svelte/reactivity';
+import { normalizeHome, workspaceOf, placementOf, type Workspace, type Card, type HomeResponse } from '../lib/home';
 
 export const REFRESH_MS = 15_000;
 
@@ -22,11 +22,35 @@ export class Home {
   res = $state.raw<HomeResponse>({ title: '', role: '', projects: [] });
   /** Why the last read failed, or "". */
   error = $state('');
+  saveError = $state('');
+  saving = $state(false);
+  selected = $state('');
+  get workspace(): Workspace {
+    return workspaceOf(this.res);
+  }
+  get project() {
+    return this.workspace.projects.find((p) => p.id === this.selected);
+  }
+  videos(project: string, group?: string): Card[] {
+    return this.res.projects.filter((v) => {
+      const p = placementOf(this.workspace, v.name);
+      return p.project === project && (group === undefined || p.group === group);
+    });
+  }
   /** Thumbnails that failed to load: their card shows the empty frame. */
   readonly broken = new SvelteSet<string>();
 
   readonly #fetch: typeof fetch;
   #timer: ReturnType<typeof setInterval> | null = null;
+  #visible = () => {
+    if (document.visibilityState === 'visible') void this.refresh();
+  };
+  #pageshow = (e: PageTransitionEvent) => {
+    if (e.persisted) void this.refresh();
+  };
+  #location = () => {
+    this.selected = new SvelteURLSearchParams(location.search).get('project') ?? '';
+  };
 
   constructor(deps: HomeDeps = {}) {
     this.#fetch = deps.fetch ?? ((...a) => fetch(...a));
@@ -68,21 +92,58 @@ export class Home {
     this.broken.add(name);
   };
 
+  /** Persist before changing the visible layout; a conflict never overwrites somebody else's organization. */
+  async save(change: (layout: Workspace) => void): Promise<boolean> {
+    if (this.saving) return false;
+    this.saving = true;
+    this.saveError = '';
+    const layout = structuredClone(this.workspace);
+    change(layout);
+    try {
+      const r = await this.#fetch('api/workspace', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(layout),
+      });
+      if (!r.ok) {
+        const error = await r.json();
+        this.saveError = error.error || 'Could not save your changes. Try again.';
+        if (r.status === 409) await this.refresh();
+        return false;
+      }
+      this.res = { ...this.res, workspace: (await r.json()) as Workspace };
+      return true;
+    } catch {
+      this.saveError = 'Could not reach Retake. Your changes were not saved.';
+      return false;
+    } finally {
+      this.saving = false;
+    }
+  }
+
+  async move(video: string, target: string): Promise<void> {
+    const [project, group = ''] = target.split('/');
+    await this.save((layout) => {
+      layout.placements = layout.placements.filter((p) => p.video !== video);
+      layout.placements.push({ video, project, group });
+    });
+  }
+
   /** Load now, then keep the cards fresh while the page is on screen. */
   start(): void {
+    this.#location();
     void this.refresh();
-    const tick = () => {
-      if (document.visibilityState === 'visible') void this.refresh();
-    };
-    this.#timer = setInterval(tick, REFRESH_MS);
-    document.addEventListener('visibilitychange', tick);
-    addEventListener('pageshow', (e) => {
-      if (e.persisted) void this.refresh(); // Back from a review: its status may have changed
-    });
+    this.#timer = setInterval(this.#visible, REFRESH_MS);
+    document.addEventListener('visibilitychange', this.#visible);
+    addEventListener('pageshow', this.#pageshow);
+    addEventListener('popstate', this.#location);
   }
 
   stop(): void {
     if (this.#timer) clearInterval(this.#timer);
     this.#timer = null;
+    document.removeEventListener('visibilitychange', this.#visible);
+    removeEventListener('pageshow', this.#pageshow);
+    removeEventListener('popstate', this.#location);
   }
 }

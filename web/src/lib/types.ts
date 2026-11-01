@@ -26,7 +26,7 @@ export interface Version {
 /** A streamed version's state: pending (nothing renders it), rendering, or complete; units published of all, and the
  * seconds playable so far. */
 export interface StreamState {
-  state: 'pending' | 'rendering' | 'complete';
+  state: 'pending' | 'rendering' | 'complete' | 'stopped';
   done: number;
   total: number;
   seconds: number;
@@ -45,6 +45,7 @@ export interface VersionEvent {
 
 /** A stroke as /api/history (and the timeline) needs it. */
 export interface HistoryStroke {
+  sourceVersion?: string;
   video_t: number;
   color: string;
   points: Point[];
@@ -64,6 +65,9 @@ export interface HistoryImage {
 }
 
 export interface HistoryEntry {
+  source_version?: string;
+  transcribed?: boolean;
+  voice_tracks?: { seg: string; transcribed: boolean; voice: { bins?: [number, number][] } }[];
   id: string;
   inherited_from: string | null;
   voice: { bin?: number; bins?: [number, number][] };
@@ -140,6 +144,9 @@ export interface TakeImage extends HistoryImage {
 
 /** One R-on/R-off recording segment and its audio file. */
 export interface Segment {
+  /** Audio coverage belonging to this clip, kept separate until its comments arrive. */
+  voiceBins?: Float32Array;
+  finalized?: boolean;
   n: number;
   id: string;
   /** The question thread this segment answers (Answer in the sidebar). */
@@ -218,6 +225,7 @@ export interface TakeData {
     video_min: number;
     video_max: number;
     answer_to?: number;
+    voice?: { bin: number; bins: [number, number][] };
   }[];
   events: ({ session_t: number; video_t: number; event: string } & Record<string, unknown>)[];
   strokes: {

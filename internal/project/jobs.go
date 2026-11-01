@@ -26,10 +26,12 @@ const (
 
 // JobArgs are a job's arguments.
 type JobArgs struct {
-	Version string  `json:"version"`         // the version label
-	Take    string  `json:"take,omitempty"`  // transcribe: the take id
-	Dir     string  `json:"dir,omitempty"`   // transcribe: the take folder
-	After   []int64 `json:"after,omitempty"` // run only once these jobs are done; fail if one of them failed
+	Live     bool    `json:"live,omitempty"`     // publish text without waiting for snapshots; final pass writes artifacts
+	Revision string  `json:"revision,omitempty"` // completed-clip fingerprint; empty for final pass
+	Version  string  `json:"version"`            // the version label
+	Take     string  `json:"take,omitempty"`     // transcribe: the take id
+	Dir      string  `json:"dir,omitempty"`      // transcribe: the take folder
+	After    []int64 `json:"after,omitempty"`    // run only once these jobs are done; fail if one of them failed
 }
 
 // Job is one row of the jobs table.
@@ -120,17 +122,22 @@ func (t *tx) insertJob(kind string, args JobArgs) (Job, error) {
 // a take whose transcription is queued, running or done keeps that job, and a notes job that already waits for it
 // is kept too. A take whose last transcription failed gets a new one, so pressing Done again retries.
 func (s *Store) QueueTake(version, take, dir string) ([]Job, error) {
+	return s.QueueClips(version, take, dir, "")
+}
+
+// QueueClips queues a completed-clip snapshot without closing its take.
+func (s *Store) QueueClips(version, take, dir, revision string) ([]Job, error) {
 	var out []Job
 	err := s.write(func(t *tx) error {
 		out = nil
 		tj, err := t.findJob(JobTranscribe, func(j Job) bool {
-			return j.Args.Take == take && j.Args.Version == version && j.State != JobFailed
+			return j.Args.Take == take && j.Args.Version == version && j.Args.Revision == revision && j.State != JobFailed
 		})
 		if err != nil {
 			return err
 		}
 		if tj == nil {
-			j, err := t.insertJob(JobTranscribe, JobArgs{Version: version, Take: take, Dir: dir})
+			j, err := t.insertJob(JobTranscribe, JobArgs{Version: version, Take: take, Dir: dir, Revision: revision})
 			if err != nil {
 				return err
 			}
@@ -144,7 +151,9 @@ func (s *Store) QueueTake(version, take, dir string) ([]Job, error) {
 		}
 		if nj == nil {
 			// A notes run for this version that hasn't started yet can wait for this take too.
-			nj, err = t.findJob(JobNotes, func(j Job) bool { return j.Args.Version == version && j.State == JobQueued })
+			nj, err = t.findJob(JobNotes, func(j Job) bool {
+				return j.Args.Version == version && j.State == JobQueued && j.Args.Live == (revision != "")
+			})
 			if err != nil {
 				return err
 			}
@@ -160,7 +169,7 @@ func (s *Store) QueueTake(version, take, dir string) ([]Job, error) {
 			}
 		}
 		if nj == nil {
-			j, err := t.insertJob(JobNotes, JobArgs{Version: version, After: []int64{tj.ID}})
+			j, err := t.insertJob(JobNotes, JobArgs{Version: version, After: []int64{tj.ID}, Live: revision != ""})
 			if err != nil {
 				return err
 			}
@@ -176,7 +185,7 @@ func (s *Store) QueueTake(version, take, dir string) ([]Job, error) {
 func (s *Store) QueueNotes(version string) (Job, error) {
 	var out Job
 	err := s.write(func(t *tx) error {
-		nj, err := t.findJob(JobNotes, func(j Job) bool { return j.Args.Version == version && j.State == JobQueued })
+		nj, err := t.findJob(JobNotes, func(j Job) bool { return j.Args.Version == version && j.State == JobQueued && !j.Args.Live })
 		if err != nil || nj != nil {
 			if nj != nil {
 				out = *nj

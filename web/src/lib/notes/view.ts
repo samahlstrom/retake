@@ -6,6 +6,7 @@
 import { fmt } from '../util';
 import type { Box } from '../types';
 import type { NoteItem, NotesResponse } from './types';
+import type { EditingTask } from '../automation.svelte';
 
 /** ✓ answered (or accepted), ? asked, • open. */
 export type Mark = 'answered' | 'question' | 'open';
@@ -20,6 +21,12 @@ export interface Chip {
 }
 
 export interface Row {
+  work?: EditingTask;
+  version?: string;
+  take?: string;
+  seg?: string;
+  drawings: string[];
+  by: string;
   key: string;
   id: number;
   kind: 'note' | 'question';
@@ -46,6 +53,16 @@ export interface Row {
   /** Carried over from the parent version: what became of its moment ("unchanged", "answered, check it", "context
    * changed"), with the version it came from. */
   carried: string | null;
+}
+
+/** Submitted work stays beside the live edit, even as its original reviewed version becomes historical. */
+export function inCurrentReview(row: Row, shown: string | null): boolean {
+  return (
+    !row.version ||
+    row.version === shown ||
+    row.answeredIn === shown ||
+    (!!row.work && row.work.state !== 'completed' && row.work.state !== 'cancelled')
+  );
 }
 
 /** What a carried note's tag says. */
@@ -85,7 +102,7 @@ export function visible(item: NoteItem, newest: boolean): boolean {
 
 export function markOf(item: NoteItem): Mark {
   if (ANSWERED.has(item.status)) return 'answered';
-  if (item.kind === 'question' || item.status === 'question') return 'question';
+  if (item.kind === 'question' || item.status === 'question' || item.work?.state === 'question') return 'question';
   return 'open';
 }
 
@@ -95,6 +112,12 @@ export function toRow(item: NoteItem, newest: boolean, ctx: ViewContext): Row {
   const answeredIn = mark === 'answered' ? item.answered_in || null : null;
   const t1 = typeof item.t1 === 'number' && item.t1 >= item.t0 ? item.t1 : item.t0;
   return {
+    work: item.work,
+    version: item.version,
+    take: item.take,
+    seg: item.seg,
+    drawings: item.drawings ?? [],
+    by: item.by || (item.kind === 'question' ? 'Editor' : 'Reviewer'),
     key: `${item.kind}:${item.id}`,
     id: item.id,
     kind: item.kind,
@@ -119,8 +142,8 @@ export function toRow(item: NoteItem, newest: boolean, ctx: ViewContext): Row {
 export function sidebarRows(res: NotesResponse | null, ctx: ViewContext): Row[] {
   if (!res) return [];
   return res.items
-    .filter((it) => visible(it, res.newest))
-    .map((it) => toRow(it, res.newest, ctx))
+    .filter((it) => visible(it, res.scope ? false : res.newest))
+    .map((it) => toRow(it, res.scope ? false : res.newest, ctx))
     .sort((a, b) => a.t0 - b.t0 || (a.kind === b.kind ? a.id - b.id : a.kind === 'note' ? -1 : 1));
 }
 

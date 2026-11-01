@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import Stage from './components/Stage.svelte';
   import Bar from './components/Bar.svelte';
   import Sidebar from './components/sidebar/Sidebar.svelte';
@@ -6,6 +7,13 @@
   import type { Review } from './lib/review.svelte';
 
   let { review }: { review: Review } = $props();
+  onMount(() => {
+    void review.automation.refresh();
+    const timer = setInterval(() => {
+      void review.automation.refresh();
+    }, 5000);
+    return () => clearInterval(timer);
+  });
 </script>
 
 <svelte:window onkeydowncapture={review.onKeydown} onpagehide={review.onPageHide} />

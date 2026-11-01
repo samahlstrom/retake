@@ -35,7 +35,15 @@ func Engines(cfg config.Config) jobs.Engines {
 type notesEngine struct{}
 
 func (notesEngine) Build(ctx context.Context, v family.Version, fam []family.Version) (project.Run, error) {
-	res, err := notes.Build(ctx, v, fam, notes.Options{})
+	return buildNotes(ctx, v, fam, false)
+}
+
+func (notesEngine) BuildLive(ctx context.Context, v family.Version, fam []family.Version) (project.Run, error) {
+	return buildNotes(ctx, v, fam, true)
+}
+
+func buildNotes(ctx context.Context, v family.Version, fam []family.Version, live bool) (project.Run, error) {
+	res, err := notes.Build(ctx, v, fam, notes.Options{Live: live})
 	if err != nil {
 		return project.Run{}, err
 	}
@@ -105,4 +113,9 @@ type takeTranscriber struct{ t transcribe.Transcriber }
 
 func (a takeTranscriber) Take(ctx context.Context, takeDir string) error {
 	return transcribe.Take(ctx, takeDir, a.t, transcribe.TakeOptions{})
+}
+
+// CompletedTake leaves an in-progress recording alone while earlier clips become comments.
+func (a takeTranscriber) CompletedTake(ctx context.Context, takeDir string) error {
+	return transcribe.Take(ctx, takeDir, a.t, transcribe.TakeOptions{CompletedOnly: true})
 }

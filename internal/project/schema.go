@@ -91,6 +91,23 @@ CREATE TABLE hosts (
 	created TEXT NOT NULL
 );
 `,
+	// 3: shared project organization and scoped share links.
+	`ALTER TABLE tokens ADD COLUMN scope TEXT NOT NULL DEFAULT '';
+CREATE TABLE workspace (
+ id INTEGER PRIMARY KEY,
+ revision BIGINT NOT NULL,
+ data TEXT NOT NULL
+);`,
+	// 4: durable worker, task and render state (spec/automation.md).
+	`CREATE TABLE automation (
+ id INTEGER PRIMARY KEY,
+ data TEXT NOT NULL
+);`,
+	// 5: explicit comment deletions survive notes rebuilds and support undo.
+	`CREATE TABLE note_deletions (
+ note INTEGER PRIMARY KEY REFERENCES notes (id),
+ previous_status TEXT NOT NULL
+);`,
 }
 
 // pgMigrations are the same schema for Postgres (spec/server.md, "Storage drivers"): one schema per project, the
@@ -186,6 +203,23 @@ CREATE TABLE hosts (
 	created TEXT NOT NULL
 );
 `,
+	// 3: shared project organization and scoped share links.
+	`ALTER TABLE tokens ADD COLUMN scope TEXT NOT NULL DEFAULT '';
+CREATE TABLE workspace (
+ id BIGINT PRIMARY KEY,
+ revision BIGINT NOT NULL,
+ data TEXT NOT NULL
+);`,
+	// 4: durable worker, task and render state (spec/automation.md).
+	`CREATE TABLE automation (
+ id BIGINT PRIMARY KEY,
+ data TEXT NOT NULL
+);`,
+	// 5: explicit comment deletions survive notes rebuilds and support undo.
+	`CREATE TABLE note_deletions (
+ note BIGINT PRIMARY KEY REFERENCES notes (id),
+ previous_status TEXT NOT NULL
+);`,
 }
 
 // SchemaVersion is the schema version this build writes.

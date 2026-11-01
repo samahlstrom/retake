@@ -102,6 +102,7 @@
         "video_end": { "$ref": "#/$defs/videoT" },
         "video_min": { "$ref": "#/$defs/videoT" },
         "video_max": { "$ref": "#/$defs/videoT" },
+        "voice": { "$ref": "#/$defs/voice" },
         "answer_to": { "description": "v1.1: the question thread this segment answers.", "$ref": "#/$defs/threadId" }
       },
       "required": ["id", "file", "mime", "version", "flip", "t_start", "t_end", "recording", "video_start",

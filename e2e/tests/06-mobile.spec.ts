@@ -22,7 +22,7 @@ const recording = () => !!window.__review.seg;
 const notSaving = () => window.__review.take.closed && !window.__review.take.saving;
 
 /** The tap targets the phone layout must have (and the e2e names them by). */
-const CONTROLS = ['#rec', '#done', '#flip', '#undo', '#play', '#verBtn'];
+const CONTROLS = ['#rec', '#done', '#undo', '#play'];
 
 interface Phone {
   fam: Family;
@@ -35,7 +35,7 @@ interface Phone {
 
 async function openPhone(browser: Browser, name: string, viewport: { width: number; height: number },
   init?: () => void): Promise<Phone> {
-  const fam = family(name, ['v5', 'v6', 'v7']);
+  const fam = family(name, ['v5', 'v6']);
   const server = await startServer(name, fam.files.v6!, PORTS.mobile);
   const context = await browser.newContext({ viewport, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
   await context.grantPermissions(['microphone'], { origin: server.url.replace(/\/$/, '') });
@@ -104,7 +104,7 @@ for (const o of [{ name: 'portrait', width: 390, height: 844 }, { name: 'landsca
       expect(await p.page.evaluate(overflowing)).toEqual([]);
     });
 
-    test('Record, Done, flip, undo, play and the version chip are visible thumb-sized targets', async () => {
+    test('Record, Done, undo and play are visible thumb-sized targets', async () => {
       for (const sel of [...CONTROLS, '.sw[data-color=red]', '.sw[data-color=white]']) {
         const el = p.page.locator(sel);
         await expect(el, sel).toBeVisible();
@@ -128,7 +128,7 @@ for (const o of [{ name: 'portrait', width: 390, height: 844 }, { name: 'landsca
 
     test('a touch hint until the first record; a drag before recording draws nothing', async () => {
       const hint = p.page.locator('#hint');
-      await expect(hint).toHaveText('Tap ● to record · draw while recording · ⇄ compare');
+      await expect(hint).toHaveText('Tap ● to record · draw while recording');
       await expect(hint).not.toHaveClass(/gone/);
       await p.ui.touchDrag(loop(0.5, 0.5, 0.08));
       await sleep(300);
@@ -174,30 +174,10 @@ for (const o of [{ name: 'portrait', width: 390, height: 844 }, { name: 'landsca
       expect(t).toBeLessThan(0.82 * 40);
     });
 
-    test('flip: the comparison version at the same time; refused past the preview\'s end, like C', async () => {
-      await seek(p.page, 5);
-      await expect(p.page.locator('#flip')).toHaveText('v6⇄v7');
-      await expect(p.page.locator('#flip')).not.toHaveAttribute('aria-disabled', 'true');
-      const before = await p.ui.state();
-      await p.ui.tap('#flip');
-      await p.ui.settle();
-      await sleep(200);
-      const after = await p.ui.state();
-      expect(after).toMatchObject({ shown: 'v7', base: 'v6', flipped: true, paused: true });
-      expect(Math.abs(after.t - before.t)).toBeLessThan(0.04);
-      await expect(p.page.locator('#flip')).toHaveClass(/flipped/);
-      await expect(p.page.locator('#verBtn')).toHaveText('v7');
-      await p.ui.tap('#flip');
-      await p.ui.settle();
-      expect(await p.ui.state()).toMatchObject({ shown: 'v6', flipped: false });
-      // Past the v7 preview's end (0:10) C is refused: the button shows it, and a tap gets C's toast.
+    test('the current video stays selected without comparison controls', async () => {
       await seek(p.page, 12);
-      await expect(p.page.locator('#flip')).toHaveAttribute('aria-disabled', 'true');
-      await p.ui.tap('#flip', { force: true }); // it only looks disabled: a finger can still tap it
-      await sleep(300);
-      const refused = await p.ui.state();
-      expect(refused).toMatchObject({ shown: 'v6', flipped: false });
-      expect(refused.toast).toBe('v7 only covers 0:00–0:10');
+      await expect(p.page.locator('#verBtn')).toBeVisible();
+      expect((await p.ui.state()).shown).toBe('v6');
     });
 
     test('Done saves the take; its files validate against spec/take.schema.json', async () => {
@@ -206,7 +186,7 @@ for (const o of [{ name: 'portrait', width: 390, height: 844 }, { name: 'landsca
       await p.ui.tap('#done');
       await p.ui.waitFor(notSaving, 10_000);
       await expect(p.page.locator('#done')).toHaveText('Saved');
-      expect((await p.ui.state()).toast).toBe('Saved. Tap ● to start a new take.');
+      expect((await p.ui.state()).toast).toBe('Feedback saved. Transcription continues; comments stay open until edited.');
       const dirs = takeDirs(join(p.fam.dir, 'v6', 'clip_v6.review'));
       expect(dirs).toHaveLength(1);
       validateTakeDir(dirs[0]!);
@@ -219,25 +199,9 @@ for (const o of [{ name: 'portrait', width: 390, height: 844 }, { name: 'landsca
       expect(await audioDuration(join(dirs[0]!, seg.file))).toBeGreaterThan(1);
     });
 
-    test('the version list opens by tap and switches the version', async () => {
-      await p.ui.tap('#verBtn');
-      const list = p.page.locator('#verList');
-      await expect(list).toBeVisible();
-      const items = list.locator('button');
-      await expect(items).toHaveCount(3);
-      for (const b of await items.all()) expect((await b.boundingBox())!.height).toBeGreaterThanOrEqual(44);
-      const box = (await list.boundingBox())!;
-      expect(box.x).toBeGreaterThanOrEqual(0);
-      expect(box.x + box.width).toBeLessThanOrEqual(o.width);
-      expect(box.y).toBeGreaterThanOrEqual(0);
-      expect(box.y + box.height).toBeLessThanOrEqual(o.height);
-      await seek(p.page, 3);
-      await p.ui.tap('#verList [data-ver=v5]');
-      await p.ui.settle();
-      await sleep(200);
-      expect(await p.ui.state()).toMatchObject({ base: 'v5', shown: 'v5', flipped: false });
-      await expect(list).toBeHidden();
-      await expect(p.page.locator('#flip')).toHaveText('v5⇄v6');
+    test('completed feedback stays on the current video', async () => {
+      expect(await p.ui.state()).toMatchObject({base: 'v6', shown: 'v6', flipped: false});
+      await expect(p.page.locator('#verList')).toHaveCount(0);
     });
 
     test('no uncaught page errors', async () => {

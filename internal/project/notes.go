@@ -374,6 +374,13 @@ func (t *tx) syncNote(c Comment, key string, res *SyncResult) error {
 	if err != nil {
 		return err
 	}
+	var deleted int
+	if err := t.QueryRow(`SELECT COUNT(*) FROM note_deletions WHERE note = ?`, old.ID).Scan(&deleted); err != nil {
+		return err
+	}
+	if deleted > 0 {
+		return nil // an explicit user deletion must survive final transcription and future rebuilds
+	}
 	oldDetail, _ := json.Marshal(old.Detail)
 	if old.Text != c.Text || old.T0 != c.T0 || old.T1 != c.T1 || old.Author != c.Author ||
 		string(oldDetail) != string(detail) {

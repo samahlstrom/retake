@@ -448,3 +448,67 @@ func TestErasedLinesLeaveTheNotes(t *testing.T) {
 		t.Errorf("an erase of another take changed the notes: %d, want %d", got, before)
 	}
 }
+
+func TestLiveBuildLeavesArtifactsIntact(t *testing.T) {
+	root, gc, opts := setupCase(t, "image", true)
+	target := filepath.Join(root, gc.Target)
+	res, err := Run(context.Background(), target, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	original, err := os.ReadFile(res.JSONPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	marker := filepath.Join(res.Dir, "snaps", "keep.png")
+	if err := os.MkdirAll(filepath.Dir(marker), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(marker, []byte("previous snapshot"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	opts.Live = true
+	live, err := Run(context.Background(), target, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(live.Comments) != len(res.Comments) {
+		t.Fatal("live build lost comments")
+	}
+	after, err := os.ReadFile(res.JSONPath)
+	if err != nil || !bytes.Equal(original, after) {
+		t.Fatal("live build overwrote final artifacts")
+	}
+	if _, err := os.Stat(marker); err != nil {
+		t.Fatal("live build cleared existing snapshots")
+	}
+}
+
+func TestLiveBuildWaitsForTheActiveSegment(t *testing.T) {
+	root, gc, opts := setupCase(t, "image", true)
+	segments := filepath.Join(root, "clip_v6.review", "2026-05-05_12-00-00", "segments.json")
+	raw, err := os.ReadFile(segments)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var list []map[string]any
+	if err := json.Unmarshal(raw, &list); err != nil {
+		t.Fatal(err)
+	}
+	list[1]["recording"] = true
+	raw, err = json.Marshal(list)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(segments, raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	opts.Live = true
+	res, err := Run(context.Background(), filepath.Join(root, gc.Target), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Comments) != 1 || res.Comments[0].SegID() != "S1" {
+		t.Fatalf("unfinished segment became comments: %+v", res.Comments)
+	}
+}

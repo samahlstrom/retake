@@ -16,10 +16,11 @@ import (
 
 // TakeOptions tune Take.
 type TakeOptions struct {
-	Options           // the prompt and language, for every file
-	Force   bool      // transcribe every file again, even ones transcript.json already has
-	TempDir string    // for the decoded audio; "" = os.TempDir()
-	Log     io.Writer // one line per file; nil = quiet
+	Options                 // the prompt and language, for every file
+	CompletedOnly bool      // skip segments still recording
+	Force         bool      // transcribe every file again, even ones transcript.json already has
+	TempDir       string    // for the decoded audio; "" = os.TempDir()
+	Log           io.Writer // one line per file; nil = quiet
 }
 
 var (
@@ -79,6 +80,27 @@ func Take(ctx context.Context, takeDir string, t Transcriber, opts TakeOptions) 
 	names, err := AudioFiles(takeDir)
 	if err != nil {
 		return err
+	}
+	if opts.CompletedOnly {
+		raw, readErr := os.ReadFile(filepath.Join(takeDir, "segments.json")) //nolint:gosec // caller-provided take directory
+		if readErr == nil {
+			var segments []struct {
+				File      string `json:"file"`
+				Recording bool   `json:"recording"`
+			}
+			if err := json.Unmarshal(raw, &segments); err != nil {
+				return err
+			}
+			complete := map[string]bool{}
+			for _, seg := range segments {
+				if !seg.Recording {
+					complete[seg.File] = true
+				}
+			}
+			names = slices.DeleteFunc(names, func(name string) bool { return !complete[name] })
+		} else if !errors.Is(readErr, fs.ErrNotExist) {
+			return readErr
+		}
 	}
 	path := filepath.Join(takeDir, TranscriptFile)
 	tr, err := ReadTranscript(path)

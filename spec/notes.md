@@ -151,3 +151,37 @@ device = "auto"      # auto | cuda | cpu
 command = ""         # engine = "command": a program that reads an audio path and prints transcript words as JSON
 whisper_cli = ""     # whisper-cli's path; "" = $PATH, then scripts/install-whisper.sh's $XDG_DATA_HOME/retake/whisper.cpp
 ```
+
+## Continuous review
+
+The review page opens the newest playable cut. A version picker exposes review checkpoints with their durations; choosing an older cut pins it until another is selected. The latest cut can still stream as it renders. Checkpoints do not require storing media in Git.
+
+`GET /api/notes?v=<label>&scope=review` includes that cut's notes, earlier unresolved notes, and notes resolved in that cut, excluding future cuts. Each note exposes its originating `version`. The sidebar defaults to open feedback on the selected cut, with explicit counts and filters for earlier unresolved feedback and resolved changes. Resolved rows name the version containing the change. Timeline comments follow those filters; transcription completion is independent of resolution.
+
+`GET /api/history?v=<label>&scope=review` includes actual strokes and images for earlier unresolved feedback, with timestamps mapped when manifests exist. Carried entries expose `source_version` and are read-only on the destination cut. History exposes `transcribed` only when all saved audio files have matching completed transcripts; completed recordings never regain waveforms after reload. Partially transcribed takes expose per-segment voice tracks when available.
+
+The Finish review button stops and saves the current recording and queues final processing. When this page has no active take, it explains that existing feedback is already saved and edits remain open; it must not claim there is no recording or resolve comments. Failed final requests remain retryable and never report successful completion.
+
+Long recordings rotate into independently decodable clips at a pause after 10 seconds, or after 20 seconds of continuous speech, deferring rotation during a pen stroke. The microphone stays open; stopping or finishing during rotation stops both recorders safely. Completed clips begin processing while recording continues. Live notes builds skip snapshots and artifact writes so text can arrive promptly; final processing generates the full artifacts. This is incremental clip transcription, not word-by-word streaming.
+
+`GET /api/notes?v=<label>&scope=video` includes the family’s discussion, including resolved comments. Items are deduplicated by kind/id and mapped onto the displayed cut when render manifests exist. Without a map, timestamps retain their original clock. The response includes `scope: "video"`. The original version-scoped API remains available to integrations.
+
+Comments support text search and all/open/resolved filters. Timeline markers expose comments on hover or keyboard focus and seek on activation. Search fields do not consume player shortcuts.
+
+After a voice clip stops and its final bytes are uploaded, the page sends `POST /api/session/<take>/transcribe?v=<label>`. This queues transcription and notes without closing the take. The server fingerprints completed segments and their byte sizes for idempotence; a later clip queues new work. In-progress segments are excluded. A stopped segment remains marked `recording` in saved metadata until its recorder has finalized and all buffered bytes are uploaded; this prevents autosave from exposing a truncated clip. Clip jobs carry a `revision` argument (the fingerprint), distinct from the final pass. Failed requests retry on autosave. Done still closes the take and runs the final pass, reusing cached completed audio. No coding agent is started automatically.
+
+### Timeline feedback lanes
+
+The upper lane first displays recorded audio coverage. When a clip’s transcribed comments arrive, their hoverable markers replace that clip’s audio coverage. The active recording remains visible even when earlier feedback exists at the same video time. Replacement is matched by note `take` and `seg`; history with a verified complete transcript hides the whole recording, while partial histories use per-segment coverage or matching take and comment time ranges. Failed or pending transcription keeps its audio visible.
+
+Drawings keep a separate lower lane and do not turn into comment markers. Notes expose their originating `take`, `seg`, and `drawings` (pen colors) so historical annotations can remain represented below the current video. Drawing-only notes appear below, while comments with attached drawings occupy both lanes. Hover previews and click-to-seek remain available.
+
+## Deleting a comment
+
+Owners and approvers can choose **Delete comment** on a saved comment, including an empty or drawing-only
+comment, and **Undo** immediately afterward. `POST /api/notes/<id>/delete` records a durable user deletion and
+retracts the note; `POST /api/notes/<id>/restore` restores its prior status. Both actions are idempotent, need the
+approve permission, check the origin, and emit notes events. A notes rebuild must not resurrect a deleted note.
+The original audio, drawings and video files are retained. Deletion removes the comment from the sidebar and
+comment markers; it does not undo an already-rendered video edit. Queued work for deleted feedback is cancelled,
+and running work is asked to stop. Restoring feedback does not automatically restart cancelled editing work.

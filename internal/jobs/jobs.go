@@ -100,7 +100,7 @@ type FamilyFunc func() []family.Version
 func Handlers(st *project.Store, fam FamilyFunc, e Engines) map[string]Handler {
 	return map[string]Handler{
 		project.JobTranscribe: func(ctx context.Context, job project.Job) error {
-			return transcribe(ctx, e, job.Args.Dir)
+			return transcribe(ctx, e, job.Args.Dir, job.Args.Revision != "")
 		},
 		project.JobNotes: func(ctx context.Context, job project.Job) error {
 			f := fam()
@@ -108,7 +108,7 @@ func Handlers(st *project.Store, fam FamilyFunc, e Engines) map[string]Handler {
 			if !ok {
 				return Fatal(fmt.Errorf("version %s is no longer in the family", job.Args.Version))
 			}
-			_, err := Notes(ctx, st, v, f, e)
+			_, err := notesForJob(ctx, st, v, f, e, job.Args.Live)
 			return err
 		},
 	}
@@ -123,7 +123,7 @@ func find(fam []family.Version, label string) (family.Version, bool) {
 	return family.Version{}, false
 }
 
-func transcribe(ctx context.Context, e Engines, dir string) error {
+func transcribe(ctx context.Context, e Engines, dir string, completedOnly bool) error {
 	if dir == "" {
 		return Fatal(errors.New("a transcribe job needs its take folder"))
 	}
@@ -141,20 +141,55 @@ func transcribe(ctx context.Context, e Engines, dir string) error {
 		}
 		return Fatal(Hinted(fmt.Errorf("can't transcribe: %w", err), hint))
 	}
+	if completedOnly {
+		if partial, ok := t.(interface {
+			CompletedTake(context.Context, string) error
+		}); ok {
+			return partial.CompletedTake(ctx, dir)
+		}
+		return Fatal(errors.New("this transcriber does not support completed clips; use Done to transcribe the take"))
+	}
 	return t.Take(ctx, dir)
 }
 
 // Notes runs the notes engine for one version and syncs the notes table with what it found.
 func Notes(ctx context.Context, st *project.Store, v family.Version, fam []family.Version, e Engines) (project.SyncResult, error) {
+	return notesForJob(ctx, st, v, fam, e, false)
+}
+
+func notesForJob(ctx context.Context, st *project.Store, v family.Version, fam []family.Version, e Engines, live bool) (project.SyncResult, error) {
 	if e.Notes == nil {
 		return project.SyncResult{}, Fatal(errors.New("no notes engine is set up"))
 	}
-	run, err := e.Notes.Build(ctx, v, fam)
+	build := e.Notes.Build
+	if live {
+		if fast, ok := e.Notes.(interface {
+			BuildLive(context.Context, family.Version, []family.Version) (project.Run, error)
+		}); ok {
+			build = fast.BuildLive
+		}
+	}
+	run, err := build(ctx, v, fam)
 	if err != nil {
 		return project.SyncResult{}, err
 	}
 	if run.Version == "" {
 		run.Version = v.Label
+	}
+	if live {
+		previous, err := st.Notes(project.NoteFilter{Scope: &project.Scope{Version: v.Label}})
+		if err != nil {
+			return project.SyncResult{}, err
+		}
+		snapshots := map[string]string{}
+		for _, n := range previous {
+			snapshots[n.Key] = n.Detail.Snapshot
+		}
+		for i := range run.Comments {
+			if run.Comments[i].Detail.Snapshot == "" {
+				run.Comments[i].Detail.Snapshot = snapshots[run.Comments[i].NoteKey()]
+			}
+		}
 	}
 	return st.Sync(run)
 }

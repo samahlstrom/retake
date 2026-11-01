@@ -19,6 +19,9 @@ import (
 
 // manifestOf reads a version's render manifest: nil when it has none (or a broken one, which is logged).
 func (s *Server) manifestOf(v family.Version) *bridge.Manifest {
+	if remote, ok := s.remoteRender(v.Label); ok {
+		return remote.Manifest
+	}
 	m, err := bridge.ForVideo(v.Path)
 	if err != nil {
 		if !errors.Is(err, bridge.ErrNoManifest) {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TL_PAD } from './constants';
-import { drawTimeline, TRACK, TRACK_PENDING, tlT, tlX, type TimelineData } from './timeline';
+import { drawTimeline, pendingVoiceBins, TRACK, TRACK_PENDING, tlT, tlX, type TimelineData } from './timeline';
 
 /** A 2D context that records the rounded rectangles it fills (the track and the played part) with their color. */
 function recorder() {
@@ -64,5 +64,45 @@ describe('the timeline', () => {
     expect(rects[0]).toEqual({ fill: TRACK_PENDING, x: TL_PAD, w: 1000 }); // the whole expected length, faint
     expect(rects[1]).toEqual({ fill: TRACK, x: TL_PAD, w: 410 }); // rendered so far
     expect(rects[2]!.w).toBeCloseTo(100); // the played part on top, at the same scale
+  });
+});
+
+describe('audio becoming comments', () => {
+  const comment = { kind: 'note', take: 'take-a', seg: 'S1', t0: 0.25, t1: 0.5, text: 'Make this bigger' };
+  const bins = new Float32Array([1, 2, 3, 4]);
+
+  it('replaces only the transcribed clip, keeping overlapping recordings and active audio', () => {
+    const tracks = [
+      { take: 'take-a', seg: 'S1', bins },
+      { take: 'take-a', seg: 'S2', bins },
+      { take: 'take-b', seg: 'S1', bins },
+    ];
+    expect([...pendingVoiceBins(tracks, [])]).toEqual([3, 6, 9, 12]);
+    expect([...pendingVoiceBins(tracks, [comment])]).toEqual([2, 4, 6, 8]);
+    expect([...pendingVoiceBins([{ ...tracks[0]!, active: true }], [comment])]).toEqual([...bins]);
+  });
+
+  it('keeps audio until real text arrives, including when transcription fails or only drawings exist', () => {
+    const track = [{ take: 'take-a', seg: 'S1', bins }];
+    expect([...pendingVoiceBins(track, [{ ...comment, text: '' }])]).toEqual([...bins]);
+    expect([...pendingVoiceBins(track, [{ ...comment, kind: 'question' }])]).toEqual([...bins]);
+  });
+
+  it('hides completed history even with no speech while preserving an overlapping pending clip', () => {
+    expect([
+      ...pendingVoiceBins(
+        [
+          { take: 'a', bins, transcribed: true },
+          { take: 'a', seg: 'S2', bins },
+        ],
+        [],
+      ),
+    ]).toEqual([...bins]);
+    expect([...pendingVoiceBins([{ take: 'a', bins, transcribed: true }], [])]).toEqual([0, 0, 0, 0]);
+  });
+
+  it('replaces only matching time ranges in older aggregate waveforms', () => {
+    expect([...pendingVoiceBins([{ take: 'take-a', bins }], [comment])]).toEqual([1, 0, 0, 4]);
+    expect([...pendingVoiceBins([{ take: 'take-b', bins }], [comment])]).toEqual([...bins]);
   });
 });

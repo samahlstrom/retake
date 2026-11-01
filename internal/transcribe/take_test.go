@@ -237,3 +237,29 @@ func TestTakeWithoutAudio(t *testing.T) {
 		t.Errorf("transcript.json = %q, %v", b, err)
 	}
 }
+
+func TestCompletedClipsSkipGrowingAudioAndReuseFinalTranscript(t *testing.T) {
+	dir := newTake(t)
+	f := &fakeTranscriber{name: "fake"}
+	writeFile(t, filepath.Join(dir, "segments.json"), `[{"file":"seg_01.webm","recording":false},{"file":"seg_02.ogg","recording":true}]`)
+	opts := TakeOptions{CompletedOnly: true, TempDir: t.TempDir()}
+	if err := Take(context.Background(), dir, f, opts); err != nil {
+		t.Fatal(err)
+	}
+	if f.calls != 1 {
+		t.Fatalf("transcribed growing clip: %d calls", f.calls)
+	}
+	writeFile(t, filepath.Join(dir, "segments.json"), `[{"file":"seg_01.webm","recording":false},{"file":"seg_02.ogg","recording":false}]`)
+	if err := Take(context.Background(), dir, f, opts); err != nil {
+		t.Fatal(err)
+	}
+	if f.calls != 2 {
+		t.Fatalf("did not reuse first clip: %d calls", f.calls)
+	}
+	if err := Take(context.Background(), dir, f, opts); err != nil {
+		t.Fatal(err)
+	}
+	if f.calls != 2 {
+		t.Fatalf("final pass repeated completed clips: %d calls", f.calls)
+	}
+}

@@ -69,13 +69,13 @@ test('family: the mp4 v6 and the m3u8 v8 in its own folder', async () => {
   expect(versions[1]![2] as number).toBeCloseTo(FULL, 0);
 });
 
-test('C flips from the mp4 to the m3u8 at the same time, it plays, and C flips back', async () => {
+test('the latest HLS video plays and removed comparison keys leave it selected', async () => {
   await page.evaluate(() => { document.querySelector('video')!.currentTime = 12; });
   await ui.waitFor(() => !document.querySelector('video')!.seeking, 5000);
   const before = await ui.state();
   await ui.key('c'); await ui.settle(); await sleep(300);
   const after = await ui.state();
-  expect(after).toMatchObject({ shown: 'v8', base: 'v6', flipped: true, paused: true });
+  expect(after).toMatchObject({ shown: 'v8', base: 'v8', flipped: false, paused: true });
   expect(Math.abs(after.t - before.t)).toBeLessThan(0.1);
   expect(playsV8((await ui.video()).src)).toBe(true);
 
@@ -92,11 +92,11 @@ test('C flips from the mp4 to the m3u8 at the same time, it plays, and C flips b
   const b2 = await ui.state();
   await ui.key('c'); await ui.settle(); await sleep(200);
   const a2 = await ui.state();
-  expect(a2).toMatchObject({ shown: 'v6', base: 'v6', flipped: false, paused: true });
+  expect(a2).toMatchObject({ shown: 'v8', base: 'v8', flipped: false, paused: true });
   expect(Math.abs(a2.t - b2.t)).toBeLessThan(0.1);
 });
 
-test('] steps to the m3u8 keeping time and play state, it plays, and [ steps back', async () => {
+test('removed version shortcuts preserve HLS playback and its playhead', async () => {
   await ui.key(' ');
   await sleep(1000);
   const before = await ui.state();
@@ -111,7 +111,7 @@ test('] steps to the m3u8 keeping time and play state, it plays, and [ steps bac
   const b2 = await ui.state();
   await ui.key('['); await ui.settle(); await sleep(150);
   const a2 = await ui.state();
-  expect(a2).toMatchObject({ base: 'v6', shown: 'v6', paused: false });
+  expect(a2).toMatchObject({ base: 'v8', shown: 'v8', paused: false });
   expect(Math.abs(a2.t - b2.t)).toBeLessThan(0.8);
   await ui.key(' ');
 });

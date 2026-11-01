@@ -251,3 +251,18 @@ describe('active row, heading, toggle and presence', () => {
     expect(presence({ ...p, phone: true, phoneOpen: true })).toEqual({ panel: true, toggle: true });
   });
 });
+
+it('continuous review retains resolved comments and their author', () => {
+  const res: NotesResponse = {
+    version: 'v9',
+    newest: true,
+    scope: 'video',
+    items: [
+      { id: 1, kind: 'note', status: 'answered', t0: 3, text: 'Fix this', by: 'Reviewer', answered_in: 'v9' },
+      { id: 2, kind: 'note', status: 'retracted', t0: 4, text: 'Withdrawn' },
+    ],
+  };
+  const result = sidebarRows(res, { versions: [], shown: 'v9' });
+  expect(result).toHaveLength(1);
+  expect(result[0]).toMatchObject({ by: 'Reviewer', mark: 'answered', reopen: true });
+});

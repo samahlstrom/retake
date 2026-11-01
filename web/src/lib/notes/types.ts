@@ -1,10 +1,16 @@
 // Shapes of the notes routes (spec/notes.md, "What the sidebar shows" and "HTTP additions").
 import type { Box } from '../types';
+import type { EditingTask } from '../automation.svelte';
 
 export type NoteStatus = 'open' | 'question' | 'answered' | 'accepted' | 'retracted';
 
 /** One sidebar item from GET /api/notes. For a question, `id` is the thread id (what `answer_to` takes). */
 export interface NoteItem {
+  work?: EditingTask;
+  version?: string;
+  take?: string;
+  seg?: string;
+  drawings?: string[];
   id: number;
   kind: 'note' | 'question';
   status: NoteStatus | string;
@@ -38,6 +44,8 @@ export interface Carried {
 }
 
 export interface NotesResponse {
+  scope?: 'video' | 'review';
+  jobs?: Job[];
   version: string;
   newest: boolean;
   items: NoteItem[];

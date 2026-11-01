@@ -10,6 +10,47 @@ export const tlX = (t: number, w: number, d: number): number => TL_PAD + (w - 2 
 export const tlT = (clientX: number, left: number, width: number, d: number): number =>
   clamp((clientX - left - TL_PAD) / (width - 2 * TL_PAD), 0, 1) * d;
 
+/** Audio from one take, optionally isolated to one recorded clip. */
+export interface VoiceTrack {
+  take: string;
+  seg?: string;
+  bins: Float32Array;
+  active?: boolean;
+  transcribed?: boolean;
+}
+
+export interface TranscribedComment {
+  take?: string;
+  seg?: string;
+  t0: number;
+  t1: number;
+  text: string;
+  kind: string;
+}
+
+/** Replace only the audio that became a comment. Unrelated recordings at the same time stay visible. */
+export function pendingVoiceBins(tracks: readonly VoiceTrack[], comments: readonly TranscribedComment[]): Float32Array {
+  const size = tracks.reduce((n, track) => Math.max(n, track.bins.length), 0);
+  const out = new Float32Array(size);
+  for (const track of tracks) {
+    if (track.transcribed && !track.active) continue;
+    const matches = track.active
+      ? []
+      : comments.filter((c) => c.kind === 'note' && c.text.trim() && c.take === track.take);
+    if (track.seg && matches.some((c) => c.seg === track.seg)) continue;
+    const covered = new Uint8Array(size);
+    // Old takes have one aggregate waveform; replace only the transcribed time ranges of that same take.
+    if (!track.seg)
+      for (const c of matches) {
+        const start = Math.max(0, Math.floor(c.t0 / BIN));
+        const end = Math.min(size, Math.floor(c.t1 / BIN) + 1);
+        covered.fill(1, start, Math.max(start, end));
+      }
+    for (let i = 0; i < track.bins.length; i++) if (!covered[i]) out[i] += track.bins[i];
+  }
+  return out;
+}
+
 function roundRect(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
   if (w <= 0) return;
   g.beginPath();

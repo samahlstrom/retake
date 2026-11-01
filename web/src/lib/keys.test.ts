@@ -11,7 +11,7 @@ const k = (key: string, mods: Partial<KeyLike> = {}): KeyLike => ({
 });
 
 describe('keys', () => {
-  it('maps the legacy keys', () => {
+  it('maps playback and recording keys', () => {
     const map: Record<string, string> = {
       r: 'toggleRec',
       R: 'toggleRec',
@@ -22,9 +22,6 @@ describe('keys', () => {
       '1': 'color1',
       '4': 'color4',
       z: 'undo',
-      c: 'flip',
-      '[': 'stepPrev',
-      ']': 'stepNext',
       ',': 'framePrev',
       '.': 'frameNext',
       f: 'fullscreen',
@@ -66,11 +63,15 @@ describe('keys', () => {
       expect(keyAction(e)).toBeNull();
   });
 
-  it('ignores auto-repeat of R, K, Z, F, C, [, ] and Space, but not of seeking or frame steps', () => {
-    for (const key of ['r', 'k', 'z', 'f', 'c', '[', ']', ' '])
+  it('ignores auto-repeat of R, K, Z, F and Space, but not of seeking or frame steps', () => {
+    for (const key of ['r', 'k', 'z', 'f', ' '])
       expect(keyAction(k(key, { repeat: true }))).toEqual({ act: null, stop: true });
     for (const key of ['ArrowLeft', 'ArrowRight', ',', '.', '1'])
       expect(keyAction(k(key, { repeat: true }))?.act).not.toBeNull();
+  });
+
+  it('does not expose version switching shortcuts', () => {
+    for (const key of ['c', '[', ']']) expect(keyAction(k(key))).toBeNull();
   });
 
   it('ignores inherited object keys', () => {

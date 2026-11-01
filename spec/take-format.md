@@ -45,3 +45,7 @@ never rewritten after the fact, so a line of an earlier take (history) is erased
 ```
 
 `/api/history` and the notes engine leave those lines out. The take's own files stay as they were.
+
+### Incremental voice coverage
+
+Segments may include optional `voice: {bin, bins}` coverage in the same sparse format as `voice.json`. It belongs only to that clip, allowing pending audio to stay visible while completed clips become comments, including after reload. Recording may rotate through short segments while the microphone stays open.
