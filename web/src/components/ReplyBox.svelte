@@ -1,7 +1,8 @@
 <script lang="ts">
   // The one way to answer the agent, under its question. A worker's question takes typed words (POST …/answer); an
   // agent that asked through the notes (MCP) listens to a recorded answer, exactly like R with the segment pointing at
-  // its question. Same field either way; it offers what that question can take, never a control that would fail.
+  // its question; a question from inside a task (retake ask) takes both, so the field has a mic beside its arrow. Same
+  // field either way; it offers what that question can take, never a control that would fail.
   let {
     onsend,
     onmic,
@@ -26,6 +27,26 @@
 {#if onsend}
   <form class="reply" onsubmit={submit}>
     <input aria-label="Answer the agent" placeholder="Type your answer…" bind:value={text} enterkeyhint="send" />
+    {#if onmic}
+      <button
+        class="go mic"
+        type="button"
+        class:on={recording}
+        aria-label={recording ? 'Stop answering' : 'Answer out loud'}
+        title={recording ? 'Stop answering' : 'Answer out loud (you can draw while you talk)'}
+        onclick={onmic}
+        >{#if recording}<span class="stop" aria-hidden="true"></span>{:else}<svg viewBox="0 0 20 20" aria-hidden="true"
+            ><path
+              d="M10 2.5a2.5 2.5 0 0 0-2.5 2.5v5a2.5 2.5 0 0 0 5 0V5A2.5 2.5 0 0 0 10 2.5ZM5 9.5a5 5 0 0 0 10 0M10 14.5v3"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            /></svg
+          >{/if}</button
+      >
+    {/if}
     <button class="go" type="submit" aria-label="Send answer" title="Send answer (Enter)" class:ready={!!text.trim()}
       ><svg viewBox="0 0 20 20" aria-hidden="true"
         ><path
@@ -106,6 +127,15 @@
   }
   .go.ready {
     color: #d9d2ff;
+  }
+  .go.mic {
+    color: #a59fc6;
+  }
+  .go.mic:hover {
+    color: #d9d2ff;
+  }
+  .go.mic.on {
+    background: rgba(255, 69, 58, 0.14);
   }
   .go svg,
   button.reply svg {

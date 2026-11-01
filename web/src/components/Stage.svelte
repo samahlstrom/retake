@@ -6,6 +6,7 @@
   import Hint from './Hint.svelte';
   import HomeNav from './HomeNav.svelte';
   import ImageLayer from './ImageLayer.svelte';
+  import AgentLayer from './AgentLayer.svelte';
 
   let { review }: { review: Review } = $props();
 </script>
@@ -26,6 +27,7 @@
   ></video>
   <canvas id="freeze" bind:this={review.el.freeze} style:display={review.freezeShown ? 'block' : null}></canvas>
   <ImageLayer {review} />
+  <AgentLayer {review} />
   <canvas id="ink" class:pen={!!review.seg} class:erasing={review.eraser && review.canRecord} {@attach review.attachInk}
   ></canvas>
   {#if review.layoutMode !== 'portrait'}

@@ -5,7 +5,7 @@
 //  - retracted notes are never shown.
 import { fmt } from '../util';
 import type { Box } from '../types';
-import type { NoteItem, NotesResponse } from './types';
+import type { NoteItem, NotesResponse, TaskAsk } from './types';
 import type { EditingTask } from '../automation.svelte';
 
 /** ✓ answered (or accepted), ? asked, • open. */
@@ -53,6 +53,8 @@ export interface Row {
   /** Carried over from the parent version: what became of its moment ("unchanged", "answered, check it", "context
    * changed"), with the version it came from. */
   carried: string | null;
+  /** The agent's open question from inside its task, with its time as m:ss. */
+  ask: (TaskAsk & { time: string }) | null;
 }
 
 /** Submitted work stays beside the live edit, even as its original reviewed version becomes historical. */
@@ -135,6 +137,7 @@ export function toRow(item: NoteItem, newest: boolean, ctx: ViewContext): Row {
     options: (item.options ?? []).map((label) => ({ label, known: known(label), on: label === ctx.shown })),
     images: item.images ?? [],
     carried: carriedText(item),
+    ask: item.kind === 'note' && item.ask && mark === 'question' ? { ...item.ask, time: fmt(item.ask.t, false) } : null,
   };
 }
 
@@ -186,7 +189,7 @@ export const heading = (res: NotesResponse | null): string =>
 
 /** The collapsed toggle's label: what's waiting in the sidebar. */
 export function toggleLabel(rows: readonly Row[], newest: boolean): string {
-  const q = rows.filter((r) => r.answer != null).length;
+  const q = rows.filter((r) => r.answer != null || r.ask).length;
   if (newest && q) return q === 1 ? '1 question' : `${q} questions`;
   return rows.length === 1 ? '1 note' : `${rows.length} notes`;
 }

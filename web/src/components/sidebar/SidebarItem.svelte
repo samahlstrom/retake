@@ -9,6 +9,7 @@
   import CommentMenu from './CommentMenu.svelte';
   import ReplyBox from '../ReplyBox.svelte';
   import Sketch from './Sketch.svelte';
+  import AskCard from './AskCard.svelte';
 
   let { review, row, active }: { review: Review; row: Row; active: boolean } = $props();
 
@@ -21,8 +22,9 @@
   });
   /** Agent questions asked through the notes take a recorded answer; a worker's question takes typed words. */
   const voiceThread = $derived(row.answer);
-  const workerAsks = $derived(task?.state === 'question' && review.canRecord ? task : null);
-  const asked = $derived(row.kind === 'question' ? null : (workerAsks?.question ?? row.question));
+  const workerAsks = $derived(task?.state === 'question' && !row.ask && review.canRecord ? task : null);
+  // A question from inside the task (row.ask) has its own card, with its reply box.
+  const asked = $derived(row.kind === 'question' || row.ask ? null : (workerAsks?.question ?? row.question));
   const answering = $derived(voiceThread != null && review.seg?.answer_to === voiceThread);
   const text = $derived(
     row.text.trim() || (row.drawings.length || row.images.length || strokes.length ? 'Drawing' : 'No words'),
@@ -87,7 +89,9 @@
   {/if}
   {#if status.waiting}<p class="waiting">{status.waiting}</p>{/if}
   {#if asked}<p class="asked">{asked}</p>{/if}
-  {#if voiceThread != null}
+  {#if row.ask}
+    <AskCard {review} {row} />
+  {:else if voiceThread != null}
     <ReplyBox onmic={() => review.answer(voiceThread, row.t0)} recording={answering} />
   {:else if workerAsks}
     <ReplyBox onsend={answer} busy={review.automation.busy} />

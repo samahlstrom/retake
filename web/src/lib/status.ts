@@ -67,7 +67,8 @@ export function commentStatus(
       return { state: 'working', paused: null, waiting: waitingLine(ctx.agent) };
     case 'running':
     case 'stopping':
-      return is('working');
+      // The agent asked about it from inside the task and works on: the question is the reviewer's to answer.
+      return row.mark === 'question' ? is('question') : is('working');
     case 'paused':
       return is('open', pausedReason(task));
   }

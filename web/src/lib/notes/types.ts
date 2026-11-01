@@ -34,6 +34,33 @@ export interface NoteItem {
   carried?: Carried | null;
   /** The timeline elements under the note, best first (versions rendered from a timeline). */
   targets?: { id: string; kind: string; score: number }[] | null;
+  /** The open question its task's agent asked about it from inside the task (`retake ask`), shown under it. */
+  ask?: TaskAsk | null;
+}
+
+/** What an agent drew to ask (spec/automation.md, "Questions from inside a task"), normalized 0–1 to the frame. */
+export interface AgentVisuals {
+  boxes?: { box: Box; label?: string }[] | null;
+  arrows?: { from: [number, number]; to: [number, number]; label?: string }[] | null;
+  strokes?: { points: [number, number][] }[] | null;
+  /** With a box it is placed on the frame; without, it shows in the question's card. */
+  images?: { url: string; box?: Box | null }[] | null;
+  options?: { text: string; image?: { url: string } | null }[] | null;
+  /** The still of the question's moment. */
+  frame?: string | null;
+}
+
+/** A task's question under its comment: `id` is the thread (what an answer points at), `t`, `from` and `to` its
+ * moment and shot on the shown version. */
+export interface TaskAsk {
+  id: number;
+  task: string;
+  t: number;
+  from?: number | null;
+  to?: number | null;
+  version: string;
+  text: string;
+  visuals?: AgentVisuals | null;
 }
 
 export interface Carried {

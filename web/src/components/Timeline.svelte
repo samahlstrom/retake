@@ -1,5 +1,6 @@
 <script lang="ts">
-  // The timeline canvas (drawn by the frame loop) and one marker per comment, colored by its status. Where you talked
+  // The timeline canvas (drawn by the frame loop) and one marker per comment, colored by its status, plus a "?" for
+  // each question the agent asked from inside its task, at the question's own moment. Where you talked
   // and drew shows on the canvas only until it becomes a comment; then the comment's marker stands for it. The tip
   // follows the pointer. Click or drag to seek.
   import type { Review } from '../lib/review.svelte';
@@ -29,6 +30,18 @@
       }}
       onclick={() => review.jumpToComment(row)}
     ></button>
+  {/each}
+  {#each review.timelineAsks as row (`ask:${row.ask!.id}`)}
+    {@const ask = row.ask!}
+    <button
+      class="ask-marker"
+      data-ask={ask.id}
+      class:on={review.selectedAsk === ask.id}
+      style:left={`calc(8px + (100% - 16px) * ${Math.min(1, Math.max(0, ask.t / (review.timelineDuration || 1)))})`}
+      aria-label={`The agent's question at ${ask.time}: ${ask.text}`}
+      title={`${ask.time} · ${ask.text}`}
+      onclick={() => review.selectAsk(row)}><span aria-hidden="true">?</span></button
+    >
   {/each}
   <div
     id="tip"

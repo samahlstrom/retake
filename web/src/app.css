@@ -507,6 +507,38 @@ button {
 #timeline .comment-marker.done {
   background: var(--st-done);
 }
+/* The agent's question (retake ask), at its own moment: a violet tag with a "?", dashed like its visuals. */
+#timeline .ask-marker {
+  position: absolute;
+  top: calc(50% - 21px);
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  transform: translateX(-50%);
+  border: 1.5px dashed var(--st-question);
+  border-radius: 5px;
+  background: rgba(22, 18, 31, 0.92);
+  color: var(--st-question);
+  font:
+    700 11px/1 system-ui,
+    sans-serif;
+  cursor: pointer;
+  z-index: 3;
+  animation: comment-arrive 220ms ease-out;
+}
+#timeline .ask-marker.on {
+  border-style: solid;
+  background: var(--st-question);
+  color: #16121f;
+}
+#timeline .ask-marker:hover,
+#timeline .ask-marker:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 1px;
+  z-index: 4;
+}
 #timeline .comment-marker:hover,
 #timeline .comment-marker:focus-visible {
   outline: 2px solid #fff;
@@ -582,7 +614,8 @@ button {
   overflow-wrap: anywhere;
 }
 @media (prefers-reduced-motion: reduce) {
-  #timeline .comment-marker {
+  #timeline .comment-marker,
+  #timeline .ask-marker {
     animation: none;
   }
 }

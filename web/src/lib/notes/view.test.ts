@@ -266,3 +266,34 @@ it('continuous review retains resolved comments and their author', () => {
   expect(result).toHaveLength(1);
   expect(result[0]).toMatchObject({ by: 'Reviewer', mark: 'answered', reopen: true });
 });
+
+describe("an agent's question from inside its task", () => {
+  const ask = {
+    id: 31,
+    task: 'task-1',
+    t: 83.4,
+    from: 80,
+    to: 86,
+    version: 'v7',
+    text: 'Which logo?',
+    visuals: { boxes: [{ box: [0.1, 0.2, 0.3, 0.2] as [number, number, number, number], label: 'this one' }] },
+  };
+  const res: NotesResponse = {
+    version: 'v8',
+    newest: true,
+    scope: 'review',
+    items: [item({ id: 12, status: 'question', question: 'Which logo?', ask })],
+  };
+  it('rides on its comment, with its own time as m:ss', () => {
+    const [row] = sidebarRows(res, { versions, shown: 'v8' });
+    expect(row!.kind).toBe('note');
+    expect(row!.mark).toBe('question');
+    expect(row!.ask).toMatchObject({ id: 31, task: 'task-1', t: 83.4, time: '1:23', text: 'Which logo?' });
+    expect(row!.answer).toBeNull(); // the card under the comment answers it, not a separate question row
+    expect(toggleLabel([row!], true)).toBe('1 question');
+  });
+  it('goes once the note is answered (open again)', () => {
+    const [row] = sidebarRows({ ...res, items: [item({ id: 12, status: 'open', ask })] }, { versions, shown: 'v8' });
+    expect(row!.ask).toBeNull();
+  });
+});

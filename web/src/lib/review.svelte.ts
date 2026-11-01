@@ -50,6 +50,7 @@ import { closeMic, MIC_BLOCKED, MIC_BLOCKED_TOUCH, openMic, pickMime, recorderMi
 import { Notes } from './notes/notes.svelte';
 import type { NoteItem } from './notes/types';
 import { activeKey, PHONE_QUERY, presence, sidebarRows, type Row } from './notes/view';
+import { inRange } from './notes/agent';
 import { addPoint, alphaAt, fitFrame, isClick, renderInk } from './pen';
 import { Saver } from './saver';
 import { VideoSource } from './source';
@@ -261,6 +262,17 @@ export class Review {
   readonly pendingHistoryVoice = $derived(pendingVoiceBins(this.historyVoice, this.rows));
   /** One marker per comment on the timeline (a drawing-only comment too); its pen ticks fold into it. */
   readonly timelineComments = $derived(this.sidebar.rows);
+  /** The agent's questions from inside its tasks: a marker each, at the question's own moment. */
+  readonly timelineAsks = $derived(this.sidebar.rows.filter((row) => row.ask));
+  /** The question whose visuals stay on the video (its marker or time was clicked), by thread id. */
+  selectedAsk = $state<number | null>(null);
+  /** The questions whose visuals are on the video now; `pulse` counts entries into their range, for one highlight. */
+  shownAsks = $state.raw<{ row: Row; pulse: number }[]>([]);
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- bookkeeping, nothing renders it
+  readonly #askIn = new Map<number, number>();
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- bookkeeping, nothing renders it
+  readonly #askPulses = new Map<number, number>();
+  #askSig = '';
   /** The task that owns each note, freshest first: the automation state, else the one the notes route carried. */
   readonly tasks = $derived.by(() => {
     const all = this.automation.state?.tasks ?? [];
@@ -1410,6 +1422,50 @@ export class Review {
     void this.addImage(file, this.lastPointer);
   };
 
+  /** The agent questions to show at playhead `vt`: in their range, or selected. Playing out of a selected one's range
+   * lets it go. Assigned only when something changed. */
+  #updateAsks(vt: number): void {
+    const out: { row: Row; pulse: number }[] = [];
+    const playing = !this.video.paused;
+    for (const row of this.rows) {
+      const ask = row.ask;
+      if (!ask) continue;
+      const inside = inRange(ask, vt);
+      if (inside && !this.#askIn.has(ask.id)) this.#askIn.set(ask.id, (this.#askPulses.get(ask.id) ?? 0) + 1);
+      if (!inside) this.#askIn.delete(ask.id);
+      if (inside) this.#askPulses.set(ask.id, this.#askIn.get(ask.id)!);
+      if (this.selectedAsk === ask.id && !inside && playing) this.selectedAsk = null;
+      if (inside || this.selectedAsk === ask.id) out.push({ row, pulse: this.#askPulses.get(ask.id) ?? 0 });
+    }
+    const sig = out.map((a) => `${a.row.key}:${a.row.ask!.id}:${a.pulse}`).join('|');
+    if (sig === this.#askSig) return;
+    this.#askSig = sig;
+    this.shownAsks = out;
+  }
+
+  /** Click a question's marker or time: go to its moment and keep its visuals on the video. */
+  selectAsk = (row: Row): void => {
+    if (!row.ask) return;
+    this.video.pause();
+    this.selectedAsk = row.ask.id;
+    this.jumpTo(row.ask.t);
+  };
+
+  /** Answer an agent's question with typed words or a tapped choice: back to the same task. */
+  answerAsk = async (row: Row, message: string): Promise<boolean> => {
+    const ask = row.ask;
+    if (!ask) return false;
+    const ok = await this.automation.send(`/tasks/${encodeURIComponent(ask.task)}/answer`, {
+      question: ask.id,
+      message,
+    });
+    if (ok) {
+      if (this.selectedAsk === ask.id) this.selectedAsk = null;
+      await this.notes.refresh();
+    } else this.toast.say(this.automation.error || 'Could not send your answer. Try again.', 5000);
+    return ok;
+  };
+
   /** The image cards to show at playhead `vt`: like strokes, within ±SHOW s of their time, dimmer when not recording.
    * Only assigned when something changed, so the layer re-renders only then. */
   #updateCards(vt: number): void {
@@ -2284,6 +2340,7 @@ export class Review {
     this.#drawTimeline(vt);
     this.#drawWave();
     this.#updateCards(vt);
+    this.#updateAsks(vt);
     const rows = this.rows,
       act = activeKey(rows, vt);
     if (act !== this.activeRow) this.activeRow = act;

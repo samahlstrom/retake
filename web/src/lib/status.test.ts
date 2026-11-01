@@ -36,6 +36,11 @@ describe('comment status: four states the reviewer sees', () => {
     for (const s of ['queued', 'running', 'stopping'])
       expect(commentStatus(note(), task(s))).toEqual({ state: 'working', paused: null, waiting: null });
   });
+  it('a question the agent asked from inside its running task is Question while it works on', () => {
+    expect(commentStatus(note('question'), task('running')).state).toBe('question');
+    expect(commentStatus(note('question'), task('stopping')).state).toBe('question');
+    expect(commentStatus(note('open'), task('running')).state).toBe('working'); // answered: Working again
+  });
   it('a question is Question, from the task or from the notes (MCP)', () => {
     expect(commentStatus(note(), task('question')).state).toBe('question');
     expect(commentStatus(note('question')).state).toBe('question');
