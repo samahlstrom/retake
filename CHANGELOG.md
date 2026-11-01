@@ -4,6 +4,21 @@ All notable changes are listed here. Versions follow semver once the first relea
 
 ## Unreleased
 
+### Folders on the left of the home
+- `retake open <folder>` scans the whole tree (6 folders down, hidden, `.review`, `node_modules` and `__pycache__`
+  folders skipped, at most 20 000 folders, no video opened): folders, the projects in them, and each project's
+  videos, including those in its `shorts/`-like subfolders (2 folders down). Deeper videos are named by their path
+  (`2026-10-19/fullgame` is `/p/2026-10-19-fullgame/`); the ones directly in the folder keep their names and URLs.
+- `GET /api/home` gains `tree` (folders → projects → videos) and, per video, `video` (its own name), `path`,
+  `project` and `questions`. `retake connect` sends each video's `path` and `project`, so the hosted home shows the
+  same tree.
+- The home has a left column: the tree with chevrons and status dots (has questions, to review, being edited), a
+  filter, a resize handle, ☰ to hide it, and a drawer on a phone. A folder or project shows its videos as cards;
+  the selection is in the URL hash and remembered with the opened folders. The review page's back link reads
+  "Project › video" and returns to the same place.
+- The organizing that lived only in Retake's database (New project, New group, Move to) is gone from the page; its
+  API stays for now.
+
 ### Agents ask on the video, never in the terminal
 - The built-in agents never stop for a permission prompt: Claude Code runs with `--dangerously-skip-permissions`
   (and without its own question tool), Codex with `--dangerously-bypass-approvals-and-sandbox`, in the background and

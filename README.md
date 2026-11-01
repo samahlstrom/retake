@@ -107,7 +107,8 @@ retake push how-to/v2/how-to_v2.mp4 --render --parent v2             # registers
 - `retake push --render` registers the current revision with a poster. Opening it starts a growing stream; closing
   the last viewer stops rendering, and reopening resumes from the cache. Only changed units draw again.
   Each patch's note ids and summary become the changelog. Use `--no-stream` to wait for a completed MP4.
-- `retake open <folder>` lists projects with thumbnails, review status, and Next video. `retake share <folder>` shares that home screen.
+- `retake open <folder>` shows the folder as a tree on the left (folders, projects, their videos) and the videos as
+  thumbnails with their review status, and Next video. `retake share <folder>` shares that home screen.
 - Notes point at the timeline elements under their strokes, so an agent knows what to patch.
 - C, `[` and `]` land on the matching moment when a trim moved things, not on the same clock time.
 - The newest version shows the parent's notes as unchanged, answered (check it), or context changed.
