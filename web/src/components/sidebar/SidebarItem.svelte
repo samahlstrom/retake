@@ -3,7 +3,7 @@
   // agent has the reply box under it; a paused one says why once, with Retry; a Working one waiting for its computer
   // says so. Everything else is in its ⋯.
   import type { Review } from '../../lib/review.svelte';
-  import type { Row } from '../../lib/notes/view';
+  import { sketchFrame, type Row } from '../../lib/notes/view';
   import { STATE_TEXT } from '../../lib/status';
   import { verName } from '../../lib/versions';
   import CommentMenu from './CommentMenu.svelte';
@@ -16,6 +16,7 @@
   const status = $derived(review.statusOf(row));
   const task = $derived(review.taskOf(row));
   const strokes = $derived(row.drawings.length || !row.text.trim() ? review.strokesOf(row) : []);
+  const frame = $derived(sketchFrame(row, review.versions, review.shown, !!review.homeCtx));
   const aspect = $derived.by(() => {
     const [w, h] = review.aspect.split('/').map(Number);
     return w && h ? w / h : 16 / 9;
@@ -73,7 +74,7 @@
     <p class="text" class:quiet={!row.text.trim()}>{text}</p>
   {/if}
   {#if strokes.length || row.images.length}
-    <Sketch {strokes} images={row.images} {aspect} onclick={() => review.jumpToComment(row)} />
+    <Sketch {strokes} images={row.images} {aspect} {frame} onclick={() => review.jumpToComment(row)} />
   {/if}
   {#if status.state === 'done' && row.change}
     <p class="change">

@@ -4,6 +4,15 @@ All notable changes are listed here. Versions follow semver once the first relea
 
 ## Unreleased
 
+### Moving or copying a project keeps its stills
+- The project store keeps paths relative to the project folder (notes' snapshots, pushed versions, transcribe
+  jobs' take folders). Opening an older store fixes its absolute paths, also ones from where the folder used to be.
+- A missing still never pauses a task: the worker makes its own from the version at the note's moment, with the
+  note's pen lines drawn on it, and the note's context says so (`missing`). A missing attached image is said there
+  too. Notes now keep each stroke's line (up to 64 points) and time.
+- A comment card's drawing sits on the still of its moment (`GET /api/notes/<id>/snapshot`), else on its version's
+  poster, instead of an empty dark box.
+
 ### Agents ask on the video, never in the terminal
 - The built-in agents never stop for a permission prompt: Claude Code runs with `--dangerously-skip-permissions`
   (and without its own question tool), Codex with `--dangerously-bypass-approvals-and-sandbox`, in the background and
