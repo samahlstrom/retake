@@ -181,9 +181,38 @@ whisper_cli = ""     # whisper-cli's path; "" = $PATH, then scripts/install-whis
 
 The review page opens the newest playable cut. A version picker exposes review checkpoints with their durations; choosing an older cut pins it until another is selected. The latest cut can still stream as it renders. Checkpoints do not require storing media in Git.
 
-`GET /api/notes?v=<label>&scope=review` includes that cut's notes, earlier unresolved notes, and notes resolved in that cut, excluding future cuts. Each note exposes its originating `version`. The sidebar has two tabs with counts: To do (Open, Working, Question, earlier cuts' unresolved notes included, tagged with their version) and Done (resolved, with the change and the version containing it). Flipping to an older cut shows that cut's notes in their final state the same way. Timeline markers follow the tab, one per comment, in its status color; a comment's pen strokes and voice fold into its marker once it is transcribed. Transcription completion is independent of resolution.
+`GET /api/notes?v=<label>&scope=review` includes that cut's notes, earlier unresolved notes, and notes resolved in that cut, excluding future cuts. Each note exposes its originating `version`. It stays for integrations; the review page reads `scope=video` (below) and does the per-version split itself.
 
-`GET /api/history?v=<label>&scope=review` includes actual strokes and images for earlier unresolved feedback, with timestamps mapped when manifests exist. Carried entries expose `source_version` and are read-only on the destination cut. History exposes `transcribed` only when all saved audio files have matching completed transcripts; completed recordings never regain waveforms after reload. Partially transcribed takes expose per-segment voice tracks when available.
+### Comments belong to their version
+
+A comment belongs to the version it was recorded on. A draft's comments (`v5-draft2`) belong to the version the draft
+heads for (`v5`), so they are still there once the draft becomes that version.
+
+- **What a version shows.** The sidebar and the timeline show the shown version's comments only, plus the agent's
+  questions about them (an item's `note`, else its own `version`), never another version's. The two tabs count that
+  version: To do (Open, Working, Question) and Done (resolved, with the change and "See vN" when another version holds
+  it). Timeline markers follow the tab, one per comment, in its status color, at the comment's own time on its own
+  version; a comment's pen strokes and voice fold into its marker once it is transcribed. Transcription completion is
+  independent of resolution. Switching the version, however it is switched (the picker, the strip below), switches
+  the comments, the markers and the drawings on the video with it.
+- **The page reads the whole family once.** `GET /api/notes?v=<label>&scope=video` returns every version's comments
+  with their `version`, also those recorded on a draft the family no longer lists (an older draft, or a promoted
+  draft's old label) while its version is listed (with `scope=review`, within the same version limit). The page keeps the shown version's for the list and the markers, and counts the rest per
+  version for the strip and the line below. A switch shows the new version's comments at once, from the same answer.
+- **The version strip.** With two or more entries in the family (a second version, or a draft), the top of the
+  comments panel has one row of versions, oldest first: `v1 v2 … v7`, the shown one highlighted, each with its To do
+  count when it has one (`v3 91`). Drafts of the next version are one quiet entry, `v8 · drafting`, which shows the
+  newest listed draft. A click shows that version, as the picker does (pinned unless it is the newest). The row has a
+  fixed height; on a phone it scrolls sideways inside its own row. The bar's version picker stays, for compact
+  layouts and phones.
+- **Open on earlier versions.** On the latest version (or a draft ahead of it), one quiet line at the top of the list
+  says what is still to do on older versions, newest first: `Open on earlier versions: v6 · 2, v3 · 91`. Each part
+  shows that version. The line is not there when nothing earlier is to do. A single version has no strip and no line.
+- **Send** counts and sends the shown version's open comments (spec/automation.md, "HTTP and UI"). An older version's
+  open comments are sent from that version. The agent still gets every open comment of every version as context with
+  each task (the poll answer's `notes`).
+
+`GET /api/history?v=<label>&scope=review` includes actual strokes and images for earlier unresolved feedback, with timestamps mapped when manifests exist. Carried entries expose `source_version` and are read-only on the destination cut. The review page reads the version's own history (no `scope`), so another version's drawings never show on this one. History exposes `transcribed` only when all saved audio files have matching completed transcripts; completed recordings never regain waveforms after reload. Partially transcribed takes expose per-segment voice tracks when available.
 
 The bar's one action, Send (spec/automation.md), stops and saves the current recording and queues final processing. When this page has no active take and nothing new to send, it says so, and that existing feedback is already saved; it must not claim there is no recording or resolve comments. Failed final requests remain retryable and never report successful completion.
 

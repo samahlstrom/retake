@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -376,7 +377,9 @@ func (s *Server) sidebar(w http.ResponseWriter, r *http.Request) {
 	if resp.Scope != "" {
 		seen := map[string]bool{}
 		target := s.manifestOf(v)
-		for _, source := range fam {
+		sources := s.withLeftDrafts(st, fam)
+		q.TakeDir = s.takeDirOf(sources)
+		for _, source := range sources {
 			if resp.Scope == "review" && source.N > v.N {
 				continue
 			}
@@ -494,6 +497,34 @@ func (s *Server) sidebar(w http.ResponseWriter, r *http.Request) {
 		resp.Items = s.attachAsks(st, v, resp.Items, automation)
 	}
 	s.json(w, r, http.StatusOK, resp)
+}
+
+// draftLabel is a draft's label, v<N>-draft<K>: the draft K heading for version N.
+var draftLabel = regexp.MustCompile(`^v(\d+)-draft\d+$`)
+
+// withLeftDrafts is the family plus the drafts it no longer lists that comments were recorded on (older drafts, and a
+// promoted draft's old label), each as version N: those comments belong to the version they headed for (spec/notes.md,
+// "Comments belong to their version"), so they don't vanish once it exists.
+func (s *Server) withLeftDrafts(st *project.Store, fam []family.Version) []family.Version {
+	notes, err := st.Notes(project.NoteFilter{})
+	if err != nil {
+		return fam
+	}
+	listed := map[string]bool{}
+	for _, v := range fam {
+		listed[v.Label] = true
+	}
+	out := slices.Clone(fam)
+	for _, n := range notes {
+		m := draftLabel.FindStringSubmatch(n.Version)
+		if m == nil || listed[n.Version] || !listed["v"+m[1]] {
+			continue
+		}
+		listed[n.Version] = true
+		num, _ := strconv.Atoi(m[1])
+		out = append(out, family.Version{Label: n.Version, N: num, Path: s.remotePath(n.Version)})
+	}
+	return out
 }
 
 // takeDirOf finds a note's take folder through the family: <version's dir>/<stem>.review/<take>.

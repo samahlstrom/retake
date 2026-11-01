@@ -26,6 +26,15 @@ All notable changes are listed here. Versions follow semver once the first relea
   too. Notes now keep each stroke's line (up to 64 points) and time.
 - A comment card's drawing sits on the still of its moment (`GET /api/notes/<id>/snapshot`), else on its version's
   poster, instead of an empty dark box.
+### Comments stay on their version
+- A version shows its own comments only: the list, the To do and Done counts, the timeline markers, the drawings on
+  the video and Send N. Older versions' open comments no longer pile onto the newest version at their old times.
+  A draft's comments belong to the version it heads for.
+- A strip of versions over the comments (`v1 … v7`, the shown one highlighted, each with what's still to do, the
+  agent's draft as `v8 · drafting`) switches versions; on a phone it scrolls sideways. The bar's picker stays.
+- On the newest version, one quiet line says what's still open earlier (`Open on earlier versions: v6 · 2, v3 · 91`),
+  and each part goes there. The agent still gets every open comment of every version as context.
+- Comments recorded on a draft stay on its version after the family stops listing that draft.
 
 ### Agents ask on the video, never in the terminal
 - The built-in agents never stop for a permission prompt: Claude Code runs with `--dangerously-skip-permissions`

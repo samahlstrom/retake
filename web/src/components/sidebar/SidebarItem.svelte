@@ -61,10 +61,6 @@
       >{/if}
     <button class="time jump" title="Go to {row.time}" onclick={() => review.jumpToComment(row)}>{row.time}</button>
     <span class="status {status.state}"><span class="dot" aria-hidden="true"></span>{STATE_TEXT[status.state]}</span>
-    {#if row.version && row.version !== review.shown && status.state !== 'done'}<span
-        class="origin"
-        title="Left on {verName(row.version)}">{verName(row.version)}</span
-      >{/if}
     <span class="grow"></span>
     <CommentMenu {review} {row} />
   </div>
