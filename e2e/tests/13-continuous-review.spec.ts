@@ -153,7 +153,7 @@ test('recorded audio and drawings fold into one comment marker once transcribed'
 });
 
 test('Send with nothing new says the feedback is saved; the agent menu says why it can\'t edit', async ({page}) => {
-  // This server's own worker can't edit (a plain video, no agent): Send saves, and never says Finish review.
+  // This server's own worker can't edit (e2e turns agent discovery off): Send saves, and never says Finish review.
   await expect(page.locator('#agent')).toHaveText('Agent unavailable');
   await expect(page.locator('#done')).toHaveText('Send 1 to agent');
   await page.locator('#done').click();
@@ -165,7 +165,7 @@ test('Send with nothing new says the feedback is saved; the agent menu says why 
   await expect(page.locator('#side .item .status')).toHaveText('Open');
   await page.locator('#agent').click();
   await expect(page.locator('.agent-pop')).toContainText('The agent can’t edit yet');
-  await expect(page.locator('.agent-pop')).toContainText('no timeline');
+  await expect(page.locator('.agent-pop')).toContainText('No agent found'); // plain videos are editable now; e2e finds no agents
   await expect(page.locator('.agent-pop button')).toHaveCount(0); // nothing to press that does nothing
 });
 
