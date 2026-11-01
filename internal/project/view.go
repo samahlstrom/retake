@@ -28,8 +28,23 @@ type Item struct {
 	Images     []ItemImage  `json:"images,omitempty"`
 	Targets    []Target     `json:"targets,omitempty"` // notes: the timeline elements under it (spec/bridge.md)
 	Carried    *CarriedFrom `json:"carried,omitempty"` // a note of the parent version, shown here at its mapped time
+	Ask        *ItemAsk     `json:"ask,omitempty"`     // notes: the open question its task's agent asked about it
 
 	imagesOf *Note // the note whose images this item shows
+}
+
+// ItemAsk is a question an agent asked from inside its editing task (retake ask), shown under its comment: the thread
+// id (what an answer points at), the task, its time and range (on the shown version when mapped, else on Version)
+// and the agent's visuals.
+type ItemAsk struct {
+	ID      int64    `json:"id"`
+	Task    string   `json:"task"`
+	T       float64  `json:"t"`
+	From    *float64 `json:"from,omitempty"`
+	To      *float64 `json:"to,omitempty"`
+	Version string   `json:"version"`
+	Text    string   `json:"text"`
+	Visuals *Visuals `json:"visuals,omitempty"`
 }
 
 // CarriedFrom says where a carried-over item comes from and what became of its moment (spec/bridge.md, "Carrying

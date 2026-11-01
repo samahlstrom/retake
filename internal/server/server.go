@@ -546,6 +546,8 @@ func (s *Server) get(w http.ResponseWriter, r *http.Request, parts []string) {
 		s.timemap(w, r)
 	case len(parts) == 4 && parts[0] == "api" && parts[1] == "takes":
 		s.takeFile(w, r, parts[2], parts[3])
+	case len(parts) == 4 && parts[0] == "api" && parts[1] == "questions":
+		s.questionFile(w, r, parts[2], parts[3])
 	case is(parts, "api", "poster"):
 		s.poster(w, r)
 	case parts[0] == "api" || parts[0] == "video":

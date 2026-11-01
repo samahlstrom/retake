@@ -70,6 +70,8 @@ func (s *Server) automationRoute(w http.ResponseWriter, r *http.Request, p []str
 		project.AutomationConfig
 		Notes   []int64 `json:"notes"`
 		Message string  `json:"message"`
+		// Question is the thread an answer is to: a question the task's agent asked from inside it (retake ask).
+		Question int64 `json:"question"`
 	}
 	if err = json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&b); err != nil {
 		s.fail(w, r, 400, "invalid request")
@@ -96,6 +98,10 @@ func (s *Server) automationRoute(w http.ResponseWriter, r *http.Request, p []str
 		agent := b.Agent
 		if !accessOf(r).role.Can(team.PermManage) {
 			agent = "" // a reviewer's retry keeps the task's agent
+		}
+		if p[4] == "answer" && b.Question != 0 {
+			err = st.AnswerTask(p[3], b.Question, b.Message, s.authorOf(r))
+			break
 		}
 		err = st.ControlTask(p[3], p[4], agent, b.Message)
 	default:
@@ -138,6 +144,7 @@ func (s *Server) workerRoute(w http.ResponseWriter, r *http.Request, p []string,
 			Worker project.EditingWorker `json:"worker"`
 			Task   string                `json:"task"`
 			Lease  string                `json:"lease"`
+			Told   []int64               `json:"told"`
 		}
 		if json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&b) != nil || !project.ValidWorkID(b.Worker.ID) || !project.ValidWorkID(b.Worker.Session) || len(b.Worker.Name) > 100 || len(b.Worker.Agents) > 16 {
 			s.fail(w, r, 400, "invalid worker")
@@ -153,13 +160,22 @@ func (s *Server) workerRoute(w http.ResponseWriter, r *http.Request, p []string,
 			s.storeFailed(w, r, err)
 			return
 		}
-		t, err := st.PollWork(b.Worker, b.Task, b.Lease)
+		if len(b.Told) > 1000 {
+			s.fail(w, r, 400, "invalid worker")
+			return
+		}
+		t, err := st.PollWork(b.Worker, b.Task, b.Lease, b.Told...)
 		if err != nil {
 			s.fail(w, r, 409, err.Error())
 			return
 		}
 		var notes []project.WorkNote
+		var questions []project.TaskQuestion
 		if t != nil {
+			if questions, err = st.TaskQuestions(*t, s.questionURL); err != nil {
+				s.storeFailed(w, r, err)
+				return
+			}
 			ns, err := st.Notes(project.NoteFilter{})
 			if err != nil {
 				s.storeFailed(w, r, err)
@@ -192,7 +208,7 @@ func (s *Server) workerRoute(w http.ResponseWriter, r *http.Request, p []string,
 				versions++
 			}
 		}
-		s.json(w, r, 200, project.WorkAssignment{Task: t, Notes: notes, Config: state.Config, Versions: versions})
+		s.json(w, r, 200, project.WorkAssignment{Task: t, Notes: notes, Config: state.Config, Versions: versions, Questions: questions})
 		return
 	}
 	// Every request after registration belongs to the live worker session. A token alone cannot impersonate
@@ -261,6 +277,26 @@ func (s *Server) workerRoute(w http.ResponseWriter, r *http.Request, p []string,
 		}
 		w.Header().Set("Content-Type", project.ImageTypes[filepath.Ext(path)])
 		http.ServeContent(w, r, filepath.Base(path), stat.ModTime(), file)
+		return
+	case is(p, "api", "worker", "ask") && r.Method == http.MethodPost:
+		// A question from the task's running attempt (spec/automation.md, "Questions from inside a task").
+		var b project.WorkAsk
+		if json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<20)).Decode(&b) != nil {
+			s.fail(w, r, 400, "invalid question")
+			return
+		}
+		b.Worker = id
+		b.Known = func(label string) bool {
+			_, ok := s.version(label)
+			return ok && label != ""
+		}
+		b.Size = s.frameSize
+		q, e := st.AskInTask(b)
+		if e != nil {
+			s.fail(w, r, 409, e.Error())
+			return
+		}
+		s.json(w, r, 200, q)
 		return
 	case is(p, "api", "worker", "report") && r.Method == http.MethodPost:
 		var b project.WorkReport

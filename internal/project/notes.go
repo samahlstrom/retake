@@ -319,6 +319,9 @@ func (s *Store) Sync(run Run) (SyncResult, error) {
 		ev.Opened = unique(openOnly(res.Added, t), res.Reinstated, res.Reopened)
 		ev.Answers = res.Answers
 		t.emit(EventNotes, ev)
+		if len(res.Answers) > 0 {
+			return t.resumeAfterSync() // a task waiting on a recorded answer goes again
+		}
 		return nil
 	})
 	return res, err

@@ -65,6 +65,12 @@ type EditingTask struct {
 	Result    string      `json:"result,omitempty"`
 	Events    []TaskEvent `json:"events"`
 	Usage     *AgentUsage `json:"usage,omitempty"`
+	// Asked is the questions its agents asked from inside the task (retake ask), Told the answers to them that
+	// reached an agent, and Done the notes an earlier attempt finished while others waited on an answer
+	// (spec/automation.md, "Questions from inside a task").
+	Asked []TaskAsk `json:"asked,omitempty"`
+	Told  []int64   `json:"told,omitempty"`
+	Done  []int64   `json:"done,omitempty"`
 }
 
 // AgentUsage reports provider telemetry, never an invented remaining subscription balance.
@@ -225,12 +231,13 @@ func (s *Store) reconcileWork(t *tx, a *AutomationState) (bool, error) {
 			j.AddEvent(now, j.Error)
 			changed = true
 		}
-		for _, id := range j.Notes {
+		for _, id := range j.Pending() {
 			n, e := noteByID(t, id)
 			if e != nil {
 				return changed, e
 			}
-			if n.Status == StatusOpen {
+			// A question (its own agent's, waiting for the person) doesn't withdraw the note.
+			if n.Status == StatusOpen || n.Status == StatusQuestion {
 				continue
 			}
 			if j.State == "running" || j.State == "stopping" {
@@ -592,8 +599,9 @@ func (s *Store) ReadyFeedback() error {
 	return nil
 }
 
-// PollWork registers a heartbeat and renews or claims an exclusive task attempt.
-func (s *Store) PollWork(w EditingWorker, active, lease string) (*EditingTask, error) {
+// PollWork registers a heartbeat and renews or claims an exclusive task attempt. told is the answers to the active
+// task's questions that reached its agent since the last poll.
+func (s *Store) PollWork(w EditingWorker, active, lease string, told ...int64) (*EditingTask, error) {
 	var result *EditingTask
 	var stale bool
 	err := s.UpdateAutomation(func(a *AutomationState) (bool, error) {
@@ -623,6 +631,7 @@ func (s *Store) PollWork(w EditingWorker, active, lease string) (*EditingTask, e
 				return changed, nil
 			}
 			j.Until = now + int64(WorkerLease.Seconds())
+			changed = j.tell(told) || changed
 			clone := *j
 			result = &clone
 			return changed, nil
@@ -744,6 +753,8 @@ type WorkReport struct {
 	Version        string      `json:"version,omitempty"`
 	VersionChecked bool        `json:"-"`
 	Usage          *AgentUsage `json:"usage,omitempty"`
+	// Told is the answers that reached the agent, as in a poll: the report counts them before it decides.
+	Told []int64 `json:"told,omitempty"`
 }
 
 // WorkNote includes the original annotations alongside the note text.
@@ -760,6 +771,8 @@ type WorkAssignment struct {
 	Task     *EditingTask     `json:"task"`
 	Notes    []WorkNote       `json:"notes,omitempty"`
 	Versions int              `json:"versions"`
+	// Questions is the task's questions from inside it (retake ask), with their answers.
+	Questions []TaskQuestion `json:"questions,omitempty"`
 }
 
 // ReportWork atomically updates task and note completion, preserving reviewer approval. A completed task's final
@@ -783,6 +796,7 @@ func (s *Store) ReportWork(r WorkReport, floor int) (LiveRender, error) {
 		if len(r.Message) > 4000 {
 			r.Message = r.Message[:4000]
 		}
+		j.tell(r.Told)
 		switch r.State {
 		case "progress":
 			j.AddEvent(now, r.Message)
@@ -817,6 +831,31 @@ func (s *Store) ReportWork(r WorkReport, floor int) (LiveRender, error) {
 			if j.Stop {
 				return errors.New("task is stopping")
 			}
+			// Notes held by the task's own questions aren't finished by this report (spec/automation.md, "How a task
+			// ends"); the rest are, with a render or a new version.
+			hold, waiting, herr := held(t, j)
+			if herr != nil {
+				return herr
+			}
+			var free []int64
+			for _, id := range j.Pending() {
+				if !slices.Contains(hold, id) {
+					free = append(free, id)
+				}
+			}
+			if r.Result == "" && r.Version == "" && len(j.Asked) > 0 {
+				if len(free) > 0 {
+					// The agent was told an answer just before it reported: it goes again rather than failing.
+					j.wait(false, now, r.Message)
+				} else {
+					j.wait(waiting, now, r.Message)
+				}
+				break
+			}
+			if len(free) == 0 && len(hold) > 0 {
+				j.wait(waiting, now, r.Message) // its render stays a draft: nothing it holds is done
+				break
+			}
 			var label string
 			if r.Result == "" && r.Version != "" {
 				// A plain project's new version file: the server has seen it in its family.
@@ -833,7 +872,7 @@ func (s *Store) ReportWork(r WorkReport, floor int) (LiveRender, error) {
 				result = *v
 				label = v.Label
 			}
-			for _, id := range j.Notes {
+			for _, id := range free {
 				n, e := noteByID(t, id)
 				if e != nil {
 					return e
@@ -845,8 +884,14 @@ func (s *Store) ReportWork(r WorkReport, floor int) (LiveRender, error) {
 					return e
 				}
 			}
-			j.State = "completed"
 			j.Result = label
+			if len(hold) > 0 {
+				// Some notes are Done; the others still wait on their questions, in this same task.
+				j.Done = append(j.Done, free...)
+				j.wait(waiting, now, r.Message)
+				break
+			}
+			j.State = "completed"
 			j.Lease = ""
 			j.Until = 0
 			j.Error = ""
