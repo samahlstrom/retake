@@ -243,7 +243,7 @@ func serveCmd(ctx context.Context, args []string, env Env) int {
 		engines = env.Engines(cfg)
 	}
 	o := hub.Options{Stores: st, PublicURL: s.PublicURL, Proxies: s.Proxies, UI: page, Jobs: &engines, Prober: prober,
-		Version: Version(), Log: env.Stderr, Verbose: sf.verbose, RelayCache: s.RelayCache}
+		Version: Version(), Log: env.Stderr, Verbose: sf.verbose, RelayCache: s.RelayCache, Theme: tdir}
 	if mail != nil {
 		o.Mailer = mail
 	}

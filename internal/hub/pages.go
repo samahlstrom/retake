@@ -22,32 +22,83 @@ func esc(s string) string { return html.EscapeString(s) }
 
 const backHome = `<p><a href="/">Your projects</a></p>`
 
-const pageStyle = `body{margin:0;min-height:100vh;display:grid;place-items:center;padding:0 16px;background:#0b0b0c;` +
-	`color:#ddd;font:16px/1.5 system-ui,sans-serif}main{max-width:32rem;width:100%}h1{font-size:1.25rem;font-weight:600}` +
-	`a{color:#9cf}ul{list-style:none;padding:0}li{padding:.4rem 0;border-bottom:1px solid #222;display:flex;` +
-	`justify-content:space-between;gap:1rem}.role{color:#888}button,input{font:inherit;padding:.5rem .9rem;` +
-	`border-radius:6px;border:1px solid #333;background:#1a1a1c;color:#eee}button{cursor:pointer}` +
-	`form.inline{display:inline}.muted{color:#888}h2{font-size:1rem;font-weight:600;margin-top:1.75rem}` +
-	`.field label{display:block;margin-bottom:.25rem;color:#aaa}.field input{width:100%;box-sizing:border-box}` +
-	`pre{white-space:pre-wrap;word-break:break-all;background:#1a1a1c;border:1px solid #333;border-radius:6px;` +
-	`padding:.75rem;user-select:all}code{font:14px/1.5 ui-monospace,monospace;font-variant-ligatures:none}`
+// pageStyle's colours and fonts are the theme's tokens when the host has a theme (spec/theme.md), else these
+// fallbacks: the pages look the same without one.
+const pageStyle = `body{margin:0;min-height:100vh;display:grid;place-items:center;padding:0 16px;` +
+	`background:var(--bg,#0b0b0c);color:var(--text,#ddd);font:16px/1.5 var(--font-ui,system-ui,sans-serif)}` +
+	`main{max-width:32rem;width:100%}h1{font-size:1.25rem;font-weight:600}` +
+	`a{color:var(--link,#9cf)}ul{list-style:none;padding:0}li{padding:.4rem 0;border-bottom:1px solid var(--line,#222);` +
+	`display:flex;justify-content:space-between;gap:1rem}.role{color:var(--muted,#888)}button,input{font:inherit;` +
+	`padding:.5rem .9rem;border-radius:6px;border:1px solid var(--border,#333);` +
+	`background:var(--surface-control,#1a1a1c);color:var(--text,#eee)}button{cursor:pointer}` +
+	`form.inline{display:inline}.muted{color:var(--muted,#888)}h2{font-size:1rem;font-weight:600;margin-top:1.75rem}` +
+	`.field label{display:block;margin-bottom:.25rem;color:var(--text-6,#aaa)}` +
+	`.field input{width:100%;box-sizing:border-box}pre{white-space:pre-wrap;word-break:break-all;` +
+	`background:var(--surface-control,#1a1a1c);border:1px solid var(--border,#333);border-radius:6px;` +
+	`padding:.75rem;user-select:all}code{font:14px/1.5 var(--font-mono,ui-monospace,monospace);` +
+	`font-variant-ligatures:none}img.logo{display:block;height:32px;width:auto;margin-bottom:.5rem}` +
+	`.wordmark-dot{color:var(--wordmark-dot,var(--record,#ff453a))}`
 
-// page sends one short HTML page. body is HTML; callers escape what they put in it.
+// page sends one short HTML page, in the host's theme when there is one: its name instead of "Retake" in the title
+// and the heading, its logo above the heading, and its theme.css. body is HTML; callers escape what they put in it.
 func (h *Hub) page(w http.ResponseWriter, r *http.Request, code int, title, body string) {
-	writePage(w, r, code, title, body)
+	t := theme.Load(h.opts.Theme)
+	if t == nil {
+		writePage(w, r, code, title, body)
+		return
+	}
+	if t.Settings.Name == "" && t.Settings.Logo == "" {
+		body = wordmark(body) // the theme keeps the built-in wordmark
+	}
+	var head strings.Builder
+	if name := t.Settings.Name; name != "" {
+		title = strings.ReplaceAll(title, "Retake", name)
+		if i := strings.Index(body, "</h1>"); strings.HasPrefix(body, "<h1>") && i > 0 {
+			body = "<h1>" + strings.ReplaceAll(body[4:i], "Retake", esc(name)) + body[i:]
+		}
+	}
+	if t.Settings.Logo != "" {
+		body = `<img class="logo" src="/` + esc(theme.AssetURL(t.Settings.Logo)) + `" alt="">` + body
+	}
+	if t.Settings.Favicon != "" {
+		head.WriteString(`<link rel="icon" href="/` + esc(theme.AssetURL(t.Settings.Favicon)) + `">`)
+	}
+	if t.CSS {
+		head.WriteString(`<link rel="stylesheet" href="/` + theme.Prefix + theme.CSSFile + `">`)
+	}
+	writeDoc(w, r, code, title, head.String(), body, true)
 }
 
 // writePage sends one short HTML page in the review page's colors, with no script.
 func writePage(w http.ResponseWriter, r *http.Request, code int, title, body string) {
+	writeDoc(w, r, code, title, "", wordmark(body), false)
+}
+
+// wordmark makes "Retake" in the page's heading the built-in wordmark: Retake and a period in the record red
+// (spec/theme.md). The title stays plain.
+func wordmark(body string) string {
+	if i := strings.Index(body, "</h1>"); strings.HasPrefix(body, "<h1>") && i > 0 {
+		return "<h1>" + strings.Replace(body[4:i], "Retake", `Retake<span class="wordmark-dot">.</span>`, 1) + body[i:]
+	}
+	return body
+}
+
+// writeDoc sends a page; head goes after the built-in style (a theme's links), and themed lets the page load the
+// host's own styles, fonts and images (never a script).
+func writeDoc(w http.ResponseWriter, r *http.Request, code int, title, head, body string, themed bool) {
 	doc := `<!doctype html><html lang="en"><meta charset="utf-8">` +
 		`<meta name="viewport" content="width=device-width,initial-scale=1"><title>` + esc(title) + `</title>` +
-		`<style>` + pageStyle + `</style><main>` + body + `</main>`
+		`<style>` + pageStyle + `</style>` + head + `<main>` + body + `</main>`
+	csp := "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'"
+	if themed {
+		csp = "default-src 'none'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self'; " +
+			"form-action 'self'; frame-ancestors 'none'"
+	}
 	hd := w.Header()
 	hd.Set("Content-Type", "text/html; charset=utf-8")
 	hd.Set("Content-Length", strconv.Itoa(len(doc)))
 	hd.Set("Cache-Control", "no-store")
-	hd.Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; "+
-		"frame-ancestors 'none'")
+	hd.Set("Content-Security-Policy", csp)
 	w.WriteHeader(code)
 	if r.Method != http.MethodHead {
 		_, _ = w.Write([]byte(doc)) //nolint:gosec // callers escape what they put in (esc)

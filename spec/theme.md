@@ -67,9 +67,17 @@ are relative, like the rest of the page: `/theme/theme.css` at the root, `/p/<pr
 page of `retake serve` or `retake open <folder>`. The same files answer at both.
 
 The page reads the two metas: the brand name replaces "Retake" in the titles (`<project> · <name>` on the home;
-`Review · <video> · <name>` on the review page) and in the home's top left corner, after the logo.
+`Review · <video> · <name>` on the review page) and in the home's top left corner, after the logo. Without a theme
+name or logo that corner is the built-in wordmark: "Retake" and a period in `--wordmark-dot` (the record red); the
+titles stay plain "Retake".
 
 A custom page (`--ui-dir`) gets the same additions when its HTML has a `</head>`; it may use them or ignore them.
+
+`retake serve`'s own pages (sign in, first-run setup, short messages) are plain HTML without the page's CSS. With a
+theme they get its name instead of "Retake" in the title and the heading, its logo above the heading, its favicon and
+`/theme/theme.css`; their colours and fonts are the tokens with built-in fallbacks (`var(--bg, …)`), so the tokens a
+theme sets apply there too. Their Content-Security-Policy then allows styles, fonts and images from the server itself,
+still no script.
 
 ### The cascade
 
@@ -107,8 +115,10 @@ unlayered and later-declared layers both beat `retake`.
   so the page works.
 - A `logo` or `favicon` that's missing or not an allowed type: left out, with a warning.
 - A broken `theme.toml`: ignored, with a warning; `theme.css` still loads.
-- The server never refuses to start over a theme. It prints one line at startup: `theme  <folder> (<name>)`, and a
-  `retake: theme: …` warning for each problem `retake theme check` would report.
+- The server never refuses to start over a theme. It prints one line at startup,
+  `retake: theme <folder> (<name>, theme.css)`, and a `retake: theme: …` warning for each problem
+  `retake theme check` would report. A folder named with `--theme` or `RETAKE_THEME` that isn't there is a warning
+  too; the default folder not being there is silent.
 
 ## Tokens
 
@@ -158,6 +168,7 @@ the toast, the comments toggle, "← Projects") use `--scrim` and `--on-scrim`, 
 | `--dim` | `#85858d` | The bar's quiet text (total time, key hints) |
 | `--faint` | `#6f6f7a` | Counts, the ? key, idle icons |
 | `--faintest` | `#5c5c66` | Empty-project icon |
+| `--wordmark-dot` | `var(--record)` | The period after "Retake" in the built-in wordmark (home, sign-in pages) |
 | `--accent` | `#ececef` | Send and the other primary buttons |
 | `--accent-hover` | `#fff` | A hovered primary button |
 | `--on-accent` | `#111114` | Text on `--accent` |
@@ -279,6 +290,7 @@ Versioning). Classes and ids are not part of the API and can change in any relea
 | `brand` | The name (and logo) at the top left of the home | home |
 | `logo` | The theme's logo inside `brand` | home |
 | `brand-name` | The name inside `brand` | home |
+| `wordmark-dot` | The red period of the built-in wordmark "Retake." (not there with a theme's name or logo) | home |
 | `account` | Who is signed in, and Sign out | home |
 | `connect-card` | The "Connect your computer" card | home |
 | `project-grid` | The grid of projects | home |

@@ -44,6 +44,9 @@
     --focus: #a693fa;
     --link: #9edcff;
 
+    /* the built-in wordmark: Retake and a period in the record red (a theme's name or logo replaces it) */
+    --wordmark-dot: var(--record);
+
     /* recording and voice */
     --record: #ff453a;
     --record-text: #ff7a70;

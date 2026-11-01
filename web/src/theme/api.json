@@ -44,6 +44,7 @@
     "brand": "The name (and logo) at the top left of the home",
     "logo": "The theme's logo inside brand",
     "brand-name": "The name inside brand",
+    "wordmark-dot": "The red period after Retake in the built-in wordmark (not there with a theme's name or logo)",
     "account": "Who is signed in, and Sign out",
     "connect-card": "The Connect your computer card",
     "project-grid": "The grid of projects",

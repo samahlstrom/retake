@@ -69,6 +69,10 @@
     letter-spacing: -0.02em;
     font-size: 16px;
   }
+  /* The built-in wordmark: Retake and a red period. */
+  .breadcrumbs .brand .wordmark-dot {
+    color: var(--wordmark-dot);
+  }
   /* A theme's logo (theme.toml logo) before the name. */
   .breadcrumbs .brand.with-logo {
     display: inline-flex;

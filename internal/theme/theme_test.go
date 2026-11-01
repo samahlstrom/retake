@@ -450,3 +450,18 @@ func TestWarnings(t *testing.T) {
 		t.Errorf("Warnings = %q %v", line, ps)
 	}
 }
+
+// The example themes (examples/themes) use only this version's tokens and parts, so they can't fall behind.
+func TestExamplesCheck(t *testing.T) {
+	for _, name := range []string{"light", "brand"} {
+		dir := filepath.Join("..", "..", "examples", "themes", name)
+		r := Check(dir)
+		if len(r.Problems) != 0 || len(r.Tokens) < 20 || len(r.Parts) == 0 {
+			t.Errorf("%s: %d tokens, parts %v, problems %v", name, len(r.Tokens), r.Parts, r.Problems)
+		}
+		th := Load(dir)
+		if th.Settings.Name == "" || !th.CSS {
+			t.Errorf("%s: %+v", name, th.Settings)
+		}
+	}
+}

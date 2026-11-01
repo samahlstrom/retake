@@ -92,7 +92,11 @@
     <nav class="breadcrumbs" aria-label="Breadcrumb">
       <a class="brand" class:with-logo={!!brand.logo} data-part="brand" href="./"
         >{#if brand.logo}<img data-part="logo" src={brand.logo} alt="" />{/if}<span data-part="brand-name"
-          >{brand.name}</span
+          >{brand.name}{#if !brand.custom && !brand.logo}<span
+              class="wordmark-dot"
+              data-part="wordmark-dot"
+              aria-hidden="true">.</span
+            >{/if}</span
         ></a
       >
       {#if home.selected && !home.single}<span aria-hidden="true">/</span><a href="./">Projects</a>{/if}

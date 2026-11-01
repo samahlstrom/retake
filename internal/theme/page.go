@@ -136,10 +136,10 @@ func Inject(page []byte, t *Theme) []byte {
 		tags.WriteString(`<meta name="retake-brand" content="` + html.EscapeString(t.Settings.Name) + `">`)
 	}
 	if t.Settings.Logo != "" {
-		tags.WriteString(`<meta name="retake-logo" content="` + html.EscapeString(assetURL(t.Settings.Logo)) + `">`)
+		tags.WriteString(`<meta name="retake-logo" content="` + html.EscapeString(AssetURL(t.Settings.Logo)) + `">`)
 	}
 	if t.Settings.Favicon != "" {
-		tags.WriteString(`<link rel="icon" href="` + html.EscapeString(assetURL(t.Settings.Favicon)) + `">`)
+		tags.WriteString(`<link rel="icon" href="` + html.EscapeString(AssetURL(t.Settings.Favicon)) + `">`)
 	}
 	if t.CSS {
 		tags.WriteString(`<link rel="stylesheet" href="` + Prefix + CSSFile + `">`)
@@ -167,8 +167,8 @@ func Inject(page []byte, t *Theme) []byte {
 	return out
 }
 
-// assetURL is a theme file's URL relative to the page: theme/<path>, each segment escaped.
-func assetURL(name string) string {
+// AssetURL is a theme file's URL relative to the page: theme/<path>, each segment escaped.
+func AssetURL(name string) string {
 	segs := strings.Split(name, "/")
 	for i, s := range segs {
 		segs[i] = url.PathEscape(s)
