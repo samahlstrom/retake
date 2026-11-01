@@ -38,8 +38,8 @@ Settings come from the flags, else the environment, else `[server]` in config.to
 - The admin commands below (`retake user`, `retake project`) read the same settings, so in a container
   `docker compose exec retake retake user add ...` reaches the same stores. They also take `--data`.
 - The server listens on plain HTTP. TLS is the reverse proxy's job (deploy/README.md).
-- `retake serve` prints the URL, the drivers, and the number of projects and users. With no users yet it says how to
-  add the first admin.
+- `retake serve` prints the URL, the drivers, and the number of projects and users. With no users yet it prints the
+  setup link (below, "First run").
 
 ### The data folder
 
@@ -77,7 +77,8 @@ it, and a folder made by `retake open` can be copied in as a project (`retake pr
 
 ## Accounts
 
-There are no passwords. An admin creates users, and each user signs in with a one-time link.
+There are no passwords. An admin creates users, and each user signs in with a one-time link. The first admin, the
+server's owner, creates their own account in the browser.
 
 | Field | Holds |
 |---|---|
@@ -105,6 +106,29 @@ There are no passwords. An admin creates users, and each user signs in with a on
 - `GET /signin` is the sign-in page. With SMTP it has an email field: `POST /signin` (form field `email`) mails a link
   when that address has an account, and always answers "If <email> has an account, a sign-in link is on its way."
   Without SMTP it says to ask an admin for a link.
+
+### First run: the owner
+
+A fresh server faces the internet before anyone has an account, so claiming it needs a code that only the person who
+started it can see.
+
+- While the server store has no users, `retake serve` makes a setup code when it starts: `su_` plus 43 base64url
+  characters (256 random bits). It prints the setup link, `<public URL>/setup?code=<code>`, to stdout, so in a
+  container `docker compose logs retake` shows it. The code lives only in that process's memory: a restart prints a
+  new one, and the old one stops working.
+- `GET /setup?code=<code>` is a page in the sign-in pages' style with two fields, Name and Email, and one button,
+  "Create owner account". A missing or wrong code gives 401 with "This setup link isn't valid. Use the link the server
+  printed when it started." and counts as a failed attempt (rate limits). The page has `Referrer-Policy: same-origin`
+  and `Cache-Control: no-store`, as the sign-in link's.
+- `POST /setup` (form fields `code`, `name`, `email`; origin-checked like every post) checks the code, then, in one
+  transaction, that there are still no users, and adds the person as an admin. The code is used up, a session starts
+  (as with a sign-in link) and the answer is a page saying the account is ready, with the first "Connect your
+  computer" command (a fresh machine token, "Machines" below) and a link to `/`. A bad email answers the form again
+  with "That isn't an email address."
+- Once any user exists, `GET` and `POST /setup` answer 404 with "This server is already set up." and a link to
+  `/signin`. The page is gone for good.
+- While there are no users, the sign-in page says so and points at the setup link in the server's log.
+  `retake user add <email> --admin` on the host still works instead.
 
 ### Sessions
 
@@ -138,12 +162,48 @@ There are no passwords. An admin creates users, and each user signs in with a on
   A share role prints the link `<public URL>/p/<name>/s/<token>`; an agent token prints the `retake remote add` line
   and the MCP setup for `<public URL>/p/<name>/mcp`. `retake project token list|revoke <project> [<id>]`.
 
+## Machines: "Connect your computer"
+
+The editing happens on the owner's computer, which keeps the footage, the project source and the agent CLIs
+(spec/automation.md). A **machine token** lets that computer put its projects on the server and run their workers,
+without a token per project.
+
+- `POST /api/connect` (an admin's session) makes a machine token, `rk_` plus 43 base64url characters (256 random
+  bits), and answers 201 `{"command": "retake connect <public URL> --token rk_…", "url", "token", "id"}`. Every
+  call makes a new token, and its value is shown only then. The server store keeps its SHA-256 in the
+  `machine_tokens` table (migration 2): `id`, `hash`, `created_by` (the admin), `created`, `used` (last use, written
+  at most once a minute) and `revoked`.
+- `GET /api/connect` (admin) lists them, never their values: `{"tokens": [{id, created_by, created, used,
+  revoked}]}`. `DELETE /api/connect/<id>` (admin) revokes one.
+- A machine token works while it isn't revoked and the admin who made it still exists, is enabled and is an admin.
+  Removing, disabling or demoting that admin ends their machine tokens.
+- **What it can do.** As `Authorization: Bearer`, on every project it is the project's `agent` (spec/team.md):
+  `/mcp`, the uploads, the push and `/api/worker/*`; and it can use the machine routes below. **What it can't do.** It
+  is never a session, so the server routes (`/api/me`, `/api/projects`, members, tokens, users, `/api/connect`) answer
+  it 401, and it can't open a review page. A bad one counts as a failed attempt (rate limits).
+
+| Method | Path | Does |
+|---|---|---|
+| GET | `/api/machine` | Checks the token: `{"ok": true, "url": "<public URL or this request's origin>"}` |
+| POST | `/api/machine/projects` | `{name, title}`: makes the project when it doesn't exist (201), else 200. Answers `{name, title, url, created}` |
+| PUT | `/api/machine/projects/<name>/poster` | The project's poster: a JPEG (`Content-Type: image/jpeg`) of at most 2 MiB. 204 |
+
+- The machine routes need a machine token; anything else gets 401 `{"error":"machine token required"}`. A project
+  token isn't one.
+- A project made this way has no members: admins own it, as they own every project. Its name follows the project
+  rule above (400 otherwise); the title is at most 200 characters.
+- The poster is kept as `.retake/poster.jpg` in the project's workspace. Until the project's page has a version,
+  `GET /p/<name>/api/poster` serves it (watch permission), and the project's home card uses it as `thumb`.
+- Nothing else is sent: never footage, source or renders. Video reaches the server only through the worker's relay
+  (spec/automation.md), or a `retake push --remote`.
+
 ## Who a request is
 
 For a request to `/p/<name>/...`, the first of these that applies:
 
-1. **`Authorization: Bearer <token>`**: a token of the project (spec/team.md). Malformed, unknown, expired or revoked:
-   401 `{"error":"bad token"}`. A share cookie or session never counts on `/mcp`, the uploads and the push route.
+1. **`Authorization: Bearer <token>`**: a token of the project (spec/team.md), or a machine token ("Machines" below),
+   which is the project's `agent`. Malformed, unknown, expired or revoked: 401 `{"error":"bad token"}`. A share
+   cookie or session never counts on `/mcp`, the uploads and the push route.
 2. **The session cookie**: the user's role on the project (an admin is `owner`). A signed-in user who isn't a member
    gets 403 `{"error":"not a member"}` (the page route: an HTML page saying so).
 3. **The project's share cookie** (`retake_share`, scoped to `Path=/p/<name>/`): the token's role.
@@ -171,13 +231,18 @@ email. A share guest's get the token's label, else "guest".
 
 | Method | Path | Needs | Does |
 |---|---|---|---|
-| GET | `/` | a session (else 303 to `/signin`) | The projects page: your projects, with links, and Sign out. |
+| GET | `/` | a session (else 303 to `/signin`) | The home screen (the page's `home.html`, spec/home.md); without a built page, a plain projects page with Sign out |
+| GET | `/assets/*` | nothing | The page's own files, for the home screen (the review page loads them under `/p/<name>/`) |
+| GET, POST | `/setup` | the setup code, and no users yet | First run (above) |
 | GET, POST | `/signin` | nothing | The sign-in page (above). |
 | GET, POST | `/signin/<code>` | nothing | A sign-in link (above). |
 | POST | `/signout` | a session | Ends it. |
 | GET | `/api/me` | a session | `{email, name, admin, projects: [{name, title, role}]}` |
 | GET | `/api/projects` | a session | `{projects: [{name, title, role, versions}]}`: the ones you can see |
-| GET | `/api/home` | a session | The home screen's cards for your projects (spec/home.md): status, thumbnail, newest version, plus `user` |
+| GET | `/api/home` | a session | The home screen's cards for your projects (spec/home.md): status, thumbnail, newest version, plus `user`, `role` (`owner` for an admin, else `member`) and `machines` |
+| GET, POST | `/api/connect` | admin | Machine tokens (above): list them; make one with its `retake connect` command |
+| DELETE | `/api/connect/<id>` | admin | Revokes a machine token |
+| GET, POST, PUT | `/api/machine/...` | a machine token | The machine routes (above) |
 | POST | `/api/projects` | admin | Creates a project: `{name, title}`. 201 with the project. |
 | GET, POST | `/api/projects/<name>/members` | owner | The members; adds or changes one: `{email, role}` |
 | DELETE | `/api/projects/<name>/members/<email>` | owner | Removes one |
@@ -342,8 +407,13 @@ The page uses relative URLs (`api/info`, `video/v3`, `./assets/...`), so the sam
 - `Dockerfile`: a multi-stage build: the page (node), a static Go binary with the page embedded (`CGO_ENABLED=0`,
   `-tags webdist`), whisper.cpp's `whisper-cli` built for the CPU, and a runtime image with ffmpeg that runs
   `retake serve --data /data` as a non-root user (uid 10001).
-- `deploy/docker-compose.yml`: retake, Postgres and MinIO, with volumes and healthchecks.
-- `deploy/README.md`: a self-host guide (Caddy, backups, upgrades, the first admin).
+- `deploy/docker-compose.yml`: by default one service, retake, with one volume (`/data`: SQLite and the media as local
+  files), so `docker compose up -d` is the whole install. The `scale` profile adds Postgres and MinIO
+  (`docker compose --profile scale up -d`, with their settings in `deploy/.env`).
+- `deploy/Caddyfile`: HTTPS in front, with the proxy's needs: the event stream (`/api/events`) unbuffered, and
+  responses that may take 30 s or more (the media relay, `notes_wait`).
+- `deploy/README.md`: the self-host reference (HTTPS, transcription, mail, backups, upgrades, the scale profile).
+  `docs/hosting.md` is the short story.
 
 ## Deferred
 

@@ -101,6 +101,21 @@ origins, the 401/403/429 answers, rate limits and `Cache-Control: private` are t
   `{"state": "pending" | "rendering" | "complete", "done": n, "total": m}` (below).
 - `thumb` is the newest version's poster (below).
 
+`machines` lists the computers that edit these projects (spec/automation.md), for the owner; it is `[]` for anyone
+else:
+
+```json
+"machines": [ { "id": "w_…", "name": "sam-pc", "online": true, "agents": [ { "id": "claude", "name": "Claude Code" } ] } ]
+```
+
+- It comes from the worker heartbeats in the projects' stores (the `workers` of `GET api/automation`), not from a
+  list of its own. A computer runs one worker per project, so the workers are grouped by name: one entry per name
+  (the computer's hostname unless the worker was given another), with the smallest worker id as its `id`.
+- `online` is true while one of its workers polled within the worker lease (30 s). `agents` is every agent its
+  workers offer, once each, in the order first seen. Online machines come first, then by name.
+- In `retake open <folder>` the in-process worker shows up here like any other, online while it runs. The team
+  server (spec/server.md) lists the machines of the signed-in person's projects.
+
 The team server (spec/server.md) answers `GET /api/home` too, for a signed-in user: their projects, with a `user`
 field `{email, name}` and no `folder`. Its projects page at `/` stays as it is.
 
