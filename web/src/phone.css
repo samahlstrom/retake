@@ -427,8 +427,7 @@ html[data-layout='landscape'] #side {
 }
 
 /* ------------------------------------------------------------------ the bar's parts, phone sized */
-html[data-phone] #rec.pill,
-html[data-phone] #rec.round {
+html[data-phone] #rec.pill {
   width: auto;
 }
 html[data-phone] #done {
@@ -450,6 +449,12 @@ html[data-phone] .agent-status {
   min-height: 44px;
   padding: 0 6px;
 }
+/* Landscape's bar is the timeline's: the agent is its dot (tap it for the name and settings). */
 html[data-phone] .agent-status.compact {
-  max-width: 120px;
+  justify-content: center;
+  width: 44px;
+  padding: 0;
+}
+html[data-phone] .agent-status.compact .name {
+  display: none;
 }

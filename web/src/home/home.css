@@ -34,13 +34,38 @@ body {
 }
 
 /* ---------------------------------------------------------------- top */
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 36px;
+}
 .breadcrumbs {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
   align-items: center;
   color: var(--dim);
-  margin: 0 0 36px;
+}
+.account {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  color: var(--dim);
+}
+.account .who {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.account a {
+  color: #c9c9d1;
+  text-decoration: none;
+}
+.account a:hover {
+  color: var(--text);
 }
 .breadcrumbs a {
   color: inherit;
@@ -418,7 +443,7 @@ input:focus {
   .home {
     padding: 18px 16px 40px;
   }
-  .breadcrumbs {
+  .top {
     margin-bottom: 24px;
   }
   h1 {

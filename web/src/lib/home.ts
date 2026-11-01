@@ -42,7 +42,14 @@ export interface HomeResponse {
   workspace?: Workspace;
   /** C5: the editing computers. Absent on an older server. */
   machines?: Machine[];
+  /** The signed-in person on a hosted server (the team server). Its presence means hosted mode. */
+  user?: { email: string; name: string };
 }
+
+/** Hosted (the team server, signed in): an owner there connects their computer from the home when none is online.
+ * Local mode never shows it (the computer is the server). */
+export const needsComputer = (h: Pick<HomeResponse, 'user' | 'role' | 'machines'>): boolean =>
+  !!h.user && h.role === 'owner' && Array.isArray(h.machines) && !h.machines.some((m) => m.online);
 
 export interface WorkspaceProject {
   id: string;
@@ -137,6 +144,10 @@ export function normalizeHome(body: unknown): HomeResponse {
   const result: HomeResponse = { title: str(b.title), folder: str(b.folder) || undefined, role: str(b.role), projects };
   const w = b.workspace as Workspace | undefined;
   if (w && Array.isArray(w.projects) && Array.isArray(w.placements)) result.workspace = w;
+  if (b.user && typeof b.user === 'object') {
+    const u = b.user as Record<string, unknown>;
+    result.user = { email: str(u.email), name: str(u.name) };
+  }
   if (Array.isArray(b.machines)) {
     result.machines = (b.machines as unknown[]).flatMap((x) => {
       if (!x || typeof x !== 'object') return [];

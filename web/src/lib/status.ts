@@ -156,7 +156,7 @@ export interface SendInput {
 /**
  * - `send`: finish the take with `send: true` and submit the other open notes.
  * - `finish`: finish the take (the reviewer's own job; the owner or auto-send takes it from there).
- * - `connect`: there is no machine to send to: finish the take if one is open, then show how to connect one.
+ * - `connect`: hosted, and no computer to send to: finish the take if one is open, then show how to connect one.
  * - `none`: nothing new to send; say so.
  */
 export type SendAction = 'send' | 'finish' | 'connect' | 'none';
@@ -176,9 +176,10 @@ export const dispatcher = (role: Role | null, canRecord: boolean): boolean =>
 export function sendButton(i: SendInput): SendButton {
   const s = i.status;
   const canSend = s.available && s.online && !s.blocked;
-  // A server that says where the worker runs (C1) gets the Send button even with nothing connected: it opens the way
-  // to connect one. An older server that doesn't say keeps the old Finish review until a worker shows up.
-  const sends = dispatcher(i.role, i.canRecord) && (canSend || (s.available && s.local !== null));
+  // Hosted (C1 `local: false`) with no computer connected keeps Send: it opens the way to connect one. Local mode that
+  // can't edit (no agent installed, …) and an older server that doesn't say keep Finish review; the agent status
+  // next to it says why.
+  const sends = dispatcher(i.role, i.canRecord) && (canSend || (s.available && s.local === false));
   if (!sends) {
     if (i.finishing) return { label: 'Saving…', action: 'finish', primary: false };
     return { label: i.saved && !i.takeOpen ? 'Saved' : 'Finish review', action: 'finish', primary: false };

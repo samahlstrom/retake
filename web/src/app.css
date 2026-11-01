@@ -586,3 +586,16 @@ button {
     animation: none;
   }
 }
+
+/* The agent's drafts (contract C4): the version they head for, with a quiet tag. */
+#verBtn .draft,
+#verList .draft {
+  margin-left: 6px;
+  color: var(--dim);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+#verList .is-draft {
+  color: #b9b9c4;
+}

@@ -3,6 +3,7 @@ import {
   cardStatus,
   fmtLength,
   moveTargets,
+  needsComputer,
   homeContext,
   nextToReview,
   normalizeHome,
@@ -150,5 +151,24 @@ describe('machines (C5)', () => {
         machines: [{ id: 'm1', name: 'sam-pc', online: true, agents: [{ id: 'claude', name: 'Claude Code' }] }, null],
       }).machines,
     ).toEqual([{ id: 'm1', name: 'sam-pc', online: true, agents: [{ id: 'claude', name: 'Claude Code' }] }]);
+  });
+});
+
+describe('hosted: connect your computer', () => {
+  const m = (online: boolean) => ({ id: 'm', name: 'sam-pc', online, agents: [] });
+  it('an owner signed in to a hosted server with no computer online', () => {
+    expect(normalizeHome({ projects: [], user: { email: 'a@example.com', name: 'Ana' } }).user).toEqual({
+      email: 'a@example.com',
+      name: 'Ana',
+    });
+    const user = { email: 'a@example.com', name: 'Ana' };
+    expect(needsComputer({ user, role: 'owner', machines: [] })).toBe(true);
+    expect(needsComputer({ user, role: 'owner', machines: [m(false)] })).toBe(true);
+    expect(needsComputer({ user, role: 'owner', machines: [m(false), m(true)] })).toBe(false);
+  });
+  it('never in local mode, for other roles, or on an older server', () => {
+    expect(needsComputer({ role: 'owner', machines: [] })).toBe(false);
+    expect(needsComputer({ user: { email: '', name: '' }, role: 'reviewer', machines: [] })).toBe(false);
+    expect(needsComputer({ user: { email: '', name: '' }, role: 'owner' })).toBe(false);
   });
 });

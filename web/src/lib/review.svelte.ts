@@ -185,7 +185,9 @@ export class Review {
   shown = $state<string | null>(null);
   flipped = $state(false);
   verOpen = $state(false);
-  hintGone = $state(false);
+  /** The hint is hidden until the page knows whether to show it (start()), so a returning reviewer never sees it
+   * flash. */
+  hintGone = $state(true);
   doneSaved = $state(false);
   fatal = $state('');
   freezeShown = $state(false);
@@ -548,6 +550,10 @@ export class Review {
     const t = this.take,
       open = !!t.id && !t.closed;
     const others = this.unsentRows.filter((row) => !open || row.take !== t.id).map((row) => row.id);
+    // Nothing chosen yet (a first send): the computer that's online and its first agent.
+    const w = this.agent.worker;
+    if (w && !this.automation.state?.config?.worker)
+      await this.automation.configure({ worker: w.id, agent: w.agents[0]?.id ?? '', fallback: '' });
     if (open && !(await this.done(true))) return;
     if (others.length) {
       if (!(await this.automation.send('/tasks', { notes: others }))) {
@@ -2069,7 +2075,8 @@ export class Review {
     const r = keyAction(e);
     if (!r) return;
     e.preventDefault();
-    if (r.stop) e.stopPropagation();
+    // Escape also reaches an open menu or popover (Bits UI closes them on it), wherever the focus is.
+    if (r.stop && e.key !== 'Escape') e.stopPropagation();
     if (r.act) this.run(r.act);
   };
 
@@ -2244,7 +2251,8 @@ export class Review {
     }
     document.title = `Review · ${this.info.name}`;
     this.role = this.info.role ?? null;
-    if (this.canRecord && hintSeen()) this.hintGone = true; // shown once per browser, then it's behind ?
+    // Shown once per browser, then it's behind ?. A viewer's "View only" always shows.
+    if (!this.take.id) this.hintGone = this.canRecord && hintSeen();
     this.versions = this.info.versions || [];
     // Streams already there when the page opens show their chip; only ones pushed later are announced.
     for (const v of newlyStreamed(this.versions, this.#seenStreams)) this.#seenStreams.add(v.label);

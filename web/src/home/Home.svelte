@@ -3,7 +3,7 @@
   // (new project, new group, rename, move) lives in ⋯ menus, so the page is thumbnails, names and one status each.
   // An owner with no computer connected (hosted, C5) gets "Connect your computer" at the top.
   import { DropdownMenu } from 'bits-ui';
-  import { toReview, workspaceUrl, type Card } from '../lib/home';
+  import { needsComputer, toReview, workspaceUrl, type Card } from '../lib/home';
   import { connectCommand } from '../lib/automation.svelte';
   import type { Home } from './home.svelte';
   import VideoCard from './VideoCard.svelte';
@@ -31,7 +31,8 @@
   const sections = $derived(
     project ? [{ id: '', title: project.groups.length ? 'Ungrouped' : '' }, ...project.groups] : [],
   );
-  const connect = $derived(home.res.role === 'owner' && Array.isArray(home.res.machines) && !home.res.machines.length);
+  const connect = $derived(needsComputer(home.res));
+  const user = $derived(home.res.user);
 
   function startForm(kind: typeof form, title = '', group = '') {
     form = kind;
@@ -84,10 +85,18 @@
 {/snippet}
 
 <main class="home">
-  <nav class="breadcrumbs" aria-label="Breadcrumb">
-    <a class="brand" href="./">Retake</a>
-    {#if home.selected && !home.single}<span aria-hidden="true">/</span><a href="./">Projects</a>{/if}
-  </nav>
+  <div class="top">
+    <nav class="breadcrumbs" aria-label="Breadcrumb">
+      <a class="brand" href="./">Retake</a>
+      {#if home.selected && !home.single}<span aria-hidden="true">/</span><a href="./">Projects</a>{/if}
+    </nav>
+    {#if user}
+      <div class="account">
+        <span class="who" title={user.email}>{user.name || user.email}</span>
+        <a href="/signout">Sign out</a>
+      </div>
+    {/if}
+  </div>
   <header>
     <div class="heading">
       <h1>{title}</h1>

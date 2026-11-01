@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  draftOf,
+  latestVersion,
+  verName,
   byLabel,
   coverMessage,
   covers,
@@ -221,5 +224,20 @@ describe('an incomplete stream', () => {
     expect(readyToast(streaming, 'v6', 'v9', true)).toBe('v9 is ready, tap the version to watch');
     expect(failedToast('v9', 'ffmpeg failed')).toBe("v9's render failed: ffmpeg failed");
     expect(failedToast('v9')).toBe("v9's render failed");
+  });
+});
+
+describe('drafts (C4) read as the version they head for', () => {
+  it('names them quietly', () => {
+    expect(draftOf('v5-draft2')).toBe('v5');
+    expect(draftOf('v5')).toBeNull();
+    expect(draftOf('v5_draft')).toBeNull();
+    expect(draftOf(null)).toBeNull();
+    expect(verName('v5-draft2')).toBe('v5 draft');
+    expect(verName('v12')).toBe('v12');
+  });
+  it('Latest is the newest real version', () => {
+    expect(latestVersion([{ label: 'v3' }, { label: 'v4' }, { label: 'v5-draft1' }])?.label).toBe('v4');
+    expect(latestVersion([{ label: 'v1-draft1' }])).toBeUndefined();
   });
 });

@@ -12,7 +12,6 @@
 
   const notes = $derived(review.notes);
   const view = $derived(review.sidebar);
-  const res = $derived(notes.res);
   const job = $derived(notes.job);
   const pill = $derived(
     job && !view.rows.length
@@ -23,6 +22,8 @@
           ? `${review.todoCount} to do`
           : `${review.rows.length} comments`,
   );
+  const asking = $derived(review.rows.some((row) => review.statusOf(row).state === 'question'));
+  const working = $derived(review.rows.some((row) => review.statusOf(row).state === 'working'));
   const setOpen = (v: boolean) => {
     if (v !== view.panel) review.toggleSidebar();
   };
@@ -49,7 +50,7 @@
             <Tooltip.Trigger id="sideToggle">
               {#snippet child({ props })}
                 <Collapsible.Trigger {...props} class={view.panel ? 'open' : ''}
-                  ><span class="dot {job?.error ? 'err' : job ? 'busy' : res?.newest ? 'q' : ''}"
+                  ><span class="dot {job?.error ? 'err' : job ? 'busy' : asking ? 'q' : working ? 'w' : ''}"
                   ></span>{pill}</Collapsible.Trigger
                 >
               {/snippet}

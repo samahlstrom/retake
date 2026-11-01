@@ -142,3 +142,18 @@ export function versionTitle(vs: readonly V[], base: string | null, shown: strin
     ? `Comparing: showing ${shown}. C goes back to ${base}.`
     : `Version ${base}. [ and ] step${pt ? `, C flips to ${pt.label}` : ''}`;
 }
+
+/** A draft render (contract C4): `v5-draft2` is the agent's second draft heading for v5. Drafts aren't versions of
+ * their own, so the page shows them quietly as "v5" with a draft tag. Returns the version it heads for, or null. */
+export const draftOf = (label: string | null | undefined): string | null =>
+  /^(v\d+)-draft\d+$/.exec(label ?? '')?.[1] ?? null;
+
+/** How a label reads on screen: "v5" for a version, "v5 draft" for a draft of it. */
+export const verName = (label: string | null | undefined): string => {
+  const d = draftOf(label);
+  return d ? `${d} draft` : (label ?? '');
+};
+
+/** The newest real version (not a draft), for the list's "Latest". */
+export const latestVersion = <T extends { label: string }>(vs: readonly T[]): T | undefined =>
+  [...vs].reverse().find((v) => !draftOf(v.label));

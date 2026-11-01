@@ -198,9 +198,17 @@ describe('the bar button', () => {
     expect(b({ status: hostedNone, saved: true })).toMatchObject({ label: 'Saved', action: 'connect' });
     expect(b({ status: hostedNone, finishing: true, takeOpen: true }).label).toBe('Saving…');
   });
-  it('local mode that cannot edit also points at why', () => {
-    const blocked = agentStatus(automation({ local: true, blocked: 'No agent installed' }), 1001);
-    expect(b({ status: blocked, unsent: 2 })).toMatchObject({ action: 'connect', label: 'Send 2 to agent' });
+  it('local mode that cannot edit finishes; the status next to it says why', () => {
+    const blocked = agentStatus(
+      automation({ local: true, blocked: 'No agent found. Install Claude Code or Codex.' }),
+      1001,
+    );
+    expect(b({ status: blocked, unsent: 2, takeOpen: true })).toEqual({
+      label: 'Finish review',
+      action: 'finish',
+      primary: false,
+    });
+    expect(statusText(blocked, true)).toBe('Agent unavailable');
   });
   it('an older server with no worker keeps Finish review', () => {
     expect(b({ status: oldNone, takeOpen: true })).toEqual({

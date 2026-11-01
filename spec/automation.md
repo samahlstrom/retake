@@ -73,8 +73,9 @@ upload or an inbound connection to the worker. This is an addition to the existi
 - Existing video URLs serve remote versions through the relay. Existing viewing permissions apply to all media.
 - The bar has one action. The owner's is Send (`Send N to agent`, N the open comments no task owns): it finishes
   the take in progress with `send: true` on its `/done` and submits the other open comments. Other reviewers have
-  Finish review. With no computer to send to, Send saves the take and opens the agent popover, which shows the
-  connect command (`POST /api/connect`), or, in local mode, why the built-in worker can't edit. Next to the action,
+  Finish review. Hosted with no computer online, Send saves the take and opens the agent popover with the connect
+  command (`POST /api/connect`). In local mode, when the built-in worker can't edit (`blocked`), the action is
+  Finish review and the popover says why. Next to the action,
   the agent's name with a dot (green: online) opens that popover: the agent, its fallback ("Pause and ask me" by
   default) and "Send other reviewers' comments automatically" (`config.enabled`). Per-comment actions (send one,
   retry, switch agent, pause, history, reopen, delete) are in the card's ⋯ menu. A worker's question takes a typed

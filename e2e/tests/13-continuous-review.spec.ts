@@ -23,13 +23,14 @@ test.beforeEach(async ({ page }) => {
   await page.waitForFunction(READY);
 });
 
-test('opens the latest version with resolved feedback separate and lets an older cut stay selected', async ({ page }) => {
+test('opens the latest version with done feedback separate and lets an older cut stay selected', async ({ page }) => {
   await expect.poll(() => page.evaluate(() => window.__review.view.shown)).toBe('v6');
   await expect(page.locator('#verBtn')).toHaveText('v6⌄');
   await expect(page.locator('#side header')).toContainText('Comments');
   await expect(page.locator('#side .item')).toHaveCount(1);
-  await page.getByRole('button', {name:'Resolved 1', exact:true}).click();
-  await expect(page.locator('#side .resolved')).toContainText('Resolved in v6');
+  await page.getByRole('tab', {name:'Done 1', exact:true}).click();
+  await expect(page.locator('#side .item .status')).toHaveText('Done');
+  await expect(page.locator('#side .item .change')).toContainText('Pause shortened.');
   await page.locator('#verBtn').click();
   await page.locator('[data-ver="v5"]').click();
   await expect.poll(() => page.evaluate(() => window.__review.view.shown)).toBe('v5');
@@ -39,17 +40,22 @@ test('opens the latest version with resolved feedback separate and lets an older
   expect(await page.evaluate(() => window.__review.view.shown)).toBe('v5');
 });
 
-test('search and status filters work without firing player shortcuts', async ({ page }) => {
-  await page.getByRole('searchbox').fill('read');
+test('search behind its icon and the two tabs work without firing player shortcuts', async ({ page }) => {
+  await expect(page.getByRole('searchbox')).toHaveCount(0);
+  await page.getByRole('button', {name:'Search comments', exact:true}).click();
+  await expect(page.getByRole('searchbox')).toBeFocused();
+  await page.keyboard.type('read');
   await expect(page.locator('#side .item')).toHaveCount(1);
   expect(await page.evaluate(() => window.__review.seg)).toBeNull();
-  await page.getByRole('searchbox').fill('');
-  await page.getByRole('combobox', {name:'Filter comments',exact:true}).click();
-  await page.getByRole('option', {name:'Resolved',exact:true}).click();
+  await page.getByRole('searchbox').fill('nothing like this');
+  await expect(page.locator('#side .empty')).toContainText('No comments match');
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('searchbox')).toHaveCount(0);
+  await expect(page.locator('#side .item')).toHaveCount(1);
+  await page.getByRole('tab', {name:'Done 1', exact:true}).click();
   await expect(page.locator('#side .item')).toHaveCount(1);
   await expect(page.locator('#side .item')).toContainText('Pause shortened.');
-  await page.getByRole('combobox', {name:'Filter comments',exact:true}).click();
-  await page.getByRole('option', {name:'Open',exact:true}).click();
+  await page.getByRole('tab', {name:'To do 1', exact:true}).click();
   await expect(page.locator('#side .item')).toContainText('title');
 });
 
@@ -99,7 +105,7 @@ test('phone comments and timeline stay inside the viewport', async ({ page }) =>
 });
 
 
-test('recorded audio becomes comments above the bar while drawings stay below', async ({ page, context }) => {
+test('recorded audio and drawings fold into one comment marker once transcribed', async ({ page, context }) => {
   await context.grantPermissions(['microphone'], { origin: server.url });
   let transcribed: Record<string, unknown> | null = null;
   await page.route('**/api/notes?*', r => json(r, {version:'v6', newest:true, scope:'review', items:[...items, ...(transcribed ? [transcribed] : [])], jobs:[]}));
@@ -135,7 +141,9 @@ test('recorded audio becomes comments above the bar while drawings stay below', 
   const marker = page.locator('.comment-marker[data-comment="note:3"]');
   await expect(marker).toBeVisible();
   await expect.poll(async () => (await pixels()).audio).toBe(0);
-  expect((await pixels()).ink).toBe(beforeInk);
+  // One row of markers: the comment's marker stands for its pen ticks too.
+  expect(beforeInk).toBeGreaterThan(0);
+  await expect.poll(async () => (await pixels()).ink).toBe(0);
   const markerBox = (await marker.boundingBox())!;
   const timelineBox = (await page.locator('#timeline').boundingBox())!;
   expect(markerBox.y + markerBox.height).toBeLessThan(timelineBox.y + timelineBox.height/2);
@@ -187,7 +195,8 @@ test('reloaded completed audio stays gone while original carried drawings remain
   await page.route('**/api/notes?*', r => json(r, {version:'v6',newest:true,scope:'review',items:[{id:9,version:'v5',take:'old-take',seg:'S1',kind:'note',status:'open',text:'Move this title.',t0:3,t1:3,drawings:['red']}],jobs:[]}));
   await page.route('**/api/history?*', r => json(r, {label:'v6',history:[{id:'old-take',source_version:'v5',transcribed:true,voice:{bin:0.25,bins:[[12,1],[13,1],[14,1],[15,1],[16,1]]},strokes:[{id:1,video_t:3,color:'red',points:[[0.3,0.3],[0.6,0.6]]}]}]}));
   await page.reload(); await page.waitForFunction(READY);
-  await page.getByRole('button',{name:'Earlier 1',exact:true}).click();
+  // An earlier cut's open note is still to do, tagged with its version.
+  await expect(page.locator('#side .item .origin')).toHaveText('v5');
   await page.locator('#side .time').click();
   await expect.poll(() => page.locator('#ink').evaluate((canvas:HTMLCanvasElement) => {
     const d=canvas.getContext('2d')!.getImageData(0,0,canvas.width,canvas.height).data;
@@ -244,41 +253,48 @@ test('empty and saved comments can be deleted and undone without removing other 
   await page.route('**/api/notes/*/restore',r=>{hidden.delete(Number(new URL(r.request().url()).pathname.split('/')[3]));return json(r,{ok:true});});
   await page.reload(); await page.waitForFunction(READY);
   const blank=page.locator('.item[data-key="note:90"]');
-  await blank.getByRole('button',{name:'Delete comment',exact:true}).click();
+  const del = async (key: string) => {
+    const card = page.locator(`.item[data-key="${key}"]`);
+    await card.hover();
+    await card.getByRole('button',{name:'More for this comment',exact:true}).click();
+    await page.getByRole('menuitem',{name:'Delete',exact:true}).click();
+  };
+  await expect(blank.locator('.text')).toHaveText('No words');
+  await del('note:90');
   await expect(blank).toHaveCount(0);
   await expect(page.locator('.item[data-key="note:1"]')).toBeVisible();
   await page.getByRole('button',{name:'Undo',exact:true}).click();
   await expect(blank).toBeVisible();
-  await page.locator('.item[data-key="note:1"]').getByRole('button',{name:'Delete comment',exact:true}).click();
+  await del('note:1');
   await expect(page.locator('.item[data-key="note:1"]')).toHaveCount(0);
   await page.reload(); await page.waitForFunction(READY);
   await expect(page.locator('.item[data-key="note:1"]')).toHaveCount(0);
   await expect(blank).toBeVisible();
-  await page.getByRole('button',{name:'Resolved 1',exact:true}).click();
+  await page.getByRole('tab',{name:'Done 1',exact:true}).click();
   await expect(page.locator('.item[data-key="note:2"]')).toBeVisible();
 });
 
-test('comment dropdown keys select and dismiss without recording or playing', async ({page, context}) => {
-  const filter=page.getByRole('combobox',{name:'Filter comments',exact:true});
-  await filter.focus();
-  await page.keyboard.press('Space');
-  await expect(page.getByRole('listbox',{name:'Filter comments',exact:true})).toBeVisible();
-  await page.keyboard.press('r');
+test('comment menu keys open and dismiss without recording or playing', async ({page, context}) => {
+  const more=page.locator('.item[data-key="note:1"]').getByRole('button',{name:'More for this comment',exact:true});
+  await more.focus();
   await page.keyboard.press('Enter');
-  await expect(filter).toHaveText('Resolved');
+  await expect(page.getByRole('menu')).toBeVisible();
+  await page.keyboard.press('r');
+  await page.keyboard.press(' ');
   expect(await page.evaluate(()=>!!window.__review.seg)).toBe(false);
   expect(await page.locator('video').evaluate((v:HTMLVideoElement)=>v.paused)).toBe(true);
-  await filter.click();
   await page.keyboard.press('Escape');
-  await expect(page.getByRole('listbox')).toHaveCount(0);
-  await expect(filter).toBeFocused();
-  await expect(page.locator('.item[data-key="note:2"]')).toBeVisible();
+  await expect(page.getByRole('menu')).toHaveCount(0);
+  await expect(page.locator('.item[data-key="note:1"]')).toBeVisible();
   await context.grantPermissions(['microphone'], { origin: server.url });
   await page.route('**/api/session/*/transcribe?*', r => json(r, { ok: true }));
   await page.locator('#rec').click();
   await expect.poll(() => page.evaluate(() => !!window.__review.seg)).toBe(true);
-  await filter.click();
+  await page.locator('.item[data-key="note:1"]').hover();
+  await more.click();
+  await expect(page.getByRole('menu')).toBeVisible();
   await page.keyboard.press('Escape');
+  await expect(page.getByRole('menu')).toHaveCount(0);
   expect(await page.evaluate(() => !!window.__review.seg)).toBe(true);
   await page.locator('#rec').click();
   await expect.poll(() => page.evaluate(() => !!window.__review.seg)).toBe(false);
@@ -289,23 +305,86 @@ test('comment dropdown keys select and dismiss without recording or playing', as
   await expect.poll(() => page.evaluate(() => !!window.__review.seg)).toBe(false);
 });
 
-test('agent settings use the same menus inside their popover', async ({page}) => {
-  await page.route('**/api/automation',route=>json(route,{
-    config:{worker:'machine',agent:'claude',fallback:'',enabled:false},
-    workers:[{id:'machine',name:'Editing computer',seen:Date.now()/1000,agents:[{id:'claude',name:'Claude Code'},{id:'codex',name:'Codex'}]}],
-    tasks:[],renders:[],
-  }));
+test('agent status opens a small popover whose choices save at once', async ({page}) => {
+  let config = {worker:'machine',agent:'claude',fallback:'',enabled:false};
+  const posts: Record<string, unknown>[] = [];
+  await page.route('**/api/automation',route=>{
+    if (route.request().method()==='POST') {
+      const body = JSON.parse(route.request().postData()!) as typeof config;
+      posts.push(body); config = body;
+      return json(route,{ok:true});
+    }
+    return json(route,{
+      local:true, config,
+      workers:[{id:'machine',name:'Editing computer',seen:Date.now()/1000,agents:[{id:'claude',name:'Claude Code'},{id:'codex',name:'Codex'}]}],
+      tasks:[],renders:[],
+    });
+  });
   await page.reload();await page.waitForFunction(READY);
-  await page.getByRole('button',{name:'Agent controls',exact:true}).click();
-  const provider=page.getByRole('combobox',{name:'Default agent',exact:true});
+  // The owner with a computer online sends: one open comment no task owns.
+  await expect(page.locator('#done')).toHaveText('Send 1 to agent');
+  const status = page.locator('#agent');
+  await expect(status).toHaveText('Claude Code');
+  await expect(status).toHaveClass(/\bok\b/);
+  await status.click();
+  await expect(page.locator('.agent-pop')).toContainText('on Editing computer');
+  const provider=page.getByRole('combobox',{name:'Agent',exact:true});
   await expect(provider).toHaveText('Claude Code');
   await provider.click();
   await page.getByRole('option',{name:'Codex',exact:true}).click();
+  await expect.poll(() => posts.at(-1)).toMatchObject({worker:'machine',agent:'codex',fallback:'',enabled:false});
   await expect(provider).toHaveText('Codex');
-  const fallback=page.getByRole('combobox',{name:'When usage runs out',exact:true});
+  const fallback=page.getByRole('combobox',{name:'If its usage runs out',exact:true});
+  await expect(fallback).toHaveText('Pause and ask me');
   await fallback.click();
   await expect(page.getByRole('option',{name:'Switch to Claude Code',exact:true})).toBeVisible();
   await page.keyboard.press('Escape');
-  await expect(page.getByRole('button',{name:'Save agent settings',exact:true})).toBeVisible();
-  await expect(fallback).toHaveText('Pause and let me choose');
+  await page.getByRole('switch',{name:'Send other reviewers’ comments automatically'}).click();
+  await expect.poll(() => posts.at(-1)).toMatchObject({agent:'codex',enabled:true});
+});
+
+test('Send hands the open comments to the agent; with no computer it shows how to connect one', async ({page}) => {
+  let workers: unknown[] = [];
+  const tasks: unknown[] = [];
+  await page.route('**/api/automation',route=>json(route,{
+    local:false, config:{worker:'machine',agent:'claude',fallback:'',enabled:false}, workers, tasks, renders:[],
+  }));
+  let submitted: unknown = null;
+  await page.route('**/api/automation/tasks',route=>{ submitted = JSON.parse(route.request().postData()!); return json(route,{ok:true}); });
+  let minted = 0;
+  await page.route('**/api/connect',route=>{ minted++; return json(route,{command:'retake connect https://review.example.com --token rk_test'}); });
+  await page.reload();await page.waitForFunction(READY);
+  await expect(page.locator('#agent')).toHaveText('Connect computer');
+  await expect(page.locator('#done')).toHaveText('Send 1 to agent');
+  await page.locator('#done').click();
+  await expect(page.locator('.agent-pop')).toContainText('retake connect https://review.example.com --token rk_test');
+  await expect(page.getByRole('button',{name:'Copy the command'})).toBeVisible();
+  expect(submitted).toBeNull();
+  await page.keyboard.press('Escape');
+  await page.locator('#agent').click();
+  await expect(page.locator('.agent-pop')).toContainText('rk_test');
+  expect(minted).toBe(1); // one token per page, not one per click
+  await page.keyboard.press('Escape');
+  workers = [{id:'machine',name:'Editing computer',seen:Date.now()/1000,online:true,agents:[{id:'claude',name:'Claude Code'}]}];
+  // The page polls api/automation every 5 s: the computer shows up without a reload.
+  await expect(page.locator('#agent')).toHaveText('Claude Code', {timeout:12_000});
+  await page.locator('#done').click();
+  await expect.poll(() => submitted).toEqual({notes:[1]});
+  await expect(page.locator('#toast')).toContainText('Sent 1 comment');
+});
+
+test('the keyboard hint shows once per browser; ? opens the keys', async ({page}) => {
+  await page.evaluate(() => localStorage.removeItem('retake.hint'));
+  await page.reload();await page.waitForFunction(READY);
+  await expect(page.locator('#hint')).not.toHaveClass(/gone/);
+  await page.keyboard.press('?');
+  await expect(page.locator('.keys-pop')).toContainText('Flip to the other version and back');
+  await expect(page.locator('#hint')).toHaveClass(/gone/);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.keys-pop')).toHaveCount(0);
+  await page.reload();await page.waitForFunction(READY);
+  await page.waitForTimeout(500);
+  await expect(page.locator('#hint')).toHaveClass(/gone/);
+  await page.locator('#keys').click();
+  await expect(page.locator('.keys-pop')).toBeVisible();
 });

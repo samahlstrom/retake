@@ -4,6 +4,7 @@
   import type { Review } from '../../lib/review.svelte';
   import type { Row } from '../../lib/notes/view';
   import { STATE_TEXT } from '../../lib/status';
+  import { verName } from '../../lib/versions';
   import CommentMenu from './CommentMenu.svelte';
   import ReplyBox from '../ReplyBox.svelte';
   import Sketch from './Sketch.svelte';
@@ -57,7 +58,7 @@
     <span class="status {status.state}"><span class="dot" aria-hidden="true"></span>{STATE_TEXT[status.state]}</span>
     {#if row.version && row.version !== review.shown && status.state !== 'done'}<span
         class="origin"
-        title="Left on {row.version}">{row.version}</span
+        title="Left on {verName(row.version)}">{verName(row.version)}</span
       >{/if}
     <span class="grow"></span>
     <CommentMenu {review} {row} />
@@ -73,7 +74,7 @@
   {#if status.state === 'done' && row.change}
     <p class="change">
       <span>{row.change}</span>{#if row.see}<button class="link" onclick={() => review.setBase(row.see!)}
-          >See {row.see}</button
+          >See {verName(row.see)}</button
         >{/if}
     </p>
   {/if}

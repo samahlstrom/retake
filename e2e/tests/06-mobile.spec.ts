@@ -186,7 +186,7 @@ for (const o of [{ name: 'portrait', width: 390, height: 844 }, { name: 'landsca
       await p.ui.tap('#done');
       await p.ui.waitFor(notSaving, 10_000);
       await expect(p.page.locator('#done')).toHaveText('Saved');
-      expect((await p.ui.state()).toast).toBe('Feedback saved. Transcription continues; comments stay open until edited.');
+      expect((await p.ui.state()).toast).toBe('Saved. Your comments stay open until they are edited.');
       const dirs = takeDirs(join(p.fam.dir, 'v6', 'clip_v6.review'));
       expect(dirs).toHaveLength(1);
       validateTakeDir(dirs[0]!);

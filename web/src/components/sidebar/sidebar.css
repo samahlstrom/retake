@@ -450,6 +450,9 @@ html[data-phone] #side .more {
 #sideToggle .dot.q {
   background: var(--st-question);
 }
+#sideToggle .dot.w {
+  background: var(--st-working);
+}
 #sideToggle .dot.busy {
   background: var(--voice);
   animation: dot-pulse 1.4s ease-in-out infinite;
