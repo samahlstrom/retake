@@ -56,8 +56,9 @@ Where a worker runs its agent is a user setting: `open_agents_in` in the user co
 - `background`: as above. The agent's headless command (`command`) runs in the project folder with the prompt on
   stdin, its output goes to `tasks/<task>/agent-<attempt>.log`, and its JSON stream gives usage and usage limits.
 - `herdr` and `tmux`: the agent runs as a normal interactive session, which the person can watch and type into at any
-  time. Its command is the profile's `interactive` argv: the built-in `claude` is `claude --permission-mode
-  acceptEdits` and `codex` is `codex --sandbox workspace-write -c approval_policy="never"`. A configured agent without
+  time. Its command is the profile's `interactive` argv: the built-in `claude` is `claude
+  --dangerously-skip-permissions --disallowedTools=AskUserQuestion` and `codex` is `codex
+  --dangerously-bypass-approvals-and-sandbox` ("Permissions" below). A configured agent without
   `interactive` runs in the background, and the worker says so once in its log; an entry whose own `open_in` asks for
   herdr or tmux without `interactive` is a config error.
 - One session per project, named after the project folder (the video): in herdr a workspace labelled
@@ -81,9 +82,102 @@ Where a worker runs its agent is a user setting: `open_agents_in` in the user co
 - Stopping a task before its report (pause, switch agent, lost connection, retake quitting) closes the agent's pane:
   `herdr pane close` or `tmux kill-pane`. After the report it's left open.
 - No usage is recorded in these modes: there's no JSON stream to read it from. Usage limits show in the session.
-- An agent that stops at a startup question in herdr (such as "trust this folder?") makes `herdr agent start` answer
-  `agent_not_ready`: the worker logs that the agent is waiting for the person and waits (`herdr agent wait`) before
-  sending the line. A missing `herdr` or `tmux` binary, or a herdr or tmux error, pauses the task with that error.
+- An agent that stops at a startup question in herdr (such as "trust this folder?", or Claude Code's one-time "accept
+  bypass permissions mode?") makes `herdr agent start` answer `agent_not_ready`: the worker logs that the agent is
+  waiting for the person and waits (`herdr agent wait`) before sending the line. In tmux the line is the command's
+  argument, so the agent reads it once the person has answered; the worker logs, once per session, that a new agent
+  may stop at such a question. A missing `herdr` or `tmux` binary, or a herdr or tmux error, pauses the task with that
+  error.
+
+## Permissions: agents never stop to ask
+
+An agent runs unattended, so the built-in profiles never stop for a permission prompt, in every mode:
+
+| id | background (`command`) | herdr, tmux (`interactive`) |
+|---|---|---|
+| `claude` | `claude -p --output-format stream-json --verbose --dangerously-skip-permissions --disallowedTools=AskUserQuestion` | `claude --dangerously-skip-permissions --disallowedTools=AskUserQuestion` |
+| `codex` | `codex exec --json --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check -` | `codex --dangerously-bypass-approvals-and-sandbox` |
+
+- The agent can run any command as the user who runs retake, with no sandbox: full access to the editing machine.
+  The docs say so where they name the agents (docs/agents.md). A `[[agents]]` entry is the person's own argv and
+  keeps whatever permissions it names.
+- `--disallowedTools=AskUserQuestion` takes Claude Code's own question tool away (the `=` keeps the tool list from
+  swallowing the line that follows it in tmux). Codex has no such flag; the prompt covers it.
+- Claude Code refuses `--dangerously-skip-permissions` as root; run retake as a normal user.
+- Every task prompt says: never wait for input, and never ask the person in the terminal or with the agent's own
+  question tools. When unsure about a note, ask with `retake ask` ("Questions from inside a task") and carry on with
+  the rest of the task.
+
+## Questions from inside a task: `retake ask`
+
+An agent that is unsure about a note asks about a moment of the video, and keeps working. The question shows on the
+review page under its comment and on the timeline at that moment; the answer comes back to the same task.
+
+```
+retake ask [--note ID] [--at TIME] [--box X,Y,W,H] [--version LABEL] [--json] "question"
+```
+
+- With one positional argument it asks from inside the running task: no video path and no token. (Three, `retake ask
+  <video> <note> "question"`, is the project-level command of spec/notes.md, unchanged.)
+- `--note` is one of the task's notes (`task.notes`); it may be left out when the task has one. `--at` is seconds
+  (`83`, `83.5`) or `m:ss` (`1:23`) on `--version`, which defaults to the note's version (the times in the task
+  context; a draft label such as `v4-draft2` points at a render of this task). Without `--at` the question is at the
+  note's start. `--box` is a region of the frame, normalized 0–1 with (0, 0) at the top left, like a stroke's box.
+- It prints `asked about #12 at 1:23 (question 7)` (with `--json`, the question) and exits 0 at once. It never waits
+  for the answer. Exit 1 when the question is refused, with the reason; exit 2 for a usage error, or when it isn't run
+  inside a task ("not inside a Retake task: …").
+- **Finding the worker.** `RETAKE_ASK_URL` and `RETAKE_ASK_TOKEN` in its environment, else the file
+  `.retake/worker/ask.json` (`{"url", "token"}`) in the current folder or the nearest parent that has one. A
+  background agent gets both variables. An agent in herdr or tmux gets the file: its session's environment is fixed
+  when the session opens, and outlives the task.
+- **The worker's endpoint.** At its first task a worker listens on `127.0.0.1` (a free port) for its whole life.
+  Each attempt gets a fresh random secret (32 hex), which ends with the attempt; the worker writes `ask.json` (mode
+  0600) when the attempt starts and deletes it when it ends. `POST <url>/ask` with `Authorization: Bearer <secret>`
+  and `{"note", "at", "box", "version", "text"}` answers 200 with the question `{"id", "note", "version", "at", "box",
+  "text"}`, 403 for a wrong or stale secret or when no task is running, 400 for a malformed request, and the server's
+  status and reason when it refuses. The worker's own host token never reaches the agent.
+- The worker forwards it as `POST /api/worker/ask` `{"task", "lease", "note", "at", "box", "version", "text"}` with
+  its own credentials (in process in Local mode, over HTTP to a hosted server), fenced like a report. The server
+  checks the note is the task's (`note` 0 with one note means that one), the version is in the family or is a render,
+  `at` is 0 or more, the box is inside the frame with a positive size, and the text is 1–2000 characters. It stores
+  a question thread (spec/notes.md; `by` "agent", `t` = `at`), records it on the task (`asked: [{"id", "note",
+  "box"}]`), and moves the note to `question`. The attempt keeps running: asking doesn't end it.
+
+**Answers.**
+
+- The comment shows the question under its text, with the reply box: typed, or recorded with the existing voice
+  reply. A typed answer is `POST /api/automation/tasks/<id>/answer` `{"question": <thread id>, "message"}` (any role
+  that can record); a recorded one is a segment whose `answer_to` is the thread id, as for any question. Either way
+  it becomes an answer thread (`by` the person's name), and the note goes back to `open`, so the comment is Working
+  again (its task owns it).
+- The poll answer lists the task's questions in `questions`: `[{"id", "note", "version", "at", "box", "text",
+  "answer": {"id", "by", "text"}}]` (`answer` once there is one). The worker says which answers reached the agent
+  with `told: [<answer thread id>, ...]` in its next poll; the task keeps them in `told`.
+- In herdr or tmux, while the attempt is running, the worker sends each new answer into the live session as a new
+  message, the way it sends a task's line: `Answer to your question on note 12 at 1:23: <answer>` (whitespace folded
+  to single spaces). That answer is told.
+- Otherwise the answer waits for the next attempt (a background agent can't be given anything while it runs). The
+  attempt's context has it in `questions`, and every answer there is told. In herdr or tmux the attempt's line then
+  starts with the answers: `Answer to your question on note 12 at 1:23: <answer>. Carry on with Retake task <id>
+  (attempt <n>): follow the instructions in <prompt file>`.
+
+**How a task ends.** A note of a task is *held* while its newest question from that task has no answer (waiting for
+the person), or has one that wasn't told to an agent yet.
+
+- A `completed` report finishes the task's notes that aren't held: they become Done, with the render (or new
+  version) required as before. When every note not yet Done is held, the report needs no render or version: the
+  worker reports at once, without one, and the task's drafts stay drafts.
+- If a note is still held, the task isn't completed. It waits in `question` while one of its questions is
+  unanswered, else it is queued again at once, so the next attempt gets the answers. The notes it finished stay Done
+  (`done` lists them), and later attempts leave them alone. So a task can end an attempt with some notes Done and
+  some still Question.
+- Answering the last unanswered question of a task waiting in `question` queues it again ("Reviewer answered").
+- A completed report without a render or version while a note isn't held (the agent was told an answer just before
+  it reported) queues the task again rather than failing it.
+- Withdrawn feedback: a note of a task that is Question doesn't stop or cancel it; only a note that was answered
+  outside the task (not in its `done`) or retracted does.
+- The report's `question` state stays as the fallback: the task waits in `question` with the report's message,
+  answered with a typed `…/answer` without `question`.
 
 ## Connect your computer: `retake connect`
 
@@ -222,7 +316,8 @@ its version files and runs the agent, and the agent makes the next version howev
   while no worker is online, "Waiting for the agent" while Local mode is `blocked`. Existing approval and retraction remain intact. Working comes from a task. Done requires a
   successfully rendered result plus an explicit per-note change description; an agent process exit alone never
   completes feedback.
-- A question and its answer stay on the task/comment. Answering resumes the same task. Operational pauses (usage
+- A question and its answer stay on the task/comment. Answering resumes the same task ("Questions from inside a
+  task"). A Working comment whose task asked about it shows Question until it is answered. Operational pauses (usage
   limits, offline, failed render) are displayed separately from creative questions.
 - Every task records the original note IDs and versions. Completion links the original notes to the resulting
   version. The agent receives the current source, original feedback, prior task events, and a local durable task
@@ -271,10 +366,11 @@ its version files and runs the agent, and the agent makes the next version howev
 - `POST /api/automation/tasks` (submit feedback), `.../tasks/<id>/answer` and `.../tasks/<id>/retry`: any role that
   can record. A retry's `agent` counts only from the owner. Switching, pausing and the config are owner actions.
 - `/api/worker/*`: Bearer agent token only, including local requests. Worker registration, polling/heartbeats,
-  attempt reports, render registration/progress, version files (`files`), note artifacts and relay response
-  endpoints. An attempt's `completed` report names a render (`result`) or, in a plain project, a version file
+  attempt reports, questions (`ask`), render registration/progress, version files (`files`), note artifacts and
+  relay response endpoints. An attempt's `completed` report names a render (`result`) or, in a plain project, a version file
   (`version`). The poll answer has
-  `config`, `task`, `notes` and `versions` (how many versions the family has, drafts not counted). In Local mode
+  `config`, `task`, `notes`, `questions` (the task's, with their answers) and `versions` (how many versions the
+  family has, drafts not counted). A poll may carry `told` (answers that reached the agent). In Local mode
   the in-process worker reaches these handlers without HTTP or a token.
 - Existing video URLs serve remote versions through the relay. Existing viewing permissions apply to all media.
 - The bar has one action for everyone who can record: Send (`Send N to agent`, N the open comments no task owns
@@ -286,9 +382,13 @@ its version files and runs the agent, and the agent makes the next version howev
   Next to it, the agent's name with a dot (green: online) opens that popover. The owner chooses the agent, its
   fallback ("Pause and ask me" by default) and the computer there; everyone else sees the agent, or the one line
   "Waiting for the editing computer". Per-comment actions are in the card's ⋯ menu: send one, retry, history and
-  delete as the role allows; switch agent and pause for the owner; reopen for approvers. A worker's question takes
-  a typed answer (`…/answer`); a question asked through the notes takes a recorded one (`answer_to`), in the same
-  reply box. Comment cards show current task state and result links regardless of which version is selected.
+  delete as the role allows; switch agent and pause for the owner; reopen for approvers. A question an agent asked
+  from inside its task (`retake ask`) shows under its comment, with a reply box that takes typed words (`…/answer`
+  with `question`) or a recorded answer (`answer_to`), and as a marker on the timeline at its moment, in the
+  Question color; clicking the marker (or the question's time) seeks there and outlines its box on the video, when
+  it has one, until playback moves on. A report's question (the fallback) takes a typed answer (`…/answer`); a
+  question asked through the notes takes a recorded one (`answer_to`), in the same reply box. Comment cards show
+  current task state and result links regardless of which version is selected.
 
 ## Required verification
 
@@ -300,5 +400,8 @@ submissions, Send by every recording role (a share link too) with no worker onli
 `/done` with and without `send`, a sent take queuing without a worker poll, drafts versus versions, a worker restart
 with unchanged source, profile `env` expansion, Local mode's in-process worker and `blocked` reasons, the exact herdr
 and tmux commands (fake binaries on `PATH` that log their argv), completion by report with no agent output, stop
-closing the pane, and two projects' tasks running at the same time. Provider adapters are tested with deterministic executables; live paid-provider execution is reported
+closing the pane, and two projects' tasks running at the same time. For `retake ask`: the built-in profiles' argv, a
+fake agent that asks mid-task and then completes (Local mode and hosted), a wrong or stale secret refused, an answer
+reaching a herdr and a tmux session (fake binaries) and a background attempt's context, a task ending with some notes
+Done and some Question, and the question's timeline marker (a web unit test and an e2e test). Provider adapters are tested with deterministic executables; live paid-provider execution is reported
 separately if it is not exercised.

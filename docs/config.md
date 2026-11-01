@@ -74,7 +74,7 @@ that one, so you can change how it runs without listing the other.
 [[agents]]
 id = "claude"                    # letters, digits, - and _; shown in the page's agent menu by name
 name = "Claude Code (API key)"
-command = ["claude", "-p", "--output-format", "stream-json", "--verbose", "--permission-mode", "acceptEdits"]
+command = ["claude", "-p", "--output-format", "stream-json", "--verbose", "--dangerously-skip-permissions"]
 env = { ANTHROPIC_API_KEY = "$ANTHROPIC_API_KEY" }
 ```
 

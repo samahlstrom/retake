@@ -15,6 +15,13 @@ comment turns Done when the new version is ready. If the agent is unsure, the co
 and the agent carries on. There is nothing else to start: `retake open` runs the editing worker itself, one per
 project, named after this computer.
 
+**The agent has full access to this computer.** It runs unattended, so it never stops to ask permission: Claude
+Code runs with `--dangerously-skip-permissions` and Codex with `--dangerously-bypass-approvals-and-sandbox`, in the
+background and in herdr or tmux alike. It can run any command, read and write any file your user can, and use the
+network, with no sandbox. Run retake as a normal user (Claude Code refuses that flag as root), and only send notes
+from people you'd let use your computer that way. To keep tighter permissions, add your own agent in
+[config.md](config.md#agents) with the flags you want; that one may stop at a prompt nobody answers.
+
 What it needs: Claude Code or Codex installed and signed in. A timeline project (`edit/timeline.json`, or
 `[edit] timeline` in the project's `retake.toml`) also needs `retake-edit` ([timeline.md](timeline.md)). When
 something is missing, the agent menu next to Send says what, and it picks the fix up within 15 seconds without a
@@ -32,6 +39,31 @@ to the others). The comment turns Done once that video plays.
 - Anyone you share the review with (`retake share`) has the same Send button, and their comments go to this agent.
 - Each task's prompt, context, log and report are in `.retake/worker/tasks/<task>/` (no log in herdr or tmux: the
   session is the log).
+
+## When the agent is unsure
+
+The agent never asks in its terminal. When a note is unclear, it asks about the moment of the video it's unsure of,
+and carries on with the rest of its work:
+
+```bash
+retake ask --note 12 --at 1:23 --box 0.1,0.6,0.4,0.3 "Which logo: the old one or the new one?"
+```
+
+The question shows on the review page under comment 12 (which turns Question) and as a marker on the timeline at
+1:23. Click the marker to jump there and see the box it drew. Answer under the comment, typed or out loud. The answer
+goes back to the same task:
+
+- In herdr or tmux, if the agent is still working, it gets the answer as a new message in its session: "Answer to
+  your question on note 12 at 1:23: the new one". If it had already finished, the task starts again in the same
+  session with the answer.
+- In the background, the task starts again with the answer in its context once the agent's current run ends.
+
+A task can finish with some notes Done and others still waiting on their answer. The command needs no video or
+token: the worker gives each task its own local address and secret (`RETAKE_ASK_URL` and `RETAKE_ASK_TOKEN`, or
+`.retake/worker/ask.json` in herdr and tmux), and passes the question on to the review. `--note` can be left out
+when the task has one note; `--at` is seconds (`83.5`) or `m:ss` on the version the note was made on (`--version
+v4-draft2` for a time on a draft); `--box` is `x,y,w,h` from 0 to 1, from the top left of the frame. A background
+agent that writes `{"state": "question", ...}` as its report still works too.
 
 Reviewing on a hosted server instead? Run `retake connect` and the same worker connects out to it: [hosting.md](hosting.md).
 
@@ -59,31 +91,35 @@ back and keep talking. The video's next task goes to the same session if it's st
 
 What's different from the background:
 
-- Retake reads nothing from the terminal. Only the report file finishes a task. If the agent asks you something in
-  the terminal instead of in its report, or hits a usage limit, the comment stays Working until it reports; answer it
-  there, or pause the comment from the page.
+- Retake reads nothing from the terminal. Only the report file finishes a task. The agent is told to ask with
+  `retake ask` (above), never in the terminal. If it asks there anyway, or hits a usage limit, the comment stays
+  Working until it reports; answer it there, or pause the comment from the page.
 - Closing the session (or quitting the agent) before it reports pauses the comment. Pausing or switching agents from
   the page closes the agent's pane. After the report, the pane is left alone.
 - No usage or cost is recorded: an interactive session has no JSON stream to read it from.
 - The agent's environment is herdr's or tmux's, plus the agent's `env` from your config. `RETAKE_CONTEXT` and
   `RETAKE_REPORT` aren't set; the prompt names both files.
-- The first time an agent runs in a folder it may ask whether to trust it. In herdr Retake waits for you to answer that
-  in the workspace before it sends the task, and says so in its log.
+- The first time an agent runs in a folder it may ask whether to trust it, and the first time Claude Code runs with
+  `--dangerously-skip-permissions` on this computer it asks you to accept bypass-permissions mode (once). In herdr
+  Retake waits for you to answer that in the workspace before it sends the task, and says so in its log. In tmux the
+  task is the agent's first message, so it starts once you've answered (`tmux attach -t retake`). Answering "no"
+  quits the agent, which pauses the comment.
 - An agent from `[[agents]]` needs an `interactive` command to open in herdr or tmux; without one it stays in the
   background ([config.md](config.md#agents)). In herdr, the program's name must be one herdr knows (`claude`, `codex`,
   `gemini`, ...), because herdr starts it by that name.
 
-The built-in agents run as `claude --permission-mode acceptEdits` and
-`codex --sandbox workspace-write -c approval_policy="never"`, the same permissions as in the background. A `[[agents]]`
+The built-in agents run as `claude --dangerously-skip-permissions --disallowedTools=AskUserQuestion` and
+`codex --dangerously-bypass-approvals-and-sandbox`, the same permissions as in the background. A `[[agents]]`
 entry can set `open_in` to put just that agent somewhere else.
 
 These are the commands Retake runs. In herdr, for a video's first task (`<name>` is `retake-<video>-<4 hex>`):
 
 ```
 herdr workspace create --cwd <project> --label "retake · <video>" --no-focus [--env KEY=VALUE ...]
-herdr agent start <name> --kind claude --pane <pane> --timeout 60000 -- --permission-mode acceptEdits
+herdr agent start <name> --kind claude --pane <pane> --timeout 60000 -- --dangerously-skip-permissions --disallowedTools=AskUserQuestion
 herdr agent prompt <name> "New Retake task for <video> (...): follow the instructions in <prompt file>"
 herdr agent get <name>        # every 2 s until the report: is the session still there?
+herdr agent prompt <name> "Answer to your question on note 12 at 1:23: ..."   # an answer while it works
 herdr pane close <pane>       # only on pause, switch or a lost connection, before the report
 ```
 
@@ -96,11 +132,11 @@ In tmux:
 
 ```
 tmux has-session -t =retake
-tmux new-session -d -s retake -P -F '#{pane_id}' -n <video> -c <project> [-e KEY=VALUE ...] -- claude --permission-mode acceptEdits "<line>"
+tmux new-session -d -s retake -P -F '#{pane_id}' -n <video> -c <project> [-e KEY=VALUE ...] -- claude --dangerously-skip-permissions --disallowedTools=AskUserQuestion "<line>"
     (or: tmux new-window -d -t =retake: -P -F '#{pane_id}' -n <video> -c <project> ... when the session exists)
 tmux set-option -w -t <pane> remain-on-exit on
 tmux list-panes -a -F '#{pane_id} #{pane_dead}'    # every 2 s until the report
-tmux send-keys -t <pane> -l "<line>"; tmux send-keys -t <pane> Enter    # the next task, into the running agent
+tmux send-keys -t <pane> -l "<line>"; tmux send-keys -t <pane> Enter    # the next task, or an answer, into the running agent
 tmux respawn-pane -k -t <pane> -c <project> ... -- <agent> "<line>"     # the next task when the agent had quit, or another agent
 tmux kill-pane -t <pane>                                               # pause, switch or a lost connection
 ```
@@ -110,6 +146,7 @@ tmux kill-pane -t <pane>                                               # pause, 
 In the background, the worker runs the agent's command in the project folder, with the task prompt on stdin. `RETAKE_CONTEXT` names a
 JSON file with the task and its notes (text, times, strokes, snapshots and images), and the agent writes its answer
 to `RETAKE_REPORT`: `{"state": "completed", "message": "what changed"}` or `{"state": "question", "message": "..."}`.
+`RETAKE_ASK_URL` and `RETAKE_ASK_TOKEN` are what `retake ask` uses to reach the worker (above).
 A completed task still waits for a checked, playable render of the agent's final source before the comment is Done.
 In a project without a timeline, `RETAKE_OUTPUT` names the file the agent writes its video to
 (`.retake/worker/tasks/<task>/output.mp4`), and the context lists the versions under `family`; the worker moves that
@@ -119,8 +156,8 @@ The built-in agents are these commands, with your installed CLI's own sign-in an
 
 | id | command |
 |---|---|
-| `claude` | `claude -p --output-format stream-json --verbose --permission-mode acceptEdits` |
-| `codex` | `codex exec --json --sandbox workspace-write -c approval_policy="never" --skip-git-repo-check -` |
+| `claude` | `claude -p --output-format stream-json --verbose --dangerously-skip-permissions --disallowedTools=AskUserQuestion` |
+| `codex` | `codex exec --json --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check -` |
 
 The agent inherits retake's environment. An `ANTHROPIC_API_KEY` exported in that shell makes Claude Code bill the key
 instead of your subscription ("In non-interactive mode (`-p`), the key is always used when present").
@@ -140,7 +177,7 @@ empty string (unset, Claude Code may fall back to Anthropic's servers):
 [[agents]]
 id = "claude-openrouter"
 name = "Claude Code (OpenRouter)"
-command = ["claude", "-p", "--output-format", "stream-json", "--verbose", "--permission-mode", "acceptEdits"]
+command = ["claude", "-p", "--output-format", "stream-json", "--verbose", "--dangerously-skip-permissions"]
 env = { ANTHROPIC_BASE_URL = "https://openrouter.ai/api", ANTHROPIC_AUTH_TOKEN = "$OPENROUTER_API_KEY", ANTHROPIC_API_KEY = "" }
 ```
 
@@ -153,7 +190,7 @@ your subscription and this one bills the key:
 [[agents]]
 id = "claude-api"
 name = "Claude Code (API key)"
-command = ["claude", "-p", "--output-format", "stream-json", "--verbose", "--permission-mode", "acceptEdits"]
+command = ["claude", "-p", "--output-format", "stream-json", "--verbose", "--dangerously-skip-permissions"]
 env = { ANTHROPIC_API_KEY = "$RETAKE_ANTHROPIC_API_KEY" }
 ```
 
@@ -177,14 +214,14 @@ Then a retake agent picks that provider and an OpenRouter model slug for its tas
 [[agents]]
 id = "codex-openrouter"
 name = "Codex (OpenRouter)"
-command = ["codex", "exec", "--json", "--sandbox", "workspace-write", "-c", "approval_policy=\"never\"",
+command = ["codex", "exec", "--json", "--dangerously-bypass-approvals-and-sandbox",
   "-c", "model_provider=\"openrouter\"", "-c", "model=\"openai/gpt-5.6-sol\"", "--skip-git-repo-check", "-"]
 ```
 
 `find_agents = false` hides the agents found on `PATH`, so only yours are offered.
 
 To open one of these in herdr or tmux too (`open_agents_in` above), give it `interactive`, the same command without the
-headless flags, for example `interactive = ["claude", "--permission-mode", "acceptEdits"]` for the Claude Code ones.
+headless flags, for example `interactive = ["claude", "--dangerously-skip-permissions"]` for the Claude Code ones.
 
 ## Drive an agent yourself (MCP and the CLI)
 
