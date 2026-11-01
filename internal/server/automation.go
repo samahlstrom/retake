@@ -3,7 +3,6 @@ package server
 import (
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -11,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/samahlstrom/retake/internal/bridge"
 	"github.com/samahlstrom/retake/internal/family"
@@ -257,6 +257,12 @@ func (s *Server) workerRoute(w http.ResponseWriter, r *http.Request, p []string,
 			s.fail(w, r, 400, "invalid report")
 			return
 		}
+		if b.State == "completed" && b.Result == "" && b.Version != "" {
+			// A plain project's new version file: it must be a version of the family now, and not a render.
+			v, ok := s.familyVersion(b.Version)
+			b.VersionChecked = ok && a.Render(b.Version) == nil && (!v.Relay || a.FileVersion(b.Version) != nil &&
+				a.FileVersion(b.Version).Worker == id)
+		}
 		_, floor := s.diskVersions(&a)
 		var v project.LiveRender
 		if v, err = st.ReportWork(b, floor); err == nil && v.ID != "" {
@@ -337,6 +343,40 @@ func (s *Server) workerRoute(w http.ResponseWriter, r *http.Request, p []string,
 				return
 			}
 		}
+	case is(p, "api", "worker", "files") && r.Method == http.MethodPost:
+		var b struct {
+			Files []project.FileVersion `json:"files"`
+		}
+		if json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&b) != nil || !validFiles(b.Files) {
+			s.fail(w, r, 400, "invalid version files")
+			return
+		}
+		var added []string
+		changed := false
+		err = st.UpdateAutomation(func(a *project.AutomationState) (bool, error) {
+			before := map[string]bool{}
+			for _, f := range a.ListedFiles() {
+				before[f.Label] = true
+			}
+			changed = a.SetFiles(id, b.Files)
+			for _, f := range a.ListedFiles() {
+				if changed && !before[f.Label] {
+					added = append(added, f.Label)
+				}
+			}
+			return changed, nil
+		})
+		if err == nil && changed {
+			s.Rescan()
+			if len(added) == 0 {
+				added = []string{""} // a file changed or went: the pages read the family again
+			}
+			for _, label := range added {
+				if err = st.EmitVersion(project.VersionEvent{Label: label, Why: "push"}); err != nil {
+					break
+				}
+			}
+		}
 	case is(p, "api", "worker", "media") && r.Method == http.MethodGet:
 		request, e := s.mediaRelay.Next(r.Context(), id)
 		if e != nil {
@@ -351,14 +391,24 @@ func (s *Server) workerRoute(w http.ResponseWriter, r *http.Request, p []string,
 			s.fail(w, r, 400, "invalid media status")
 			return
 		}
-		body, e := io.ReadAll(http.MaxBytesReader(w, r.Body, relay.MaxBody))
-		if e != nil {
-			s.fail(w, r, 413, "media response too large")
+		length, e1 := strconv.ParseInt(r.Header.Get("X-Media-Length"), 10, 64)
+		modified, _ := strconv.ParseInt(r.Header.Get("X-Media-Modified"), 10, 64)
+		if e1 != nil || length < 0 || r.ContentLength < 0 || r.ContentLength > relay.Chunk {
+			s.fail(w, r, 413, "a media answer is one chunk at most, with its length")
 			return
 		}
-		if !s.mediaRelay.Reply(id, p[3], relay.Response{Status: status, Type: r.Header.Get("Content-Type"), Range: r.Header.Get("Content-Range"), Body: body}) {
+		// The body streams through to the browser: this request stays open until it has been read.
+		body := http.MaxBytesReader(w, r.Body, relay.Chunk)
+		done, ok := s.mediaRelay.Reply(id, p[3], relay.Response{Status: status, Type: r.Header.Get("Content-Type"),
+			Range: r.Header.Get("Content-Range"), Length: length, Modified: modified, Body: body})
+		if !ok {
 			s.fail(w, r, 410, "request expired")
 			return
+		}
+		select {
+		case <-done:
+		case <-r.Context().Done():
+		case <-time.After(relay.Hold):
 		}
 	default:
 		s.fail(w, r, 404, "not found")
@@ -369,6 +419,26 @@ func (s *Server) workerRoute(w http.ResponseWriter, r *http.Request, p []string,
 		return
 	}
 	s.json(w, r, 200, map[string]bool{"ok": true})
+}
+
+// validFiles checks a worker's version files (spec/automation.md, "Version files").
+func validFiles(fs []project.FileVersion) bool {
+	if len(fs) > 1000 {
+		return false
+	}
+	seen := map[string]bool{}
+	for _, f := range fs {
+		n, err := strconv.Atoi(strings.TrimPrefix(f.Label, "v"))
+		ok := err == nil && n == f.N && n >= 0 && f.Label == "v"+strconv.Itoa(n) && !seen[f.Label] &&
+			plainName(f.Name) && len(f.Name) <= 255 && family.IsVideo(f.Name) && f.Size >= 0 && f.Modified >= 0 &&
+			f.Duration >= 0 && f.Duration < 1e7 && f.FPS >= 0 && f.FPS <= 1000 && f.Width >= 0 && f.Width <= 1<<15 &&
+			f.Height >= 0 && f.Height <= 1<<15
+		if !ok {
+			return false
+		}
+		seen[f.Label] = true
+	}
+	return true
 }
 
 func remoteStream(v project.LiveRender) family.StreamState {
@@ -410,6 +480,17 @@ func (s *Server) remoteFamily(f []family.Version) []family.Version {
 	if e != nil {
 		return f
 	}
+	// A connected computer's version files, unless the server has that version itself or a render has its label.
+	have := map[string]bool{}
+	for _, v := range f {
+		have[v.Label] = true
+	}
+	for _, fv := range a.ListedFiles() {
+		if !have[fv.Label] && a.Render(fv.Label) == nil {
+			f = append(f, s.fileVersion(fv))
+			have[fv.Label] = true
+		}
+	}
 	floor := 0
 	for _, v := range f {
 		floor = max(floor, v.N)
@@ -429,7 +510,31 @@ func (s *Server) remoteVersion(v project.LiveRender) family.Version {
 	duration := jsonx.Float(v.Duration)
 	w, h := v.Width, v.Height
 	return family.Version{Label: v.Label, N: v.N, Name: "index.m3u8", Path: s.remotePath(v.Label), FPS: jsonx.Float(v.FPS),
-		Duration: &duration, Width: &w, Height: &h, Stream: &stream}
+		Duration: &duration, Width: &w, Height: &h, Stream: &stream, Relay: true}
+}
+
+// fileVersion is a connected computer's version file as a version of the family. Its takes live on the host, under
+// .retake/remote/<label>/.
+func (s *Server) fileVersion(fv project.FileVersion) family.Version {
+	v := family.Version{Label: fv.Label, N: fv.N, Name: fv.Name, FPS: jsonx.Float(fv.FPS), Relay: true,
+		Path: filepath.Join(s.root, ".retake", "remote", fv.Label, fv.Name)}
+	d := jsonx.Float(fv.Duration)
+	v.Duration = &d
+	if fv.Width > 0 && fv.Height > 0 {
+		w, h := fv.Width, fv.Height
+		v.Width, v.Height = &w, &h
+	}
+	return v
+}
+
+// familyVersion finds a version in the family as it is now (scanned again).
+func (s *Server) familyVersion(label string) (family.Version, bool) {
+	for _, v := range s.Rescan() {
+		if v.Label == label {
+			return v, true
+		}
+	}
+	return family.Version{}, false
 }
 
 // remotePath is where a relayed version's takes and manifest live on the host.
@@ -537,51 +642,4 @@ func (s *Server) Busy() bool {
 	return err == nil && slices.ContainsFunc(a.Tasks, func(t project.EditingTask) bool {
 		return t.State == "running" || t.State == "stopping"
 	})
-}
-
-func (s *Server) remoteMedia(w http.ResponseWriter, r *http.Request, label, name string) bool {
-	v, ok := s.remoteRender(label)
-	if !ok {
-		return false
-	}
-	if !relay.ValidFile(name) {
-		s.fail(w, r, 404, "no such media file")
-		return true
-	}
-	st, e := s.store(false)
-	if e != nil {
-		s.storeFailed(w, r, e)
-		return true
-	}
-	a, e := st.Automation()
-	if e != nil {
-		s.storeFailed(w, r, e)
-		return true
-	}
-	m := a.Worker(v.Worker)
-	if m == nil || m.Seen+10 < st.Now().Unix() {
-		w.Header().Set("Retry-After", "3")
-		s.fail(w, r, 503, "editing machine is offline")
-		return true
-	}
-	reply, e := s.mediaRelay.Fetch(r.Context(), v.Worker, relay.Request{Render: v.ID, File: name, Range: r.Header.Get("Range"), Head: r.Method == http.MethodHead})
-	if e != nil {
-		s.fail(w, r, 503, "editing machine did not answer the media request")
-		return true
-	}
-	h := w.Header()
-	h.Set("Content-Type", reply.Type)
-	h.Set("Accept-Ranges", "bytes")
-	h.Set("Cache-Control", "private, max-age=31536000, immutable")
-	if strings.HasSuffix(name, ".m3u8") || reply.Status != 200 && reply.Status != 206 {
-		h.Set("Cache-Control", "no-store")
-	}
-	if reply.Range != "" {
-		h.Set("Content-Range", reply.Range)
-	}
-	w.WriteHeader(reply.Status)
-	if r.Method != http.MethodHead {
-		_, _ = w.Write(reply.Body)
-	}
-	return true
 }

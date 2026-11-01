@@ -100,6 +100,21 @@ type LiveRender struct {
 	Error    string           `json:"error,omitempty"`
 }
 
+// FileVersion is a version file on a connected computer (spec/automation.md, "Version files"): the host keeps its
+// metadata, and relays its bytes from that worker when a page plays it. Modified is its mtime in Unix ms.
+type FileVersion struct {
+	Worker   string  `json:"worker"`
+	Label    string  `json:"label"`
+	N        int     `json:"n"`
+	Name     string  `json:"name"`
+	Size     int64   `json:"size"`
+	Modified int64   `json:"modified"`
+	Duration float64 `json:"duration"`
+	FPS      float64 `json:"fps"`
+	Width    int     `json:"width"`
+	Height   int     `json:"height"`
+}
+
 // ReviewSubmission waits for final transcription before scheduling its notes. Send means the reviewer asked for
 // the notes to go to the agent, whatever the automation config says.
 type ReviewSubmission struct {
@@ -116,6 +131,7 @@ type AutomationState struct {
 	Workers     []EditingWorker    `json:"workers"`
 	Tasks       []EditingTask      `json:"tasks"`
 	Renders     []LiveRender       `json:"renders"`
+	Files       []FileVersion      `json:"files,omitempty"`
 	Submissions []ReviewSubmission `json:"submissions,omitempty"`
 }
 
@@ -274,6 +290,66 @@ func (a *AutomationState) Render(id string) *LiveRender {
 		}
 	}
 	return nil
+}
+
+// FileSource is the worker whose version files the family lists: the selected one when it sent files, else the one
+// seen last of those that did; "" when none did.
+func (a *AutomationState) FileSource() string {
+	src, seen := "", int64(-1)
+	for _, f := range a.Files {
+		if f.Worker == a.Config.Worker {
+			return f.Worker
+		}
+		if w := a.Worker(f.Worker); w != nil && w.Seen > seen {
+			src, seen = f.Worker, w.Seen
+		} else if w == nil && src == "" {
+			src = f.Worker
+		}
+	}
+	return src
+}
+
+// ListedFiles are the version files the family lists: FileSource's.
+func (a *AutomationState) ListedFiles() []FileVersion {
+	src := a.FileSource()
+	var out []FileVersion
+	for _, f := range a.Files {
+		if f.Worker == src {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+// FileVersion finds a listed version file by label.
+func (a *AutomationState) FileVersion(label string) *FileVersion {
+	src := a.FileSource()
+	for i := range a.Files {
+		if a.Files[i].Worker == src && a.Files[i].Label == label {
+			return &a.Files[i]
+		}
+	}
+	return nil
+}
+
+// SetFiles replaces a worker's version files, and reports whether they changed.
+func (a *AutomationState) SetFiles(worker string, files []FileVersion) bool {
+	var old, kept []FileVersion
+	for _, f := range a.Files {
+		if f.Worker == worker {
+			old = append(old, f)
+		} else {
+			kept = append(kept, f)
+		}
+	}
+	for i := range files {
+		files[i].Worker = worker
+	}
+	if slices.Equal(old, files) {
+		return false
+	}
+	a.Files = append(kept, files...)
+	return true
 }
 
 // NextVersion is the number the next version gets: one past floor (the highest version the family has on disk)
@@ -623,15 +699,19 @@ func (s *Store) ControlTask(id, action, agent, message string) error {
 	})
 }
 
-// WorkReport is an attempt's checkpoint. Completed results must name a fully rendered revision.
+// WorkReport is an attempt's checkpoint. Completed results must name a fully rendered revision (Result), or in a
+// project without a timeline the version file the attempt added (Version). VersionChecked is set by the server once
+// it found Version in its family; it never comes from the worker.
 type WorkReport struct {
-	Worker  string      `json:"worker"`
-	Task    string      `json:"task"`
-	Lease   string      `json:"lease"`
-	State   string      `json:"state"`
-	Message string      `json:"message"`
-	Result  string      `json:"result,omitempty"`
-	Usage   *AgentUsage `json:"usage,omitempty"`
+	Worker         string      `json:"worker"`
+	Task           string      `json:"task"`
+	Lease          string      `json:"lease"`
+	State          string      `json:"state"`
+	Message        string      `json:"message"`
+	Result         string      `json:"result,omitempty"`
+	Version        string      `json:"version,omitempty"`
+	VersionChecked bool        `json:"-"`
+	Usage          *AgentUsage `json:"usage,omitempty"`
 }
 
 // WorkNote includes the original annotations alongside the note text.
@@ -705,12 +785,22 @@ func (s *Store) ReportWork(r WorkReport, floor int) (LiveRender, error) {
 			if j.Stop {
 				return errors.New("task is stopping")
 			}
-			v := a.Render(r.Result)
-			if v == nil || !v.Complete || v.Error != "" || v.Worker != r.Worker || v.Task != j.ID || strings.TrimSpace(r.Message) == "" {
-				return errors.New("completion requires a checked playable render and a change summary")
+			var label string
+			if r.Result == "" && r.Version != "" {
+				// A plain project's new version file: the server has seen it in its family.
+				if !r.VersionChecked || strings.TrimSpace(r.Message) == "" {
+					return errors.New("completion requires a new version that plays and a change summary")
+				}
+				label = r.Version
+			} else {
+				v := a.Render(r.Result)
+				if v == nil || !v.Complete || v.Error != "" || v.Worker != r.Worker || v.Task != j.ID || strings.TrimSpace(r.Message) == "" {
+					return errors.New("completion requires a checked playable render and a change summary")
+				}
+				a.promote(v, floor)
+				result = *v
+				label = v.Label
 			}
-			a.promote(v, floor)
-			result = *v
 			for _, id := range j.Notes {
 				n, e := noteByID(t, id)
 				if e != nil {
@@ -719,12 +809,12 @@ func (s *Store) ReportWork(r WorkReport, floor int) (LiveRender, error) {
 				if n.Status == StatusRetracted {
 					return errors.New("feedback was retracted")
 				}
-				if _, e = t.Exec(`UPDATE notes SET status='answered', answered_in=?, change=?, updated=? WHERE id=?`, v.Label, r.Message, s.stamp(), id); e != nil {
+				if _, e = t.Exec(`UPDATE notes SET status='answered', answered_in=?, change=?, updated=? WHERE id=?`, label, r.Message, s.stamp(), id); e != nil {
 					return e
 				}
 			}
 			j.State = "completed"
-			j.Result = v.Label
+			j.Result = label
 			j.Lease = ""
 			j.Until = 0
 			j.Error = ""

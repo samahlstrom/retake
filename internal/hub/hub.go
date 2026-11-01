@@ -9,6 +9,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -19,6 +20,7 @@ import (
 	"github.com/samahlstrom/retake/internal/family"
 	"github.com/samahlstrom/retake/internal/jobs"
 	"github.com/samahlstrom/retake/internal/jsonx"
+	"github.com/samahlstrom/retake/internal/relay"
 	"github.com/samahlstrom/retake/internal/team"
 	"github.com/samahlstrom/retake/internal/tus"
 )
@@ -41,6 +43,9 @@ type Options struct {
 	SyncEvery time.Duration
 	// EventPoll is how often the per-project event streams look for events of other processes; 0 = 250 ms.
 	EventPoll time.Duration
+	// RelayCache is the most bytes of relayed video kept under the data folder's relay-cache/ (spec/automation.md,
+	// "The server's cache"); 0 keeps none.
+	RelayCache int64
 }
 
 // Hub is a running team server.
@@ -61,6 +66,8 @@ type Hub struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
+
+	cache *relay.Cache // nil without RelayCache
 
 	mu        sync.Mutex
 	projects  map[string]*slot
@@ -98,8 +105,31 @@ func New(opts Options) (*Hub, error) {
 	h.tokenFails = team.NewLimiter()
 	h.signinMails = newLimiter(5)
 	h.ctx, h.cancel = context.WithCancel(context.Background())
+	if opts.RelayCache > 0 {
+		if h.cache, err = relay.OpenCache(opts.Stores.RelayCacheDir(), opts.RelayCache); err != nil {
+			return nil, fmt.Errorf("the relay cache: %w", err)
+		}
+	}
 	return h, nil
 }
+
+// dropGoneProjects deletes the relay cache of every project that no longer exists.
+func (h *Hub) dropGoneProjects() {
+	if h.cache == nil {
+		return
+	}
+	entries, _ := os.ReadDir(h.st.RelayCacheDir())
+	for _, e := range entries {
+		if _, err := h.st.Accounts.Project(e.Name()); errors.Is(err, accounts.ErrNotFound) {
+			if err := h.cache.Drop(e.Name()); err != nil {
+				h.logf("dropping the relay cache of %s: %v", e.Name(), err)
+			}
+		}
+	}
+}
+
+// DropProjectCache deletes a project's relayed video from the cache: for when the project is deleted.
+func (h *Hub) DropProjectCache(name string) error { return h.cache.Drop(name) }
 
 func newLimiter(maxFails int) *team.Limiter {
 	l := team.NewLimiter()
@@ -117,6 +147,7 @@ func (h *Hub) Start() {
 		}
 	}
 	h.wg.Go(func() {
+		h.dropGoneProjects()
 		ps, err := h.st.Accounts.Projects()
 		if err != nil {
 			h.logf("listing projects: %v", err)

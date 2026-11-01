@@ -23,7 +23,7 @@ import (
 type serverFlags struct {
 	data, listen, publicURL, database string
 	s3Endpoint, s3Bucket, s3Region    string
-	smtpFrom, uiDir                   string
+	smtpFrom, uiDir, relayCache       string
 	proxies                           []string
 	s3Insecure, verbose               bool
 }
@@ -41,7 +41,7 @@ func (sf *serverFlags) add(f *flags) {
 	}
 	for name, p := range map[string]*string{"--data": &sf.data, "--listen": &sf.listen, "--public-url": &sf.publicURL,
 		"--database": &sf.database, "--s3-endpoint": &sf.s3Endpoint, "--s3-bucket": &sf.s3Bucket,
-		"--s3-region": &sf.s3Region, "--smtp-from": &sf.smtpFrom} {
+		"--s3-region": &sf.s3Region, "--smtp-from": &sf.smtpFrom, "--relay-cache": &sf.relayCache} {
 		f.values[name] = p
 	}
 	f.bools["--s3-insecure"] = &sf.s3Insecure
@@ -54,6 +54,7 @@ type serverSettings struct {
 	Proxies                           []string
 	S3                                *blob.S3Config
 	SMTPURL, SMTPFrom                 string
+	RelayCache                        int64 // bytes; 0 = no relay cache
 }
 
 // resolveServer combines flags, RETAKE_* environment variables, config.toml's [server] table and the defaults.
@@ -90,6 +91,11 @@ func resolveServer(env Env, cfg config.Config, sf serverFlags) (serverSettings, 
 	if s.Data == "" {
 		return s, errors.New("no data folder: give --data DIR, or set RETAKE_DATA")
 	}
+	size := pick(sf.relayCache, "RETAKE_RELAY_CACHE", c.RelayCache, DefaultRelayCache)
+	var err error
+	if s.RelayCache, err = parseSize(size); err != nil {
+		return s, fmt.Errorf("relay cache: %w", err)
+	}
 	s.Data = absPath(s.Data, env.Getenv)
 	if _, err := strconv.Atoi(s.Listen); err == nil {
 		s.Listen = ":" + s.Listen // a bare port
@@ -105,6 +111,31 @@ func resolveServer(env Env, cfg config.Config, sf serverFlags) (serverSettings, 
 		}
 	}
 	return s, nil
+}
+
+// DefaultRelayCache is the relay cache's size when none is set.
+const DefaultRelayCache = "20GB"
+
+// parseSize reads a size such as 20GB, 512MB, 1.5TB, 8GiB or 1000000 (bytes). 0 is none.
+func parseSize(s string) (int64, error) {
+	t := strings.ToUpper(strings.ReplaceAll(strings.TrimSpace(s), " ", ""))
+	units := []struct {
+		suffix string
+		n      float64
+	}{{"TIB", 1 << 40}, {"GIB", 1 << 30}, {"MIB", 1 << 20}, {"KIB", 1 << 10}, {"TB", 1e12}, {"GB", 1e9}, {"MB", 1e6},
+		{"KB", 1e3}, {"T", 1e12}, {"G", 1e9}, {"M", 1e6}, {"K", 1e3}, {"B", 1}}
+	mult := 1.0
+	for _, u := range units {
+		if rest, ok := strings.CutSuffix(t, u.suffix); ok {
+			t, mult = rest, u.n
+			break
+		}
+	}
+	v, err := strconv.ParseFloat(t, 64)
+	if err != nil || v < 0 || v*mult > 1<<62 {
+		return 0, fmt.Errorf("%q isn't a size like 20GB", s)
+	}
+	return int64(v * mult), nil
 }
 
 func truthy(v string) bool {
@@ -206,7 +237,7 @@ func serveCmd(ctx context.Context, args []string, env Env) int {
 		engines = env.Engines(cfg)
 	}
 	o := hub.Options{Stores: st, PublicURL: s.PublicURL, Proxies: s.Proxies, UI: page, Jobs: &engines, Prober: prober,
-		Version: Version(), Log: env.Stderr, Verbose: sf.verbose}
+		Version: Version(), Log: env.Stderr, Verbose: sf.verbose, RelayCache: s.RelayCache}
 	if mail != nil {
 		o.Mailer = mail
 	}

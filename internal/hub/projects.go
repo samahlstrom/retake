@@ -130,7 +130,7 @@ func (p *proj) makeServerLocked(allowEmpty bool) *server.Server {
 	o := p.h.opts
 	so := server.Options{Video: anchor, Root: p.root, Store: p.store, External: true, BasePath: p.base,
 		FollowNewest: true, UI: o.UI, Prober: o.Prober, Jobs: o.Jobs, Version: o.Version, Log: o.Log,
-		Verbose: o.Verbose, EventPoll: o.EventPoll, MCPFiles: p.uploadFile}
+		Verbose: o.Verbose, EventPoll: o.EventPoll, MCPFiles: p.uploadFile, MediaCache: p.h.cache, CacheScope: p.row.Name}
 	if p.pub != nil {
 		so.Media = p.pub.serve
 	}

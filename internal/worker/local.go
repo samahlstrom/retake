@@ -37,14 +37,17 @@ func Local(ctx context.Context, o Options, profiles func() []Profile, h http.Han
 	}
 }
 
-// Check reports what stops a worker from editing the project at o.Root, without starting one: no native timeline,
-// no retake-edit, or no agent.
+// Check reports what stops a worker from editing the project at o.Root, without starting one: no retake-edit for
+// a timeline project, or no agent. A project without a timeline is a plain one, which needs no renderer.
 func Check(o Options) error {
-	if _, err := bridge.FindTimeline(o.Root); err != nil {
+	_, err := bridge.FindTimeline(o.Root)
+	if err != nil && !errors.Is(err, bridge.ErrNoTimeline) {
 		return err
 	}
-	if _, err := o.Editor.Find(); err != nil {
-		return err
+	if err == nil {
+		if _, err := o.Editor.Find(); err != nil {
+			return err
+		}
 	}
 	if len(o.Profiles) == 0 {
 		return ErrNoAgents
@@ -57,8 +60,6 @@ func Reason(err error) string {
 	switch {
 	case err == nil:
 		return "The editing worker stopped. Restart retake to try again."
-	case errors.Is(err, bridge.ErrNoTimeline):
-		return "This project has no timeline (edit/timeline.json), so an agent can't edit it."
 	case errors.Is(err, bridge.ErrNoEditor):
 		return "retake-edit isn't installed, so edits can't be rendered."
 	case errors.Is(err, ErrNoAgents):

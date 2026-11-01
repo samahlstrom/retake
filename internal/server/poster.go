@@ -19,6 +19,11 @@ func (s *Server) poster(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, http.StatusNotFound, "no such version")
 		return
 	}
+	if v.Relay {
+		// Its video is on a connected computer: the server has no frame of it (a home serves the computer's poster).
+		s.fail(w, r, http.StatusNotFound, "no poster")
+		return
+	}
 	maker := s.opts.Thumbs
 	if maker == nil {
 		maker = thumb.Default

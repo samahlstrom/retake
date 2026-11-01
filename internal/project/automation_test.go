@@ -1,6 +1,7 @@
 package project
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -364,5 +365,60 @@ func TestDraftLabelsAndPromotion(t *testing.T) {
 		if a.Renders[i].Draft && a.Listed(i, 9) {
 			t.Fatalf("draft %s listed behind v9", a.Renders[i].Label)
 		}
+	}
+}
+
+func TestVersionFilesBelongToOneWorkerAndCompleteAPlainTask(t *testing.T) {
+	s, _, w := automationFixture(t)
+	other := EditingWorker{ID: "laptop", Session: "s2", Agents: []AgentProfile{{ID: "claude"}}}
+	if _, e := s.PollWork(other, "", ""); e != nil {
+		t.Fatal(e)
+	}
+	changed := false
+	e := s.UpdateAutomation(func(a *AutomationState) (bool, error) {
+		changed = a.SetFiles("laptop", []FileVersion{{Label: "v1", N: 1, Name: "clip_v1.mp4", Size: 10}})
+		if !a.SetFiles("machine", []FileVersion{{Label: "v1", N: 1, Name: "clip_v1.mp4"}, {Label: "v2", N: 2, Name: "clip_v2.mp4"}}) {
+			return false, errors.New("a new list didn't change")
+		}
+		if a.SetFiles("machine", []FileVersion{{Label: "v1", N: 1, Name: "clip_v1.mp4"}, {Label: "v2", N: 2, Name: "clip_v2.mp4"}}) {
+			return false, errors.New("the same list changed")
+		}
+		return true, nil
+	})
+	if e != nil || !changed {
+		t.Fatal(e, changed)
+	}
+	a, _ := s.Automation()
+	// The selected worker's files are the listed ones.
+	if a.FileSource() != "machine" || len(a.ListedFiles()) != 2 || a.FileVersion("v2") == nil || a.FileVersion("v2").Worker != "machine" {
+		t.Fatalf("%+v", a.Files)
+	}
+	_ = s.UpdateAutomation(func(a *AutomationState) (bool, error) { a.SetFiles("machine", nil); return true, nil })
+	if a, _ = s.Automation(); a.FileSource() != "laptop" || a.FileVersion("v2") != nil {
+		t.Fatalf("without the selected worker's files: %+v", a.Files)
+	}
+
+	// A plain project's task completes with the version file the server checked.
+	if _, e = s.QueueFeedback([]int64{1}, ""); e != nil {
+		t.Fatal(e)
+	}
+	task, e := s.PollWork(w, "", "")
+	if e != nil || task == nil {
+		t.Fatal(task, e)
+	}
+	report := WorkReport{Worker: w.ID, Task: task.ID, Lease: task.Lease, State: "completed", Message: "Made the title blue", Version: "v7"}
+	if _, e = s.ReportWork(report, 0); e == nil {
+		t.Fatal("an unchecked version completed the task")
+	}
+	report.VersionChecked = true
+	if _, e = s.ReportWork(report, 0); e != nil {
+		t.Fatal(e)
+	}
+	n, e := s.Note(1)
+	if e != nil || n.Status != StatusAnswered || n.AnsweredIn != "v7" || n.Change != "Made the title blue" {
+		t.Fatalf("%+v %v", n, e)
+	}
+	if a, _ = s.Automation(); a.Task(task.ID).State != "completed" || a.Task(task.ID).Result != "v7" {
+		t.Fatalf("%+v", a.Task(task.ID))
 	}
 }

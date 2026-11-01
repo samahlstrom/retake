@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -175,5 +176,159 @@ func TestWorkerStreamsEditsFromSeparateMachineAndSwitchesProvider(t *testing.T) 
 	out, e := probe.CombinedOutput()
 	if e != nil || !strings.Contains(string(out), "6.000000") {
 		t.Fatalf("relayed media doesn't decode: %s %v", out, e)
+	}
+}
+
+// A folder of finished videos on one computer, reviewed on a server: the worker relays its version files (metadata
+// to the server, bytes on request) and, without a timeline, its agent writes a video that becomes the next version.
+func TestPlainProjectRelaysItsVersionsAndPushesTheAgentsVideo(t *testing.T) {
+	testmedia.Need(t)
+	scratch, e := filepath.Abs("../../.retake-work")
+	if e != nil {
+		t.Fatal(e)
+	}
+	if e = os.MkdirAll(scratch, 0o700); e != nil {
+		t.Fatal(e)
+	}
+	base, e := os.MkdirTemp(scratch, "plain-worker-test-")
+	if e != nil {
+		t.Fatal(e)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(base) })
+	local, hosted := filepath.Join(base, "local"), filepath.Join(base, "hosted")
+	testmedia.Video(t, filepath.Join(local, "clip_v1.mp4"), 2)
+	testmedia.Video(t, filepath.Join(local, "clip_v2.mp4"), 3)
+	v2, e := os.ReadFile(filepath.Join(local, "clip_v2.mp4"))
+	if e != nil {
+		t.Fatal(e)
+	}
+	st, e := project.Open(hosted)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer func() { _ = st.Close() }()
+	token, hash, e := team.NewToken()
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, e = st.CreateToken(project.NewToken{Hash: hash, Role: "agent"}); e != nil {
+		t.Fatal(e)
+	}
+	ts := httptest.NewUnstartedServer(nil)
+	srv := server.New(server.Options{Root: hosted, Store: st, Port: ts.Listener.Addr().(*net.TCPAddr).Port, FollowNewest: true})
+	ts.Config.Handler = srv
+	ts.Start()
+	defer ts.Close()
+	defer func() { _ = srv.Close() }()
+	bin, e := os.Executable()
+	if e != nil {
+		t.Fatal(e)
+	}
+	profiles := []Profile{
+		{AgentProfile: project.AgentProfile{ID: "lazy", Name: "Lazy"}, Command: []string{bin, "-test.run=^TestAgentProcess$", "--", "plain-lazy"}},
+		{AgentProfile: project.AgentProfile{ID: "editor", Name: "Editor"}, Command: []string{bin, "-test.run=^TestAgentProcess$", "--", "plain-edit"}},
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	finished := make(chan error, 1)
+	go func() {
+		// No renderer: a plain project doesn't need one.
+		finished <- Run(ctx, Options{URL: ts.URL, Token: token, Root: local, Name: "Test machine", Profiles: profiles,
+			Editor: bridge.Editor{Configured: filepath.Join(base, "no-retake-edit")}})
+	}()
+	defer func() {
+		cancel()
+		select {
+		case err := <-finished:
+			if err != nil {
+				t.Error(err)
+			}
+		case <-time.After(10 * time.Second):
+			t.Error("worker did not stop")
+		}
+	}()
+	wait := func(label string, test func(project.AutomationState) bool) project.AutomationState {
+		t.Helper()
+		deadline := time.Now().Add(45 * time.Second)
+		for time.Now().Before(deadline) {
+			a, err := st.Automation()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if test(a) {
+				return a
+			}
+			select {
+			case err := <-finished:
+				t.Fatalf("worker exited: %v", err)
+			default:
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		a, _ := st.Automation()
+		b, _ := json.Marshal(a)
+		t.Fatalf("waiting for %s: %s", label, b)
+		return project.AutomationState{}
+	}
+	a := wait("the version files", func(a project.AutomationState) bool { return len(a.ListedFiles()) == 2 })
+	if f := a.FileVersion("v2"); f == nil || f.Name != "clip_v2.mp4" || f.Size != int64(len(v2)) || f.Duration < 2.9 {
+		t.Fatalf("v2: %+v", f)
+	}
+	fetch := func(path, rng string) (int, string, []byte) {
+		t.Helper()
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+path, nil)
+		if rng != "" {
+			req.Header.Set("Range", rng)
+		}
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = res.Body.Close() }()
+		b, _ := io.ReadAll(res.Body)
+		return res.StatusCode, res.Header.Get("Content-Range"), b
+	}
+	if code, cr, b := fetch("/video/v2", "bytes=100-"); code != 206 || cr != "bytes 100-"+strconv.Itoa(len(v2)-1)+"/"+strconv.Itoa(len(v2)) || string(b) != string(v2[100:]) {
+		t.Fatalf("v2 through the relay: %d %s", code, cr)
+	}
+	if _, e = os.Stat(filepath.Join(hosted, "clip_v2.mp4")); !os.IsNotExist(e) {
+		t.Fatal("a version file was copied to the server")
+	}
+
+	// A note on v2, sent to an agent that says it's done without a video: the task pauses, nothing is answered.
+	if _, e = st.Sync(project.Run{Version: "v2", Comments: []project.Comment{{Key: "intro", Text: "Cut the first second", T0: 0, T1: 1}}}); e != nil {
+		t.Fatal(e)
+	}
+	if e = st.UpdateAutomation(func(a *project.AutomationState) (bool, error) { a.Config.Agent = "lazy"; return true, nil }); e != nil {
+		t.Fatal(e)
+	}
+	queued, e := st.QueueFeedback([]int64{1}, "")
+	if e != nil {
+		t.Fatal(e)
+	}
+	a = wait("the lazy agent's pause", func(a project.AutomationState) bool { return a.Tasks[0].State == "paused" })
+	if a.Tasks[0].Error != "The agent finished without writing a new version." {
+		t.Fatalf("pause: %q", a.Tasks[0].Error)
+	}
+	// Retried with an agent that writes $RETAKE_OUTPUT: it becomes v3, next to the others, and answers the note.
+	if e = st.ControlTask(queued[0].ID, "retry", "editor", ""); e != nil {
+		t.Fatal(e)
+	}
+	a = wait("the edit", func(a project.AutomationState) bool { return a.Tasks[0].State == "completed" })
+	if a.Tasks[0].Result != "v3" {
+		t.Fatalf("result %q", a.Tasks[0].Result)
+	}
+	n, e := st.Note(1)
+	if e != nil || n.Status != project.StatusAnswered || n.AnsweredIn != "v3" || n.Change != "Cut the first second of v2" {
+		t.Fatalf("%+v %v", n, e)
+	}
+	v3, e := os.ReadFile(filepath.Join(local, "clip_v3.mp4"))
+	if e != nil {
+		t.Fatal("the agent's video isn't the next version:", e)
+	}
+	if code, _, b := fetch("/video/v3", "bytes=0-"); code != 206 || string(b) != string(v3) {
+		t.Fatalf("v3 through the relay: %d", code)
+	}
+	if fv := a.FileVersion("v3"); fv == nil || fv.Duration < 1.9 || fv.Duration > 2.1 {
+		t.Fatalf("v3: %+v", fv)
 	}
 }

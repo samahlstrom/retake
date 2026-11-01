@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,12 +11,38 @@ import (
 	"testing"
 	"time"
 
+	"github.com/samahlstrom/retake/internal/probe"
 	"github.com/samahlstrom/retake/internal/project"
 	"github.com/samahlstrom/retake/internal/relay"
 )
 
+// fakeProber says every file that isn't "broken" is a 10 s video.
+type fakeProber struct{}
+
+func (fakeProber) Probe(path string) probe.Info {
+	if strings.Contains(filepath.Base(path), "broken") {
+		return probe.Info{}
+	}
+	d, w, h := 10.0, 64, 36
+	return probe.Info{Duration: &d, FPS: 30, Width: &w, Height: &h}
+}
+
+func body(t *testing.T, m media) string {
+	t.Helper()
+	defer m.close()
+	if m.Body == nil {
+		return ""
+	}
+	b, e := io.ReadAll(m.Body)
+	if e != nil {
+		t.Fatal(e)
+	}
+	return string(b)
+}
+
 func TestMediaReadsRangesButNeverSymlinksOrSource(t *testing.T) {
-	dir := t.TempDir()
+	root := t.TempDir()
+	dir := filepath.Join(root, ".retake", "worker")
 	render := filepath.Join(dir, "renders", "revision")
 	if e := os.MkdirAll(render, 0o700); e != nil {
 		t.Fatal(e)
@@ -23,24 +50,79 @@ func TestMediaReadsRangesButNeverSymlinksOrSource(t *testing.T) {
 	if e := writeJSON(filepath.Join(render, "state.json"), project.LiveRender{ID: "revision"}); e != nil {
 		t.Fatal(e)
 	}
-	if e := os.WriteFile(filepath.Join(render, "seg_00000.m4s"), []byte("0123456789"), 0o600); e != nil {
-		t.Fatal(e)
+	write := func(p, data string) {
+		t.Helper()
+		if e := os.MkdirAll(filepath.Dir(p), 0o700); e != nil {
+			t.Fatal(e)
+		}
+		if e := os.WriteFile(p, []byte(data), 0o600); e != nil {
+			t.Fatal(e)
+		}
 	}
-	r := readMedia(dir, relay.Request{Render: "revision", File: "seg_00000.m4s", Range: "bytes=2-5"})
-	if r.Status != 206 || string(r.Body) != "2345" || r.Range != "bytes 2-5/10" {
-		t.Fatal(r)
+	write(filepath.Join(render, "seg_00000.m4s"), "0123456789")
+	r := &runner{opts: Options{Root: root, Prober: fakeProber{}}, dir: dir}
+	m := r.readMedia(relay.Request{Render: "revision", File: "seg_00000.m4s", Range: "bytes=2-5"})
+	if m.Status != 206 || m.Range != "bytes 2-5/10" || m.Length != 4 || body(t, m) != "2345" {
+		t.Fatal(m.Status, m.Range, m.Length)
 	}
-	secret := filepath.Join(dir, "secret.mp4")
-	if e := os.WriteFile(secret, []byte("private source"), 0o600); e != nil {
-		t.Fatal(e)
-	}
+	secret := filepath.Join(root, "secret.mp4")
+	write(secret, "private source")
 	if e := os.Symlink(secret, filepath.Join(render, "escape.mp4")); e != nil {
 		t.Fatal(e)
 	}
-	for _, req := range []relay.Request{{Render: "revision", File: "escape.mp4"}, {Render: "revision", File: "state.json"}, {Render: "../revision", File: "seg_00000.m4s"}} {
-		if got := readMedia(dir, req); got.Status != 404 {
-			t.Fatal("unsafe read", req, got)
+	// The project's version files: v1/clip_v1.mp4, and v2/ with an HLS playlist beside its segments.
+	write(filepath.Join(root, "v1", "clip_v1.mp4"), "version one bytes")
+	write(filepath.Join(root, "v2", "clip_v2.m3u8"), "#EXTM3U\n")
+	write(filepath.Join(root, "v2", "seg_000.m4s"), "segment zero")
+	write(filepath.Join(root, "v2", "notes.txt"), "not media")
+	write(filepath.Join(root, "edit", "timeline.mp4"), "not a version")
+	if e := os.Symlink(secret, filepath.Join(root, "v2", "seg_001.m4s")); e != nil {
+		t.Fatal(e)
+	}
+	if e := os.Symlink(filepath.Join(root, "v2"), filepath.Join(root, "v2", "sub.mp4")); e != nil {
+		t.Fatal(e)
+	}
+	m = r.readMedia(relay.Request{Version: "v1", Range: "bytes=8-"})
+	if m.Status != 206 || m.Range != "bytes 8-16/17" || body(t, m) != "one bytes" || m.Modified == 0 {
+		t.Fatal(m.Status, m.Range, m.Modified)
+	}
+	if m = r.readMedia(relay.Request{Version: "v1", File: "clip_v1.mp4"}); m.Status != 200 || body(t, m) != "version one bytes" {
+		t.Fatal("the version by its name", m.Status)
+	}
+	if m = r.readMedia(relay.Request{Version: "v1", File: "clip_v1.mp4", Head: true}); m.Status != 200 || m.Length != 17 || m.Body != nil {
+		t.Fatal("HEAD", m.Status, m.Length)
+	}
+	if m = r.readMedia(relay.Request{Version: "v2", File: "seg_000.m4s"}); m.Status != 200 || body(t, m) != "segment zero" {
+		t.Fatal("a segment beside the playlist", m.Status)
+	}
+	if m = r.readMedia(relay.Request{Version: "v1", Range: "bytes=17-"}); m.Status != 416 || m.Range != "bytes */17" {
+		t.Fatal("past the end", m.Status, m.Range)
+	}
+	for _, req := range []relay.Request{
+		{Render: "revision", File: "escape.mp4"}, {Render: "revision", File: "state.json"},
+		{Render: "../revision", File: "seg_00000.m4s"},
+		{Version: "v1", File: "secret.mp4"},           // not the version's file, and v1 isn't a playlist
+		{Version: "v1", File: "../secret.mp4"},        // traversal
+		{Version: "v2", File: "../v1/clip_v1.mp4"},    // out of the playlist's folder
+		{Version: "v2", File: "../../secret.mp4"},     // further out
+		{Version: "v2", File: "/etc/passwd"},          // absolute
+		{Version: "v2", File: "notes.txt"},            // not media
+		{Version: "v2", File: "seg_001.m4s"},          // a symlink out
+		{Version: "v2", File: "sub.mp4"},              // a symlink to a folder
+		{Version: "v3", File: "clip_v3.mp4"},          // no such version
+		{Version: "../v1"}, {Version: "timeline"}, {}, // not versions
+	} {
+		if got := r.readMedia(req); got.Status != 404 {
+			body(t, got)
+			t.Fatal("unsafe read", req, got.Status)
 		}
+	}
+	// What the server is told: metadata only, of the versions that play.
+	write(filepath.Join(root, "v3", "clip_v3_broken.mp4"), "x")
+	files := fileVersions(r.onDisk(false))
+	if len(files) != 2 || files[0].Label != "v1" || files[0].Name != "clip_v1.mp4" || files[0].Size != 17 ||
+		files[0].Duration != 10 || files[0].Width != 64 || files[1].Label != "v2" || files[1].Name != "clip_v2.m3u8" {
+		t.Fatalf("%+v", files)
 	}
 }
 
@@ -122,7 +204,7 @@ func TestCancellingAgentStopsItsChildBeforeHandoff(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	r := &runner{opts: Options{Root: root, Profiles: []Profile{{AgentProfile: project.AgentProfile{ID: "slow"}, Command: []string{bin, "-test.run=^TestAgentProcess$", "--", "slow"}}}}, dir: filepath.Join(root, ".retake", "worker")}
+	r := &runner{opts: Options{Root: root, Profiles: []Profile{{AgentProfile: project.AgentProfile{ID: "slow"}, Command: []string{bin, "-test.run=^TestAgentProcess$", "--", "slow"}}}}, dir: filepath.Join(root, ".retake", "worker"), timeline: filepath.Join(root, "timeline.json")}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	done := make(chan outcome, 1)
@@ -194,6 +276,26 @@ func TestAgentProcess(t *testing.T) {
 			}
 			return
 		}
+	case "plain-lazy": // a plain project's agent that says it's done without a video
+		if e = writeJSON(os.Getenv("RETAKE_REPORT"), agentResult{State: "completed", Message: "Done, I think"}); e != nil {
+			t.Fatal(e)
+		}
+		return
+	case "plain-edit": // a plain project's agent: cuts the newest version's first second, into $RETAKE_OUTPUT
+		var c plainContext
+		if e = json.Unmarshal(b, &c); e != nil || len(c.Family) == 0 || c.Output != os.Getenv("RETAKE_OUTPUT") {
+			t.Fatal("plain context", c, e)
+		}
+		src := c.Family[len(c.Family)-1].Path
+		cut := exec.Command("ffmpeg", "-nostdin", "-v", "error", "-y", "-threads", "2", "-ss", "1", "-i", src,
+			"-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", "-movflags", "+faststart", os.Getenv("RETAKE_OUTPUT"))
+		if out, e := cut.CombinedOutput(); e != nil {
+			t.Fatal(e, string(out))
+		}
+		if e = writeJSON(os.Getenv("RETAKE_REPORT"), agentResult{State: "completed", Message: "Cut the first second of " + c.Family[len(c.Family)-1].Label}); e != nil {
+			t.Fatal(e)
+		}
+		return
 	case "slow":
 		bin, e := os.Executable()
 		if e != nil {

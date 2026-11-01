@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/samahlstrom/retake/internal/agent"
 	"github.com/samahlstrom/retake/internal/project"
 )
 
@@ -71,7 +72,28 @@ func (r *runner) execute(ctx context.Context, a project.WorkAssignment) outcome 
 	// Preserve each attempt's result and context for provider-independent handoff.
 	reportPath := filepath.Join(dir, fmt.Sprintf("report-%d.json", t.Attempt))
 	contextPath := filepath.Join(dir, fmt.Sprintf("context-%d.json", t.Attempt))
-	if e := writeJSON(contextPath, a); e != nil {
+	// A plain project's agent writes its video to output; the worker pushes it as the next version.
+	plain, output := r.timeline == "", filepath.Join(dir, "output.mp4")
+	var before []string
+	var taskContext any = a
+	prompt := timelinePrompt(contextPath, r.timeline, reportPath)
+	if plain {
+		vs := r.onDisk(false)
+		if len(vs) == 0 {
+			return paused("The project has no version that plays")
+		}
+		next, _, err := agent.NextVersionFile(vs, ".mp4")
+		if err != nil {
+			return paused("Couldn't name the next version: " + err.Error())
+		}
+		for _, v := range vs {
+			before = append(before, v.Label)
+		}
+		_ = os.Remove(output) // an earlier attempt's: this attempt writes its own
+		taskContext = r.plainContext(a, vs, output)
+		prompt = plainPrompt(contextPath, vs[len(vs)-1].Path, output, next, reportPath)
+	}
+	if e := writeJSON(contextPath, taskContext); e != nil {
 		return paused("Cannot save task context")
 	}
 	for _, n := range a.Notes {
@@ -92,21 +114,14 @@ func (r *runner) execute(ctx context.Context, a project.WorkAssignment) outcome 
 			}
 		}
 	}
-	prompt := fmt.Sprintf(`You are editing a native Retake video project in the current working directory.
-Read the project instructions, then the durable task context at %q. The native timeline is %q.
-Only the note IDs in task.notes are assigned. Other notes are context: check them and prior events for conflicting or already-applied feedback. Original note versions, timing, strokes and targets must be respected. Saved annotated stills, when available, are note-<id>.png in this task directory. Attached reference images are note-<id>-<file>; their boxes and original video times are in the context.
-Original local video revisions are retained in .retake/worker/renders/: each state.json gives its label (a draft such as v4-draft2 until a task completes it as v4), source.json is its timeline snapshot, and index.m3u8 is its video. Inspect the original frame there when needed; do not assume an old comment's time refers to the current source.
-Make the requested source edits in this project. Preserve all existing working changes, media and other people's work. Retake automatically renders valid saved source changes and streams them to reviewers. Do not run retake push or mark notes complete yourself.
-If feedback conflicts, the target is ambiguous, or needed material is missing, ask a concise specific question instead of guessing.
-Before exiting, write a JSON object to %q with exactly: {"state":"completed","message":"concrete description of the change and checks"} OR {"state":"question","message":"your question"}.
-A completed report is only a request: Retake waits for a checked playable render before resolving the comment.
-The next agent may differ from you; leave source changes and useful context on disk. Do not delete or edit the worker's identity, lock, logs, context files or render output.
-`, contextPath, r.timeline, reportPath)
 	p := r.opts.Profiles[index]
 	cmd := exec.CommandContext(ctx, p.Command[0], p.Command[1:]...) //nolint:gosec // trusted local argv, never supplied by the host
 	cmd.Dir = r.opts.Root
 	cmd.Stdin = strings.NewReader(prompt)
 	cmd.Env = agentEnv(os.Environ(), contextPath, reportPath, p.Env)
+	if plain {
+		cmd.Env = append(cmd.Env, "RETAKE_OUTPUT="+output)
+	}
 	ownGroup(cmd)
 	cmd.Cancel = func() error { return stopGroup(cmd.Process) }
 	cmd.WaitDelay = 3 * time.Second
@@ -146,6 +161,23 @@ The next agent may differ from you; leave source changes and useful context on d
 	if report.State != "completed" {
 		return paused("Agent report must be completed or question")
 	}
+	if plain {
+		// The video, not the agent's exit, completes the task: it must play, as the next version.
+		label, problem := r.pushPlain(output, before)
+		if problem != "" {
+			return outcome{state: "paused", message: problem, usage: usage}
+		}
+		if r.opts.Handler == nil {
+			for e := r.sendFiles(ctx); e != nil; e = r.sendFiles(ctx) {
+				select {
+				case <-ctx.Done():
+					return outcome{state: "stopped"}
+				case <-time.After(time.Second):
+				}
+			}
+		}
+		return outcome{state: "completed", message: report.Message, version: label, usage: usage}
+	}
 	r.mu.Lock()
 	r.finalTask = t.ID
 	r.mu.Unlock()
@@ -177,6 +209,20 @@ The next agent may differ from you; leave source changes and useful context on d
 	}
 }
 
+// timelinePrompt is the task prompt of a project with a native timeline.
+func timelinePrompt(contextPath, timeline, reportPath string) string {
+	return fmt.Sprintf(`You are editing a native Retake video project in the current working directory.
+Read the project instructions, then the durable task context at %q. The native timeline is %q.
+Only the note IDs in task.notes are assigned. Other notes are context: check them and prior events for conflicting or already-applied feedback. Original note versions, timing, strokes and targets must be respected. Saved annotated stills, when available, are note-<id>.png in this task directory. Attached reference images are note-<id>-<file>; their boxes and original video times are in the context.
+Original local video revisions are retained in .retake/worker/renders/: each state.json gives its label (a draft such as v4-draft2 until a task completes it as v4), source.json is its timeline snapshot, and index.m3u8 is its video. Inspect the original frame there when needed; do not assume an old comment's time refers to the current source.
+Make the requested source edits in this project. Preserve all existing working changes, media and other people's work. Retake automatically renders valid saved source changes and streams them to reviewers. Do not run retake push or mark notes complete yourself.
+If feedback conflicts, the target is ambiguous, or needed material is missing, ask a concise specific question instead of guessing.
+Before exiting, write a JSON object to %q with exactly: {"state":"completed","message":"concrete description of the change and checks"} OR {"state":"question","message":"your question"}.
+A completed report is only a request: Retake waits for a checked playable render before resolving the comment.
+The next agent may differ from you; leave source changes and useful context on disk. Do not delete or edit the worker's identity, lock, logs, context files or render output.
+`, contextPath, timeline, reportPath)
+}
+
 func (r *runner) fetchArtifact(ctx context.Context, path, destination string) error {
 	resp, e := r.request(ctx, http.MethodGet, path, nil)
 	if e != nil {
@@ -199,7 +245,9 @@ func (r *runner) fetchArtifact(ctx context.Context, path, destination string) er
 // agentEnv is the agent's environment: the worker's own without its token, the profile's extra variables (their
 // $VAR and ${VAR} read from that same environment), then the task's context and report paths.
 func agentEnv(env []string, contextPath, reportPath string, extra map[string]string) []string {
-	reserved := func(k string) bool { return k == "RETAKE_TOKEN" || k == "RETAKE_CONTEXT" || k == "RETAKE_REPORT" }
+	reserved := func(k string) bool {
+		return k == "RETAKE_TOKEN" || k == "RETAKE_CONTEXT" || k == "RETAKE_REPORT" || k == "RETAKE_OUTPUT"
+	}
 	own := map[string]string{}
 	out := make([]string, 0, len(env)+len(extra)+2)
 	for _, v := range env {

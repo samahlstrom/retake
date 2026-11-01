@@ -130,7 +130,8 @@ sharing (spec/team.md; links and tokens belong to the project of <video>):
 
 the team server (spec/server.md; settings also come from RETAKE_* variables and config.toml [server]):
   retake serve --data DIR [--listen :8080] [--public-url URL] [--trust-proxy CIDR]... [--database postgres://...]
-               [--s3-endpoint HOST:PORT [--s3-bucket B] [--s3-region R] [--s3-insecure]] [--ui-dir DIR] [--verbose]
+               [--s3-endpoint HOST:PORT [--s3-bucket B] [--s3-region R] [--s3-insecure]] [--relay-cache 20GB]
+               [--ui-dir DIR] [--verbose]
       host many projects for a team: sign-in links, members, share links, uploads and remote MCP at /p/<project>/
   retake user add <email> [--name NAME] [--admin] [--expires 24h] [--json]
       add a person and print their one-time sign-in link (mailed instead when RETAKE_SMTP_URL is set)

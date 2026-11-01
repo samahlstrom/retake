@@ -75,7 +75,8 @@ func TestRestartedWorkerRemembersItsLastCompleteRender(t *testing.T) {
 func TestBlockedReasonsAreShortSentences(t *testing.T) {
 	root := t.TempDir()
 	o := Options{Root: root, Editor: bridge.Editor{Configured: filepath.Join(root, "missing-retake-edit")}}
-	if got := Reason(Check(o)); !strings.Contains(got, "no timeline") {
+	// A folder without a timeline is a plain project: it needs an agent, not the renderer.
+	if got := Reason(Check(o)); got != "No agent found. Install Claude Code or Codex." {
 		t.Fatal(got)
 	}
 	if e := os.MkdirAll(filepath.Join(root, "edit"), 0o700); e != nil {

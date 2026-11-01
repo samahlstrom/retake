@@ -138,11 +138,7 @@ func (p *Project) pushTarget(a PushArgs, ext string) (pushTarget, error) {
 		return pushTarget{}, err
 	}
 	label := fmt.Sprintf("v%d", n)
-	dir := filepath.Dir(parent.Path)
-	if base := filepath.Base(dir); project.IsVersionDir(base) {
-		dir = filepath.Join(filepath.Dir(dir), base[:1]+strconv.Itoa(n))
-	}
-	dest := filepath.Join(dir, m[1]+m[2]+m[3]+strconv.Itoa(n)+strings.ToLower(ext))
+	dest := versionPath(parent.Path, m, n, ext)
 	if _, err := os.Lstat(dest); err == nil {
 		return pushTarget{}, errorf(CodeBadRequest, "%s already exists", dest)
 	}
@@ -152,6 +148,41 @@ func (p *Project) pushTarget(a PushArgs, ext string) (pushTarget, error) {
 	}
 	return pushTarget{parent: parent, push: project.Push{Label: label, Path: dest, Parent: parent.Label, By: by,
 		Changelog: a.Changes, Asks: a.Asks, Scope: scope(parent)}}, nil
+}
+
+// versionPath is where version n goes, named after its parent's file (m is nameRE's match of the parent's stem),
+// in a sibling v<n>/ folder when the parent is in a version folder.
+func versionPath(parent string, m []string, n int, ext string) string {
+	dir := filepath.Dir(parent)
+	if base := filepath.Base(dir); project.IsVersionDir(base) {
+		dir = filepath.Join(filepath.Dir(dir), base[:1]+strconv.Itoa(n))
+	}
+	return filepath.Join(dir, m[1]+m[2]+m[3]+strconv.Itoa(n)+strings.ToLower(ext))
+}
+
+// NextVersionFile is where a version made after the family's newest goes, by version_push's rule: its label, the
+// next v<N> past every version of the family and every file of it on disk (even one that doesn't play yet), and its
+// path, named after the newest version's file with ext (spec/automation.md, "Plain projects").
+func NextVersionFile(fam []family.Version, ext string) (label, path string, err error) {
+	if len(fam) == 0 {
+		return "", "", errorf(CodeNotFound, "the project has no version to follow")
+	}
+	parent := fam[len(fam)-1]
+	m := nameRE.FindStringSubmatch(family.Stem(filepath.Base(parent.Path)))
+	if m == nil {
+		return "", "", errorf(CodeBadRequest, "%s has no _v<N> in its name", filepath.Base(parent.Path))
+	}
+	top := 0
+	for _, v := range fam {
+		if lm := labelRE.FindStringSubmatch(v.Label); lm != nil {
+			n, _ := strconv.Atoi(lm[1])
+			top = max(top, n)
+		}
+	}
+	for _, n := range rendering(parent.Path, m[1]) {
+		top = max(top, n)
+	}
+	return fmt.Sprintf("v%d", top+1), versionPath(parent.Path, m, top+1, ext), nil
 }
 
 func nonNil(ids []int64) []int64 {

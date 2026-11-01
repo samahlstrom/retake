@@ -139,7 +139,7 @@ A project without a native timeline is a folder of finished videos. Its worker r
 its version files and runs the agent, and the agent makes the next version however it can.
 
 - The worker needs an agent, not `retake-edit`. It renders nothing.
-- A task's prompt says the project has no timeline, lists the versions (also in the task context, `versions`, with
+- A task's prompt says the project has no timeline, lists the versions (also in the task context, `family`, with
   each one's path relative to the project), and asks the agent to make the change with the tools it has (ffmpeg,
   say), starting from the version the notes were made on, and to write the result as one video file to
   `$RETAKE_OUTPUT` (`.retake/worker/tasks/<id>/output.mp4`). It never edits or deletes the existing versions.

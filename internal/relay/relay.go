@@ -1,10 +1,12 @@
-// Package relay carries bounded media requests over worker-initiated HTTP connections.
-// Media is retained on the worker; the host holds only in-flight responses.
+// Package relay carries media requests over worker-initiated HTTP connections (spec/automation.md, "The media
+// relay"). Media is retained on the worker; the host holds only in-flight responses, and, with a Cache, the chunks it
+// already relayed.
 package relay
 
 import (
 	"context"
 	"errors"
+	"io"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -13,10 +15,17 @@ import (
 	"github.com/samahlstrom/retake/internal/project"
 )
 
-// MaxBody bounds a single HLS segment, not the full video.
-const MaxBody = 64 << 20
+const (
+	// Chunk is the most one relayed response carries, and the unit the host asks for and caches: chunk k is bytes
+	// k*Chunk to (k+1)*Chunk-1 of a file.
+	Chunk = 8 << 20
+	// Wait is how long the host waits for a worker to start answering a request.
+	Wait = 30 * time.Second
+	// Hold is how long a worker's answer may take to stream through to the browser.
+	Hold = 5 * time.Minute
+)
 
-// ValidFile accepts only flat generated HLS media names, never source, manifests or arbitrary files.
+// ValidFile accepts only flat media names, never source, manifests or arbitrary files.
 func ValidFile(name string) bool {
 	if len(name) == 0 || len(name) > 180 || strings.ContainsAny(name, "/\\") || strings.Contains(name, "..") {
 		return false
@@ -34,20 +43,35 @@ func ValidFile(name string) bool {
 	return false
 }
 
-// Request describes a read of one immutable render's flat media directory.
+// Request asks a worker for part of one file: a render's media file (Render), or a version file of its project
+// (Version, with File "" or its own name, or a file beside its playlist).
 type Request struct {
-	ID     string `json:"id"`
-	Render string `json:"render"`
-	File   string `json:"file"`
-	Range  string `json:"range,omitempty"`
-	Head   bool   `json:"head,omitempty"`
+	ID      string `json:"id"`
+	Render  string `json:"render,omitempty"`
+	Version string `json:"version,omitempty"`
+	File    string `json:"file"`
+	Range   string `json:"range,omitempty"`
+	Head    bool   `json:"head,omitempty"`
 }
 
-// Response contains a worker's media response. Headers are explicitly allowlisted by the caller.
+// Response is a worker's answer. Body streams the worker's upload as it arrives: whoever got it from Fetch reads it
+// and then calls Close, which lets the worker's request end.
 type Response struct {
 	Status      int
 	Type, Range string
-	Body        []byte
+	Length      int64 // the Content-Length the browser is told
+	Modified    int64 // a version file's mtime (Unix ms); 0 for a render's media
+	Body        io.Reader
+
+	done chan struct{}
+	once *sync.Once
+}
+
+// Close says the body has been read (or never will be). It is safe to call more than once.
+func (r Response) Close() {
+	if r.once != nil {
+		r.once.Do(func() { close(r.done) })
+	}
 }
 
 type pending struct {
@@ -71,15 +95,19 @@ func (h *Hub) init() {
 	}
 }
 
-// Fetch waits for a response, releasing its queue slot on cancellation or timeout.
+// ErrBusy is Fetch's error while too many requests wait for workers.
+var ErrBusy = errors.New("media relay busy")
+
+// Fetch waits for a worker's answer, releasing its queue slot on cancellation or after Wait. The caller must Close
+// the response.
 func (h *Hub) Fetch(ctx context.Context, worker string, r Request) (Response, error) {
-	ctx, cancel := context.WithTimeout(ctx, 25*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, Wait)
 	defer cancel()
 	h.mu.Lock()
 	h.init()
 	if len(h.pending) >= 64 {
 		h.mu.Unlock()
-		return Response{}, errors.New("media relay busy")
+		return Response{}, ErrBusy
 	}
 	r.ID = project.NewWorkID()
 	p := &pending{worker: worker, request: r, reply: make(chan Response, 1)}
@@ -121,18 +149,24 @@ func (h *Hub) Next(ctx context.Context, worker string) (Request, error) {
 	}
 }
 
-// Reply never accepts responses from another worker, or after the browser stopped waiting.
-func (h *Hub) Reply(worker, id string, r Response) bool {
+// Reply hands a worker's answer to the request waiting for it. It never accepts an answer from another worker, or
+// after the browser stopped waiting. done closes once the reader is finished with r.Body: the worker's request
+// must stay open (and r.Body readable) until then.
+func (h *Hub) Reply(worker, id string, r Response) (done <-chan struct{}, ok bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	p := h.pending[id]
 	if p == nil || p.worker != worker || !p.delivered {
-		return false
+		return nil, false
 	}
+	if r.Body == nil {
+		r.Body = strings.NewReader("")
+	}
+	r.done, r.once = make(chan struct{}), &sync.Once{}
 	select {
 	case p.reply <- r:
-		return true
+		return r.done, true
 	default:
-		return false
+		return nil, false
 	}
 }

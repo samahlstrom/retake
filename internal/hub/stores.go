@@ -94,6 +94,9 @@ func (st *Stores) Describe() string {
 // Workspace returns a project's folder: <data>/projects/<name>.
 func (st *Stores) Workspace(name string) string { return filepath.Join(st.cfg.Data, "projects", name) }
 
+// RelayCacheDir is where chunks of relayed video are kept (spec/server.md, "The data folder").
+func (st *Stores) RelayCacheDir() string { return filepath.Join(st.cfg.Data, "relay-cache") }
+
 // UploadsDir is where tus uploads live.
 func (st *Stores) UploadsDir() string { return filepath.Join(st.cfg.Data, "uploads") }
 
