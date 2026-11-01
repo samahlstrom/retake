@@ -31,6 +31,7 @@ type openArgs struct {
 	noOpen   bool
 	idleExit *float64
 	uiDir    string
+	theme    string // --theme: the theme folder, or none (spec/theme.md)
 	allow    []string
 	verbose  bool
 	help     bool
@@ -109,6 +110,15 @@ func parseOpen(args []string) (openArgs, error) {
 				return a, err
 			}
 			a.uiDir = v
+		case "--theme":
+			v, err := value()
+			if err != nil {
+				return a, err
+			}
+			if strings.TrimSpace(v) == "" {
+				return a, errors.New("--theme needs a folder, or none")
+			}
+			a.theme = v
 		case "--allow-host":
 			v, err := value()
 			if err != nil {
@@ -240,6 +250,8 @@ func openCmd(ctx context.Context, args []string, env Env) int {
 	if !ok {
 		return ExitUsage
 	}
+	tdir, named := a.themeDir(env)
+	page = withTheme(env, page, tdir, named)
 
 	tries := env.PortTries
 	if tries <= 0 {
@@ -304,6 +316,9 @@ func newServer(env Env, cfg config.Config, st config.Settings, o server.Options)
 	o.LocalWorker = localWorker(env, cfg) // Send works with nothing else to run
 	return server.New(o)
 }
+
+// themeDir is the theme folder for retake open: --theme, $RETAKE_THEME, then ~/.config/retake/theme (spec/theme.md).
+func (a openArgs) themeDir(env Env) (string, bool) { return localThemeDir(env, a.theme) }
 
 // pageFiles returns the page to serve: --ui-dir's folder, else the build in the binary. ok is false (after saying
 // why) when the folder doesn't exist.

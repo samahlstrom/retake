@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/samahlstrom/retake/internal/family"
+	"github.com/samahlstrom/retake/internal/theme"
 )
 
 // mediaTypes maps the extensions of page files and playlist neighbors to content types. It is fixed (not the OS
@@ -218,5 +219,6 @@ func (s *Server) static(w http.ResponseWriter, r *http.Request, parts []string) 
 	}
 	w.Header().Set("Content-Type", mediaType(name))
 	w.Header().Set("Cache-Control", "no-cache")
+	theme.Headers(w.Header(), name) // a theme file: its own type, nosniff and a CSP (spec/theme.md)
 	http.ServeContent(w, r, name, st.ModTime(), rs)
 }

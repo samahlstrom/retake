@@ -21,6 +21,7 @@ import (
 	"github.com/samahlstrom/retake/internal/jobs"
 	"github.com/samahlstrom/retake/internal/jsonx"
 	"github.com/samahlstrom/retake/internal/relay"
+	"github.com/samahlstrom/retake/internal/server"
 	"github.com/samahlstrom/retake/internal/team"
 	"github.com/samahlstrom/retake/internal/tus"
 )
@@ -332,7 +333,7 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.signinRoute(w, r, ri, parts[1:])
 	case parts[0] == "setup":
 		h.setupRoute(w, r, ri, parts[1:])
-	case parts[0] == "assets":
+	case parts[0] == "assets" || parts[0] == "theme":
 		h.static(w, r, parts)
 	case len(parts) == 1 && parts[0] == "signout":
 		h.signout(w, r, ri)
@@ -360,6 +361,7 @@ func logPath(p string) string {
 func (h *Hub) secureHeaders(w http.ResponseWriter) {
 	hd := w.Header()
 	hd.Set("X-Content-Type-Options", "nosniff")
+	hd.Set(server.APIHeader, server.APIVersion)
 	hd.Set("Referrer-Policy", "same-origin")
 	hd.Set("X-Frame-Options", "SAMEORIGIN")
 }

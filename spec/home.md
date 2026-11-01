@@ -13,7 +13,7 @@ machine that hosts the review does work only for the videos someone is watching.
 ## Local multi-project mode: `retake open <folder>`
 
 ```
-retake open <folder> [--port N] [--no-open] [--idle-exit MIN] [--ui-dir DIR] [--allow-host H]... [--verbose]
+retake open <folder> [--port N] [--no-open] [--idle-exit MIN] [--ui-dir DIR] [--theme DIR] [--allow-host H]... [--verbose]
 ```
 
 When the argument is a folder instead of a video, the server serves every project in it. `--versions` takes a video,

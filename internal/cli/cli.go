@@ -71,9 +71,10 @@ func (e Env) withDefaults() Env {
 const usage = `retake: review a video by talking over it. Press R, talk and draw, press R again.
 
 usage:
-  retake open <video> [--versions a.mp4 b.mp4 ...] [--port N] [--no-open] [--idle-exit MIN] [--ui-dir DIR] [--allow-host H]... [--verbose]
+  retake open <video> [--versions a.mp4 b.mp4 ...] [--port N] [--no-open] [--idle-exit MIN] [--ui-dir DIR] [--theme DIR]
+              [--allow-host H]... [--verbose]
       serve the review page for <video> and its version family (clip_v5, v6/clip_v6, ...)
-  retake open <folder> [--port N] [--no-open] [--idle-exit MIN] [--ui-dir DIR] [--allow-host H]... [--verbose]
+  retake open <folder> [--port N] [--no-open] [--idle-exit MIN] [--ui-dir DIR] [--theme DIR] [--allow-host H]... [--verbose]
       review many videos: every project in <folder> and its folders, with a home screen of them all at /
       (in a timeline project, Send hands your notes to Claude Code or Codex on this machine; nothing else to run)
   retake sessions <video> [--json]
@@ -118,7 +119,7 @@ the agent loop (spec/notes.md; <video> is any version of the family, and every c
 
 sharing (spec/team.md; links and tokens belong to the project of <video>):
   retake share <video> [--role reviewer] [--expires 24h] [--label NAME] [--tunnel cloudflare|tailscale|none]
-               [--host H] [--funnel] [--tunnel-bin PATH] [--port N] [--no-qr] [--json] [--verbose]
+               [--host H] [--funnel] [--tunnel-bin PATH] [--port N] [--theme DIR] [--no-qr] [--json] [--verbose]
       share the review over an HTTPS tunnel: attaches to (or starts) the server and prints a link with a QR
       code. Roles: viewer (watch), reviewer (and record), approver (and approve, reopen). Ctrl+C stops sharing.
       Give a folder instead of a video to share its home: one link for every video in it (spec/home.md)
@@ -134,7 +135,7 @@ sharing (spec/team.md; links and tokens belong to the project of <video>):
 the team server (spec/server.md; settings also come from RETAKE_* variables and config.toml [server]):
   retake serve --data DIR [--listen :8080] [--public-url URL] [--trust-proxy CIDR]... [--database postgres://...]
                [--s3-endpoint HOST:PORT [--s3-bucket B] [--s3-region R] [--s3-insecure]] [--relay-cache 20GB]
-               [--ui-dir DIR] [--verbose]
+               [--ui-dir DIR] [--theme DIR] [--verbose]
       host many projects for a team: sign-in links, members, share links, uploads and remote MCP at /p/<project>/
   retake user add <email> [--name NAME] [--admin] [--expires 24h] [--json]
       add a person and print their one-time sign-in link (mailed instead when RETAKE_SMTP_URL is set)
@@ -157,12 +158,20 @@ the team server (spec/server.md; settings also come from RETAKE_* variables and 
   retake push --remote <name> <file> [--parent vN] [--label vN] [--change ID="summary"]... [--ask ID="q"]...
       upload <file> to the team server (resumable) and push it, with the same push rule
 
+the look (spec/theme.md; a theme is a folder outside the install, so an update never changes it):
+  retake theme init [DIR] [--force]
+      write a starter theme into DIR: every token (colours, fonts, sizes) and part, commented out
+  retake theme check [DIR] [--json]
+      say what in the theme this version of retake doesn't use (exit 1 when something); run it after an update
+      DIR is --theme's folder: by default ~/.config/retake/theme for open and share, <data dir>/theme for serve
+
 open:
   --versions F...   the family is exactly <video> plus these files (default: detect *_vN files)
   --port N          serve on port N, or exit 2 if it's busy (default 8777, or the next free one up to 8796)
   --no-open         don't open the page in the browser
   --idle-exit MIN   exit MIN minutes after the page is gone; 0 = never (default 15)
   --ui-dir DIR      serve the page from DIR instead of the one built into the binary
+  --theme DIR       your look: a theme folder (default $RETAKE_THEME, else ~/.config/retake/theme); none: built-in
   --allow-host H    also answer at https://H, e.g. a reverse proxy's hostname (repeatable). Every request there
                     needs a token (retake token create); retake share does all of this for you
   --verbose         log every request
@@ -231,6 +240,8 @@ func Main(ctx context.Context, args []string, env Env) int {
 		return workerCmd(ctx, args[1:], env)
 	case "connect":
 		return connectCmd(ctx, args[1:], env)
+	case "theme":
+		return themeCmd(args[1:], env)
 	case "version", "--version":
 		_, _ = fmt.Fprintf(env.Stdout, "retake %s\n", Version())
 		return ExitOK

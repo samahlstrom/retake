@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/samahlstrom/retake/internal/server"
+	"github.com/samahlstrom/retake/internal/theme"
 )
 
 // The server's own pages: the projects page, the sign-in pages and short messages. They are plain HTML in the
@@ -144,8 +145,8 @@ func (h *Hub) uiFile(name string) []byte {
 	return b
 }
 
-// static is GET /assets/...: the page's own files, for the home screen. They are the same for everyone, so they need
-// no session. Hidden files and folders are never served.
+// static is GET /assets/... and /theme/...: the page's own files and the host's theme (spec/theme.md), for the home
+// screen. They are the same for everyone, so they need no session. Hidden files and folders are never served.
 func (h *Hub) static(w http.ResponseWriter, r *http.Request, parts []string) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		h.notFound(w, r)
@@ -169,6 +170,7 @@ func (h *Hub) static(w http.ResponseWriter, r *http.Request, parts []string) {
 	}
 	w.Header().Set("Content-Type", server.MediaType(name))
 	w.Header().Set("Cache-Control", "no-cache")
+	theme.Headers(w.Header(), name) // a theme file: its own type, nosniff and a CSP
 	http.ServeContent(w, r, name, mod, bytes.NewReader(b))
 }
 

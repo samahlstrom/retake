@@ -13,7 +13,8 @@ no passwords), guests come in through the share links of spec/team.md, and agent
 
 ```
 retake serve --data DIR [--listen :8080] [--public-url https://review.example.com] [--trust-proxy CIDR]...
-             [--database postgres://...] [--s3-endpoint HOST:PORT --s3-bucket B ...] [--ui-dir DIR] [--verbose]
+             [--database postgres://...] [--s3-endpoint HOST:PORT --s3-bucket B ...] [--ui-dir DIR] [--theme DIR]
+             [--verbose]
 ```
 
 Settings come from the flags, else the environment, else `[server]` in config.toml, else the defaults:
@@ -33,6 +34,7 @@ Settings come from the flags, else the environment, else `[server]` in config.to
 | SMTP | none (secrets) | `RETAKE_SMTP_URL` | `smtp_url` | none: links are printed |
 | Mail sender | `--smtp-from` | `RETAKE_SMTP_FROM` | `smtp_from` | `retake@<public host>` |
 | Relay cache size | `--relay-cache` | `RETAKE_RELAY_CACHE` | `relay_cache` | `20GB` (`0`: off) |
+| Theme folder | `--theme` | `RETAKE_THEME` | none | `<data dir>/theme` (`none`: the built-in look; spec/theme.md) |
 
 - `RETAKE_SMTP_URL` is `smtp://user:password@host:587` (STARTTLS, required) or `smtps://user:password@host:465`
   (TLS from the start).
@@ -238,6 +240,7 @@ email. A share guest's get the token's label, else "guest".
 |---|---|---|---|
 | GET | `/` | a session (else 303 to `/signin`) | The home screen (the page's `home.html`, spec/home.md); without a built page, a plain projects page with Sign out |
 | GET | `/assets/*` | nothing | The page's own files, for the home screen (the review page loads them under `/p/<name>/`) |
+| GET | `/theme/*` | nothing | The host's theme: `<data dir>/theme/` or `--theme DIR` / `RETAKE_THEME` (spec/theme.md); CSS, fonts and images only |
 | GET, POST | `/setup` | the setup code, and no users yet | First run (above) |
 | GET, POST | `/signin` | nothing | The sign-in page (above). |
 | GET, POST | `/signin/<code>` | nothing | A sign-in link (above). |

@@ -30,6 +30,8 @@ func openFolder(ctx context.Context, a openArgs, env Env, cfg config.Config, st 
 	if !ok {
 		return ExitUsage
 	}
+	tdir, named := a.themeDir(env)
+	page = withTheme(env, page, tdir, named)
 	tries := env.PortTries
 	if tries <= 0 {
 		tries = config.PortTries

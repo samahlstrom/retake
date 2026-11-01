@@ -35,6 +35,13 @@ import (
 	"github.com/samahlstrom/retake/internal/ui"
 )
 
+// APIVersion is the HTTP API's major version (spec/api.md, "API versions"). Every answer says it in APIHeader, so a
+// page of your own (--ui-dir) can tell which API it talks to.
+const APIVersion = "1"
+
+// APIHeader carries APIVersion on every answer.
+const APIHeader = "X-Retake-Api-Version"
+
 // DefaultMaxBody is the largest POST body accepted (1 GiB).
 const DefaultMaxBody int64 = 1 << 30
 
@@ -382,6 +389,7 @@ func (s *Server) errorLog() io.Writer {
 
 // ServeHTTP implements http.Handler.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set(APIHeader, APIVersion)
 	if s.opts.External {
 		s.serveGranted(w, r)
 		return

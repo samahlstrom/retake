@@ -9,6 +9,17 @@ the other: the new page against the old server, and the old page against the new
 The server binds `127.0.0.1` only. Default port 8777; if it is busy, the next free one up to 8796. A fixed port matters
 because the browser remembers the mic permission per origin, port included.
 
+## API versions
+
+The HTTP API has a major version, **1**. Every answer of `retake open`, `retake share` and `retake serve` carries the
+header `X-Retake-Api-Version: 1`, so a page of your own (`--ui-dir`, docs/theming.md "Going further") can check what
+it talks to.
+
+- Within a major version, routes, fields and values are only added. A client ignores fields it doesn't know.
+- A route or field is removed, renamed or changes meaning only in a major release (`retake` 2.0.0), and the header
+  says the new number. The release notes list what changed.
+- The page's look has its own versioned contract, the Theme API (spec/theme.md).
+
 ## Versions
 
 A *version family* is a set of video files that are versions of the same edit. The opened file is the *current*
@@ -47,7 +58,8 @@ A streamed version also has `"stream": {"state": "rendering", "done": 12, "total
 
 | Method | Path | Response |
 |---|---|---|
-| GET/HEAD | `/` or `/index.html` | The review page (embedded build, or `--ui-dir`). |
+| GET/HEAD | `/` or `/index.html` | The review page (embedded build, or `--ui-dir`), with the user's theme added when there is one (spec/theme.md). |
+| GET/HEAD | `/theme/<path>` | A file of the user's theme folder: CSS, fonts and images only (spec/theme.md, "Serving theme files"). |
 | GET/HEAD | `/assets/*` and other static files | The page's static files (new server only; the legacy page is a single file). |
 | GET/HEAD | `/video` | The current version's file. |
 | GET/HEAD | `/video/<label>` | That version's file. 404 `{"error":"no such version"}` if unknown. |
@@ -161,14 +173,18 @@ New: on a phone the page has its own layout, with the same ids. `<html data-layo
 ## CLI (milestone 1)
 
 ```
-retake open <video> [--versions a.mp4 b.mp4 ...] [--port N] [--no-open] [--idle-exit MIN] [--ui-dir DIR] [--allow-host H]... [--verbose]
-retake open <folder> [--port N] [--no-open] [--idle-exit MIN] [--ui-dir DIR] [--allow-host H]... [--verbose]
+retake open <video> [--versions a.mp4 b.mp4 ...] [--port N] [--no-open] [--idle-exit MIN] [--ui-dir DIR] [--theme DIR] [--allow-host H]... [--verbose]
+retake open <folder> [--port N] [--no-open] [--idle-exit MIN] [--ui-dir DIR] [--theme DIR] [--allow-host H]... [--verbose]
+retake theme init [DIR] [--force]
+retake theme check [DIR] [--json]
 retake sessions <video> [--json]
 retake version
 ```
 
 - Without `--no-open`, the page opens with the OS opener: `xdg-open`, `open` or `start`.
 - With a folder, every project in it is served, with a home screen at `/` (spec/home.md).
+- `--theme DIR` (or `RETAKE_THEME`) is the user's theme folder, by default `$XDG_CONFIG_HOME/retake/theme`; `none`
+  turns theming off (spec/theme.md).
 - Exit code 2 for a missing file, a busy `--port`, or no free port.
 - The startup lines match the legacy ones (video, versions, page URL, where takes are saved).
 

@@ -135,8 +135,8 @@ func newToken(st *project.Store, role team.Role, label string, ttl time.Duration
 }
 
 type shareArgs struct {
-	role, expires, label, tunnel, host, bin, port string
-	funnel, noQR, asJSON, verbose                 bool
+	role, expires, label, tunnel, host, bin, port, theme string
+	funnel, noQR, asJSON, verbose                        bool
 }
 
 func shareCmd(ctx context.Context, args []string, env Env) int {
@@ -152,7 +152,7 @@ func shareCmd(ctx context.Context, args []string, env Env) int {
 	f := flags{
 		bools: map[string]*bool{"--funnel": &a.funnel, "--no-qr": &a.noQR, "--json": &a.asJSON, "--verbose": &a.verbose},
 		values: map[string]*string{"--role": &a.role, "--expires": &a.expires, "--label": &a.label,
-			"--tunnel": &a.tunnel, "--host": &a.host, "--tunnel-bin": &a.bin, "--port": &a.port},
+			"--tunnel": &a.tunnel, "--host": &a.host, "--tunnel-bin": &a.bin, "--port": &a.port, "--theme": &a.theme},
 	}
 	pos, help, err := f.parse(args)
 	if help {
@@ -308,11 +308,13 @@ func (s *share) server(cfg config.Config, port *int) error {
 		Serve(ctx context.Context, ln net.Listener) (bool, error)
 		Close() error
 	}
+	dir, named := localThemeDir(s.env, s.a.theme)
+	page := withTheme(s.env, ui.Embedded(), dir, named)
 	if s.folder {
-		srv = newFolder(s.env, cfg, sets, hub.FolderOptions{Dir: s.video, Port: s.port, UI: ui.Embedded(),
+		srv = newFolder(s.env, cfg, sets, hub.FolderOptions{Dir: s.video, Port: s.port, UI: page,
 			Verbose: s.a.verbose})
 	} else {
-		srv = newServer(s.env, cfg, sets, server.Options{Video: s.video, Port: s.port, UI: ui.Embedded(),
+		srv = newServer(s.env, cfg, sets, server.Options{Video: s.video, Port: s.port, UI: page,
 			Verbose: s.a.verbose})
 	}
 	ctx, cancel := context.WithCancel(context.Background())

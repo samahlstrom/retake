@@ -15,6 +15,7 @@ import (
 	"github.com/samahlstrom/retake/internal/config"
 	"github.com/samahlstrom/retake/internal/hub"
 	"github.com/samahlstrom/retake/internal/probe"
+	"github.com/samahlstrom/retake/internal/theme"
 )
 
 // retake serve and its admin commands (spec/server.md).
@@ -185,7 +186,9 @@ func linkBase(s serverSettings, st *hub.Stores) string {
 
 func serveCmd(ctx context.Context, args []string, env Env) int {
 	var sf serverFlags
-	f := flags{values: map[string]*string{"--ui-dir": &sf.uiDir}, bools: map[string]*bool{"--verbose": &sf.verbose}}
+	var themeFlag string
+	f := flags{values: map[string]*string{"--ui-dir": &sf.uiDir, "--theme": &themeFlag},
+		bools: map[string]*bool{"--verbose": &sf.verbose}}
 	sf.add(&f)
 	pos, help, err := f.parse(args)
 	if help {
@@ -218,6 +221,9 @@ func serveCmd(ctx context.Context, args []string, env Env) int {
 	if !ok {
 		return ExitUsage
 	}
+	// The look is the host's: <data dir>/theme, outside the image, so an update never changes it (spec/theme.md).
+	tdir, named := themeDir(env, themeFlag, theme.HostedDir(s.Data))
+	page = withTheme(env, page, tdir, named)
 	st, err := openStores(ctx, s, true)
 	if err != nil {
 		_, _ = fmt.Fprintf(env.Stderr, "retake serve: %v\n", err)

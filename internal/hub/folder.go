@@ -23,6 +23,7 @@ import (
 	"github.com/samahlstrom/retake/internal/project"
 	"github.com/samahlstrom/retake/internal/server"
 	"github.com/samahlstrom/retake/internal/team"
+	"github.com/samahlstrom/retake/internal/theme"
 	"github.com/samahlstrom/retake/internal/thumb"
 	"github.com/samahlstrom/retake/internal/ui"
 )
@@ -370,6 +371,7 @@ func (f *Folder) originOK(r *http.Request) bool {
 
 // ServeHTTP implements http.Handler: the routes of spec/home.md.
 func (f *Folder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set(server.APIHeader, server.APIVersion)
 	shared, ok := f.classify(r)
 	sw := &statusWriter{ResponseWriter: w}
 	w = sw
@@ -672,6 +674,7 @@ func (f *Folder) static(w http.ResponseWriter, r *http.Request, parts []string) 
 	}
 	w.Header().Set("Content-Type", server.MediaType(name))
 	w.Header().Set("Cache-Control", "no-cache")
+	theme.Headers(w.Header(), name) // a theme file: its own type, nosniff and a CSP (spec/theme.md)
 	http.ServeContent(w, r, name, mod, bytes.NewReader(b))
 }
 
