@@ -100,10 +100,13 @@ usual URLs: `/video/<label>`, and `/video/<label>/<file>` for a playlist and the
 - The server asks the worker (`GET /api/worker/media`, a long poll of up to 15 s that answers 204 when there is
   nothing) with `{"id", "render" | "version", "file", "range", "head"}`: `render` is a render's id, `version` a
   version file's label; `file` is the render's media file, or for a version file `""`/its own name, or a plain name
-  beside its playlist. `range` is the browser's `Range` header, as sent.
+  beside its playlist. `range` is the aligned chunk the server wants (below); for a HEAD, the browser's `Range` as
+  sent.
 - The worker answers `POST /api/worker/media/<id>` with the bytes as the body and `X-Media-Status` (200, 206, 404,
-  416 or 503), `Content-Type`, `Content-Range` and `X-Media-Length` (the length the browser is told: the body's, or
-  the file's for a HEAD). The body streams through to the browser as it arrives; the server keeps none of it.
+  416 or 503), `Content-Type`, `Content-Range`, `X-Media-Length` (the length the browser is told: the body's, or
+  the file's for a HEAD) and, for a version file, `X-Media-Modified` (its mtime, Unix ms). The body streams through
+  to the browser as it arrives; the server keeps only what its cache keeps (below). The server sets the content type
+  from the file's name, not the worker's.
 - **Chunks.** No response carries more than 8 MiB. The worker reads one range: `bytes=a-b`, `bytes=a-` or
   `bytes=-n` (anything else, or none, is `bytes=0-`). A range that starts past the end is 416 with `bytes */<size>`.
   Otherwise it sends at most 8 MiB from its start: 206 with `Content-Range: bytes a-b/<size>`, or 200 when no range
