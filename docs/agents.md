@@ -4,7 +4,110 @@ An agent is any program that reads review notes and makes the next version: Clau
 or a script. Retake gives it the notes, takes its questions, and checks its pushes. How the agent edits the video is
 up to it. It can patch a timeline with `retake-edit`, run ffmpeg, or drive another editor.
 
-The contract is [spec/notes.md](../spec/notes.md). This page is the practical guide.
+## Send your notes to an agent
+
+```bash
+retake open ~/Videos
+```
+
+Open a video, press R, talk and draw over it, and press R again. Then press **Send** (or **Finish review** and
+send). Claude Code or Codex on this computer edits the project, the page plays the edit as it renders, and the
+comment turns Done when the new version is ready. If the agent is unsure, the comment shows its question; answer it
+and the agent carries on. There is nothing else to start: `retake open` runs the editing worker itself, one per
+project, named after this computer.
+
+What it needs: a timeline project (`edit/timeline.json`, or `[edit] timeline` in the project's `retake.toml`),
+`retake-edit` ([timeline.md](timeline.md)), and Claude Code or Codex installed and signed in. When something is
+missing, the Agent panel says what, and it picks the fix up within 15 seconds without a restart.
+
+- One task runs at a time; each Send queues one. The agent works in the project folder with its own sign-in and
+  settings.
+- While it works, the page follows its drafts (`v4-draft1`, `v4-draft2`, ...). Only a finished task makes a version
+  (`v4`), and restarting `retake open` makes none.
+- **Start edits when feedback is submitted** only sends finished reviews that nobody sent. Send always works.
+- Each task's prompt, context, log and report are in `.retake/worker/tasks/<task>/`.
+
+Reviewing on a hosted server instead? The same worker connects out to it: [editing-workers.md](editing-workers.md).
+
+## How the worker runs an agent
+
+The worker runs the agent's command in the project folder, with the task prompt on stdin. `RETAKE_CONTEXT` names a
+JSON file with the task and its notes (text, times, strokes, snapshots and images), and the agent writes its answer
+to `RETAKE_REPORT`: `{"state": "completed", "message": "what changed"}` or `{"state": "question", "message": "..."}`.
+A completed task still waits for a checked, playable render of the agent's final source before the comment is Done.
+
+The built-in agents are these commands, with your installed CLI's own sign-in and model settings:
+
+| id | command |
+|---|---|
+| `claude` | `claude -p --output-format stream-json --verbose --permission-mode acceptEdits` |
+| `codex` | `codex exec --json --sandbox workspace-write -c approval_policy="never" --skip-git-repo-check -` |
+
+The agent inherits retake's environment. An `ANTHROPIC_API_KEY` exported in that shell makes Claude Code bill the key
+instead of your subscription ("In non-interactive mode (`-p`), the key is always used when present").
+
+## Use another provider or an API key
+
+Add agents in `~/.config/retake/config.toml` ([config.md](config.md#agents)). Each one shows up in the page's agent
+menu. `env` adds variables to the agent's environment, and a value can name one of yours, `$VAR` or `${VAR}`, so the
+key stays in your shell profile or secret manager rather than in the file. Start `retake` from a shell where those
+variables are set.
+
+**Claude Code through OpenRouter.** OpenRouter's Claude Code guide sets `ANTHROPIC_BASE_URL` to
+`https://openrouter.ai/api`, `ANTHROPIC_AUTH_TOKEN` to your OpenRouter key, and `ANTHROPIC_API_KEY` to an explicit
+empty string (unset, Claude Code may fall back to Anthropic's servers):
+
+```toml
+[[agents]]
+id = "claude-openrouter"
+name = "Claude Code (OpenRouter)"
+command = ["claude", "-p", "--output-format", "stream-json", "--verbose", "--permission-mode", "acceptEdits"]
+env = { ANTHROPIC_BASE_URL = "https://openrouter.ai/api", ANTHROPIC_AUTH_TOKEN = "$OPENROUTER_API_KEY", ANTHROPIC_API_KEY = "" }
+```
+
+Model choices go in the same `env`, with the variables the guide lists (`ANTHROPIC_DEFAULT_SONNET_MODEL` and so on).
+
+**Claude Code with an Anthropic API key.** Keep the key under another name, so the built-in `claude` agent stays on
+your subscription and this one bills the key:
+
+```toml
+[[agents]]
+id = "claude-api"
+name = "Claude Code (API key)"
+command = ["claude", "-p", "--output-format", "stream-json", "--verbose", "--permission-mode", "acceptEdits"]
+env = { ANTHROPIC_API_KEY = "$RETAKE_ANTHROPIC_API_KEY" }
+```
+
+**Codex through OpenRouter.** Codex keeps providers in its own `~/.codex/config.toml`. Add OpenRouter there as
+OpenRouter's Codex guide shows (`wire_api = "responses"` is required), but leave your default provider alone:
+
+```toml
+[model_providers.openrouter]
+name = "OpenRouter"
+base_url = "https://openrouter.ai/api/v1"
+wire_api = "responses"
+
+[model_providers.openrouter.auth]
+command = "sh"
+args = ["-c", "echo $OPENROUTER_API_KEY"]
+```
+
+Then a retake agent picks that provider and an OpenRouter model slug for its tasks only:
+
+```toml
+[[agents]]
+id = "codex-openrouter"
+name = "Codex (OpenRouter)"
+command = ["codex", "exec", "--json", "--sandbox", "workspace-write", "-c", "approval_policy=\"never\"",
+  "-c", "model_provider=\"openrouter\"", "-c", "model=\"openai/gpt-5.6-sol\"", "--skip-git-repo-check", "-"]
+```
+
+`find_agents = false` hides the agents found on `PATH`, so only yours are offered.
+
+## Drive an agent yourself (MCP and the CLI)
+
+The rest of this page is for running your own agent loop: the agent reads the notes over MCP or the CLI and pushes
+each new version itself. The contract is [spec/notes.md](../spec/notes.md).
 
 ## The loop
 

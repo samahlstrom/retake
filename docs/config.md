@@ -26,6 +26,7 @@ whisper_cli = ""
 | `port` | `8777` | The port `retake open` tries first. If it's busy, the next free one of the following 19 is used. `--port N` is strict instead: that port or exit code 2. |
 | `idle_exit_minutes` | `15` | The server exits this many minutes after the page's last request. It counts only once the page has loaded. `0` means never. Flag: `--idle-exit MIN`. |
 | `open_browser` | `true` | Whether `retake open` opens the page in your browser. Flag: `--no-open`. |
+| `find_agents` | `true` | Whether the editing worker offers Claude Code and Codex found on your `PATH`, besides `[[agents]]`. |
 
 The port matters more than it seems: the browser remembers the microphone permission per origin, port included.
 
@@ -60,6 +61,32 @@ command = "python3 /path/to/faster-whisper-words.py {audio}"
 
 A segment is transcribed again only when its file, the engine's name or the prompt changed.
 `retake transcribe <take folder | audio file>` runs the transcriber by hand, for debugging.
+
+## [[agents]]
+
+The programs the editing worker may run when you press Send: `retake open` and `retake share` use them for every
+timeline project they serve, and so does `retake worker` (unless `--profiles FILE` is given). Claude Code and Codex
+found on `PATH` are added on their own with their own sign-in. An entry with the id `claude` or `codex` replaces
+that one, so you can change how it runs without listing the other.
+
+```toml
+[[agents]]
+id = "claude"                    # letters, digits, - and _; shown in the page's agent menu by name
+name = "Claude Code (API key)"
+command = ["claude", "-p", "--output-format", "stream-json", "--verbose", "--permission-mode", "acceptEdits"]
+env = { ANTHROPIC_API_KEY = "$ANTHROPIC_API_KEY" }
+```
+
+| Key | Meaning |
+|---|---|
+| `id` | Unique. Tasks and the page's agent menu refer to it. |
+| `name` | What the page shows. Default: the id. |
+| `model` | Optional, shown next to the name. It doesn't change the command. |
+| `command` | The program and its arguments. It gets the task prompt on stdin and runs in the project folder. |
+| `env` | Extra environment variables. A value may name your own environment's variables, `$VAR` or `${VAR}`, so keys stay out of this file. `""` sets a variable to empty. |
+
+The agent also gets `RETAKE_CONTEXT` and `RETAKE_REPORT` ([agents.md](agents.md#how-the-worker-runs-an-agent)).
+[agents.md](agents.md#use-another-provider-or-an-api-key) has OpenRouter and API-key examples.
 
 ## [server]
 
@@ -103,6 +130,7 @@ only by you. `retake push --remote` remembers unfinished uploads in `$XDG_STATE_
 | `RETAKE_TOKEN` | retake remote add | The agent token, when `--token` isn't given. |
 | `XDG_STATE_HOME` | retake push --remote | Where unfinished uploads are remembered (`retake/uploads.json`). |
 | `RETAKE_PROMPT`, `RETAKE_LANGUAGE` | your command engine | Set by retake for the program it runs. |
+| `RETAKE_CONTEXT`, `RETAKE_REPORT` | your agent | Set by the editing worker for the agent it runs: the task's context file and where to write its report. |
 | `RETAKE_VIDEO`, `RETAKE_PROJECT`, `RETAKE_SINCE` | your `retake watch` command | Set by retake for the command it runs ([agents.md](agents.md#retake-watch)). |
 | `RETAKE_DIR` | retake-edit | Where the render cache and renders go, instead of `.retake/` next to the timeline. |
 | `RETAKE_FFMPEG`, `RETAKE_FFPROBE` | retake-edit | The ffmpeg and ffprobe binaries, instead of the ones on `PATH`. |
@@ -114,6 +142,7 @@ only by you. `retake push --remote` remembers unfinished uploads in `$XDG_STATE_
 | `<video folder>/<video name>.review/<take>/` | One take: audio segments, `session.json`, `segments.json`, `events.json`, `strokes.json`, `voice.json`, images, `transcript.json`. |
 | `<video folder>/<video name>.review/notes.md`, `notes.json`, `snaps/` | The notes engine's output for that version. |
 | `<project>/.retake/project.db` | The project store: notes, questions, versions, jobs (SQLite). The project is the folder above the `v<N>` folders, or the video's own folder. |
+| `<project>/.retake/worker/` | The editing worker's files: its identity and lock, each task's context, log and report (`tasks/`), and each render's snapshot and video (`renders/`). Keep `renders/` for older versions to stay playable. |
 | `<timeline folder>/.retake/` | retake-edit's render cache and renders. |
 | `<data>/server.db`, `<data>/projects/<name>/`, `<data>/uploads/` | `retake serve`: the server store (SQLite), each project's workspace (a retake project folder), and uploads in progress. |
 

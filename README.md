@@ -83,13 +83,16 @@ with a valid link get in (see [Sharing](#sharing)).
 
 ## Connect an agent
 
-`retake mcp <video>` serves the agent tools over MCP (stdio), and every CLI command takes `--json`. For Claude Code:
+There's nothing to connect. In a timeline project, with Claude Code or Codex installed and signed in:
 
 ```bash
-claude mcp add retake -- retake mcp ~/retake-sample/how-to/v2/how-to_v2.mp4
+retake open ~/Videos
 ```
 
-[docs/agents.md](docs/agents.md) covers Codex and other MCP clients, the loop, `retake watch` and the push rule.
+Open a video, press R, talk and draw, press R again, then **Send**. The agent edits the project on this computer,
+the page plays the edit as it renders, and the comment turns Done when the new version is ready. If something is
+missing, the Agent panel says what. [docs/agents.md](docs/agents.md) covers other providers (OpenRouter, API keys)
+and driving your own agent over MCP (`retake mcp <video>`) or the CLI.
 
 ## Editing with the timeline
 
