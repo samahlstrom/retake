@@ -35,6 +35,9 @@ favicon = "favicon.svg"  # the browser tab
 mode = "dark"            # dark, light or auto
 ```
 
+Without a `name` or `logo`, the home and the sign-in pages show the built-in wordmark, "Retake." with the period in
+the record red; `--wordmark-dot` recolours just the period.
+
 ## Where it lives
 
 | How you run Retake | Theme folder |
