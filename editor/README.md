@@ -191,6 +191,29 @@ A unit is one shot (or insert): its footage decoded by ffmpeg, composited in Rus
   a unit whose hardware encoder fails is tried twice more before the render fails. The library's default is x264 (no
   device, the same bytes every run); there is no CUDA, Metal or VAAPI code: only ffmpeg's encoders.
 
+### Numbers
+
+The item-shop pilot's first 40 s (11 shots, 2648 frames at 1080p60), cold cache, on a 16-thread Ryzen 7 7800X3D with
+an RTX 4090 (`auto` = NVENC). A cold cache also hashes the source recordings, about 15 s here, before and after.
+
+| | Before | After |
+|---|---|---|
+| One render, `--jobs 1 / 2 / 4 / 8 / 11` | 13.1 / 16.4 / 16.8 / 16.6 / 16.5 fps | 34.5 / 45.9 / 48.7 / 49.7 / 50.7 fps |
+| 2 / 4 / 8 renders at once, `--jobs 1` each | 16.6 fps in all / did not finish (out of memory) | 55.7 / 76.0 / 90.1 fps in all |
+| Video decoders, decode CPU (`--jobs 8`) | 109, 864 cpu-s | 14, 71 cpu-s |
+| Encode CPU | 234 cpu-s (x264) | 35 cpu-s (NVENC); 236 with x264 |
+| Compositor CPU | 266 cpu-s | 250 cpu-s |
+| Peak memory (`--jobs 8`) | 17.0 GB | 4.5 GB (8.1 GB with x264) |
+| The whole 190 s pilot, `--jobs 8` | about 11 min at the rate above | 197 s, 57.7 fps, 5.8 GB |
+
+With the asset hashes already known, the slice takes 38 s with NVENC and 49 s with x264. What's left is compositing
+and graphics: Skia draws the animated runs (11 s of the 38), and the 3D-panel shot's 96 tiles cost 96 QuickJS
+transforms and warps a frame (about 45 fps for that shot alone; a plain shot composites at about 150).
+
+Colour, against a float64 reference (Lanczos-3 chroma upsampling with H.264 siting, the source's matrix) on frames
+of the pilot's sources, where rounding alone gives 58.9–61.6 dB: zimg 58.2–61.5 dB, swscale 44.6–55.1 dB; zimg against
+swscale 44.8–56.0 dB.
+
 ### Encoders
 
 NVENC was tuned on the item-shop pilot's first 40 s (11 units, 2648 frames of 1080p60 game footage, graphics and 3D
