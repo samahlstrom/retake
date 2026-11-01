@@ -618,8 +618,10 @@ func (f *Folder) apiHome(w http.ResponseWriter, r *http.Request, role team.Role,
 	}
 	visible := layout.Visible(scope, videos)
 	res := home.Response{Title: filepath.Base(f.opts.Dir), Role: string(role), Projects: cards, Workspace: &visible}
+	res.Machines = []home.Machine{}
 	if role == team.Owner {
 		res.Folder = f.opts.Dir
+		res.Machines = f.machines()
 	}
 	writeJSON(w, r, http.StatusOK, res)
 }

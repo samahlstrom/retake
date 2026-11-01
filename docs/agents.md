@@ -27,7 +27,7 @@ missing, the Agent panel says what, and it picks the fix up within 15 seconds wi
 - **Start edits when feedback is submitted** only sends finished reviews that nobody sent. Send always works.
 - Each task's prompt, context, log and report are in `.retake/worker/tasks/<task>/`.
 
-Reviewing on a hosted server instead? The same worker connects out to it: [editing-workers.md](editing-workers.md).
+Reviewing on a hosted server instead? Run `retake connect` and the same worker connects out to it: [hosting.md](hosting.md).
 
 ## How the worker runs an agent
 

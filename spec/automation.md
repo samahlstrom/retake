@@ -42,6 +42,32 @@ upload or an inbound connection to the worker. This is an addition to the existi
 - Agent usage failures pause a task with an explanation and a Switch agent / Retry action. No silent change to
   billing method. Available structured token/cost reports are recorded as estimates; absent limits remain unknown.
 
+## Connect your computer: `retake connect`
+
+```
+retake connect [<server URL> --token rk_…] [--folder DIR] [--name NAME] [--profiles FILE]
+```
+
+One command connects a whole projects folder to a hosted server with a machine token (spec/server.md, "Machines";
+the browser's Connect your computer card prints the line). It is `retake worker` for every project, in one process.
+
+- The folder is `--folder`, else the current folder. It checks the token first (`GET /api/machine`; a bad token or
+  URL stops it with exit 1).
+- It finds the projects as `retake open <folder>` does (spec/home.md), and keeps those with a native timeline
+  (spec/bridge.md). A candidate folder (the folder itself or one directly in it, not hidden) with a timeline but no
+  version yet counts too, named by the same rule. Projects without a timeline are listed once as skipped: the worker
+  streams timeline renders only, so their videos can't play from this computer.
+- For each project it sends its name and title (`POST /api/machine/projects`, which makes it when it's missing) and,
+  when it has a version, that version's first frame as the poster (`PUT .../poster`, the JPEG of spec/home.md's
+  poster). Nothing else leaves the computer: no footage, source or renders. Video plays through the worker's relay.
+- Then it runs one worker per project (as `retake worker`: the project URL is `<server URL>/p/<name>`, the machine
+  token is its agent token, `--name` and `--profiles` as there). A worker that stops with an error (another worker
+  holds the project, the renderer is missing) is started again at the next look, and the same error is printed once.
+- It looks at the folder again every 10 s: a new project is sent and started; a project that is gone is stopped.
+- It saves the server URL, the token and the folder in `$XDG_CONFIG_HOME/retake/connect.toml` (mode 0600), so a bare
+  `retake connect`, from any folder, connects the same folder to the same server again. Ctrl+C stops every worker.
+- `retake worker --remote NAME --project DIR` stays, for one project with that project's agent token.
+
 ## Submission and comment state
 
 - Recording and incremental transcription do not launch editing. Finish review closes the take and queues its

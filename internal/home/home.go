@@ -75,6 +75,8 @@ type Response struct {
 	User      *User             `json:"user,omitempty"` // the team server's
 	Projects  []Card            `json:"projects"`
 	Workspace *workspace.Layout `json:"workspace,omitempty"`
+	// Machines are the computers that edit these projects, for the owner; [] for anyone else (spec/home.md).
+	Machines []Machine `json:"machines"`
 }
 
 // Source is what a card is made from.

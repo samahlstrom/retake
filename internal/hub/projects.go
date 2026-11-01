@@ -212,6 +212,13 @@ func (h *Hub) projectRoute(w http.ResponseWriter, r *http.Request, ri reqInfo, n
 		return
 	}
 	srv := p.server()
+	if get && len(parts) == 2 && parts[0] == "api" && parts[1] == "poster" && p.hasPoster() {
+		// The poster a connected machine sent stands in until a version has a poster of its own.
+		if srv == nil || len(srv.Family()) == 0 || !serveIfFound(w, server.Grant(r, who.role, who.author), srv, rest) {
+			p.servePoster(w, r)
+		}
+		return
+	}
 	if srv == nil && isWorker {
 		p.mu.Lock()
 		srv = p.makeServerLocked(true)
@@ -252,9 +259,10 @@ func (h *Hub) allowed(w http.ResponseWriter, r *http.Request, who who, perm team
 // noVersions answers a project that has no version yet.
 func (h *Hub) noVersions(w http.ResponseWriter, r *http.Request, page bool) {
 	if page {
-		h.page(w, r, http.StatusOK, "Retake", "<h1>No versions yet</h1><p class=\"muted\">Connect your editing machine with "+
-			"<code>retake worker --remote NAME --project DIR</code> to stream its video here, or use <code>retake push --remote</code>. "+
-			"This page shows the first playable version when it arrives.</p><script>setTimeout(()=>location.reload(),5000)</script>"+backHome)
+		h.page(w, r, http.StatusOK, "Retake", "<h1>No versions yet</h1><p class=\"muted\">The video plays here once the "+
+			"computer that edits it is connected (<code>retake connect</code>) and has rendered it, or after a "+
+			"<code>retake push --remote</code>. This page looks again every 10 seconds.</p>"+
+			`<meta http-equiv="refresh" content="10">`+backHome)
 		return
 	}
 	h.fail(w, r, http.StatusNotFound, "no versions yet")

@@ -45,6 +45,8 @@ type Env struct {
 	SharePing time.Duration
 	// Agents returns the agents an editing worker may run; nil = the config's [[agents]] and those found on PATH.
 	Agents func() []worker.Profile
+	// ConnectEvery is how often `retake connect` looks for new projects; 0 = DefaultConnectEvery.
+	ConnectEvery time.Duration
 }
 
 func (e Env) withDefaults() Env {
@@ -140,9 +142,13 @@ the team server (spec/server.md; settings also come from RETAKE_* variables and 
   retake project token create <project> --role viewer|reviewer|approver|agent [--label L] [--expires 30d]
       a share link, or an agent token with its remote and MCP setup (also token list, token revoke <id>)
       every server command takes --data DIR and the database flags of retake serve
+  retake connect [<server URL> --token rk_…] [--folder DIR] [--name NAME] [--profiles FILE]
+      connect this computer to a hosted server (the line comes from Connect your computer): puts the folder's
+      timeline projects there and runs their agents and live renders here. Footage never leaves this computer.
+      Plain retake connect reconnects the last folder to the same server
   retake remote add <name> <project URL> --token <agent token>   (also remote list, remote remove <name>)
   retake worker --remote NAME --project DIR [--name NAME] [--profiles FILE]
-      connect this editing machine: run assigned agents and stream live source edits through the hosted project
+      one project, with that project's agent token: run assigned agents and stream live source edits
       (agents: [[agents]] in config.toml plus Claude Code and Codex on PATH; --profiles FILE replaces them)
   retake push --remote <name> <file> [--parent vN] [--label vN] [--change ID="summary"]... [--ask ID="q"]...
       upload <file> to the team server (resumable) and push it, with the same push rule
@@ -219,6 +225,8 @@ func Main(ctx context.Context, args []string, env Env) int {
 		return remoteCmd(ctx, args[1:], env)
 	case "worker":
 		return workerCmd(ctx, args[1:], env)
+	case "connect":
+		return connectCmd(ctx, args[1:], env)
 	case "version", "--version":
 		_, _ = fmt.Fprintf(env.Stdout, "retake %s\n", Version())
 		return ExitOK

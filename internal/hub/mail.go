@@ -112,7 +112,7 @@ func (m *SMTP) Send(ctx context.Context, to, subject, body string) error {
 			return err
 		}
 	}
-	if err := c.Mail(m.From); err != nil { //nolint:gosec // From is checked as an address by ParseSMTP
+	if err := c.Mail(m.From); err != nil { // From is checked as an address by ParseSMTP
 		return err
 	}
 	if err := c.Rcpt(to); err != nil {

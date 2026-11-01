@@ -107,5 +107,6 @@ it), and `notes_wait` returns after 50 s at most; the agent calls it again with 
 - Repeated bad tokens from one address are refused for a minute.
 - Responses through a tunnel are marked `private`, so Cloudflare never caches them.
 
-Not yet (milestone 3b): accounts instead of links, uploads from a remote agent, and hiding the paths of your machine
-(`/api/info` still shows the folders the videos are in).
+A share lasts as long as `retake share` runs on your computer. For a review that stays up, with accounts, host Retake
+instead ([hosting.md](hosting.md)). Not yet: hiding the paths of your machine (`/api/info` still shows the folders the
+videos are in).

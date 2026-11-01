@@ -1,12 +1,18 @@
-# The retake team server with Postgres (the stores) and MinIO (the media). See deploy/README.md.
+# Retake on a server: one container and one volume (SQLite and the media as files in /data).
 #
-#   docker compose -f deploy/docker-compose.yml up -d --build
-#   docker compose -f deploy/docker-compose.yml exec retake retake user add you@example.com --admin
+#   cd deploy
+#   echo RETAKE_PUBLIC_URL=https://review.example.com > .env
+#   docker compose up -d
+#   docker compose logs retake     # the one-time setup link: open it to create the owner account
 #
-# Secrets and the public URL come from the environment or a .env file next to this file (deploy/.env). Change the
-# defaults below before the server faces the internet.
+# docs/hosting.md is the short story; deploy/README.md has HTTPS, transcription, mail, backups and upgrades.
+#
+# The "scale" profile adds Postgres (the stores) and MinIO (the media) instead of the volume's SQLite and files. Turn
+# it on with COMPOSE_PROFILES=scale and the settings in deploy/README.md ("Postgres and MinIO").
+#
+# Settings come from the environment or a .env file next to this file (deploy/.env).
 
-# The project name: volumes are retake_retake-data, retake_pg-data and retake_minio-data; the network retake_default.
+# The project name: the volumes are retake_retake-data (and retake_pg-data, retake_minio-data); the network retake_default.
 name: retake
 
 services:
@@ -16,15 +22,18 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     ports:
-      # Only on this machine by default: a reverse proxy (Caddy, deploy/README.md) terminates TLS in front of it.
+      # Only on this machine by default: a reverse proxy (deploy/Caddyfile) terminates TLS in front of it. Set
+      # RETAKE_BIND=0.0.0.0 to reach it from other machines without one.
       - "${RETAKE_BIND:-127.0.0.1}:${RETAKE_PORT:-8080}:8080"
     environment:
+      # The address people use. Sign-in links, the setup link and the connect line are made from it.
       RETAKE_PUBLIC_URL: ${RETAKE_PUBLIC_URL:-http://localhost:8080}
       # The proxy's address as the container sees it, e.g. the docker bridge (172.16.0.0/12). Only these peers'
       # X-Forwarded-* headers are believed.
       RETAKE_TRUSTED_PROXIES: ${RETAKE_TRUSTED_PROXIES:-}
-      RETAKE_DATABASE_URL: postgres://retake:${POSTGRES_PASSWORD:-retake}@postgres:5432/retake?sslmode=disable
-      RETAKE_S3_ENDPOINT: minio:9000
+      # Empty: SQLite and local files in /data. The scale profile sets both (deploy/README.md).
+      RETAKE_DATABASE_URL: ${RETAKE_DATABASE_URL:-}
+      RETAKE_S3_ENDPOINT: ${RETAKE_S3_ENDPOINT:-}
       RETAKE_S3_BUCKET: ${RETAKE_S3_BUCKET:-retake}
       RETAKE_S3_ACCESS_KEY: ${MINIO_ROOT_USER:-retake}
       RETAKE_S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-retake-minio-secret}
@@ -33,15 +42,19 @@ services:
       RETAKE_SMTP_URL: ${RETAKE_SMTP_URL:-}
       RETAKE_SMTP_FROM: ${RETAKE_SMTP_FROM:-}
     volumes:
-      # A cache of the media (it is all in MinIO), uploads in progress and the whisper models.
+      # Everything: server.db, the projects (their stores, takes, notes and posters), uploads in progress and the
+      # whisper models. With the scale profile, a cache of MinIO's media.
       - retake-data:/data
       # [transcribe] and other settings: mount a config.toml.
       # - ./config.toml:/config/retake/config.toml:ro
     depends_on:
+      # Only with the scale profile; without it these services don't exist and nothing waits.
       postgres:
         condition: service_healthy
+        required: false
       minio:
         condition: service_healthy
+        required: false
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/healthz"]
       interval: 30s
@@ -50,6 +63,7 @@ services:
       retries: 3
 
   postgres:
+    profiles: [scale]
     image: postgres:17-alpine
     restart: unless-stopped
     environment:
@@ -66,6 +80,7 @@ services:
       retries: 5
 
   minio:
+    profiles: [scale]
     # Upstream stopped publishing minio/minio images in 2025. pgsty/minio is a drop-in community build of the same
     # server (with mc and curl). Point MINIO_IMAGE at another build, or use any S3-compatible store instead.
     image: ${MINIO_IMAGE:-pgsty/minio:RELEASE.2026-08-04T00-00-00Z}

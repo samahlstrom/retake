@@ -196,8 +196,23 @@ func (h *Hub) SendLink(ctx context.Context, u accounts.User, base string, ttl ti
 // LinkURL is a sign-in link.
 func LinkURL(base, code string) string { return strings.TrimSuffix(base, "/") + "/signin/" + code }
 
-// signout is POST /signout.
+// signout is GET /signout, a page with one button, which posts to POST /signout: the home screen links here.
 func (h *Hub) signout(w http.ResponseWriter, r *http.Request, _ reqInfo) {
+	if r.Method == http.MethodGet || r.Method == http.MethodHead {
+		s, err := h.session(w, r)
+		if err != nil {
+			h.storeFailed(w, r, err)
+			return
+		}
+		if s == nil {
+			http.Redirect(w, r, "/signin", http.StatusSeeOther)
+			return
+		}
+		h.page(w, r, http.StatusOK, "Sign out", `<h1>Sign out</h1><p>You're signed in as `+esc(s.user.Email)+
+			`.</p><form method="post" action="/signout"><p><button type="submit" autofocus>Sign out</button></p></form>`+
+			backHome)
+		return
+	}
 	if r.Method != http.MethodPost {
 		h.notFound(w, r)
 		return
@@ -221,7 +236,7 @@ func (h *Hub) signout(w http.ResponseWriter, r *http.Request, _ reqInfo) {
 type who struct {
 	role   team.Role
 	author string
-	via    string // bearer | session | share
+	via    string // bearer | machine | session | share
 	label  string // a token's label
 	user   *accounts.User
 }
@@ -232,6 +247,12 @@ var errRefused = errors.New("refused") // who answered the request itself
 // agent routes, where only a Bearer token counts. It answers refused requests itself and returns errRefused.
 func (h *Hub) identify(w http.ResponseWriter, r *http.Request, ri reqInfo, p *proj, page, bearerOnly bool) (who, error) {
 	if tok := bearer(r); tok != "" {
+		if accounts.WellFormed(accounts.MachinePrefix, tok) { // a machine token: the agent of every project
+			if !h.machine(w, r, ri, tok, page) {
+				return who{}, errRefused
+			}
+			return who{role: team.Agent, author: "agent", via: "machine"}, nil
+		}
 		t, ok := h.checkToken(w, r, ri, p, tok, page, false)
 		if !ok {
 			return who{}, errRefused

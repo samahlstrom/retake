@@ -1,7 +1,7 @@
 // New in milestone 3b (spec/server.md): the team server. `retake serve` runs with the default drivers (SQLite and
 // local files) in a scratch data folder. The admin and the project come from the CLI, as an admin would make them.
 // The reviewer signs in through the one-time link (its page posts the code with a button), finds the project on the
-// projects page, and records a take on /p/demo/: the same page as `retake open`, under a base path. The take is
+// home screen, and records a take on /p/demo/: the same page as `retake open`, under a base path. The take is
 // stored in the project's workspace with the account's name as its author, and Done queues its jobs.
 import { expect, test, type Page } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
@@ -59,7 +59,9 @@ test('a sign-in link opens a session; the link works once', async ({ browser }) 
     await signIn(page, user.link);
     const cookie = (await context.cookies()).find((c) => c.name === 'retake_session');
     expect(cookie).toMatchObject({ httpOnly: true, secure: true, sameSite: 'Lax', path: '/' });
-    await expect(page.getByRole('link', { name: 'Demo cut' })).toBeVisible();
+    // The home screen (the page's home.html, as `retake open <folder>` has it) lists the project.
+    const home = (await (await page.request.get(`${BASE}/api/home`)).json()) as { projects: { title: string }[] };
+    expect(home.projects.map((p) => p.title)).toEqual(['Demo cut']);
 
     // The link is used: a second browser can't sign in with it.
     const other = await browser.newContext();
@@ -84,8 +86,7 @@ test('a member records a take on /p/demo/, stored with their name', async ({ bro
   const ui = new Review(page);
   try {
     await signIn(page, user.link);
-    await page.getByRole('link', { name: 'Demo cut' }).click();
-    await page.waitForURL(`${BASE}/p/demo/`);
+    await page.goto(`${BASE}/p/demo/`);
     await page.waitForFunction(READY, null, { timeout: 20_000, polling: 80 });
     const info = await page.evaluate(() => window.__review.info as { role?: string; label?: string });
     expect(info).toMatchObject({ role: 'reviewer', label: 'v1' });
@@ -142,7 +143,7 @@ test('a viewer can watch but not record; signing out ends the session', async ({
     const post = await page.evaluate(async () =>
       (await fetch('api/session/2026-10-30_10-00-00/data?v=v1', { method: 'POST', body: '{}' })).status);
     expect(post).toBe(403);
-    await page.goto(`${BASE}/`);
+    await page.goto(`${BASE}/signout`);
     await page.getByRole('button', { name: 'Sign out' }).click();
     await page.waitForURL(`${BASE}/signin`);
     const res = await page.goto(`${BASE}/p/demo/api/info`);

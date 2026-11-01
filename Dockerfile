@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # The retake team server (spec/server.md): `retake serve --data /data`, with the review page embedded, ffmpeg, and
-# whisper.cpp's whisper-cli built for the CPU. deploy/docker-compose.yml runs it with Postgres and MinIO.
+# whisper.cpp's whisper-cli built for the CPU. deploy/docker-compose.yml runs it with one volume (docs/hosting.md).
 #
 #   docker build -t retake .                         # the image
 #   docker build --build-arg VERSION=0.3.0 -t retake .

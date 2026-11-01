@@ -223,7 +223,12 @@ func serveCmd(ctx context.Context, args []string, env Env) int {
 	if base == "" {
 		base = "http://localhost:" + strconv.Itoa(ln.Addr().(*net.TCPAddr).Port)
 	}
-	printServeStartup(env, st, s, pub, base)
+	setup, err := h.SetupURL(base)
+	if err != nil {
+		_, _ = fmt.Fprintf(env.Stderr, "retake serve: %v\n", err)
+		return ExitError
+	}
+	printServeStartup(env, st, s, pub, base, setup)
 	h.Start()
 	if env.Ready != nil {
 		env.Ready(base + "/")
@@ -240,7 +245,7 @@ func serveCmd(ctx context.Context, args []string, env Env) int {
 	return ExitOK
 }
 
-func printServeStartup(env Env, st *hub.Stores, s serverSettings, pub hub.PublicURL, base string) {
+func printServeStartup(env Env, st *hub.Stores, s serverSettings, pub hub.PublicURL, base, setup string) {
 	ps, _ := st.Accounts.Projects()
 	users, _ := st.Accounts.CountUsers()
 	w := env.Stdout
@@ -248,9 +253,9 @@ func printServeStartup(env Env, st *hub.Stores, s serverSettings, pub hub.Public
 		st.Describe())
 	_, _ = fmt.Fprintf(w, "  data   %s\n", s.Data)
 	_, _ = fmt.Fprintf(w, "  url    %s/   (listening on %s)\n", base, s.Listen)
-	if users == 0 {
-		_, _ = fmt.Fprintf(w, "  no users yet: add the first admin with\n    retake user add you@example.com --admin "+
-			"--data %s\n", s.Data)
+	if setup != "" {
+		_, _ = fmt.Fprintf(w, "\n  No accounts yet. Open this link to create the owner account (it works once):\n\n"+
+			"    %s\n\n", setup)
 	}
 	_, _ = fmt.Fprintln(w, "  Ctrl+C stops the server")
 	switch {
