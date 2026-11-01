@@ -301,15 +301,18 @@ func TestFolderTree(t *testing.T) {
 	for _, c := range h.Projects {
 		byName[c.Name] = c
 	}
-	if c := byName["2026-10-19-fullgame"]; c.Path != "2026-10-19/fullgame" || c.Project != "2026-10-19/fullgame" ||
+	if c := byName["2026-10-19-fullgame"]; c.Path != "2026-10-19/fullgame" || c.Project != "2026-10-19" ||
 		c.Video != "fullgame" || c.Title != "fullgame" || c.URL != "p/2026-10-19-fullgame/" {
 		t.Errorf("a nested video: %+v", c)
 	}
-	if c := byName["alpha-shorts-one"]; c.Path != "alpha/shorts/one" || c.Project != "alpha" || c.Video != "one" {
+	if c := byName["alpha-shorts-one"]; c.Path != "alpha/shorts/one" || c.Project != "alpha/shorts" || c.Video != "one" {
 		t.Errorf("a project's short: %+v", c)
 	}
 	if c := byName["alpha"]; c.Path != "alpha" || c.Project != "alpha" || c.Video != "alpha" || c.Questions != 0 {
-		t.Errorf("alpha: %+v", c)
+		t.Errorf("alpha (a project: a video in its folders): %+v", c)
+	}
+	if c := byName["bravo"]; c.Path != "bravo" || c.Project != "" {
+		t.Errorf("bravo (a video's folder in the opened folder): %+v", c)
 	}
 	if len(h.Projects) != 5 {
 		t.Errorf("videos: %v", summary(h))
@@ -334,12 +337,10 @@ func TestFolderTree(t *testing.T) {
 		return out
 	}
 	if got := strings.Join(draw(h.Tree, ""), "\n"); got != strings.Join([]string{
-		"Shows",
-		"  2026-10-19", "    fullgame [2026-10-19-fullgame@v2]",
-		"  alpha [alpha@v2 alpha-shorts-one@v1]",
-		"  bravo [bravo@v1]",
-		"  charlie [charlie@v3]",
-		"  drafts", "    cut []",
+		"Shows [bravo@v1 charlie@v3]",
+		"  2026-10-19 [2026-10-19-fullgame@v2]",
+		"  alpha [alpha@v2]",
+		"    shorts [alpha-shorts-one@v1]",
 	}, "\n") {
 		t.Errorf("tree:\n%s", got)
 	}
@@ -353,7 +354,7 @@ func TestFolderTree(t *testing.T) {
 	// A link scoped to one video (its own store's token) sees only it, and only the folders on its way.
 	tok := projectToken(t, filepath.Join(x.dir, "2026-10-19", "fullgame"), team.Viewer)
 	h = x.home(t, shared(), bearerTok(tok))
-	if got := strings.Join(draw(h.Tree, ""), "\n"); got != "Shows\n  2026-10-19\n    fullgame [2026-10-19-fullgame@v2]" {
+	if got := strings.Join(draw(h.Tree, ""), "\n"); got != "Shows\n  2026-10-19 [2026-10-19-fullgame@v2]" {
 		t.Errorf("a scoped link's tree:\n%s", got)
 	}
 }

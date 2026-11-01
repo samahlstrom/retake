@@ -103,8 +103,10 @@ export function cardStatus(c: Pick<Card, 'status' | 'stream'> & { questions?: nu
   return { text: STATUS_TEXT[c.status], tone: c.status };
 }
 
-/** The name a video goes by: its own (from its file), else its folder's. */
-export const videoName = (c: Pick<Card, 'video' | 'title' | 'name'>): string => c.video || c.title || c.name;
+/** The name a video goes by: a video's folder's name (deadlock/item-shop is "item-shop"); for a project's own video
+ * (its folder is its project), its family's name, else the folder's. */
+export const videoName = (c: Pick<Card, 'video' | 'title' | 'name' | 'path' | 'project'>): string =>
+  (c.path !== c.project ? c.title : c.video || c.title) || c.name;
 
 const squash = (s: string): string => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
 

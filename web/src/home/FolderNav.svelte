@@ -1,16 +1,18 @@
 <script lang="ts">
-  // The left column of the home (spec/home.md): a filter, "All videos", and the folder tree: folders and projects
-  // with a chevron, a project's videos under it, one status dot each. A name selects (the main area shows its
+  // The left column of the home (spec/home.md): a filter, and the folder tree under the opened folder's row (which
+  // shows every video): folders and projects with a chevron, a project's videos under it, one status dot each. A name selects (the main area shows its
   // videos), a chevron opens or closes, a video opens its review. Desktop: a column with a resize handle. Phone: a
   // drawer that ☰ opens. Arrow keys move through the rows.
   import { tick } from 'svelte';
-  import { DOT_TEXT, rows, type Row } from '../lib/tree';
+  import { DOT_TEXT, rows, topDot, videosUnder, type Row } from '../lib/tree';
   import { NAV_WIDTH, type Home } from './home.svelte';
 
   let { home }: { home: Home } = $props();
 
   const ALL = '';
-  const list = $derived(rows(home.tree, home.expanded, home.filter));
+  /** The top row is open (a filter always opens it). */
+  const topOpen = $derived(home.topOpen || !!home.filter.trim());
+  const list = $derived(topOpen ? rows(home.tree, home.expanded, home.filter) : []);
   /** The row that takes Tab (roving focus): the one last moved to, else the selection, else All videos. */
   let focusKey = $state<string | null>(null);
   const tabKey = $derived.by(() => {
@@ -49,12 +51,14 @@
         go(keys.length - 1);
         break;
       case 'ArrowRight':
-        if (row?.canOpen && !row.open) home.toggle(row.path, true);
-        else if (row?.open) go(at + 1);
+        if (!row && !topOpen) home.toggleTop(true);
+        else if (row?.canOpen && !row.open) home.toggle(row.path, true);
+        else if (!row || row.open) go(at + 1);
         break;
       case 'ArrowLeft':
-        if (row?.canOpen && row.open) home.toggle(row.path, false);
-        else if (row) focusRow(row.parent || ALL);
+        if (!row) home.toggleTop(false);
+        else if (row.canOpen && row.open) home.toggle(row.path, false);
+        else focusRow(row.parent || ALL);
         break;
       case 'Enter':
       case ' ':
@@ -135,33 +139,56 @@
   </div>
   <div class="rows" role="tree" aria-label={home.tree.title || 'Folders'} bind:this={tree}>
     <div
-      class="row all"
+      class="row toprow"
+      class:project={home.tree.project}
       role="treeitem"
       aria-level={1}
+      aria-expanded={topOpen}
       aria-selected={selectedKey === ALL}
       class:selected={selectedKey === ALL}
       data-key={ALL}
+      data-path=""
       data-part="nav-all"
       tabindex={tabKey === ALL ? 0 : -1}
       onclick={() => home.select('')}
       onkeydown={(e) => onKey(e, null)}
       onfocus={() => (focusKey = ALL)}
     >
-      <span class="label">All videos</span>
-      <span class="count">{home.res.projects.length || ''}</span>
+      <!-- → and ← do the same from the keyboard. -->
+      <span
+        class="chev"
+        class:open={topOpen}
+        aria-hidden="true"
+        onclick={(e) => {
+          e.stopPropagation();
+          home.toggleTop();
+        }}
+        ><svg viewBox="0 0 16 16"
+          ><path
+            d="m6 4 4 4-4 4"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          /></svg
+        ></span
+      ><span class="label">{home.tree.title || 'All videos'}</span>{@render dot(
+        topOpen ? '' : topDot(videosUnder(home.tree)),
+      )}
     </div>
     {#each list as row (row.key)}
       {#if row.kind === 'video' && row.card}
         <a
           class="row video"
           role="treeitem"
-          aria-level={row.depth + 1}
+          aria-level={row.depth + 2}
           aria-selected="false"
           href={row.card.url}
           data-key={row.key}
           data-name={row.card.name}
           data-part="nav-video"
-          style:--depth={row.depth}
+          style:--depth={row.depth + 1}
           tabindex={tabKey === row.key ? 0 : -1}
           onkeydown={(e) => onKey(e, row)}
           onfocus={() => (focusKey = row.key)}
@@ -173,14 +200,14 @@
         <div
           class="row {row.kind}"
           role="treeitem"
-          aria-level={row.depth + 1}
+          aria-level={row.depth + 2}
           aria-expanded={row.canOpen ? row.open : undefined}
           aria-selected={selectedKey === row.path}
           class:selected={selectedKey === row.path}
           data-key={row.key}
           data-path={row.path}
           data-part={row.kind === 'project' ? 'nav-project' : 'nav-folder'}
-          style:--depth={row.depth}
+          style:--depth={row.depth + 1}
           tabindex={tabKey === row.key ? 0 : -1}
           onclick={() => home.select(row.path)}
           onkeydown={(e) => onKey(e, row)}
@@ -304,11 +331,6 @@
     background: rgba(255, 255, 255, 0.07);
     color: #fff;
   }
-  .row.all {
-    padding-left: 12px;
-    margin-bottom: 4px;
-    color: #d8d8de;
-  }
   .row.project {
     color: #dcdce2;
     font-weight: 550;
@@ -325,7 +347,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .count,
   .ver {
     flex: none;
     padding-left: 8px;

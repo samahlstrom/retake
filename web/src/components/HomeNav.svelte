@@ -5,6 +5,7 @@
   import type { Review } from '../lib/review.svelte';
 
   let { review }: { review: Review } = $props();
+  const SEP = ' › '; // its spaces stay (text at a tag's edges is trimmed)
 
   const next = (e: MouseEvent) => {
     e.preventDefault(); // goNext waits for Done's call before it leaves
@@ -30,7 +31,7 @@
         stroke-linejoin="round"
       /></svg
     ><span class="label"
-      >{#each review.homeCrumb as part, i (i)}{#if i}<span class="sep" aria-hidden="true">{' › '}</span>{/if}<span
+      >{#each review.homeCrumb as part, i (i)}{#if i}<span class="sep" aria-hidden="true">{SEP}</span>{/if}<span
           class="part">{part}</span
         >{/each}</span
     ></a

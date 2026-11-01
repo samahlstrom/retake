@@ -56,19 +56,21 @@ func TestScanTree(t *testing.T) {
 	f("h/i/j/k/l/m/n/deepest_v1.mp4", old)                                          // 7 folders down, no project above it: too deep
 
 	scan := ScanDir(top)
+	// A folder that holds one video is that video, in the project above it; one that holds more (two families, or
+	// videos in its own folders) is a project with its own video.
 	want := []string{
 		"item-shop item-shop item-shop itemshop_v7.mp4",
-		"2026-10-19-fullgame 2026-10-19/fullgame 2026-10-19/fullgame fullgame_v3_endcard.mp4",
+		"2026-10-19-fullgame 2026-10-19/fullgame 2026-10-19 fullgame_v3_endcard.mp4",
 		"2026-10-19-shorts 2026-10-19/shorts 2026-10-19/shorts baby_v2.mp4",
-		"2026-10-25-jump 2026-10-25/jump 2026-10-25/jump jump_v2.mp4",
+		"2026-10-25-jump 2026-10-25/jump 2026-10-25 jump_v2.mp4",
 		"item-shop-shorts-v2 item-shop/shorts_v2 item-shop dead-cash_v2.mp4",
-		"item-shop-shorts-honored item-shop/shorts/honored item-shop honored_v2.mp4",
-		"a-b-c-d-e-f a/b/c/d/e/f a/b/c/d/e/f deep_v1.mp4",
+		"item-shop-shorts-honored item-shop/shorts/honored item-shop/shorts honored_v2.mp4",
+		"a-b-c-d-e-f a/b/c/d/e/f a/b/c/d/e deep_v1.mp4",
 	}
 	if got := places(scan.Videos); !reflect.DeepEqual(got, want) {
 		t.Errorf("videos:\n got %q\nwant %q", got, want)
 	}
-	if got := places(scan.Empty); !reflect.DeepEqual(got, []string{"drafts-new-cut drafts/new-cut drafts/new-cut ."}) {
+	if got := places(scan.Empty); !reflect.DeepEqual(got, []string{"drafts-new-cut drafts/new-cut drafts ."}) {
 		t.Errorf("empty projects: %q", got)
 	}
 	for _, v := range scan.Videos {
@@ -85,19 +87,16 @@ func TestScanTree(t *testing.T) {
 	for _, v := range scan.Videos {
 		cards = append(cards, Card{Name: v.Name, Path: v.Path, Project: v.Project})
 	}
-	tree := BuildTree("deadlock", cards, []string{"drafts/new-cut"})
+	tree := BuildTree("deadlock", cards, nil)
 	if got := outline(tree, ""); got != strings.Join([]string{
 		"deadlock/",
-		"  2026-10-19/",
-		"    fullgame* [2026-10-19-fullgame]",
+		"  2026-10-19* [2026-10-19-fullgame]",
 		"    shorts* [2026-10-19-shorts]",
-		"  2026-10-25/",
-		"    jump* [2026-10-25-jump]",
-		"  a/", "    b/", "      c/", "        d/", "          e/",
-		"            f* [a-b-c-d-e-f]",
-		"  drafts/",
-		"    new-cut* []",
-		"  item-shop* [item-shop item-shop-shorts-honored item-shop-shorts-v2]",
+		"  2026-10-25* [2026-10-25-jump]",
+		"  a/", "    b/", "      c/", "        d/",
+		"          e* [a-b-c-d-e-f]",
+		"  item-shop* [item-shop item-shop-shorts-v2]",
+		"    shorts* [item-shop-shorts-honored]",
 	}, "\n") {
 		t.Errorf("tree:\n%s", got)
 	}
@@ -144,7 +143,7 @@ func TestScanLinks(t *testing.T) {
 		}
 	}
 	got := places(ScanDir(top).Videos)
-	want := []string{"outside outside outside far_v1.mp4", "real real real real_v1.mp4"}
+	want := []string{"outside outside  far_v1.mp4", "real real  real_v1.mp4"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("links: %q", got)
 	}
@@ -248,7 +247,7 @@ func TestBuildTree(t *testing.T) {
 	}
 	tree := BuildTree("Your projects", cards, []string{"show", "empty/one", "../no"})
 	if got := outline(tree, ""); got != strings.Join([]string{
-		"Your projects/",
+		"Your projects* [hosted top bad]", // videos directly in it: a project
 		"  alpha/", "    a* [a]",
 		"  empty/", "    one* []",
 		"  show* [show shorts]",
@@ -261,7 +260,7 @@ func TestBuildTree(t *testing.T) {
 	for _, v := range tree.Videos {
 		top = append(top, v.Name)
 	}
-	if !reflect.DeepEqual(top, []string{"hosted", "top", "bad"}) || tree.Project { // its own first: path ""
+	if !reflect.DeepEqual(top, []string{"hosted", "top", "bad"}) || !tree.Project { // its own first: path ""
 		t.Errorf("the top: %v %v", top, tree.Project)
 	}
 	// Empty lists are [] in JSON, never null.

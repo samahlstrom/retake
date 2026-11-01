@@ -6,8 +6,10 @@ All notable changes are listed here. Versions follow semver once the first relea
 
 ### Folders on the left of the home
 - `retake open <folder>` scans the whole tree (6 folders down, hidden, `.review`, `node_modules` and `__pycache__`
-  folders skipped, at most 20 000 folders, no video opened): folders, the projects in them, and each project's
-  videos, including those in its `shorts/`-like subfolders (2 folders down). Deeper videos are named by their path
+  folders skipped, at most 20 000 folders, no video opened): folders, the projects in them, and their videos. A
+  folder that holds one video (its family, directly or in `vN/` folders) is that video, in the project above it:
+  `deadlock/item-shop` is the video `item-shop` of the project `deadlock`. A folder with more (two families, or
+  videos in folders inside it) is a project with its own video. Deeper videos are named by their path
   (`2026-10-19/fullgame` is `/p/2026-10-19-fullgame/`); the ones directly in the folder keep their names and URLs.
 - `GET /api/home` gains `tree` (folders → projects → videos) and, per video, `video` (its own name), `path`,
   `project` and `questions`. `retake connect` sends each video's `path` and `project`, so the hosted home shows the
@@ -15,7 +17,7 @@ All notable changes are listed here. Versions follow semver once the first relea
 - The home has a left column: the tree with chevrons and status dots (has questions, to review, being edited), a
   filter, a resize handle, ☰ to hide it, and a drawer on a phone. A folder or project shows its videos as cards;
   the selection is in the URL hash and remembered with the opened folders. The review page's back link reads
-  "Project › video" and returns to the same place.
+  "Project › video" (`deadlock › item-shop`) and returns to the same place.
 - The organizing that lived only in Retake's database (New project, New group, Move to) is gone from the page; its
   API stays for now.
 ### Moving or copying a project keeps its stills
