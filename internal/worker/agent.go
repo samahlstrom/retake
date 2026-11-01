@@ -19,18 +19,21 @@ import (
 )
 
 // DefaultProfiles uses the installed CLIs' own authentication and model settings. Interactive is the same agent as
-// a session the person can watch (herdr, tmux), with the same permissions as the headless command.
+// a session the person can watch (herdr, tmux), with the same permissions as the headless command: none are asked
+// for, since nobody is there to answer (spec/automation.md, "Permissions"). Claude Code's own question tool is off;
+// an agent asks with retake ask.
 func DefaultProfiles() []Profile {
 	var out []Profile
 	if bin, e := exec.LookPath("codex"); e == nil {
 		out = append(out, Profile{AgentProfile: project.AgentProfile{ID: "codex", Name: "Codex"},
-			Command:     []string{bin, "exec", "--json", "--sandbox", "workspace-write", "-c", "approval_policy=\"never\"", "--skip-git-repo-check", "-"},
-			Interactive: []string{bin, "--sandbox", "workspace-write", "-c", "approval_policy=\"never\""}})
+			Command:     []string{bin, "exec", "--json", "--dangerously-bypass-approvals-and-sandbox", "--skip-git-repo-check", "-"},
+			Interactive: []string{bin, "--dangerously-bypass-approvals-and-sandbox"}})
 	}
 	if bin, e := exec.LookPath("claude"); e == nil {
+		// The = keeps the tool list from taking the task's line, tmux's last argument, as a second tool.
 		out = append(out, Profile{AgentProfile: project.AgentProfile{ID: "claude", Name: "Claude Code"},
-			Command:     []string{bin, "-p", "--output-format", "stream-json", "--verbose", "--permission-mode", "acceptEdits"},
-			Interactive: []string{bin, "--permission-mode", "acceptEdits"}})
+			Command:     []string{bin, "-p", "--output-format", "stream-json", "--verbose", "--dangerously-skip-permissions", "--disallowedTools=AskUserQuestion"},
+			Interactive: []string{bin, "--dangerously-skip-permissions", "--disallowedTools=AskUserQuestion"}})
 	}
 	return out
 }
@@ -98,6 +101,8 @@ func (r *runner) execute(ctx context.Context, a project.WorkAssignment) outcome 
 		taskContext = r.plainContext(a, vs, output)
 		prompt = plainPrompt(contextPath, vs[len(vs)-1].Path, output, next, reportPath)
 	}
+	askEnv, fresh, endAsk := r.beginAsk(a)
+	defer endAsk()
 	if e := writeJSON(contextPath, taskContext); e != nil {
 		return paused("Cannot save task context")
 	}
@@ -136,10 +141,10 @@ func (r *runner) execute(ctx context.Context, a project.WorkAssignment) outcome 
 		if plain {
 			out = output
 		}
-		if usage, stop = r.background(ctx, p, prompt, dir, contextPath, reportPath, out, t.Attempt); stop != nil {
+		if usage, stop = r.background(ctx, p, prompt, dir, contextPath, reportPath, out, t.Attempt, askEnv); stop != nil {
 			return *stop
 		}
-	} else if stop := r.interactive(ctx, mode, p, t, promptPath, reportPath); stop != nil {
+	} else if stop := r.interactive(ctx, mode, p, t, promptPath, reportPath, fresh); stop != nil {
 		return *stop
 	}
 	b, e := os.ReadFile(reportPath) //nolint:gosec // generated report path in this task's directory
@@ -155,6 +160,11 @@ func (r *runner) execute(ctx context.Context, a project.WorkAssignment) outcome 
 	}
 	if report.State != "completed" {
 		return paused("Agent report must be completed or question")
+	}
+	if r.allHeld(t) {
+		// Every note waits on the agent's own questions: nothing is done yet, so there's no render or version to wait
+		// for. The server keeps the task for the answers.
+		return outcome{state: "completed", message: report.Message, usage: usage}
 	}
 	if plain {
 		// The video, not the agent's exit, completes the task: it must play, as the next version.
@@ -206,7 +216,7 @@ func (r *runner) execute(ctx context.Context, a project.WorkAssignment) outcome 
 
 // background runs p's headless command with the prompt on stdin until it exits. A non-nil outcome ends the task.
 // output, when set, is where a plain project's agent writes its video (RETAKE_OUTPUT).
-func (r *runner) background(ctx context.Context, p Profile, prompt, dir, contextPath, reportPath, output string, attempt int) (*project.AgentUsage, *outcome) {
+func (r *runner) background(ctx context.Context, p Profile, prompt, dir, contextPath, reportPath, output string, attempt int, askEnv []string) (*project.AgentUsage, *outcome) {
 	cmd := exec.CommandContext(ctx, p.Command[0], p.Command[1:]...) //nolint:gosec // trusted local argv, never supplied by the host
 	cmd.Dir = r.opts.Root
 	cmd.Stdin = strings.NewReader(prompt)
@@ -214,6 +224,7 @@ func (r *runner) background(ctx context.Context, p Profile, prompt, dir, context
 	if output != "" {
 		cmd.Env = append(cmd.Env, "RETAKE_OUTPUT="+output)
 	}
+	cmd.Env = append(cmd.Env, askEnv...)
 	ownGroup(cmd)
 	cmd.Cancel = func() error { return stopGroup(cmd.Process) }
 	cmd.WaitDelay = 3 * time.Second
@@ -245,12 +256,20 @@ func (r *runner) background(ctx context.Context, p Profile, prompt, dir, context
 // interactive runs p's agent as a session in herdr or tmux and waits for its report. The session stays open after
 // the report; stopping before one closes its pane. A non-nil outcome ends the task. Interactive agents report no
 // usage: there is no JSON stream to read it from.
-func (r *runner) interactive(ctx context.Context, mode string, p Profile, t *project.EditingTask, promptPath, reportPath string) *outcome {
+func (r *runner) interactive(ctx context.Context, mode string, p Profile, t *project.EditingTask, promptPath, reportPath string, fresh []project.TaskQuestion) *outcome {
 	v, e := r.newView(mode, p)
 	if e != nil {
 		return &outcome{state: "paused", message: e.Error()}
 	}
 	line := fmt.Sprintf("New Retake task for %s (task %s, attempt %d): follow the instructions in %s", v.name, t.ID, t.Attempt, promptPath)
+	if len(fresh) > 0 {
+		// The task resumes with answers to its questions: they come first, in the same session.
+		var answers []string
+		for _, q := range fresh {
+			answers = append(answers, answerLine(q))
+		}
+		line = fmt.Sprintf("%s. Carry on with Retake task %s (attempt %d): follow the instructions in %s", strings.Join(answers, ". "), t.ID, t.Attempt, promptPath)
+	}
 	if e = v.start(ctx, p, line); e != nil {
 		if ctx.Err() != nil {
 			v.stop()
@@ -261,7 +280,7 @@ func (r *runner) interactive(ctx context.Context, mode string, p Profile, t *pro
 	r.log("%s: %s is working in %s (%s)", v.name, p.Name, mode, v.label())
 	poll := time.NewTicker(viewPoll)
 	defer poll.Stop()
-	checked, misses := time.Now(), 0
+	checked, misses, sayErr := time.Now(), 0, ""
 	for {
 		select {
 		case <-ctx.Done():
@@ -271,6 +290,18 @@ func (r *runner) interactive(ctx context.Context, mode string, p Profile, t *pro
 		}
 		if reported(reportPath) {
 			return nil
+		}
+		// An answer to the agent's question while it works: a new message in its session.
+		for _, q := range r.untold() {
+			if e := v.say(ctx, answerLine(q)); e != nil {
+				if e.Error() != sayErr { // tried again at the next look; said once
+					r.log("%s: can't give the agent its answer in %s yet: %v", v.name, mode, e)
+					sayErr = e.Error()
+				}
+				break
+			}
+			r.tell(q.Answer.ID)
+			r.log("%s: gave the agent the answer to its question on #%d", v.name, q.Note)
 		}
 		if time.Since(checked) < viewCheck {
 			continue
@@ -295,14 +326,11 @@ func reported(path string) bool {
 func timelinePrompt(contextPath, timeline, reportPath string) string {
 	return fmt.Sprintf(`You are editing a native Retake video project in the current working directory.
 Read the project instructions, then the durable task context at %q. The native timeline is %q.
-Only the note IDs in task.notes are assigned. Other notes are context: check them and prior events for conflicting or already-applied feedback. Original note versions, timing, strokes and targets must be respected. Saved annotated stills, when available, are note-<id>.png in this task directory. Attached reference images are note-<id>-<file>; their boxes and original video times are in the context.
+Only the note IDs in task.notes are assigned (minus task.done, finished in an earlier attempt). Other notes are context: check them and prior events for conflicting or already-applied feedback. Original note versions, timing, strokes and targets must be respected. Saved annotated stills, when available, are note-<id>.png in this task directory. Attached reference images are note-<id>-<file>; their boxes and original video times are in the context.
 Original local video revisions are retained in .retake/worker/renders/: each state.json gives its label (a draft such as v4-draft2 until a task completes it as v4), source.json is its timeline snapshot, and index.m3u8 is its video. Inspect the original frame there when needed; do not assume an old comment's time refers to the current source.
 Make the requested source edits in this project. Preserve all existing working changes, media and other people's work. Retake automatically renders valid saved source changes and streams them to reviewers. Do not run retake push or mark notes complete yourself.
-If feedback conflicts, the target is ambiguous, or needed material is missing, ask a concise specific question instead of guessing.
-Before you finish, write a JSON object to %q with exactly: {"state":"completed","message":"concrete description of the change and checks"} OR {"state":"question","message":"your question"}.
-A completed report is only a request: Retake waits for a checked playable render before resolving the comment.
-The next agent may differ from you; leave source changes and useful context on disk. Do not delete or edit the worker's identity, lock, logs, context files or render output.
-`, contextPath, timeline, reportPath)
+The next agent may differ from you; leave source changes and useful context on disk. Do not delete or edit the worker's identity, lock, logs, context files, ask.json or render output.
+`, contextPath, timeline) + askRules(reportPath, "A completed report is only a request: Retake waits for a checked playable render before resolving the comment.")
 }
 
 func (r *runner) fetchArtifact(ctx context.Context, path, destination string) error {
@@ -325,7 +353,8 @@ func (r *runner) fetchArtifact(ctx context.Context, path, destination string) er
 }
 
 func reservedEnv(k string) bool {
-	return k == "RETAKE_TOKEN" || k == "RETAKE_CONTEXT" || k == "RETAKE_REPORT" || k == "RETAKE_OUTPUT"
+	return k == "RETAKE_TOKEN" || k == "RETAKE_CONTEXT" || k == "RETAKE_REPORT" || k == "RETAKE_OUTPUT" ||
+		k == "RETAKE_ASK_URL" || k == "RETAKE_ASK_TOKEN"
 }
 
 // agentEnv is the agent's environment: the worker's own without its token, the profile's extra variables (their

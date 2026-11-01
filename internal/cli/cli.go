@@ -96,6 +96,9 @@ the agent loop (spec/notes.md; <video> is any version of the family, and every c
       transcribe the takes that need it, run the notes engine for <video>'s version, and sync the notes
   retake ask <video> <note> "question" [--option vN]... [--version vN]
       ask the reviewer about a note (note 0: about a version as a whole)
+  retake ask [--note ID] [--at T] [--from T --to T] [--box X,Y,W,H[:LABEL]]... [--arrow X1,Y1,X2,Y2[:LABEL]]...
+             [--draw FILE] [--image FILE[@X,Y,W,H]]... [--option TEXT[@FILE]]... [--version L] [--px] "question"
+      inside a running editing task: ask about a moment of the video, with visuals; returns at once
   retake note <video> <id> --status answered --in vN --change "what changed"
       mark a note answered by a version that's already in the family
   retake push <video> <file> [--parent vN] [--label vN] [--change ID="summary"]... [--ask ID="question"]... [--move]

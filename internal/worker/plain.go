@@ -144,13 +144,10 @@ func (r *runner) plainContext(a project.WorkAssignment, vs []family.Version, out
 func plainPrompt(contextPath, newest, output, next, reportPath string) string {
 	return fmt.Sprintf(`You are editing a Retake video project in the current working directory. It has no edit timeline: its versions are finished video files.
 Read the project instructions, then the durable task context at %q: the notes, and under "family" every version with its path.
-Only the note IDs in task.notes are assigned. Other notes are context: check them and prior events for conflicting or already-applied feedback. Each note names the version it was made on and its times. Saved annotated stills, when available, are note-<id>.png in this task directory. Attached reference images are note-<id>-<file>; their boxes and original video times are in the context.
+Only the note IDs in task.notes are assigned (minus task.done, finished in an earlier attempt). Other notes are context: check them and prior events for conflicting or already-applied feedback. Each note names the version it was made on and its times. Saved annotated stills, when available, are note-<id>.png in this task directory. Attached reference images are note-<id>-<file>; their boxes and original video times are in the context.
 Make the requested change with the tools you have (ffmpeg, for example), starting from the version the notes were made on (the newest is %q). Write the result as one video file to %q (H.264 and AAC in an MP4 play everywhere). Retake adds it to the project as the next version, %s. Never edit, move or delete the existing versions or anyone else's files.
-If feedback conflicts, the target is ambiguous, or needed material is missing, ask a concise specific question instead of guessing.
-Before exiting, write a JSON object to %q with exactly: {"state":"completed","message":"concrete description of the change and checks"} OR {"state":"question","message":"your question"}.
-A completed report is only a request: Retake checks that the new video plays before resolving the comment. Do not run retake push or mark notes complete yourself.
-The next agent may differ from you; leave useful context on disk. Do not delete or edit the worker's identity, lock, logs or context files.
-`, contextPath, newest, output, next, reportPath)
+The next agent may differ from you; leave useful context on disk. Do not delete or edit the worker's identity, lock, logs, context files or ask.json.
+`, contextPath, newest, output, next) + askRules(reportPath, "A completed report is only a request: Retake checks that the new video plays before resolving the comment. Do not run retake push or mark notes complete yourself.")
 }
 
 // pushPlain puts a plain task's result into the project as the next version, and returns its label: the agent's

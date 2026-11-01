@@ -199,7 +199,7 @@ command = ["my-agent"]
 		t.Errorf("script: %+v", p)
 	}
 	if p := got["claude"]; p.OpenIn != worker.OpenHerdr ||
-		!slices.Equal(p.Interactive, []string{filepath.Join(bin, "claude"), "--permission-mode", "acceptEdits"}) {
+		!slices.Equal(p.Interactive, []string{filepath.Join(bin, "claude"), "--dangerously-skip-permissions", "--disallowedTools=AskUserQuestion"}) {
 		t.Errorf("claude: %+v", p)
 	}
 	none, _, _ := config.Parse("")

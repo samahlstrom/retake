@@ -47,6 +47,9 @@ type Options struct {
 	Handler http.Handler
 	// Prober probes the project's version files; nil = ffprobe.
 	Prober family.Prober
+	// Still makes the still of a question's moment (retake ask); nil = FFmpegStill. NoStill turns it off.
+	Still   Still
+	NoStill bool
 }
 
 // Errors that say why a project can't be edited here (Reason turns them into a sentence for the page).
@@ -69,6 +72,8 @@ type runner struct {
 	finalTask             string
 	versions              int             // the family's versions, from the last poll: outside a task, render only while 0
 	warned                map[string]bool // profiles already logged as having no interactive command
+	ask                   askState        // questions from inside a task (ask.go)
+	life                  context.Context // the worker's whole run: its question endpoint lives this long
 
 	famMu  sync.Mutex
 	fam    []family.Version // the project's versions at famAt (family)
@@ -158,6 +163,9 @@ func Run(ctx context.Context, o Options) error {
 	if o.Prober == nil {
 		o.Prober = probe.New(io.Discard)
 	}
+	if o.Still == nil && !o.NoStill {
+		o.Still = FFmpegStill
+	}
 	r := &runner{opts: o, dir: filepath.Join(o.Root, ".retake", "worker")}
 	// A project without a timeline is a plain one (spec/automation.md, "Plain projects"): no renderer.
 	r.timeline, e = bridge.FindTimeline(o.Root)
@@ -214,6 +222,7 @@ func Run(ctx context.Context, o Options) error {
 	r.render = lastRender(r.dir) // a restart with unchanged source renders and registers nothing
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	r.life = ctx
 	var wg sync.WaitGroup
 	for range 4 {
 		wg.Go(func() { r.mediaLoop(ctx) })
@@ -277,7 +286,8 @@ func (r *runner) controlLoop(ctx context.Context) error {
 			var assignment project.WorkAssignment
 			pollCtx, pollCancel := context.WithTimeout(ctx, 5*time.Second)
 			started := time.Now()
-			e := r.call(pollCtx, "/api/worker/poll", map[string]any{"worker": r.identity, "task": task, "lease": lease}, &assignment)
+			told := r.unsentTold()
+			e := r.call(pollCtx, "/api/worker/poll", map[string]any{"worker": r.identity, "task": task, "lease": lease, "told": told}, &assignment)
 			pollCancel()
 			if e != nil {
 				if lastError != e.Error() {
@@ -314,6 +324,9 @@ func (r *runner) controlLoop(ctx context.Context) error {
 			r.selected = assignment.Config.Worker == r.identity.ID
 			r.versions = assignment.Versions
 			r.mu.Unlock()
+			if task != "" {
+				r.acked(told) // the server keeps them on the task now
+			}
 			if current == nil && assignment.Task != nil {
 				if !project.ValidWorkID(assignment.Task.ID) || !project.ValidWorkID(assignment.Task.Lease) || assignment.Task.Worker != r.identity.ID {
 					return errors.New("host returned an invalid task assignment")
@@ -329,6 +342,7 @@ func (r *runner) controlLoop(ctx context.Context) error {
 			} else if current != nil && assignment.Task != nil {
 				current = assignment.Task
 				r.setActive(current)
+				r.sawQuestions(current, assignment.Questions)
 				if current.Stop {
 					cancel()
 					stopping = true
@@ -339,8 +353,10 @@ func (r *runner) controlLoop(ctx context.Context) error {
 				if stopping {
 					result = outcome{state: "stopped", message: "Agent process stopped; working files retained"}
 				}
-				report := project.WorkReport{Worker: r.identity.ID, Task: current.ID, Lease: current.Lease, State: result.state, Message: result.message, Result: result.result, Version: result.version, Usage: result.usage}
+				told := r.unsentTold()
+				report := project.WorkReport{Worker: r.identity.ID, Task: current.ID, Lease: current.Lease, State: result.state, Message: result.message, Result: result.result, Version: result.version, Usage: result.usage, Told: told}
 				if r.call(ctx, "/api/worker/report", report, nil) == nil {
+					r.acked(told)
 					cancel()
 					current = nil
 					pending = nil

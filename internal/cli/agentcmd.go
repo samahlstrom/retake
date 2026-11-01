@@ -333,15 +333,27 @@ func askCmd(ctx context.Context, args []string, env Env) int {
 	var asJSON bool
 	var options []string
 	var version string
-	f := flags{bools: map[string]*bool{"--json": &asJSON}, values: map[string]*string{"--version": &version},
-		multi: map[string]*[]string{"--option": &options}}
+	var in taskAsk
+	f := flags{bools: map[string]*bool{"--json": &asJSON, "--px": &in.px},
+		values: map[string]*string{"--version": &version, "--note": &in.note, "--at": &in.at, "--from": &in.from,
+			"--to": &in.to, "--draw": &in.draw},
+		multi: map[string]*[]string{"--option": &options, "--box": &in.boxes, "--arrow": &in.arrows, "--image": &in.images}}
 	pos, help, err := f.parse(args)
 	if help {
 		_, _ = io.WriteString(env.Stdout, usage)
 		return ExitOK
 	}
+	if err == nil && len(pos) == 1 {
+		// From inside a running editing task (spec/automation.md, "Questions from inside a task").
+		in.version, in.asJSON, in.opts = version, asJSON, options
+		return askInTask(ctx, in, pos[0], env)
+	}
 	if err == nil && len(pos) != 3 {
-		err = errors.New(`give the video, the note id and the question: retake ask clip_v7.mp4 3 "which track?"`)
+		err = errors.New(`give the question (inside a task: retake ask --note 3 --at 1:23 "which track?"), or the video, the note id and the question: retake ask clip_v7.mp4 3 "which track?"`)
+	}
+	if err == nil && (in.note != "" || in.at != "" || in.from != "" || in.to != "" || in.draw != "" || in.px ||
+		len(in.boxes)+len(in.arrows)+len(in.images) > 0) {
+		err = errors.New("--note, --at, --from, --to, --box, --arrow, --draw, --image and --px are for asking from inside a task")
 	}
 	var note int64
 	if err == nil {

@@ -314,13 +314,7 @@ func (v *view) startTmux(ctx context.Context, p Profile, line string) error {
 	if s.Pane != "" {
 		if dead, ok := v.tmuxPane(ctx, s.Pane); ok {
 			if s.Profile == p.ID && !dead {
-				// The agent is still running: type the line into it.
-				if _, e := v.cli(ctx, 10*time.Second, "send-keys", "-t", s.Pane, "-l", line); e != nil {
-					return e
-				}
-				time.Sleep(300 * time.Millisecond) // a separate keystroke, not part of the typed text
-				_, e := v.cli(ctx, 10*time.Second, "send-keys", "-t", s.Pane, "Enter")
-				return e
+				return v.typeTmux(ctx, line) // the agent is still running: type the line into it
 			}
 			args := append(append([]string{"respawn-pane", "-k", "-t", s.Pane, "-c", v.root}, env...), "--")
 			if _, e := v.cli(ctx, 10*time.Second, append(args, argv...)...); e != nil {
@@ -355,11 +349,31 @@ func (v *view) startTmux(ctx context.Context, p Profile, line string) error {
 	}
 	*s = viewState{Profile: p.ID, Pane: pane}
 	v.save()
+	v.log("%s: opened %s in tmux (%s). If it stops at a first-run question (trust this folder, bypass permissions mode), answer it there: tmux attach -t %s", v.name, filepath.Base(p.Interactive[0]), v.label(), tmuxSession)
 	// Keep the pane, and what the agent printed, if the agent quits.
 	if _, e = v.cli(ctx, 10*time.Second, "set-option", "-w", "-t", pane, "remain-on-exit", "on"); e != nil {
 		v.log("%s: tmux remain-on-exit: %v", v.name, e)
 	}
 	return nil
+}
+
+// typeTmux types line into the running agent's pane, then Enter as its own keystroke.
+func (v *view) typeTmux(ctx context.Context, line string) error {
+	if _, e := v.cli(ctx, 10*time.Second, "send-keys", "-t", v.state.Pane, "-l", line); e != nil {
+		return e
+	}
+	time.Sleep(300 * time.Millisecond) // a separate keystroke, not part of the typed text
+	_, e := v.cli(ctx, 10*time.Second, "send-keys", "-t", v.state.Pane, "Enter")
+	return e
+}
+
+// say gives the running agent a new message, as a task's line is given: herdr agent prompt, or typed into its tmux
+// pane.
+func (v *view) say(ctx context.Context, line string) error {
+	if v.mode == OpenTmux {
+		return v.typeTmux(ctx, line)
+	}
+	return v.herdrPrompt(ctx, line)
 }
 
 // tmuxPane finds a pane in the tmux server: whether it's there, and whether its program has exited.
