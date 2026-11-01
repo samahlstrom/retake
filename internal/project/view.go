@@ -26,9 +26,10 @@ type Item struct {
 	Options    []string     `json:"options,omitempty"`     // questions: version labels to pick from
 	Note       *int64       `json:"note,omitempty"`        // questions about a note: its id
 	Images     []ItemImage  `json:"images,omitempty"`
-	Targets    []Target     `json:"targets,omitempty"` // notes: the timeline elements under it (spec/bridge.md)
-	Carried    *CarriedFrom `json:"carried,omitempty"` // a note of the parent version, shown here at its mapped time
-	Ask        *ItemAsk     `json:"ask,omitempty"`     // notes: the open question its task's agent asked about it
+	Snapshot   string       `json:"snapshot,omitempty"` // notes: the URL of the still of its moment with its strokes
+	Targets    []Target     `json:"targets,omitempty"`  // notes: the timeline elements under it (spec/bridge.md)
+	Carried    *CarriedFrom `json:"carried,omitempty"`  // a note of the parent version, shown here at its mapped time
+	Ask        *ItemAsk     `json:"ask,omitempty"`      // notes: the open question its task's agent asked about it
 
 	imagesOf *Note // the note whose images this item shows
 }
@@ -89,6 +90,9 @@ type SidebarQuery struct {
 	TakeDir func(Note) string
 	// ImageURL returns the URL the page loads one of a note's images from.
 	ImageURL func(n Note, img TakeImage) string
+	// SnapshotURL returns the URL the page loads a note's snapshot from, given the file's modification time (nil: no
+	// snapshots). Only a snapshot whose file is in the project gets one.
+	SnapshotURL func(n Note, modified time.Time) string
 }
 
 // takeTime parses a take id (local time, YYYY-MM-DD_HH-MM-SS).
@@ -154,6 +158,15 @@ func (s *Store) Sidebar(q SidebarQuery) ([]Item, error) {
 	}
 	if err := s.addImages(items, q); err != nil {
 		return nil, err
+	}
+	if q.SnapshotURL != nil {
+		for i := range items {
+			if n := items[i].imagesOf; n != nil && items[i].Kind == "note" {
+				if _, st, ok := s.SnapshotFile(*n); ok {
+					items[i].Snapshot = q.SnapshotURL(*n, st.ModTime())
+				}
+			}
+		}
 	}
 	slices.SortStableFunc(items, func(a, b Item) int {
 		return cmp.Or(cmp.Compare(deref(a.T0), deref(b.T0)), cmp.Compare(a.Kind, b.Kind), cmp.Compare(a.ID, b.ID))

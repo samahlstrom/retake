@@ -171,7 +171,9 @@ func TestDoneIsIdempotent(t *testing.T) {
 	if len(all) != 2 {
 		t.Fatalf("jobs = %+v", all)
 	}
-	if all[1].Args.Dir != filepath.Join(f.root, "v6", "clip_v6.review", take) || all[1].Args.Version != "v6" {
+	// The take folder is kept relative to the project root (spec/notes.md, "Paths").
+	if all[1].Args.Dir != "v6/clip_v6.review/"+take || st.Abs(all[1].Args.Dir) != filepath.Join(f.root, "v6", "clip_v6.review", take) ||
+		all[1].Args.Version != "v6" {
 		t.Errorf("transcribe args = %+v", all[1].Args)
 	}
 }

@@ -25,13 +25,12 @@ const TOKEN_FILE = 'src/theme/tokens.css';
  * Files allowed colour literals, and why. Keep this short.
  * - constants.ts: the pen colours are review data (the agent reads them as words), not the look.
  * - lib/theme.ts: the canvas defaults; the last test below keeps them equal to tokens.css.
- * - Sketch.svelte: the comment card's drawing thumbnail, which another change owns this round. TODO: tokenize its
- *   frame (border, background) and put its style in @layer retake, then take it off this list.
  */
 const COLOUR_OK = new Set([TOKEN_FILE, 'src/lib/constants.ts', 'src/lib/theme.ts']);
-const NOT_THEMED_YET = new Set(['src/components/sidebar/Sketch.svelte']);
-/** Custom properties that aren't tokens: a stage's aspect ratio, and Bits UI's own. */
-const INTERNAL_VAR = /^--(ar|bits-[a-z-]+)$/;
+/** Files not themed yet (none: keep it that way). */
+const NOT_THEMED_YET = new Set<string>([]);
+/** Custom properties that aren't tokens but layout: a stage's aspect ratio, the tree's width and indent, Bits UI's. */
+const INTERNAL_VAR = /^--(ar|nav-w|depth|indent|bits-[a-z-]+)$/;
 
 const NAMED =
   'white|black|red|green|blue|yellow|orange|purple|pink|gr[ae]y|silver|navy|teal|maroon|olive|lime|aqua|fuchsia|gold|' +
@@ -85,8 +84,9 @@ describe('no hard-coded look outside tokens.css', () => {
     for (const { path, css } of sheets) {
       if (COLOUR_OK.has(path) || NOT_THEMED_YET.has(path)) continue;
       for (const d of declarations(css)) {
-        if (d.prop.startsWith('--')) found.push(`${path}: a custom property outside tokens.css: ${d.prop}`);
-        else if (COLOUR.test(d.value)) found.push(`${path}: ${d.prop}: ${d.value}`);
+        if (d.prop.startsWith('--')) {
+          if (!INTERNAL_VAR.test(d.prop)) found.push(`${path}: a custom property outside tokens.css: ${d.prop}`);
+        } else if (COLOUR.test(d.value)) found.push(`${path}: ${d.prop}: ${d.value}`);
       }
     }
     expect(found).toEqual([]);
@@ -167,8 +167,16 @@ describe('the parts (data-part)', () => {
   const used = new Map<string, string[]>();
   for (const [path, text] of Object.entries(files)) {
     if (!path.endsWith('.svelte')) continue;
-    for (const m of markupOf(text).matchAll(/data-part="([^"]*)"/g)) {
-      for (const name of m[1]!.split(/\s+/).filter(Boolean)) used.set(name, [...(used.get(name) ?? []), path]);
+    const markup = markupOf(text);
+    // data-part="a b", and data-part={x ? 'a' : 'b'}: every name it can be (the ternary's results).
+    const values = [
+      ...[...markup.matchAll(/data-part="([^"]*)"/g)].map((m) => m[1]!),
+      ...[...markup.matchAll(/data-part=\{([^}]*)\}/g)].flatMap((m) =>
+        [...m[1]!.matchAll(/[?:]\s*'([^']*)'/g)].map((q) => q[1]!),
+      ),
+    ];
+    for (const value of values) {
+      for (const name of value.split(/\s+/).filter(Boolean)) used.set(name, [...(used.get(name) ?? []), path]);
     }
   }
   const documented = Object.keys(api.parts);
@@ -187,7 +195,7 @@ describe('the parts (data-part)', () => {
     for (const p of ['agent-menu', 'sidebar', 'tabs', 'comment', 'status', 'reply-box', 'question-card']) {
       expect(used.has(p), p).toBe(true);
     }
-    for (const p of ['agent-visuals', 'home-grid', 'video-card', 'connect-card', 'toast', 'brand', 'logo']) {
+    for (const p of ['agent-visuals', 'home-grid', 'video-card', 'connect-card', 'toast', 'brand', 'logo', 'nav']) {
       expect(used.has(p), p).toBe(true);
     }
   });

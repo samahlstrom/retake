@@ -19,31 +19,70 @@ retake open <folder> [--port N] [--no-open] [--idle-exit MIN] [--ui-dir DIR] [--
 When the argument is a folder instead of a video, the server serves every project in it. `--versions` takes a video,
 so it can't be used with a folder (exit 2).
 
-### Which folders are projects
+### Folders, projects and videos
 
-A *project* is a version family with its root, as in spec/notes.md ("Project root"). The candidates are the folder
-itself and its immediate subfolders (not hidden ones, not `*.review`). A candidate `C` is a project when it holds a
-**versioned video** whose project root is `C`:
+The home is the folder as a tree: **folders** that organize, **projects** in them, and each project's **videos**.
+`deadlock/item-shop/v7/itemshop_v7.mp4` is the video `item-shop` of the project `deadlock`;
+`deadlock/2026-10-25/jump-souls/v4/jump-to-secure-souls_v4.mp4` is the video `jump-souls` of the project
+`2026-10-25`, in the folder `deadlock`.
 
-- a file with a family video extension (`.mp4 .m4v .mov .webm .mkv .m3u8`) whose stem has a version number
-  (`clip_v3`, spec/api.md "Detection"), found directly in `C` or in one of `C`'s own subfolders (not hidden, not
-  `*.review`; one level, where version folders are: `C/v3/clip_v3.mp4`);
-- and `project.Root(file) == C`. So `deadlock/item-shop/v6/itemshop_v6.mp4` makes `item-shop` a project (its `v6`
-  folder is a version folder), `deadlock/macro/macro_v2_roughcut.mp4` makes `macro` one, and a folder of
-  unnumbered clips (`broll/`) is none.
+- A **video** is a version family with its project root, as in spec/notes.md ("Project root"): its versions, takes,
+  notes, store and agent. It is what the routes below, `/p/<name>/` and the rest of this spec call a *project* (one
+  review page, one card), so review URLs, notes and agents stay per video. A folder `C` holds a video when a
+  **versioned video** has its root at `C`:
+  - a file with a family video extension (`.mp4 .m4v .mov .webm .mkv .m3u8`) whose stem has a version number
+    (`clip_v3`, spec/api.md "Detection"), found directly in `C` or in one of `C`'s own subfolders (not hidden, not
+    `*.review`; one level, where version folders are: `C/v3/clip_v3.mp4`);
+  - and `project.Root(file) == C`. So `deadlock/item-shop/v6/itemshop_v6.mp4` puts a video at `item-shop` (its `v6`
+    folder is a version folder), `macro/macro_v2_roughcut.mp4` one at `macro`, and a folder of unnumbered clips
+    (`broll/`) holds none.
 
-The project's **anchor** is the video its family is detected from: of those files, the highest version number, a plain
-name (`clip_v3`) before one with more after the number (`clip_v3_draft`), then the newest. Its server follows the
-newest version of the family (as `retake serve` does), so a version pushed later shows up without a restart. A root
-with two families (`a_v1.mp4` and `b_v1.mp4` side by side) shows the one with the newest version.
+  One folder holds one video: its store is the folder's `.retake/`. A folder with two families side by side
+  (`a_v1.mp4` and `b_v1.mp4`) shows the one with the newest version, as before (per-video stores will lift this).
+- A **video's folder** is a folder that holds just one video: one family (directly, or in its `vN/` folders) and no
+  other video in the folders inside it. Its other contents (`assets/`, `work/`, `vo/`) are the video's own. Such a
+  folder is the video, not a project: the tree shows it as a video named after the folder (`item-shop`), in the
+  **project** that is the folder above it (`deadlock`).
+- A **project** is any folder that holds videos directly: video folders, or family files of its own. So it is the
+  folder above a video's folder, and also a folder that holds a video itself and more (two families side by side, or
+  videos in folders inside it, which are then its own projects' videos). It can be at any depth, with folders above
+  it that only organize.
+- A **folder** is any other folder on the way to a project. A folder with no video inside it doesn't show.
+- A folder with a native timeline (spec/bridge.md: `[edit] timeline` in `retake.toml`, or `edit/timeline.json`) and
+  no version yet is a video to come: `retake connect` puts it on the team server (one video, no version, so its
+  worker can render the first one), and `retake open` shows it once it has a version.
 
-The folder is scanned again on every `GET /api/home` (at most once every 2 seconds) and when a request names a
-project it doesn't know, so new projects appear on the home without a restart.
+The opened folder is the top of the tree, and the project of the videos directly in it: of the videos in
+`deadlock/` when `deadlock/` is opened, and of its own family (`shows/intro_v1.mp4` when `shows/` is opened). The
+folders in it are scanned as usual.
 
-**Names.** A project's name is its folder's name made URL-safe, the team server's rule
-(`^[a-z0-9][a-z0-9-]{0,62}$`): lower case, every run of other characters becomes `-`, cut to 63 characters, and
-`video` if nothing is left. When two folders give the same name, the later one in name order gets `-2`, `-3`, ….
-Its title is the folder's name as it is.
+Inside a video's folder the scan looks only 2 folders further (not into version folders) for more videos:
+`item-shop/shorts/one-item/v1/one-item_v1.mp4` makes `item-shop` a project holding its own video and the project
+`item-shop/shorts`. Deeper videos inside a video's folder (`item-shop/assets/memes/gojo/cache/v2/…`) are its own and
+never show.
+
+**The scan** starts at the opened folder and goes down at most 6 folders. It never enters hidden folders (`.retake`
+among them), `*.review` folders, `node_modules` or `__pycache__`, and it reads at most 20 000 folders. It lists
+folders and stats only the files named like versioned videos: no video is opened or probed to build the tree. A
+folder reached through a symbolic link is followed when it lies outside the opened folder (once); a link to a folder
+inside it is left out, since the scan finds that folder anyway.
+
+A video's **anchor** is the file its family is detected from: of its versioned files, the highest version number, a
+plain name (`clip_v3`) before one with more after the number (`clip_v3_draft`), then the newest. Its server follows
+the newest version of the family (as `retake serve` does), so a version pushed later shows up without a restart.
+
+The folder is scanned again on `GET /api/home` when the last scan is older than 2 seconds, or than 10 times as long
+as that scan took (a big folder is scanned less often), and when a request names a video it doesn't know, so new
+projects and videos appear without a restart. With `--verbose`, each scan logs how many folders it read and how long
+it took.
+
+**Names.** A video's name is its folder's path in the opened folder made URL-safe, the team server's rule
+(`^[a-z0-9][a-z0-9-]{0,62}$`): lower case, every run of other characters (`/` too) becomes `-`, cut to 63
+characters, and `video` if nothing is left. So `item-shop` stays `item-shop` and `2026-10-19/fullgame` is
+`2026-10-19-fullgame`; the opened folder's own video is named after the folder. Names are given shallowest folder
+first, then in path order, and when two folders give the same name the later one gets `-2`, `-3`, …, so a folder
+added deeper never takes a name already in use. The name doesn't depend on which project the video is in, so its
+URL stays when folders around it change. Its title is the folder's name as it is.
 
 ### Routes
 
@@ -82,24 +121,49 @@ origins, the 401/403/429 answers, rate limits and `Cache-Control: private` are t
   "folder": "/abs/path/deadlock",
   "role": "owner",
   "projects": [
-    { "name": "item-shop", "title": "item-shop", "url": "p/item-shop/", "version": "v6", "versions": 6,
-      "duration": 412.5, "pushed": "2026-10-28T19:02:11Z", "status": "to_review", "takes": 0, "open": 0,
-      "stream": null, "thumb": "p/item-shop/api/poster" }
-  ]
+    { "name": "item-shop", "title": "item-shop", "video": "itemshop", "path": "item-shop", "project": "item-shop",
+      "url": "p/item-shop/", "version": "v6", "versions": 6, "duration": 412.5, "pushed": "2026-10-28T19:02:11Z",
+      "status": "to_review", "takes": 0, "open": 0, "questions": 0, "stream": null, "thumb": "p/item-shop/api/poster" }
+  ],
+  "tree": {
+    "title": "deadlock", "path": "", "project": true,
+    "children": [
+      { "title": "2026-10-25", "path": "2026-10-25", "project": true, "videos": [ { "name": "2026-10-25-jump-souls", "…": "…" } ], "children": [] }
+    ],
+    "videos": [ { "name": "item-shop", "…": "…" }, { "name": "macro-v1", "…": "…" } ]
+  }
 }
 ```
 
 - `title` is the folder's name. `folder` (its path) is sent to the owner only. `role` is the request's role.
-- `projects` is sorted **to review first, then by newest push**, then by name.
-- A project: `url` and `thumb` are relative to the home. `version` is the newest version's label ("" before the
+- `projects` is every video (the name is older than the tree), sorted **to review first, then by newest push**, then
+  by name.
+- A video: `url` and `thumb` are relative to the home. `version` is the newest version's label ("" before the
   project's server can read one), `versions` how many there are, `duration` the newest version's (or null).
   `pushed` is when the newest version arrived: its row in the project store's `versions` table (a push), else the
   file's modification time, as RFC 3339 UTC.
+- `title` is its folder's name; `video` is its family's name, the newest version's file name without the version
+  (`itemshop` for `itemshop_v7.mp4`; "" before there is a version). The page names a video in a video's folder by
+  `title` (`item-shop`), and one in a project's own folder by `video`, else `title`.
+- `path` is the folder that holds it, relative to the opened folder with `/` between names ("" for the folder
+  itself); `project` is the folder of its project (spec above): the folder above `path` for a video's folder
+  (`deadlock` for `deadlock/item-shop`; "" when that's the opened folder), else `path` itself. On the team server
+  they are what `retake connect` sent ("" for a project made another way).
 - `status` is `to_review`, `reviewed` or `being_edited` (below). `takes` is the number of closed takes on the newest
-  version, `open` the number of its notes that are `open` or `question`.
+  version, `open` the number of its notes that are `open` or `question`, and `questions` the number that are
+  `question` (the agent asked and waits for an answer).
 - `stream` is the newest version's streaming state when the streaming side reports one, else null:
   `{"state": "pending" | "rendering" | "complete", "done": n, "total": m}` (below).
 - `thumb` is the newest version's poster (below).
+
+`tree` is the same videos as folders → projects → videos. A node is `{title, path, project, videos, children}`:
+`title` the folder's name (the response's `title` for the top), `path` as above, `project` whether it is a project,
+`videos` the project's videos (the same objects as in `projects`; the project's own video first, then by path), and
+`children` the folders and projects in it, by title (case ignored). The top node is the opened folder, a project
+when videos are directly in it. Only folders on the way to a project are in it, and for a share link only those on
+the way to a video the link can see. Local and hosted build it the same way from each video's `path` and `project`,
+so a computer's folder looks the same on the team server as in `retake open` (except a timeline folder with no
+version yet, which only the team server lists, as a video without a version).
 
 `machines` lists the computers that edit these projects (spec/automation.md), for the owner; it is `[]` for anyone
 else:
@@ -117,7 +181,7 @@ else:
   server (spec/server.md) lists the machines of the signed-in person's projects.
 
 The team server (spec/server.md) answers `GET /api/home` too, for a signed-in user: their projects, with a `user`
-field `{email, name}` and no `folder`. Its projects page at `/` stays as it is.
+field `{email, name}`, no `folder`, and the tree titled "Your projects". Its projects page at `/` stays as it is.
 
 ### Status
 
@@ -154,22 +218,45 @@ the home showed is the one the page shows while the video loads: it feels like i
 The page's second entry, `home.html`, in the review page's look: the dark background, the same fonts and colors,
 nothing more than the videos.
 
-- A grid of cards, one per project (one column on a phone). A card is a link to `p/<name>/` with the thumbnail (16:9,
-  a fixed box, so nothing moves when it loads), the title, the newest version's label and length, and the status
-  chip (plus the streaming chip).
-- The header says how many are to review. With no projects: "No videos here yet", and what a video's file name
-  looks like.
+- **The folder tree** on the left (`tree`): the opened folder on top (selecting it shows every video), the folders
+  and projects in it with a chevron that opens and closes them, a project's videos under it, and a status dot on
+  each video: **has questions** (`questions > 0`), else **to review**,
+  else **being edited**; a reviewed video has none. A closed folder or project shows the dot of the most pressing
+  video inside it. Rows have a fixed height and the dot a fixed place, so nothing moves when statuses change. A
+  filter box at the top keeps the rows whose name (or a name above or below them) contains the text, opened.
+- **Selecting.** Clicking a folder's or project's name selects it (and opens it); its chevron only opens or closes
+  it. Clicking a video opens its review page. The selection shows in the main area: its name, a breadcrumb of the
+  folders above it, "N videos · M to review", and its videos as cards (a project: its own; a folder or the top: every
+  video inside it). Nothing selected is the top: every video. The top row opens and closes like the others. Arrow keys move through the rows (→ opens, ← closes or
+  goes up, Enter selects).
+- **Remembered.** The selection is in the URL hash, `#/<path>` with each folder name URL-encoded
+  (`#/2026-10-25/jump-souls`), so a link opens the same place; Back and Forward don't step through selections (the
+  hash is replaced, not pushed). The opened folders, the selection and the column's width are kept in
+  `localStorage` (`retake.nav:<home path>`); a link's hash wins over them, and its folders are opened. A selection
+  that no longer exists falls back to the top.
+- **Desktop:** a column of 200–480 px (264 px at first) that the handle on its edge resizes (drag, or ←/→ when the
+  handle has focus; double-click resets it) and the ☰ button at the top hides and shows again. **Phone** (up to
+  760 px wide): the column is a drawer that ☰ opens over the page; choosing something, the backdrop or Escape
+  closes it.
+- A grid of cards, one per video (one column on a phone). A card is a link to `p/<name>/` with the thumbnail (16:9,
+  a fixed box, so nothing moves when it loads), the video's name, the newest version's label and length, and the
+  status chip (plus the streaming chip; "Has questions" when the agent waits for an answer). In a folder's view a
+  card also names its project when that says more than the video's name.
+- With no videos: "No videos here yet", and what a video's file name looks like.
 - It reads `api/home` on load and every 15 s while visible (which also keeps an `--idle-exit` server up).
 - A viewer's link sees the same home; their review pages are view only (spec/team.md).
-- Test hook: `window.__home = { loaded, projects }`.
+- Test hook: `window.__home = { loaded, projects, selected }` (`selected`: the selected path, "" for the top).
 
 ## Moving through projects (the review page)
 
 Only when the page is a project of a home: its path ends in `/p/<name>/` and `<home>api/home` answers. Then:
 
-- **"← All videos"**, a small link at the top left of the video, goes to the home.
-- **"Next video →"** shows at the top right after Done, when another project is `to_review`: the first one in the
-  home's order other than this one. It goes to that project's page.
+- **"← Project › video"**, a small link at the top left of the video (`#allVideos`), names where the video is: its
+  project's title and the video's name (`deadlock › item-shop`), or only the project's when the two are the same
+  name but for case and punctuation (a project's own video, `shorts` and `Shorts`). It goes back to the home at the place the reviewer came from: the
+  remembered selection when the video is inside it, else the video's project (`<home>#/<project path>`).
+- **"Next video →"** shows at the top right after Done, when another video is `to_review`: the first one in the
+  home's order other than this one, from the same project when it has one. It goes to that video's page.
 - **`>`** (Shift+. on a US keyboard; no other key of the page) does the same at any time: a take in progress is
   closed and saved first, exactly like Done, and then the next project to review opens. With none left, the toast
   says "No more videos to review".
@@ -227,14 +314,24 @@ One link for the whole home, as `retake share <video>` makes one for a review (s
 ## Tests
 
 - Go: discovery in a folder (version folders, flat families, the folder itself, hidden, `.review` and unnumbered
-  files left out, names and collisions), the status rules, thumbnail caching (made once, remade for a changed file,
-  the poster beside the file first), `/api/home` (status, thumbnail URL, newest version, order), `api/poster` and
-  unwatch, and share tokens scoped to the folder.
+  files left out, names and collisions), the scan of a tree (nested folders, `vN/` folders, a project's `shorts/`,
+  junk folders, the depth limits, links, a big generated tree in well under a second), the tree built from paths,
+  the status rules, thumbnail caching (made once, remade for a changed file, the poster beside the file first),
+  `/api/home` (status, thumbnail URL, newest version, order, the tree, local and hosted alike), `retake connect`
+  sending each video's path, `api/poster` and unwatch, and share tokens scoped to the folder.
+- Web unit tests: the tree's rows (opened, filtered, dots), the hash, and the remembered state.
 - e2e `e2e/tests/12-home.spec.ts`: a folder with three generated projects. The home lists them with thumbnails and
   statuses; a card opens its review page with the poster; a take and Done make it Reviewed; "Next video" and `>` go
   to the next one to review; the home and the controls work on a phone.
+- e2e `e2e/tests/16-nav.spec.ts`: a nested folder. The tree opens, a project shows its videos, a video opens, its
+  back link returns to the same place, a hash link opens it, and on a phone the drawer does the same.
 
 ## Project workspace and in-app sharing
+
+**The page no longer shows this organization**: the folder tree above replaced it (folders on disk are the
+organization), so there is no New project, New group, Rename or Move to, and `?project=<id>` opens the top. The API
+below stays as it is (`workspace` in `GET /api/home`, `POST /api/workspace`, and share scopes), until it is removed or
+given back a place.
 
 The home is a project workspace. Its hierarchy is project → freely named groups → videos → versions. Groups describe organization; review/render status is separate. Existing detected version families remain videos at their existing `/p/<name>/` URLs. Media and saved takes are never moved when organizing them.
 

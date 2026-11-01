@@ -85,11 +85,38 @@ func TestMachineTokenScope(t *testing.T) {
 		r.json(t)["created"] != false || r.json(t)["title"] != "Intro cut" {
 		t.Fatalf("again: %d %s", r.code, r.body)
 	}
-	for _, bad := range []string{`{"name":"Bad Name"}`, `{"name":""}`, `{"name":"ok","title":"` + strings.Repeat("t", 201) + `"}`, `nope`} {
+	for _, bad := range []string{`{"name":"Bad Name"}`, `{"name":""}`, `{"name":"ok","title":"` + strings.Repeat("t", 201) + `"}`, `nope`,
+		`{"name":"ok","path":"../up"}`, `{"name":"ok","path":"/abs"}`, `{"name":"ok","path":"a//b"}`,
+		`{"name":"ok","path":"a\\b"}`, `{"name":"ok","path":"a/b","project":"c"}`, `{"name":"ok","path":"a","project":"a/b"}`} {
 		if r := x.do(http.MethodPost, "/api/machine/projects", bad, mt); r.code != 400 {
 			t.Errorf("%s: %d", bad, r.code)
 		}
 	}
+	if _, err := x.st.Accounts.Project("ok"); err == nil {
+		t.Error("a refused register made its project")
+	}
+	// Where it is in the computer's folder: kept, replaced by a register that sends it, kept by one that doesn't.
+	place := func(want string) {
+		t.Helper()
+		p, err := x.st.Accounts.Project("intro")
+		if err != nil || p.Path+"|"+p.ProjectPath != want {
+			t.Fatalf("place %q %q, want %q (%v)", p.Path, p.ProjectPath, want, err)
+		}
+	}
+	place("|")
+	if r := x.do(http.MethodPost, "/api/machine/projects", `{"name":"intro","path":"2026/intro/shorts","project":"2026/intro"}`,
+		mt); r.code != 200 || r.json(t)["path"] != "2026/intro/shorts" || r.json(t)["project"] != "2026/intro" {
+		t.Fatalf("place: %d %s", r.code, r.body)
+	}
+	place("2026/intro/shorts|2026/intro")
+	if r := x.do(http.MethodPost, "/api/machine/projects", `{"name":"intro","title":"x"}`, mt); r.code != 200 {
+		t.Fatalf("an older connect: %d %s", r.code, r.body)
+	}
+	place("2026/intro/shorts|2026/intro")
+	if r := x.do(http.MethodPost, "/api/machine/projects", `{"name":"intro","path":"intro"}`, mt); r.code != 200 {
+		t.Fatalf("moved: %d %s", r.code, r.body)
+	}
+	place("intro|intro") // no project: its own folder
 
 	// A poster: a JPEG, nothing else.
 	put := func(name, ctype, body string) res {
@@ -118,7 +145,9 @@ func TestMachineTokenScope(t *testing.T) {
 	var hr home.Response
 	if r := x.do(http.MethodGet, "/api/home", "", cookie(SessionCookie, as)); r.code != 200 ||
 		json.Unmarshal([]byte(r.body), &hr) != nil || len(hr.Projects) != 1 || hr.Projects[0].Thumb != "p/intro/api/poster" ||
-		hr.Projects[0].Title != "Intro cut" || hr.Role != "owner" {
+		hr.Projects[0].Title != "Intro cut" || hr.Role != "owner" || hr.Projects[0].Path != "intro" ||
+		hr.Tree == nil || len(hr.Tree.Children) != 1 || hr.Tree.Children[0].Path != "intro" || !hr.Tree.Children[0].Project ||
+		len(hr.Tree.Children[0].Videos) != 1 || hr.Tree.Children[0].Videos[0].Name != "intro" {
 		t.Fatalf("home: %d %s", r.code, r.body)
 	}
 

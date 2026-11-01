@@ -28,6 +28,39 @@ All notable changes are listed here. Versions follow semver once the first relea
   text). States the screenshots don't show moved a few levels to the nearest token: menu and popover text
   (`#e8e8ef` → `#e4e4ea`), the timeline tip, the agent select, error lines (→ `#ff8f86`), the sidebar's focus ring
   (`#b7a6ff` → `#a693fa`), and the reply box's idle colours.
+### Folders on the left of the home
+- `retake open <folder>` scans the whole tree (6 folders down, hidden, `.review`, `node_modules` and `__pycache__`
+  folders skipped, at most 20 000 folders, no video opened): folders, the projects in them, and their videos. A
+  folder that holds one video (its family, directly or in `vN/` folders) is that video, in the project above it:
+  `deadlock/item-shop` is the video `item-shop` of the project `deadlock`. A folder with more (two families, or
+  videos in folders inside it) is a project with its own video. Deeper videos are named by their path
+  (`2026-10-19/fullgame` is `/p/2026-10-19-fullgame/`); the ones directly in the folder keep their names and URLs.
+- `GET /api/home` gains `tree` (folders → projects → videos) and, per video, `video` (its own name), `path`,
+  `project` and `questions`. `retake connect` sends each video's `path` and `project`, so the hosted home shows the
+  same tree.
+- The home has a left column: the tree with chevrons and status dots (has questions, to review, being edited), a
+  filter, a resize handle, ☰ to hide it, and a drawer on a phone. A folder or project shows its videos as cards;
+  the selection is in the URL hash and remembered with the opened folders. The review page's back link reads
+  "Project › video" (`deadlock › item-shop`) and returns to the same place.
+- The organizing that lived only in Retake's database (New project, New group, Move to) is gone from the page; its
+  API stays for now.
+### Moving or copying a project keeps its stills
+- The project store keeps paths relative to the project folder (notes' snapshots, pushed versions, transcribe
+  jobs' take folders). Opening an older store fixes its absolute paths, also ones from where the folder used to be.
+- A missing still never pauses a task: the worker makes its own from the version at the note's moment, with the
+  note's pen lines drawn on it, and the note's context says so (`missing`). A missing attached image is said there
+  too. Notes now keep each stroke's line (up to 64 points) and time.
+- A comment card's drawing sits on the still of its moment (`GET /api/notes/<id>/snapshot`), else on its version's
+  poster, instead of an empty dark box.
+### Comments stay on their version
+- A version shows its own comments only: the list, the To do and Done counts, the timeline markers, the drawings on
+  the video and Send N. Older versions' open comments no longer pile onto the newest version at their old times.
+  A draft's comments belong to the version it heads for.
+- A strip of versions over the comments (`v1 … v7`, the shown one highlighted, each with what's still to do, the
+  agent's draft as `v8 · drafting`) switches versions; on a phone it scrolls sideways. The bar's picker stays.
+- On the newest version, one quiet line says what's still open earlier (`Open on earlier versions: v6 · 2, v3 · 91`),
+  and each part goes there. The agent still gets every open comment of every version as context.
+- Comments recorded on a draft stay on its version after the family stops listing that draft.
 
 ### Agents ask on the video, never in the terminal
 - The built-in agents never stop for a permission prompt: Claude Code runs with `--dangerously-skip-permissions`

@@ -2,13 +2,21 @@ import { describe, expect, it } from 'vitest';
 import type { NoteItem, NotesResponse } from './types';
 import {
   activeKey,
+  earlierOpen,
   emptyText,
+  forVersion,
   heading,
+  historyLabels,
   markOf,
   MARKS,
   presence,
+  rowVersions,
   sidebarRows,
+  sketchFrame,
+  todoByVersion,
   toggleLabel,
+  versionOf,
+  versionStrip,
   visible,
   type Row,
 } from './view';
@@ -295,5 +303,151 @@ describe("an agent's question from inside its task", () => {
   it('goes once the note is answered (open again)', () => {
     const [row] = sidebarRows({ ...res, items: [item({ id: 12, status: 'open', ask })] }, { versions, shown: 'v8' });
     expect(row!.ask).toBeNull();
+  });
+});
+
+describe("a drawing's thumbnail frame", () => {
+  const fam = [{ label: 'v1' }, { label: 'v2', poster: 'video/v2/index.poster.jpg' }, { label: 'v3', relay: true }];
+  const snapshot = 'api/notes/4/snapshot?m=1';
+  it("is the note's snapshot, the still of its moment, when the server has one", () => {
+    const [row] = sidebarRows(
+      { version: 'v1', newest: true, items: [item({ id: 4, version: 'v1', snapshot })] },
+      { versions, shown: 'v1' },
+    );
+    expect(row!.snapshot).toBe(snapshot);
+    expect(sketchFrame(row!, fam, 'v1', true)).toBe(snapshot);
+    expect(sketchFrame(row!, fam, 'v1', false)).toBe(snapshot);
+  });
+  it('else the first frame of the version it was left on, not the one on screen', () => {
+    expect(sketchFrame({ version: 'v1' }, fam, 'v2', true)).toBe('api/poster?v=v1');
+    expect(sketchFrame({ version: 'v2' }, fam, 'v1', true)).toBe('video/v2/index.poster.jpg'); // a stream's own
+    expect(sketchFrame({ snapshot: null }, fam, 'v1', true)).toBe('api/poster?v=v1'); // no version: the shown one
+  });
+  it('else none: no poster route, a version played from another computer, or an unknown version', () => {
+    expect(sketchFrame({ version: 'v1' }, fam, 'v1', false)).toBeNull();
+    expect(sketchFrame({ version: 'v3' }, fam, 'v3', true)).toBeNull();
+    expect(sketchFrame({ version: 'v9' }, fam, 'v1', true)).toBeNull();
+  });
+  it("a question's row never has a snapshot", () => {
+    const [row] = sidebarRows(
+      { version: 'v1', newest: true, items: [item({ id: 5, kind: 'question', status: 'question', snapshot })] },
+      { versions, shown: 'v1' },
+    );
+    expect(row!.snapshot).toBeNull();
+  });
+});
+
+describe('comments belong to the version they were made on', () => {
+  // Sam's item-shop case, small: v7 is the newest; v3 and v6 still have open comments, v6 one that v7 fixed.
+  const family = ['v1', 'v2', 'v3', 'v4', 'v5', 'v6', 'v7'].map((label) => ({ label }));
+  const res: NotesResponse = {
+    version: 'v7',
+    newest: true,
+    scope: 'video',
+    items: [
+      item({ id: 1, version: 'v3', t0: 20, text: 'Cuts off too early' }),
+      item({ id: 2, version: 'v3', t0: 34, text: 'Add the rank icons' }),
+      item({ id: 3, version: 'v6', t0: 13, text: 'Drawing' }),
+      item({ id: 4, version: 'v6', t0: 40, status: 'answered', answered_in: 'v7', change: 'Shorter intro' }),
+      item({ id: 5, version: 'v7', t0: 5, text: 'Louder here' }),
+      item({ id: 6, version: 'v7', t0: 9, status: 'retracted', text: 'scrap that' }),
+      // The agent's question about a v3 comment (the thread itself was asked on v7) belongs to v3.
+      item({ id: 40, kind: 'question', status: 'question', version: 'v7', note: 2, t0: 34, text: 'Which icons?' }),
+      // A question about the version as a whole belongs to its own version.
+      item({ id: 41, kind: 'question', status: 'question', version: 'v7', t0: 2, text: 'Keep the zoom?' }),
+    ],
+  };
+  const rows = sidebarRows(res, { versions: family, shown: 'v7' });
+  const todo = (r: Row) => r.mark !== 'answered';
+
+  it('a version shows its own comments and the questions about them, nothing else', () => {
+    expect(keys(forVersion(rows, 'v7'))).toEqual(['question:41', 'note:5']);
+    expect(keys(forVersion(rows, 'v3'))).toEqual(['note:1', 'note:2', 'question:40']);
+    expect(keys(forVersion(rows, 'v6'))).toEqual(['note:3', 'note:4']);
+    expect(forVersion(rows, 'v1')).toEqual([]);
+    // Each keeps its own time on its own version: nothing is moved onto the newest clock.
+    expect(forVersion(rows, 'v3').map((r) => r.t0)).toEqual([20, 34, 34]);
+  });
+
+  it('a row the server did not tag (an older server) shows on whatever is on screen', () => {
+    const plain = sidebarRows({ ...res, items: [item({ id: 9 })] }, { versions: family, shown: 'v2' });
+    expect(keys(forVersion(plain, 'v2'))).toEqual(['note:9']);
+    expect(keys(forVersion(plain, 'v5'))).toEqual(['note:9']);
+    expect(rowVersions(plain).size).toBe(0);
+  });
+
+  it("a draft's comments belong to the version it heads for", () => {
+    expect(versionOf('v8-draft2')).toBe('v8');
+    expect(versionOf('v8')).toBe('v8');
+    const drafts = sidebarRows(
+      {
+        ...res,
+        items: [item({ id: 11, version: 'v8-draft1' }), item({ id: 12, version: 'v8-draft2' }), item({ id: 13 })],
+      },
+      { versions: family, shown: 'v8-draft2' },
+    );
+    expect(keys(forVersion(drafts, 'v8-draft2'))).toEqual(['note:11', 'note:12', 'note:13']);
+    expect(keys(forVersion(drafts, 'v8'))).toEqual(['note:11', 'note:12', 'note:13']);
+    // Their drawings: the version's own takes first, then its other drafts'.
+    expect(historyLabels(drafts, 'v8-draft2')).toEqual(['v8-draft2', 'v8-draft1']);
+    expect(historyLabels(rows, 'v3')).toEqual(['v3']);
+  });
+
+  it('counts what is still to do on each version', () => {
+    const counts = todoByVersion(rows, todo, 'v7');
+    expect(Object.fromEntries(counts)).toEqual({ v3: 3, v6: 1, v7: 2 });
+  });
+
+  it('the strip: every version oldest first, the shown one on, with its count; none for a single version', () => {
+    const counts = todoByVersion(rows, todo, 'v7');
+    const strip = versionStrip(family, 'v7', counts);
+    expect(strip.map((e) => [e.version, e.todo, e.on])).toEqual([
+      ['v1', 0, false],
+      ['v2', 0, false],
+      ['v3', 3, false],
+      ['v4', 0, false],
+      ['v5', 0, false],
+      ['v6', 1, false],
+      ['v7', 2, true],
+    ]);
+    expect(strip.every((e) => e.label === e.version && !e.drafting)).toBe(true);
+    expect(versionStrip([{ label: 'v1' }], 'v1', counts)).toEqual([]);
+  });
+
+  it("the agent's drafts are one quiet entry that shows the newest draft", () => {
+    const withDrafts = [...family, { label: 'v8-draft2' }, { label: 'v8-draft3' }];
+    const strip = versionStrip(withDrafts, 'v8-draft2', new Map([['v8', 1]]));
+    expect(strip).toHaveLength(8);
+    expect(strip.at(-1)).toEqual({ version: 'v8', label: 'v8-draft3', drafting: true, todo: 1, on: true });
+    // A single version and its draft: that's two, so there is a strip.
+    expect(versionStrip([{ label: 'v1' }, { label: 'v2-draft1' }], 'v1', new Map()).map((e) => e.version)).toEqual([
+      'v1',
+      'v2',
+    ]);
+  });
+
+  it('"Open on earlier versions" on the latest version (or its draft) only, newest first', () => {
+    const counts = todoByVersion(rows, todo, 'v7');
+    const line = (shown: string, vs = family) =>
+      earlierOpen(versionStrip(vs, shown, counts)).map((e) => [e.version, e.todo]);
+    expect(line('v7')).toEqual([
+      ['v6', 1],
+      ['v3', 3],
+    ]);
+    expect(line('v6')).toEqual([]); // an older version: the strip says it
+    expect(line('v3')).toEqual([]);
+    const withDraft = [...family, { label: 'v8-draft1' }];
+    expect(line('v8-draft1', withDraft)).toEqual([
+      ['v7', 2],
+      ['v6', 1],
+      ['v3', 3],
+    ]);
+    expect(line('v7', withDraft)).toEqual([
+      ['v6', 1],
+      ['v3', 3],
+    ]);
+    // Nothing earlier to do: no line.
+    expect(earlierOpen(versionStrip(family, 'v7', new Map([['v7', 2]])))).toEqual([]);
+    expect(earlierOpen([])).toEqual([]);
   });
 });

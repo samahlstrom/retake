@@ -29,8 +29,8 @@ export interface EventSourceLike {
 
 export interface NotesDeps {
   onAutomation?: () => void;
+  /** Read the whole family's comments (`scope=video`): the review page keeps each on its own version. */
   continuous?: boolean;
-  review?: boolean;
   onLoad?: (label: string) => void;
   fetch?: typeof fetch;
   eventSource?: (url: string) => EventSourceLike;
@@ -133,9 +133,7 @@ export class Notes {
     if (!label) return;
     const req = ++this.#req;
     try {
-      const r = await this.#fetch(
-        notesUrl(label) + (this.deps.review ? '&scope=review' : this.deps.continuous ? '&scope=video' : ''),
-      );
+      const r = await this.#fetch(notesUrl(label) + (this.deps.continuous ? '&scope=video' : ''));
       if (req !== this.#req) return;
       if (!r.ok) {
         await r.body?.cancel().catch(() => {});

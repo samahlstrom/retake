@@ -69,8 +69,8 @@ While recording you can also drag or paste an image onto the video. It's pinned 
   and a snapshot of the frame. They're kept in `<project>/.retake/project.db`.
 - An agent reads the notes, makes the next version with any tool, and pushes it with a changelog. A push is refused
   until every open note is either answered or asked about ([docs/agents.md](docs/agents.md)).
-- The sidebar on the newest version shows only the agent's questions. On older versions it shows how each note was
-  resolved.
+- Each version keeps its own comments. The comments panel shows the version on screen, with a strip of versions and
+  what's still to do on each; the newest one says what's still open on earlier versions.
 
 ## On a phone
 
@@ -107,7 +107,8 @@ retake push how-to/v2/how-to_v2.mp4 --render --parent v2             # registers
 - `retake push --render` registers the current revision with a poster. Opening it starts a growing stream; closing
   the last viewer stops rendering, and reopening resumes from the cache. Only changed units draw again.
   Each patch's note ids and summary become the changelog. Use `--no-stream` to wait for a completed MP4.
-- `retake open <folder>` lists projects with thumbnails, review status, and Next video. `retake share <folder>` shares that home screen.
+- `retake open <folder>` shows the folder as a tree on the left (folders, projects, their videos) and the videos as
+  thumbnails with their review status, and Next video. `retake share <folder>` shares that home screen.
 - Notes point at the timeline elements under their strokes, so an agent knows what to patch.
 - C, `[` and `]` land on the matching moment when a trim moved things, not on the same clock time.
 - The newest version shows the parent's notes as unchanged, answered (check it), or context changed.

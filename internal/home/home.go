@@ -11,6 +11,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/samahlstrom/retake/internal/family"
 	"github.com/samahlstrom/retake/internal/project"
 	"github.com/samahlstrom/retake/internal/store"
 	"github.com/samahlstrom/retake/internal/workspace"
@@ -45,10 +46,16 @@ type Stream struct {
 	Total int    `json:"total"`
 }
 
-// Card is one project on the home screen.
+// Card is one video on the home screen (the routes call it a project: one review page, one store).
 type Card struct {
-	Name     string   `json:"name"`
-	Title    string   `json:"title"`
+	Name  string `json:"name"`
+	Title string `json:"title"` // its folder's name
+	// Video is its own name: the newest version's file name without the version; "" before it has one.
+	Video string `json:"video"`
+	// Path is the folder that holds it and Project its project's folder, relative to the home's folder with "/"
+	// between names ("" for that folder itself; spec/home.md).
+	Path     string   `json:"path"`
+	Project  string   `json:"project"`
 	URL      string   `json:"url"` // relative to the home
 	Version  string   `json:"version"`
 	Versions int      `json:"versions"`
@@ -57,8 +64,10 @@ type Card struct {
 	Status   Status   `json:"status"`
 	Takes    int      `json:"takes"` // closed takes on the newest version
 	Open     int      `json:"open"`  // its open or asked-about notes
-	Stream   *Stream  `json:"stream"`
-	Thumb    string   `json:"thumb"` // relative to the home
+	// Questions are its notes the agent asked about and waits on.
+	Questions int     `json:"questions"`
+	Stream    *Stream `json:"stream"`
+	Thumb     string  `json:"thumb"` // relative to the home
 }
 
 // User is the signed-in person on the team server's home.
@@ -74,6 +83,7 @@ type Response struct {
 	Role      string            `json:"role"`
 	User      *User             `json:"user,omitempty"` // the team server's
 	Projects  []Card            `json:"projects"`
+	Tree      *Node             `json:"tree"`
 	Workspace *workspace.Layout `json:"workspace,omitempty"`
 	// Machines are the computers that edit these projects, for the owner; [] for anyone else (spec/home.md).
 	Machines []Machine `json:"machines"`
@@ -82,6 +92,8 @@ type Response struct {
 // Source is what a card is made from.
 type Source struct {
 	Name, Title string
+	// Path and Project place it in the home's tree (Card).
+	Path, Project string
 	// Info is the project's GET /api/info answer; nil or empty when it has no version yet.
 	Info []byte
 	// Store is the project store; nil when the project has none yet (no pushes, no notes).
@@ -106,7 +118,8 @@ type infoBody struct {
 // Make builds a project's card from its /api/info and its store. A project without a version is "to review", with
 // no version and no thumbnail.
 func Make(src Source) Card {
-	c := Card{Name: src.Name, Title: src.Title, URL: "p/" + src.Name + "/", Status: ToReview}
+	c := Card{Name: src.Name, Title: src.Title, Path: src.Path, Project: src.Project, URL: "p/" + src.Name + "/",
+		Status: ToReview}
 	if c.Title == "" {
 		c.Title = src.Name
 	}
@@ -128,6 +141,7 @@ func Make(src Source) Card {
 		}
 	}
 	c.Version, c.Versions, c.Duration = cur.Label, len(info.Versions), cur.Duration
+	c.Video = VideoName(cur.Name)
 	c.Stream = ParseStream(cur.Stream)
 	c.Thumb = c.URL + "api/poster"
 	if cur.Poster != nil && *cur.Poster != "" {
@@ -135,7 +149,7 @@ func Make(src Source) Card {
 	}
 	c.Takes = ClosedTakes(cur.Path)
 	if src.Store != nil {
-		c.Open = openNotes(src.Store, cur.Label, cur.Path)
+		c.Open, c.Questions = openNotes(src.Store, cur.Label, cur.Path)
 		if row, err := src.Store.Version(cur.Label); err == nil {
 			if t, err := project.ParseTime(row.Created); err == nil {
 				c.Pushed = t.UTC().Format(time.RFC3339)
@@ -245,8 +259,8 @@ func closedTake(dir string) bool {
 }
 
 // openNotes counts the notes on a version (recorded on it, or carried over inside their ranges) that are open or
-// asked about.
-func openNotes(st *project.Store, label, video string) int {
+// asked about, and of those the asked-about ones.
+func openNotes(st *project.Store, label, video string) (open, questions int) {
 	sc := project.Scope{Version: label}
 	for _, x := range store.InheritedTakes(video) {
 		sc.Carried = append(sc.Carried, project.Carried{Take: filepath.Base(x.Dir), Ranges: x.Ranges})
@@ -254,9 +268,27 @@ func openNotes(st *project.Store, label, video string) int {
 	notes, err := st.Notes(project.NoteFilter{Statuses: []project.Status{project.StatusOpen, project.StatusQuestion},
 		Scope: &sc})
 	if err != nil {
-		return 0
+		return 0, 0
 	}
-	return len(notes)
+	for _, n := range notes {
+		if n.Status == project.StatusQuestion {
+			questions++
+		}
+	}
+	return len(notes), questions
+}
+
+// VideoName is a video's own name from a version's file name: the name without the version (itemshop for
+// itemshop_v7.mp4, clip for v2/clip_v2_draft.mov), or the file's stem when it has no version.
+func VideoName(file string) string {
+	if file == "" {
+		return ""
+	}
+	stem := family.Stem(filepath.Base(file))
+	if nm, ok := family.ParseStem(stem); ok {
+		return nm.Prefix
+	}
+	return stem
 }
 
 // Sort puts the cards in the home's order: to review first, then the newest push, then by name.

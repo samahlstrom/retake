@@ -108,6 +108,20 @@ An agent runs unattended, so the built-in profiles never stop for a permission p
   question tools. When unsure about a note, ask with `retake ask` ("Questions from inside a task") and carry on with
   the rest of the task.
 
+## A note's stills and images
+
+- Before an attempt starts, the worker saves each assigned note's still as `note-<id>.png` and its attached images as
+  `note-<id>-<file>` in the task folder, from `/api/worker/notes/<id>/snapshot` and `…/images/<file>`.
+- Nothing about them stops the task. When the server has no still to give (the note has strokes but no snapshot, or
+  the snapshot is missing or outside the project), the worker makes one: the frame of the note's version on this
+  computer at the note's moment (the middle one of its strokes' times, else its `t0`), at most 1280 px wide, with the
+  note's strokes drawn and numbered as the notes engine draws them (a stroke stored without its points is the outline
+  of its box: an ellipse for a circle, else a rectangle).
+- Each note in the context may carry `missing`: plain sentences saying which of its files the agent didn't get and
+  what it has instead ("Its saved still couldn't be fetched (host returned 404): note-3.png is a still this computer
+  made of v6 at 20.10 s, with the note's pen lines drawn on it."). A still that can't be made either, or an image
+  that can't be fetched, is said there and left out; the task runs on.
+
 ## Questions from inside a task: `retake ask`
 
 An agent that is unsure about a note asks about a moment of the video, and keeps working. It can draw to make the
@@ -229,11 +243,12 @@ the browser's Connect your computer card prints the line). It is `retake worker`
 
 - The folder is `--folder`, else the current folder. It checks the token first (`GET /api/machine`; a bad token or
   URL stops it with exit 1).
-- It finds the projects as `retake open <folder>` does (spec/home.md): every folder with a versioned video, with or
-  without a native timeline (spec/bridge.md), so the server lists what `retake open <folder>` lists. A candidate
-  folder (the folder itself or one directly in it, not hidden) with a timeline but no version yet counts too, named
-  by the same rule.
-- For each project it sends its name and title (`POST /api/machine/projects`, which makes it when it's missing) and,
+- It finds the projects as `retake open <folder>` does (spec/home.md, "Folders, projects and videos"): the same scan
+  of the folder's tree, every video with or without a native timeline (spec/bridge.md), so the server lists what
+  `retake open <folder>` lists. A project with a timeline but no version yet counts too (one video, named by the
+  same rule, so its worker can render the first version).
+- For each video it sends its name, title, `path` and `project` (`POST /api/machine/projects`, which makes it when
+  it's missing; the two paths put it in the same place of the home's tree as `retake open` does) and,
   when it has a version, that version's first frame as the poster (`PUT .../poster`, the JPEG of spec/home.md's
   poster). Nothing else is uploaded: no footage, source or renders. The worker then tells the server which version
   files it has (metadata only, "Version files" below), and their video plays through the worker's relay.
@@ -341,7 +356,8 @@ its version files and runs the agent, and the agent makes the next version howev
   without `send` (an older page) queues them only when `config.enabled` is on. Each finished take is considered
   once: if neither applies, its notes stay Open until someone sends them, and turning `enabled` on later doesn't
   sweep up old reviews. Finishing again with `"send": true` sends a take that was already processed. Send also
-  submits the other open comments (`POST /api/automation/tasks`); that always queues. Submission is idempotent
+  submits the shown version's other open comments (`POST /api/automation/tasks`); that always queues. An older
+  version's open comments are sent from that version (spec/notes.md, "Comments belong to their version"). Submission is idempotent
   while an unfinished task owns a note. Reopened notes may be submitted again.
 - Any role that can record (reviewer, approver, owner; signed in or through a share link, local or hosted) sends
   and retries. A queued task waits for the selected worker, or for the first worker to connect when none was ever
@@ -408,13 +424,13 @@ its version files and runs the agent, and the agent makes the next version howev
   attempt reports, questions (`ask`), render registration/progress, version files (`files`), note artifacts and
   relay response endpoints. An attempt's `completed` report names a render (`result`) or, in a plain project, a version file
   (`version`). The poll answer has
-  `config`, `task`, `notes`, `questions` (the task's, with their answers) and `versions` (how many versions the
-  family has, drafts not counted). A poll may carry `told` (answers that reached the agent). In Local mode
+  `config`, `task`, `notes` (the task's notes, plus every open note of every version as context), `questions` (the
+  task's, with their answers) and `versions` (how many versions the family has, drafts not counted). A poll may carry `told` (answers that reached the agent). In Local mode
   the in-process worker reaches these handlers without HTTP or a token.
 - Existing video URLs serve remote versions through the relay. Existing viewing permissions apply to all media.
-- The bar has one action for everyone who can record: Send (`Send N to agent`, N the open comments no task owns
-  and no `sending` take holds). It finishes the take in progress with `send: true` on its `/done` and submits the
-  other open comments. With no computer online it does the same: the comments show Working, "Waiting for the
+- The bar has one action for everyone who can record: Send (`Send N to agent`, N the shown version's open comments
+  no task owns and no `sending` take holds). It finishes the take in progress with `send: true` on its `/done` and
+  submits the shown version's other open comments. With no computer online it does the same: the comments show Working, "Waiting for the
   editing computer", and start when one connects; the owner's press also opens the agent popover with the connect
   command (`POST /api/connect`). In local mode, when the built-in worker can't edit (`blocked`), Send saves the take
   without `send`, and the popover says what's missing (it doesn't open by itself). There is no other action.
@@ -443,6 +459,7 @@ closing the pane, and two projects' tasks running at the same time. For `retake 
 CLI's parsing and validation of visuals, their persistence and the hosted relay of their images, a fake agent that
 asks mid-task and then completes (Local mode and hosted), a wrong or stale secret refused, an answer reaching a herdr
 and a tmux session (fake binaries) and a background attempt's context, a task ending with some notes Done and some
-Question, the agent's visuals drawn in their own style (a web unit test), and an e2e test where an agent's question
+Question, a note whose still the server can't give (a fake agent that gets the worker's own still, its pen line on it),
+an attached image that can't be fetched, the agent's visuals drawn in their own style (a web unit test), and an e2e test where an agent's question
 with a box, an arrow and two image choices is answered with one tap. Provider adapters are tested with deterministic executables; live paid-provider execution is reported
 separately if it is not exercised.

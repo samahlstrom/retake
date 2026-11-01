@@ -287,6 +287,78 @@ func TestFolderHome(t *testing.T) {
 	}
 }
 
+// The home's tree: folders, projects and their videos, nested, with the shorts of a project under it and a
+// timeline project with no version yet; each video is served at its own /p/<name>/.
+func TestFolderTree(t *testing.T) {
+	x := newFT(t, func(o *FolderOptions) { o.RescanEvery = time.Nanosecond })
+	now := time.Now()
+	file(t, filepath.Join(x.dir, "2026-10-19", "fullgame", "fullgame_v2.mp4"), now)
+	file(t, filepath.Join(x.dir, "alpha", "shorts", "one", "v1", "one_v1.mp4"), now)
+	file(t, filepath.Join(x.dir, "alpha", "assets", "deep", "er", "x_v1.mp4"), now) // too deep in a project
+	file(t, filepath.Join(x.dir, "drafts", "cut", "edit", "timeline.json"), now)
+	h := x.home(t)
+	byName := map[string]home.Card{}
+	for _, c := range h.Projects {
+		byName[c.Name] = c
+	}
+	if c := byName["2026-10-19-fullgame"]; c.Path != "2026-10-19/fullgame" || c.Project != "2026-10-19" ||
+		c.Video != "fullgame" || c.Title != "fullgame" || c.URL != "p/2026-10-19-fullgame/" {
+		t.Errorf("a nested video: %+v", c)
+	}
+	if c := byName["alpha-shorts-one"]; c.Path != "alpha/shorts/one" || c.Project != "alpha/shorts" || c.Video != "one" {
+		t.Errorf("a project's short: %+v", c)
+	}
+	if c := byName["alpha"]; c.Path != "alpha" || c.Project != "alpha" || c.Video != "alpha" || c.Questions != 0 {
+		t.Errorf("alpha (a project: a video in its folders): %+v", c)
+	}
+	if c := byName["bravo"]; c.Path != "bravo" || c.Project != "" {
+		t.Errorf("bravo (a video's folder in the opened folder): %+v", c)
+	}
+	if len(h.Projects) != 5 {
+		t.Errorf("videos: %v", summary(h))
+	}
+	if h.Tree == nil {
+		t.Fatal("no tree")
+	}
+	var draw func(n *home.Node, indent string) []string
+	draw = func(n *home.Node, indent string) []string {
+		line := indent + n.Title
+		if n.Project {
+			var names []string
+			for _, v := range n.Videos {
+				names = append(names, v.Name+"@"+v.Version)
+			}
+			line += " [" + strings.Join(names, " ") + "]"
+		}
+		out := []string{line}
+		for _, c := range n.Children {
+			out = append(out, draw(c, indent+"  ")...)
+		}
+		return out
+	}
+	if got := strings.Join(draw(h.Tree, ""), "\n"); got != strings.Join([]string{
+		"Shows [bravo@v1 charlie@v3]",
+		"  2026-10-19 [2026-10-19-fullgame@v2]",
+		"  alpha [alpha@v2]",
+		"    shorts [alpha-shorts-one@v1]",
+	}, "\n") {
+		t.Errorf("tree:\n%s", got)
+	}
+	if r := x.get("/p/alpha-shorts-one/api/info"); r.code != 200 || r.json(t)["label"] != "v1" {
+		t.Errorf("a short's review: %d %s", r.code, r.body)
+	}
+	if r := x.get("/p/2026-10-19-fullgame/"); r.code != 200 {
+		t.Errorf("a nested video's page: %d", r.code)
+	}
+
+	// A link scoped to one video (its own store's token) sees only it, and only the folders on its way.
+	tok := projectToken(t, filepath.Join(x.dir, "2026-10-19", "fullgame"), team.Viewer)
+	h = x.home(t, shared(), bearerTok(tok))
+	if got := strings.Join(draw(h.Tree, ""), "\n"); got != "Shows\n  2026-10-19 [2026-10-19-fullgame@v2]" {
+		t.Errorf("a scoped link's tree:\n%s", got)
+	}
+}
+
 func TestFolderStartsWithoutProjects(t *testing.T) {
 	dir := t.TempDir()
 	f := NewFolder(FolderOptions{Dir: dir, Prober: fakeProber{}})

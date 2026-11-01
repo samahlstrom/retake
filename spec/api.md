@@ -182,7 +182,7 @@ retake version
 ```
 
 - Without `--no-open`, the page opens with the OS opener: `xdg-open`, `open` or `start`.
-- With a folder, every project in it is served, with a home screen at `/` (spec/home.md).
+- With a folder, every video in its tree of folders and projects is served, with a home screen at `/` (spec/home.md).
 - `--theme DIR` (or `RETAKE_THEME`) is the user's theme folder, by default `$XDG_CONFIG_HOME/retake/theme`; `none`
   turns theming off (spec/theme.md).
 - Exit code 2 for a missing file, a busy `--port`, or no free port.

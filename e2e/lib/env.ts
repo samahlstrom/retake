@@ -56,7 +56,8 @@ export const PORTS = {
   home: PORT_BASE + 2, // 12, after 11-stream
   stream: PORT_BASE + 2, // 11, after 04-hls
   relay: PORT_BASE + 6, // 14, after 07-share
-  theme: PORT_BASE + 3, // 16, after 03-crash-safety's proxy
+  nav: PORT_BASE + 2, // 16, after 12-home
+  theme: PORT_BASE + 3, // 17, after 03-crash-safety's proxy
 } as const;
 
 /** retake-edit, for the specs that render with the editor: $RETAKE_EDIT, else the repo's release build, else $PATH. */

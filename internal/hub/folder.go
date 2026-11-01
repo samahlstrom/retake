@@ -54,7 +54,8 @@ type FolderOptions struct {
 
 	Thumbs    *thumb.Maker  // nil = thumb.Default
 	EventPoll time.Duration // the projects' event streams' poll; 0 = their default
-	// RescanEvery is the least time between two scans of the folder for /api/home; 0 = 2 s.
+	// RescanEvery is the least time between two scans of the folder for /api/home; 0 = 2 s. After a scan that took
+	// over 200 ms, the next waits at least ten times as long as it took.
 	RescanEvery time.Duration
 	// Project adjusts a project's server options before its server is made (the streaming side's hooks, tests).
 	Project func(name string, o *server.Options)
@@ -71,8 +72,9 @@ type Folder struct {
 	limiter *team.Limiter
 
 	mu      sync.Mutex
-	found   []home.Found
+	found   []home.Found // the videos
 	scanned time.Time
+	took    time.Duration             // how long the last scan took
 	open    map[string]*folderProject // by root
 	closed  bool
 
@@ -126,20 +128,34 @@ func NewFolder(opts FolderOptions) *Folder {
 // Dir returns the folder.
 func (f *Folder) Dir() string { return f.opts.Dir }
 
-// rescan scans the folder again, unless it was scanned less than RescanEvery ago (and force isn't set).
+// rescan scans the folder's tree again, unless the last scan is younger than RescanEvery, or than ten times as long
+// as it took (and force isn't set). It returns the videos.
 func (f *Folder) rescan(force bool) []home.Found {
 	f.mu.Lock()
-	if !force && !f.scanned.IsZero() && f.opts.Now().Sub(f.scanned) < f.opts.RescanEvery {
+	wait := f.opts.RescanEvery
+	if f.took > 200*time.Millisecond { // a big folder: at most a tenth of the time goes to scanning it
+		wait = max(wait, 10*f.took)
+	}
+	if !force && !f.scanned.IsZero() && f.opts.Now().Sub(f.scanned) < wait {
 		found := f.found
 		f.mu.Unlock()
 		return found
 	}
+	first := f.scanned.IsZero()
 	f.mu.Unlock()
-	found := home.Discover(f.opts.Dir) // outside the lock: a big folder takes a moment
+	scan := home.ScanDir(f.opts.Dir) // outside the lock: a big folder takes a moment
+	if f.opts.Verbose || scan.Capped && first {
+		capped := ""
+		if scan.Capped {
+			capped = fmt.Sprintf(" (stopped at %d folders)", home.MaxDirs)
+		}
+		f.logf("scanned %s: %d videos, %d folders in %s%s", f.opts.Dir, len(scan.Videos), scan.Dirs,
+			scan.Took.Round(time.Millisecond), capped)
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.found, f.scanned = found, f.opts.Now()
-	return found
+	f.found, f.scanned, f.took = scan.Videos, f.opts.Now(), scan.Took
+	return scan.Videos
 }
 
 // projectNamed returns a project by name, scanning the folder again when it doesn't know the name.
@@ -327,8 +343,8 @@ func (f *Folder) cards(allowed func(string) bool) []home.Card {
 		if fp == nil {
 			continue
 		}
-		cards = append(cards, home.Make(home.Source{Name: fd.Name, Title: fd.Title, Info: fp.srv.InfoJSON(),
-			Store: fp.projectStore()}))
+		cards = append(cards, home.Make(home.Source{Name: fd.Name, Title: fd.Title, Path: fd.Path,
+			Project: fd.Project, Info: fp.srv.InfoJSON(), Store: fp.projectStore()}))
 	}
 	home.Sort(cards)
 	return cards
@@ -619,7 +635,9 @@ func (f *Folder) apiHome(w http.ResponseWriter, r *http.Request, role team.Role,
 		videos = append(videos, card.Name)
 	}
 	visible := layout.Visible(scope, videos)
-	res := home.Response{Title: filepath.Base(f.opts.Dir), Role: string(role), Projects: cards, Workspace: &visible}
+	title := filepath.Base(f.opts.Dir)
+	res := home.Response{Title: title, Role: string(role), Projects: cards, Tree: home.BuildTree(title, cards, nil),
+		Workspace: &visible}
 	res.Machines = []home.Machine{}
 	if role == team.Owner {
 		res.Folder = f.opts.Dir

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/samahlstrom/retake/internal/accounts"
+	"github.com/samahlstrom/retake/internal/home"
 )
 
 // Machines: "Connect your computer" (spec/server.md, "Machines"). An admin makes a machine token; `retake connect`
@@ -131,6 +132,9 @@ func (h *Hub) registerProject(w http.ResponseWriter, r *http.Request, ri reqInfo
 	var req struct {
 		Name  string `json:"name"`
 		Title string `json:"title"`
+		// Where it is in the computer's folder (spec/home.md, the tree); absent from an older retake connect.
+		Path    *string `json:"path"`
+		Project *string `json:"project"`
 	}
 	if err := readJSON(r, &req); err != nil {
 		h.fail(w, r, http.StatusBadRequest, "bad json")
@@ -145,6 +149,22 @@ func (h *Hub) registerProject(w http.ResponseWriter, r *http.Request, ri reqInfo
 		h.fail(w, r, http.StatusBadRequest, fmt.Sprintf("a title is at most %d characters", maxTitle))
 		return
 	}
+	place := req.Path != nil || req.Project != nil
+	var path, proj string
+	if place {
+		if req.Path != nil {
+			path = *req.Path
+		}
+		proj = path
+		if req.Project != nil {
+			proj = *req.Project
+		}
+		if !home.ValidPath(path) || !home.ValidPath(proj) || !home.Within(proj, path) {
+			h.fail(w, r, http.StatusBadRequest, "path and project are folders relative to the connected folder, "+
+				"with / between names, and project is path or a folder above it")
+			return
+		}
+	}
 	p, err := h.st.Accounts.Project(name)
 	created := false
 	if errors.Is(err, accounts.ErrNotFound) {
@@ -157,6 +177,11 @@ func (h *Hub) registerProject(w http.ResponseWriter, r *http.Request, ri reqInfo
 			h.logf("project %s added by a connected machine", name)
 		}
 	}
+	if err == nil && place && (p.Path != path || p.ProjectPath != proj) {
+		if err = h.st.Accounts.SetProjectPlace(p.Name, path, proj); err == nil {
+			p.Path, p.ProjectPath = path, proj
+		}
+	}
 	if err != nil {
 		h.storeFailed(w, r, err)
 		return
@@ -165,8 +190,8 @@ func (h *Hub) registerProject(w http.ResponseWriter, r *http.Request, ri reqInfo
 	if created {
 		code = http.StatusCreated
 	}
-	h.json(w, r, code, map[string]any{"name": p.Name, "title": p.Title, "created": created,
-		"url": strings.TrimSuffix(h.baseURL(ri), "/") + "/p/" + p.Name})
+	h.json(w, r, code, map[string]any{"name": p.Name, "title": p.Title, "path": p.Path, "project": p.ProjectPath,
+		"created": created, "url": strings.TrimSuffix(h.baseURL(ri), "/") + "/p/" + p.Name})
 }
 
 // MaxPoster is the largest poster a machine may send.

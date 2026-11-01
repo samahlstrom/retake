@@ -4,7 +4,8 @@
 //  - older version: the notes in their final state (✓ with the change, ? with the question);
 //  - retracted notes are never shown.
 import { fmt } from '../util';
-import type { Box } from '../types';
+import { draftOf } from '../versions';
+import type { Box, Version } from '../types';
 import type { NoteItem, NotesResponse, TaskAsk } from './types';
 import type { EditingTask } from '../automation.svelte';
 
@@ -30,6 +31,8 @@ export interface Row {
   key: string;
   id: number;
   kind: 'note' | 'question';
+  /** A question about a note: the note's id (the question belongs to that note's version). */
+  note: number | null;
   mark: Mark;
   t0: number;
   t1: number;
@@ -50,11 +53,30 @@ export interface Row {
   reopen: boolean;
   options: Chip[];
   images: { url: string; box: Box }[];
+  /** A note's still of its moment with its strokes drawn on it (a URL), for its drawing's thumbnail. */
+  snapshot?: string | null;
   /** Carried over from the parent version: what became of its moment ("unchanged", "answered, check it", "context
    * changed"), with the version it came from. */
   carried: string | null;
   /** The agent's open question from inside its task, with its time as m:ss. */
   ask: (TaskAsk & { time: string }) | null;
+}
+
+/** The picture under a comment's drawing thumbnail, so its strokes sit on what they were drawn over: the still of
+ * its moment (the note's snapshot), else the first frame of the version it was left on (a streamed version's
+ * poster, or the server's `api/poster` when the page has one), else none: a plain dark box. A version that plays
+ * from another computer has no server poster. */
+export function sketchFrame(
+  row: Pick<Row, 'snapshot' | 'version'>,
+  versions: readonly Pick<Version, 'label' | 'poster' | 'relay'>[],
+  shown: string | null,
+  posters: boolean,
+): string | null {
+  if (row.snapshot) return row.snapshot;
+  const v = versions.find((x) => x.label === (row.version || shown));
+  if (!v) return null;
+  if (v.poster) return v.poster;
+  return posters && !v.relay ? `api/poster?v=${encodeURIComponent(v.label)}` : null;
 }
 
 /** Submitted work stays beside the live edit, even as its original reviewed version becomes historical. */
@@ -123,6 +145,7 @@ export function toRow(item: NoteItem, newest: boolean, ctx: ViewContext): Row {
     key: `${item.kind}:${item.id}`,
     id: item.id,
     kind: item.kind,
+    note: item.kind === 'question' && typeof item.note === 'number' ? item.note : null,
     mark,
     t0: item.t0,
     t1,
@@ -136,6 +159,7 @@ export function toRow(item: NoteItem, newest: boolean, ctx: ViewContext): Row {
     reopen: !newest && item.status === 'answered' && ctx.approve !== false,
     options: (item.options ?? []).map((label) => ({ label, known: known(label), on: label === ctx.shown })),
     images: item.images ?? [],
+    snapshot: item.kind === 'note' ? item.snapshot || null : null,
     carried: carriedText(item),
     ask: item.kind === 'note' && item.ask && mark === 'question' ? { ...item.ask, time: fmt(item.ask.t, false) } : null,
   };
@@ -148,6 +172,102 @@ export function sidebarRows(res: NotesResponse | null, ctx: ViewContext): Row[] 
     .filter((it) => visible(it, res.scope ? false : res.newest))
     .map((it) => toRow(it, res.scope ? false : res.newest, ctx))
     .sort((a, b) => a.t0 - b.t0 || (a.kind === b.kind ? a.id - b.id : a.kind === 'note' ? -1 : 1));
+}
+
+// ---------------------------------------------------------------- comments belong to their version
+
+/** The version a label belongs to: itself, or for a draft the version it heads for (`v5-draft2` is `v5`'s). */
+export const versionOf = (label: string): string => draftOf(label) ?? label;
+
+/** The version each row belongs to, by key: its own `version`, or for a question about a note, that note's. A row
+ * the server didn't tag (an older server) belongs to whatever is shown, so it has none here. */
+export function rowVersions(rows: readonly Row[]): Map<string, string> {
+  const notes = new Map<number, Row>();
+  for (const r of rows) if (r.kind === 'note') notes.set(r.id, r);
+  const out = new Map<string, string>();
+  for (const r of rows) {
+    const own = (r.note != null ? notes.get(r.note)?.version : null) || r.version;
+    if (own) out.set(r.key, versionOf(own));
+  }
+  return out;
+}
+
+/** The rows of the version on screen (spec/notes.md, "Comments belong to their version"): its comments and the
+ * agent's questions about them, and nothing of another version. */
+export function forVersion(rows: readonly Row[], shown: string | null): Row[] {
+  if (!shown) return [...rows];
+  const of = rowVersions(rows),
+    on = versionOf(shown);
+  return rows.filter((r) => (of.get(r.key) ?? on) === on);
+}
+
+/** How many comments are still to do on each version (by `versionOf`). An untagged row counts for `shown`. */
+export function todoByVersion(
+  rows: readonly Row[],
+  todo: (row: Row) => boolean,
+  shown: string | null,
+): Map<string, number> {
+  const of = rowVersions(rows),
+    out = new Map<string, number>();
+  for (const r of rows) {
+    const v = of.get(r.key) ?? (shown ? versionOf(shown) : null);
+    if (v && todo(r)) out.set(v, (out.get(v) ?? 0) + 1);
+  }
+  return out;
+}
+
+/** The labels whose takes hold the drawings of `label`'s comments: itself first, then the other drafts of its version
+ * that comments were recorded on. */
+export function historyLabels(rows: readonly Row[], label: string): string[] {
+  const out = [label],
+    on = versionOf(label);
+  for (const r of rows) if (r.version && !out.includes(r.version) && versionOf(r.version) === on) out.push(r.version);
+  return out;
+}
+
+/** One entry of the version strip at the top of the comments panel. */
+export interface VersionEntry {
+  /** The version, `v5`: its key and what it reads. */
+  version: string;
+  /** What a click shows: the version itself, or the newest listed draft heading for it. */
+  label: string;
+  /** Only drafts of it so far: it reads `v5 · drafting`. */
+  drafting: boolean;
+  /** Its comments still to do. */
+  todo: number;
+  /** It (or a draft of it) is on screen. */
+  on: boolean;
+}
+
+/** The version strip: the family's versions oldest first, a version's drafts folded into one entry. Empty with fewer
+ * than two entries (a single version has no strip). */
+export function versionStrip(
+  family: readonly { label: string }[],
+  shown: string | null,
+  todo: ReadonlyMap<string, number>,
+): VersionEntry[] {
+  const out: VersionEntry[] = [];
+  const on = shown ? versionOf(shown) : null;
+  for (const { label } of family) {
+    const version = versionOf(label),
+      draft = label !== version;
+    const e = out.find((x) => x.version === version);
+    if (!e) out.push({ version, label, drafting: draft, todo: todo.get(version) ?? 0, on: version === on });
+    else if (!draft) Object.assign(e, { label, drafting: false });
+    else if (e.drafting) e.label = label; // the family lists drafts oldest first: the newest wins
+  }
+  return out.length < 2 ? [] : out;
+}
+
+/** "Open on earlier versions": on the latest version (or a draft ahead of it), the older versions with comments still
+ * to do, newest first. Nothing anywhere else, or when nothing earlier is to do. */
+export function earlierOpen(strip: readonly VersionEntry[]): VersionEntry[] {
+  const i = strip.findIndex((e) => e.on);
+  if (i < 0 || strip.slice(i + 1).some((e) => !e.drafting)) return [];
+  return strip
+    .slice(0, i)
+    .filter((e) => e.todo > 0)
+    .reverse();
 }
 
 /** The row under the playhead (from just before its start to just after its end; the latest start wins), or null. */

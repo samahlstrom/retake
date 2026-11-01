@@ -27,6 +27,8 @@ export interface NoteItem {
   /** Version labels to flip between. */
   options?: string[] | null;
   images?: { url: string; box: Box }[] | null;
+  /** A note's still of its moment with its strokes drawn on it: a URL (spec/notes.md, "What the sidebar shows"). */
+  snapshot?: string | null;
   /** For a question: the note it's about. */
   note?: number | null;
   /** A note of the parent version shown on the newest one at its mapped time (spec/bridge.md, "Carrying notes over"):

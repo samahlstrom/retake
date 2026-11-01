@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -273,6 +274,58 @@ func (s *Server) takeFile(w http.ResponseWriter, r *http.Request, take, name str
 	s.serveFile(w, r, filepath.Join(store.TakeDir(v.Path, take), name), project.ImageTypes[filepath.Ext(name)])
 }
 
+// noteSnapshot is GET /api/notes/<id>/snapshot: the still of a note's moment with its strokes, for its card's drawing
+// (spec/notes.md, "What the sidebar shows").
+func (s *Server) noteSnapshot(w http.ResponseWriter, r *http.Request, id string) {
+	noteID, err := strconv.ParseInt(id, 10, 64)
+	if err != nil || noteID <= 0 {
+		s.fail(w, r, http.StatusNotFound, "no snapshot")
+		return
+	}
+	st, err := s.store(false)
+	if err != nil {
+		s.fail(w, r, http.StatusNotFound, "no snapshot")
+		return
+	}
+	n, err := st.Note(noteID)
+	if err != nil {
+		s.fail(w, r, http.StatusNotFound, "no snapshot")
+		return
+	}
+	s.serveSnapshot(w, r, st, n)
+}
+
+// serveSnapshot serves a note's snapshot. Only a regular file inside the project is served, through os.Root, so an
+// imported note can't name any other file of the host (spec/notes.md, "Paths").
+func (s *Server) serveSnapshot(w http.ResponseWriter, r *http.Request, st *project.Store, n project.Note) {
+	rel, _, ok := st.SnapshotFile(n)
+	if !ok {
+		s.fail(w, r, http.StatusNotFound, "no snapshot")
+		return
+	}
+	root, err := os.OpenRoot(st.Root())
+	if err != nil {
+		s.fail(w, r, http.StatusNotFound, "no snapshot")
+		return
+	}
+	defer func() { _ = root.Close() }()
+	file, err := root.Open(rel)
+	if err != nil {
+		s.fail(w, r, http.StatusNotFound, "no snapshot")
+		return
+	}
+	defer func() { _ = file.Close() }()
+	stat, err := file.Stat()
+	ctype := project.ImageTypes[strings.ToLower(filepath.Ext(rel))]
+	if err != nil || !stat.Mode().IsRegular() || stat.Size() > MaxImage || ctype == "" {
+		s.fail(w, r, http.StatusNotFound, "no snapshot")
+		return
+	}
+	w.Header().Set("Content-Type", ctype)
+	w.Header().Set("Cache-Control", "no-cache")
+	http.ServeContent(w, r, filepath.Base(rel), stat.ModTime(), file)
+}
+
 type jobView struct {
 	ID       int64  `json:"id"`
 	Kind     string `json:"kind"`
@@ -316,11 +369,17 @@ func (s *Server) sidebar(w http.ResponseWriter, r *http.Request) {
 	q := project.SidebarQuery{Version: v.Label, Newest: resp.Newest, TakeDir: s.takeDirOf(fam),
 		ImageURL: func(n project.Note, img project.TakeImage) string {
 			return s.opts.BasePath + "/api/takes/" + n.Take + "/" + img.File + "?v=" + url.QueryEscape(n.Version)
+		},
+		SnapshotURL: func(n project.Note, modified time.Time) string {
+			// The file's time in the URL: a notes rebuild redraws it, and the card loads the new one.
+			return s.opts.BasePath + "/api/notes/" + strconv.FormatInt(n.ID, 10) + "/snapshot?m=" + strconv.FormatInt(modified.UnixMilli(), 10)
 		}}
 	if resp.Scope != "" {
 		seen := map[string]bool{}
 		target := s.manifestOf(v)
-		for _, source := range fam {
+		sources := s.withLeftDrafts(st, fam)
+		q.TakeDir = s.takeDirOf(sources)
+		for _, source := range sources {
 			if resp.Scope == "review" && source.N > v.N {
 				continue
 			}
@@ -438,6 +497,34 @@ func (s *Server) sidebar(w http.ResponseWriter, r *http.Request) {
 		resp.Items = s.attachAsks(st, v, resp.Items, automation)
 	}
 	s.json(w, r, http.StatusOK, resp)
+}
+
+// draftLabel is a draft's label, v<N>-draft<K>: the draft K heading for version N.
+var draftLabel = regexp.MustCompile(`^v(\d+)-draft\d+$`)
+
+// withLeftDrafts is the family plus the drafts it no longer lists that comments were recorded on (older drafts, and a
+// promoted draft's old label), each as version N: those comments belong to the version they headed for (spec/notes.md,
+// "Comments belong to their version"), so they don't vanish once it exists.
+func (s *Server) withLeftDrafts(st *project.Store, fam []family.Version) []family.Version {
+	notes, err := st.Notes(project.NoteFilter{})
+	if err != nil {
+		return fam
+	}
+	listed := map[string]bool{}
+	for _, v := range fam {
+		listed[v.Label] = true
+	}
+	out := slices.Clone(fam)
+	for _, n := range notes {
+		m := draftLabel.FindStringSubmatch(n.Version)
+		if m == nil || listed[n.Version] || !listed["v"+m[1]] {
+			continue
+		}
+		listed[n.Version] = true
+		num, _ := strconv.Atoi(m[1])
+		out = append(out, family.Version{Label: n.Version, N: num, Path: s.remotePath(n.Version)})
+	}
+	return out
 }
 
 // takeDirOf finds a note's take folder through the family: <version's dir>/<stem>.review/<take>.

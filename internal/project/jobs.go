@@ -30,7 +30,7 @@ type JobArgs struct {
 	Revision string  `json:"revision,omitempty"` // completed-clip fingerprint; empty for final pass
 	Version  string  `json:"version"`            // the version label
 	Take     string  `json:"take,omitempty"`     // transcribe: the take id
-	Dir      string  `json:"dir,omitempty"`      // transcribe: the take folder
+	Dir      string  `json:"dir,omitempty"`      // transcribe: the take folder, relative to the project root (Store.Abs)
 	After    []int64 `json:"after,omitempty"`    // run only once these jobs are done; fail if one of them failed
 }
 
@@ -101,6 +101,7 @@ func (j Job) event() JobEvent {
 }
 
 func (t *tx) insertJob(kind string, args JobArgs) (Job, error) {
+	args.Dir = t.s.Rel(args.Dir)
 	b, err := json.Marshal(args)
 	if err != nil {
 		return Job{}, err

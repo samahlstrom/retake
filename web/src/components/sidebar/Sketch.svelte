@@ -1,6 +1,6 @@
 <script lang="ts">
-  // A comment's drawing, small: its pen lines and images in the frame's shape, so a card shows what you circled
-  // without playing to it. Click it to go to that moment.
+  // A comment's drawing, small: its pen lines and images over the frame they were drawn on (sketchFrame), so a card
+  // shows what you circled without playing to it. Click it to go to that moment.
   import { COLORS } from '../../lib/constants';
   import type { Box, HistoryStroke } from '../../lib/types';
 
@@ -8,11 +8,14 @@
     strokes,
     images,
     aspect,
+    frame = null,
     onclick,
   }: {
     strokes: HistoryStroke[];
     images: { url: string; box: Box }[];
     aspect: number;
+    /** The picture under the lines; none: the dark box alone. */
+    frame?: string | null;
     onclick: () => void;
   } = $props();
 
@@ -31,8 +34,9 @@
   );
 </script>
 
-<button class="sketch" title="Go to this moment" aria-label="Drawing: go to this moment" {onclick}>
+<button class="sketch" data-part="sketch" title="Go to this moment" aria-label="Drawing: go to this moment" {onclick}>
   <svg viewBox="0 0 {W} {H}" aria-hidden="true">
+    {#if frame}<image href={frame} width={W} height={H} opacity="0.8" preserveAspectRatio="xMidYMid slice" />{/if}
     {#each images as im, i (i)}<image
         href={im.url}
         x={im.box[0] * W}
@@ -53,24 +57,26 @@
 </button>
 
 <style>
-  .sketch {
-    display: block;
-    width: 120px;
-    margin: 10px 0 0;
-    padding: 0;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 7px;
-    overflow: hidden;
-    background: #18181c;
-    cursor: pointer;
-    transition: border-color 0.15s ease;
-  }
-  .sketch:hover {
-    border-color: rgba(255, 255, 255, 0.24);
-  }
-  svg {
-    display: block;
-    width: 100%;
-    height: auto;
+  @layer retake {
+    .sketch {
+      display: block;
+      width: 120px;
+      margin: 10px 0 0;
+      padding: 0;
+      border: 1px solid color-mix(in srgb, var(--overlay) 8%, transparent);
+      border-radius: 7px;
+      overflow: hidden;
+      background: var(--surface-control);
+      cursor: pointer;
+      transition: border-color 0.15s ease;
+    }
+    .sketch:hover {
+      border-color: color-mix(in srgb, var(--overlay) 24%, transparent);
+    }
+    svg {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
   }
 </style>

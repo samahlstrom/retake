@@ -142,6 +142,12 @@ type Stroke struct {
 func (s *Stroke) from() [2]float64 { return [2]float64{float64(s.From[0]), float64(s.From[1])} }
 func (s *Stroke) to() [2]float64   { return [2]float64{float64(s.To[0]), float64(s.To[1])} }
 
+// Pts is the line as drawn, normalized 0-1 to the frame.
+func (s *Stroke) Pts() [][2]float64 { return s.pts }
+
+// Time is the video time of the frame it was drawn on.
+func (s *Stroke) Time() float64 { return s.videoT }
+
 // Image is a picture the reviewer dropped on the frame while recording (images.json; new).
 type Image struct {
 	ID       json.RawMessage `json:"id"`

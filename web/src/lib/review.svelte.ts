@@ -31,25 +31,37 @@ import {
 } from './images';
 import { ERASE_RADIUS, strokesHit, sweep, undoTarget } from './eraser';
 import {
+  crumb,
   homeContext,
   nextToReview,
   NO_MORE,
   normalizeHome,
   projectUrl,
   unwatchUrl,
+  videoName,
   viewerId,
-  placementOf,
-  workspaceUrl,
-  type WorkspaceProject,
   type Card,
 } from './home';
+import { backPlace, findNode, hashOf, rememberedPlace } from './tree';
 import { Scrubber } from './scrub';
 import { hintSeen, keyAction, markHintSeen, type Action } from './keys';
 import { layoutMode, type LayoutMode } from './layout';
 import { closeMic, MIC_BLOCKED, MIC_BLOCKED_TOUCH, openMic, pickMime, recorderMime, type Mic } from './mic';
 import { Notes } from './notes/notes.svelte';
 import type { NoteItem } from './notes/types';
-import { activeKey, PHONE_QUERY, presence, sidebarRows, type Row } from './notes/view';
+import {
+  activeKey,
+  earlierOpen,
+  forVersion,
+  historyLabels,
+  PHONE_QUERY,
+  presence,
+  sidebarRows,
+  todoByVersion,
+  versionStrip,
+  type Row,
+  type VersionEntry,
+} from './notes/view';
 import { inRange } from './notes/agent';
 import { addPoint, alphaAt, fitFrame, isClick, renderInk } from './pen';
 import { Saver } from './saver';
@@ -235,9 +247,10 @@ export class Review {
   get canApprove(): boolean {
     return this.role === null || this.role === 'owner' || this.role === 'approver';
   }
-  /** The notes sidebar: agent questions on the newest version, resolved notes on older ones. */
+  /** The comments: the whole family's (`scope=video`), each shown on its own version (spec/notes.md, "Comments belong
+   * to their version"). */
   readonly notes = new Notes({
-    review: true,
+    continuous: true,
     onVersion: (e) => this.onVersionEvent(e),
     onAutomation: () => {
       void this.automation.refresh();
@@ -257,6 +270,9 @@ export class Review {
       approve: this.canApprove,
     }),
   );
+  /** The rows of the version on screen: the list, the markers, the counts and Send are about these only. During a
+   * switch it's the version the notes answer is for, until the new one's is in (its times are on that clock). */
+  readonly versionRows = $derived(forVersion(this.rows, this.notes.res?.version ?? this.shown));
   /** The sidebar row under the playhead. */
   historyVoice = $state.raw<VoiceTrack[]>([]);
   transcribedTakes = $state.raw<string[]>([]);
@@ -306,10 +322,22 @@ export class Review {
       ]),
     ),
   );
-  readonly todoCount = $derived(this.rows.filter((row) => this.statusOf(row).state !== 'done').length);
-  readonly doneCount = $derived(this.rows.length - this.todoCount);
-  /** Open notes nobody has sent to the agent yet. */
-  readonly unsentRows = $derived(this.rows.filter((row) => unsent(row, this.tasks[row.key], this.onItsWay(row))));
+  readonly todoCount = $derived(this.versionRows.filter((row) => this.statusOf(row).state !== 'done').length);
+  readonly doneCount = $derived(this.versionRows.length - this.todoCount);
+  /** The version strip over the comments: every version with its To do count (empty for a single version). */
+  readonly versionStrip: VersionEntry[] = $derived(
+    versionStrip(
+      this.versions,
+      this.shown,
+      todoByVersion(this.rows, (row) => this.statusOf(row).state !== 'done', this.shown),
+    ),
+  );
+  /** "Open on earlier versions: v6 · 2, v3 · 91", on the latest version. */
+  readonly earlierOpen: VersionEntry[] = $derived(earlierOpen(this.versionStrip));
+  /** This version's open notes nobody has sent to the agent yet. */
+  readonly unsentRows = $derived(
+    this.versionRows.filter((row) => unsent(row, this.tasks[row.key], this.onItsWay(row))),
+  );
   /** More than one person commented: then (only then) cards say who. */
   readonly manyAuthors = $derived.by(() => {
     const notes = this.rows.filter((row) => row.kind === 'note');
@@ -339,18 +367,16 @@ export class Review {
   homeAvailable = $state(false);
   /** The next project to review, from the home. */
   homeNext = $state.raw<Card | null>(null);
-  homeProject = $state.raw<WorkspaceProject | null>(null);
-  /** The home has one project, so it opens straight to its videos: one way back, named after the project. */
-  homeSingle = $state(true);
+  /** Where the video is: "Project › video" (or the project alone when the two are one name), from the home's tree. */
+  homeCrumb = $state.raw<string[]>([]);
+  /** Where the back link goes: the home at the place the reviewer came from, or at the video's project. */
+  homeBack = $state.raw<{ href: string; title: string }>({ href: '/', title: '' });
   /** Where the page sits in its home, from its path; null outside one. */
   homeCtx: { home: string; project: string } | null = null;
   /** This page load's id for the unwatch call. */
   readonly viewer = viewerId();
   get homeHref(): string {
     return this.homeCtx?.home ?? '/';
-  }
-  get projectHref(): string {
-    return this.homeProject ? workspaceUrl(this.homeHref, this.homeProject.id) : this.homeHref;
   }
   get nextHref(): string {
     return this.homeCtx && this.homeNext ? projectUrl(this.homeCtx.home, this.homeNext.name) : '';
@@ -1429,7 +1455,7 @@ export class Review {
   #updateAsks(vt: number): void {
     const out: { row: Row; pulse: number }[] = [];
     const playing = !this.video.paused;
-    for (const row of this.rows) {
+    for (const row of this.versionRows) {
       const ask = row.ask;
       if (!ask) continue;
       const inside = inRange(ask, vt);
@@ -1504,7 +1530,7 @@ export class Review {
 
   get sidebar(): SidebarView {
     const n = this.notes,
-      rows = this.rows;
+      rows = this.versionRows;
     return {
       ...presence({
         available: n.available,
@@ -1962,9 +1988,16 @@ export class Review {
   async loadHistory(label: string): Promise<void> {
     const request = ++this.#historyRequest;
     try {
-      const res = await fetch(`api/history?v=${encodeURIComponent(label)}&scope=review`);
-      if (!res.ok) return;
-      const d = (await res.json()) as { history?: HistoryEntry[] };
+      // The version's own takes only (another version's drawings never show on this one), and its drafts' takes.
+      const answers = await Promise.all(
+        historyLabels(this.rows, label).map(async (v, i) => {
+          const res = await fetch(`api/history?v=${encodeURIComponent(v)}`);
+          if (!res.ok && i === 0) throw new Error('history');
+          return res.ok ? ((await res.json()) as { history?: HistoryEntry[] }).history : [];
+        }),
+      );
+      const all = answers.flat().filter((h): h is HistoryEntry => !!h);
+      const d = { history: all.filter((h, i) => all.findIndex((o) => o.id === h.id) === i) };
       if (request !== this.#historyRequest || label !== this.shown) return;
       this.hist.strokes = [];
       this.hist.images = [];
@@ -2047,11 +2080,11 @@ export class Review {
     if (this.finishing) return false;
     const t = this.take;
     if (!t.id || t.closed) {
-      const open = this.rows.filter((row) => row.mark !== 'answered').length;
+      const open = this.versionRows.filter((row) => row.mark !== 'answered').length;
       this.toast.say(
         this.notes.job
           ? 'Your feedback is saved. Transcription is still processing.'
-          : this.rows.length
+          : this.versionRows.length
             ? `Your feedback is already saved. ${open} comments still need edits.`
             : 'Press Record to leave feedback. It saves automatically.',
         5000,
@@ -2096,18 +2129,21 @@ export class Review {
       const r = await fetch(`${ctx.home}api/home`);
       if (!r.ok) return;
       const h = normalizeHome(await r.json());
-      this.homeSingle = !h.workspace || h.workspace.projects.length <= 1;
-      if (h.workspace) {
-        const placement = placementOf(h.workspace, ctx.project);
-        this.homeProject = h.workspace.projects.find((p) => p.id === placement.project) ?? null;
-        this.homeNext = nextToReview(
-          h.projects.filter((v) => placementOf(h.workspace!, v.name).project === placement.project),
-          ctx.project,
-        );
-      } else {
-        this.homeProject = null;
-        this.homeNext = nextToReview(h.projects, ctx.project);
+      const me = h.projects.find((c) => c.name === ctx.project);
+      const titleOf = (path: string) => (path ? (findNode(h.tree, path)?.title ?? path.split('/').pop()!) : h.title);
+      // The next one to review: from the same project first, then any.
+      const mine = me ? h.projects.filter((c) => c.project === me.project) : [];
+      this.homeNext = nextToReview(mine, ctx.project) ?? nextToReview(h.projects, ctx.project);
+      this.homeCrumb = me ? crumb(titleOf(me.project), videoName(me)) : [h.title || 'All videos'];
+      let storage: Storage | null = null;
+      try {
+        storage = localStorage;
+      } catch {
+        /* none here */
       }
+      const place = me ? backPlace(rememberedPlace(storage, ctx.home), me) : '';
+      // The top has no hash: the home then shows what it remembers, which is the top (backPlace says so).
+      this.homeBack = { href: ctx.home + hashOf(place), title: titleOf(place) || 'All videos' };
       this.homeAvailable = true;
     } catch {
       /* no home here, or the server is gone */
@@ -2344,10 +2380,11 @@ export class Review {
     this.#drawWave();
     this.#updateCards(vt);
     this.#updateAsks(vt);
-    const rows = this.rows,
+    const rows = this.versionRows,
       act = activeKey(rows, vt);
     if (act !== this.activeRow) this.activeRow = act;
-    if (!this.notes.everShown && this.notes.available && (rows.length || this.notes.job)) this.notes.everShown = true;
+    if (!this.notes.everShown && this.notes.available && (this.rows.length || this.notes.job))
+      this.notes.everShown = true;
     if (this.touch)
       this.flipBlocked = flipRefusal(this.versions, this.base, this.flipped, vt, (label, t) =>
         mapTime(this.maps.peek(this.shown, label), t),

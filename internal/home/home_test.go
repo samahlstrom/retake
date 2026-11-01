@@ -66,23 +66,26 @@ func TestDiscover(t *testing.T) {
 	touch(t, filepath.Join(dir, "Bravo Cut", "bravo_v1.mp4"), old)
 	// The same name made URL-safe: the later folder in name order gets -2.
 	touch(t, filepath.Join(dir, "bravo-cut", "other_v1.m3u8"), old)
-	// Not projects: unnumbered clips, a hidden folder, a .review folder, and a family two levels down whose root is
-	// its own folder.
+	// Not projects: unnumbered clips, a hidden folder, a .review folder, and a text file with a version.
 	touch(t, filepath.Join(dir, "broll", "sunset.mp4"), old)
 	touch(t, filepath.Join(dir, ".cache", "x_v1.mp4"), old)
 	touch(t, filepath.Join(dir, "notes.review", "y_v1.mp4"), old)
-	touch(t, filepath.Join(dir, "deep", "sub", "w_v1.mp4"), old)
 	touch(t, filepath.Join(dir, "deep", "readme_v1.txt"), old)
+	// A family two levels down whose root is its own folder: a video in the project deep, named by its path. The
+	// videos directly in the folder (each folder holds one) are in the folder's own project, the top.
+	touch(t, filepath.Join(dir, "deep", "sub", "w_v1.mp4"), old)
 
 	got := Discover(dir)
 	want := []Found{
 		{Name: "shows", Title: "Shows", Root: dir, Anchor: filepath.Join(dir, "intro_v1.mp4")},
 		{Name: "bravo-cut", Title: "Bravo Cut", Root: filepath.Join(dir, "Bravo Cut"),
-			Anchor: filepath.Join(dir, "Bravo Cut", "bravo_v3.mp4")},
+			Anchor: filepath.Join(dir, "Bravo Cut", "bravo_v3.mp4"), Path: "Bravo Cut"},
 		{Name: "alpha", Title: "alpha", Root: filepath.Join(dir, "alpha"),
-			Anchor: filepath.Join(dir, "alpha", "v2", "alpha_v2.mp4")},
+			Anchor: filepath.Join(dir, "alpha", "v2", "alpha_v2.mp4"), Path: "alpha"},
 		{Name: "bravo-cut-2", Title: "bravo-cut", Root: filepath.Join(dir, "bravo-cut"),
-			Anchor: filepath.Join(dir, "bravo-cut", "other_v1.m3u8")},
+			Anchor: filepath.Join(dir, "bravo-cut", "other_v1.m3u8"), Path: "bravo-cut"},
+		{Name: "deep-sub", Title: "sub", Root: filepath.Join(dir, "deep", "sub"),
+			Anchor: filepath.Join(dir, "deep", "sub", "w_v1.mp4"), Path: "deep/sub", Project: "deep"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Discover:\n got %+v\nwant %+v", got, want)
@@ -164,7 +167,7 @@ func TestMakeCards(t *testing.T) {
 	// A version no one closed a take on (an open take doesn't count): to review, with the file's time as its push.
 	takeIn(t, video, "2026-10-02_10-00-00", false)
 	c := Make(Source{Name: "clip", Title: "Clip", Info: infoOf(t, "v2", video, nil)})
-	want := Card{Name: "clip", Title: "Clip", URL: "p/clip/", Version: "v2", Versions: 2, Duration: c.Duration,
+	want := Card{Name: "clip", Title: "Clip", Video: "clip", URL: "p/clip/", Version: "v2", Versions: 2, Duration: c.Duration,
 		Pushed: "2026-10-01T12:00:00Z", Status: ToReview, Thumb: "p/clip/api/poster"}
 	if c.Duration == nil || *c.Duration != 12.5 || !reflect.DeepEqual(c, want) {
 		t.Errorf("card %+v", c)

@@ -10,10 +10,17 @@ export interface Stream {
   total: number;
 }
 
-/** One project on the home. `url` and `thumb` are relative to the home. */
+/** One video on the home (the routes call it a project: one review page). `url` and `thumb` are relative to the
+ * home. */
 export interface Card {
   name: string;
+  /** Its folder's name. */
   title: string;
+  /** Its own name: the newest version's file name without the version; "" before it has one. */
+  video: string;
+  /** The folder that holds it, and its project's folder, relative to the home's folder ("" for that folder). */
+  path: string;
+  project: string;
   url: string;
   version: string;
   versions: number;
@@ -22,8 +29,19 @@ export interface Card {
   status: Status;
   takes: number;
   open: number;
+  /** Notes the agent asked about and waits on. */
+  questions: number;
   stream: Stream | null;
   thumb: string;
+}
+
+/** A folder of the home's tree (spec/home.md): one that organizes, or a project with its videos. */
+export interface TreeNode {
+  title: string;
+  path: string;
+  project: boolean;
+  videos: Card[];
+  children: TreeNode[];
 }
 
 /** A computer that edits (C5). In local mode, the server's own worker, online. */
@@ -39,6 +57,8 @@ export interface HomeResponse {
   folder?: string;
   role: string;
   projects: Card[];
+  /** The folders, projects and videos. An older server sends none: then every video is at the top. */
+  tree: TreeNode;
   workspace?: Workspace;
   /** C5: the editing computers. Absent on an older server. */
   machines?: Machine[];
@@ -63,19 +83,6 @@ export interface Workspace {
   placements: { video: string; project: string; group: string }[];
 }
 
-/** Project organization, independent of where each video's files live. */
-export const workspaceOf = (home: HomeResponse): Workspace =>
-  home.workspace ?? {
-    revision: 0,
-    projects: [{ id: 'default', title: home.title || 'My project', groups: [] }],
-    placements: [],
-  };
-
-export const placementOf = (workspace: Workspace, video: string) =>
-  workspace.placements.find((p) => p.video === video) ?? { video, project: 'default', group: '' };
-
-export const workspaceUrl = (home: string, id: string): string => `${home}?project=${encodeURIComponent(id)}`;
-
 export const STATUS_TEXT: Record<Status, string> = {
   to_review: 'To review',
   reviewed: 'Reviewed',
@@ -84,23 +91,31 @@ export const STATUS_TEXT: Record<Status, string> = {
 
 export const NO_MORE = 'No more videos to review';
 
-/** A card's one status: rendering wins (it can't be reviewed yet), then the review status. `tone` picks its dot. */
-export function cardStatus(c: Pick<Card, 'status' | 'stream'>): { text: string; tone: string } {
+/** A card's one status: rendering wins (it can't be reviewed yet), then a question waiting on an answer, then the
+ * review status. `tone` picks its dot. */
+export function cardStatus(c: Pick<Card, 'status' | 'stream'> & { questions?: number }): {
+  text: string;
+  tone: string;
+} {
   const stream = streamText(c.stream);
   if (stream) return { text: stream, tone: 'rendering' };
+  if (c.questions) return { text: 'Has questions', tone: 'question' };
   return { text: STATUS_TEXT[c.status], tone: c.status };
 }
 
-/** Where a video can be moved: every project and group but the one it's in ("Launch · Shorts"). */
-export function moveTargets(w: Workspace, video: string): { value: string; label: string }[] {
-  const here = placementOf(w, video);
-  const many = w.projects.length > 1;
-  return w.projects
-    .flatMap((p) => [
-      { value: `${p.id}/`, label: many ? (p.groups.length ? `${p.title} · Ungrouped` : p.title) : 'Ungrouped' },
-      ...p.groups.map((g) => ({ value: `${p.id}/${g.id}`, label: many ? `${p.title} · ${g.title}` : g.title })),
-    ])
-    .filter((t) => t.value !== `${here.project}/${here.group}`);
+/** The name a video goes by: a video's folder's name (deadlock/item-shop is "item-shop"); for a project's own video
+ * (its folder is its project), its family's name, else the folder's. */
+export const videoName = (c: Pick<Card, 'video' | 'title' | 'name' | 'path' | 'project'>): string =>
+  (c.path !== c.project ? c.title : c.video || c.title) || c.name;
+
+const squash = (s: string): string => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+
+/** "Project › video", or only the project when the two are one name but for case and punctuation (item-shop and
+ * itemshop). */
+export function crumb(project: string, video: string): string[] {
+  if (!project) return [video];
+  if (!video || squash(project) === squash(video)) return [project];
+  return [project, video];
 }
 
 /** The streaming chip: "Rendering 3/12", "Not rendered yet", or nothing once it's complete. */
@@ -126,9 +141,13 @@ export function normalizeHome(body: unknown): HomeResponse {
     const name = str(c.name);
     if (!name) continue;
     const s = c.stream && typeof c.stream === 'object' ? (c.stream as Record<string, unknown>) : null;
+    const path = str(c.path);
     projects.push({
       name,
       title: str(c.title) || name,
+      video: str(c.video),
+      path,
+      project: typeof c.project === 'string' ? c.project : path,
       url: str(c.url) || `p/${encodeURIComponent(name)}/`,
       version: str(c.version),
       versions: num(c.versions),
@@ -137,11 +156,16 @@ export function normalizeHome(body: unknown): HomeResponse {
       status: (STATUSES.has(str(c.status)) ? c.status : 'to_review') as Status,
       takes: num(c.takes),
       open: num(c.open),
+      questions: num(c.questions),
       stream: s && str(s.state) ? { state: str(s.state), done: num(s.done), total: num(s.total) } : null,
       thumb: str(c.thumb),
     });
   }
-  const result: HomeResponse = { title: str(b.title), folder: str(b.folder) || undefined, role: str(b.role), projects };
+  const title = str(b.title);
+  const byName = new Map(projects.map((c) => [c.name, c]));
+  const tree = normalizeNode(b.tree, byName, 0) ?? { title, path: '', project: false, videos: projects, children: [] };
+  tree.title ||= title;
+  const result: HomeResponse = { title, folder: str(b.folder) || undefined, role: str(b.role), projects, tree };
   const w = b.workspace as Workspace | undefined;
   if (w && Array.isArray(w.projects) && Array.isArray(w.placements)) result.workspace = w;
   if (b.user && typeof b.user === 'object') {
@@ -164,6 +188,24 @@ export function normalizeHome(body: unknown): HomeResponse {
     });
   }
   return result;
+}
+
+/** A tree node from /api/home, made safe: its videos are the cards of `projects` (by name), so both agree. */
+function normalizeNode(x: unknown, cards: Map<string, Card>, depth: number): TreeNode | null {
+  if (!x || typeof x !== 'object' || depth > 64) return null;
+  const n = x as Record<string, unknown>;
+  const videos = Array.isArray(n.videos) ? (n.videos as unknown[]) : [];
+  const children = Array.isArray(n.children) ? (n.children as unknown[]) : [];
+  return {
+    title: str(n.title),
+    path: str(n.path),
+    project: n.project === true,
+    videos: videos.flatMap((v) => {
+      const c = v && typeof v === 'object' ? cards.get(str((v as Record<string, unknown>).name)) : undefined;
+      return c ? [c] : [];
+    }),
+    children: children.flatMap((c) => normalizeNode(c, cards, depth + 1) ?? []),
+  };
 }
 
 /** Where a review page sits in a home: its path ends in /p/<name>/ (or /p/<name>/index.html). null: not in one. */

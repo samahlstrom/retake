@@ -23,7 +23,7 @@ func (h *Hub) apiHome(w http.ResponseWriter, r *http.Request, s *session) {
 			h.logf("project %s: %v", p.Name, err)
 			continue
 		}
-		src := home.Source{Name: p.Name, Title: p.Title, Store: pr.store}
+		src := home.Source{Name: p.Name, Title: p.Title, Path: p.Path, Project: p.ProjectPath, Store: pr.store}
 		if srv := pr.server(); srv != nil {
 			src.Info = srv.InfoJSON()
 		}
@@ -41,6 +41,8 @@ func (h *Hub) apiHome(w http.ResponseWriter, r *http.Request, s *session) {
 	if s.user.Admin {
 		role = "owner"
 	}
-	h.json(w, r, http.StatusOK, home.Response{Title: "Your projects", Role: role, User: &home.User{Email: s.user.Email,
-		Name: s.user.Name}, Projects: cards, Machines: home.Machines(h.opts.Now(), workers...)})
+	const title = "Your projects"
+	h.json(w, r, http.StatusOK, home.Response{Title: title, Role: role, User: &home.User{Email: s.user.Email,
+		Name: s.user.Name}, Projects: cards, Tree: home.BuildTree(title, cards, nil),
+		Machines: home.Machines(h.opts.Now(), workers...)})
 }

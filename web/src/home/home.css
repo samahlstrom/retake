@@ -356,6 +356,9 @@
   .chip.reviewed .dot {
     background: var(--status-done);
   }
+  .chip.question .dot {
+    background: var(--status-question);
+  }
   .card-more {
     position: absolute;
     right: -4px;

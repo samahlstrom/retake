@@ -122,8 +122,22 @@ func TestUsersProjectsMembers(t *testing.T) {
 	if len(ms) != 1 || ms[0].User.Email != "ana@example.com" || ms[0].Role != team.Approver {
 		t.Fatalf("%+v", ms)
 	}
+	// Where a connected computer's project is in its folder: none at first, then what was set.
+	if demo.Path != "" || demo.ProjectPath != "" {
+		t.Fatalf("a new project has a place: %+v", demo)
+	}
+	if err := s.SetProjectPlace("demo", "item-shop/shorts", "item-shop"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetProjectPlace("gone", "a", "a"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("place of a missing project: %v", err)
+	}
+	if p, _ := s.Project("demo"); p.Path != "item-shop/shorts" || p.ProjectPath != "item-shop" {
+		t.Fatalf("place %+v", p)
+	}
 	mine, _ := s.ProjectsOf(ana)
-	if len(mine) != 1 || mine[0].Name != "demo" || mine[0].Role != team.Approver {
+	if len(mine) != 1 || mine[0].Name != "demo" || mine[0].Role != team.Approver || mine[0].Path != "item-shop/shorts" ||
+		mine[0].ProjectPath != "item-shop" {
 		t.Fatalf("%+v", mine)
 	}
 	all, _ := s.ProjectsOf(boss)
@@ -300,10 +314,17 @@ func TestSettings(t *testing.T) {
 	}
 }
 
-var createRE = regexp.MustCompile(`(?s)CREATE TABLE (\w+) \((.*?)\n\);`)
+var (
+	createRE = regexp.MustCompile(`(?s)CREATE TABLE (\w+) \((.*?)\n\);`)
+	alterRE  = regexp.MustCompile(`ALTER TABLE (\w+) ADD COLUMN (\w+)`)
+)
 
+// columns lists the columns a step makes or adds, by table.
 func columns(step string) map[string][]string {
 	out := map[string][]string{}
+	for _, m := range alterRE.FindAllStringSubmatch(step, -1) {
+		out[m[1]] = append(out[m[1]], m[2])
+	}
 	for _, m := range createRE.FindAllStringSubmatch(step, -1) {
 		var cols []string
 		for line := range strings.SplitSeq(m[2], "\n") {

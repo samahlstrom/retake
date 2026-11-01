@@ -190,13 +190,19 @@ without a token per project.
 | Method | Path | Does |
 |---|---|---|
 | GET | `/api/machine` | Checks the token: `{"ok": true, "url": "<public URL or this request's origin>"}` |
-| POST | `/api/machine/projects` | `{name, title}`: makes the project when it doesn't exist (201), else 200. Answers `{name, title, url, created}` |
+| POST | `/api/machine/projects` | `{name, title, path?, project?}`: makes the project when it doesn't exist (201), else 200, and keeps where it is in the computer's folder (below). Answers `{name, title, path, project, url, created}` |
 | PUT | `/api/machine/projects/<name>/poster` | The project's poster: a JPEG (`Content-Type: image/jpeg`) of at most 2 MiB. 204 |
 
 - The machine routes need a machine token: without a Bearer token they answer 401 `{"error":"machine token
   required"}`, and with any other one (a project's token too) 401 `{"error":"bad token"}`, a failed attempt.
 - A project made this way has no members: admins own it, as they own every project. Its name follows the project
   rule above (400 otherwise); the title is at most 200 characters.
+- `path` and `project` place it in the home's folder tree (spec/home.md, `tree`): the folder that holds the video
+  and its project's folder, relative to the folder `retake connect` runs in, with `/` between names ("" for that
+  folder itself). Each name is not empty, `.` or `..`, and has no `\\` or control characters; a path is at most 1024
+  bytes; `project` is `path` or a folder above it. Anything else is 400. They are stored with the project (the
+  `projects` table's `path` and `project_path`), replaced by every register that sends them, and kept by one that
+  doesn't (an older `retake connect`).
 - The poster is kept as `.retake/poster.jpg` in the project's workspace. Until the project's page has a version,
   `GET /p/<name>/api/poster` serves it (watch permission), and the project's home card uses it as `thumb`.
 - Nothing else is sent: never footage, source or renders. Video reaches the server only through the worker's relay
@@ -248,7 +254,7 @@ email. A share guest's get the token's label, else "guest".
 | POST | `/signout` | a session | Ends it. |
 | GET | `/api/me` | a session | `{email, name, admin, projects: [{name, title, role}]}` |
 | GET | `/api/projects` | a session | `{projects: [{name, title, role, versions}]}`: the ones you can see |
-| GET | `/api/home` | a session | The home screen's cards for your projects (spec/home.md): status, thumbnail, newest version, plus `user`, `role` (`owner` for an admin, else `member`) and `machines` |
+| GET | `/api/home` | a session | The home screen's cards for your projects (spec/home.md): status, thumbnail, newest version, plus `user`, `role` (`owner` for an admin, else `member`), `machines` and the folder `tree` |
 | GET, POST | `/api/connect` | admin | Machine tokens (above): list them; make one with its `retake connect` command |
 | DELETE | `/api/connect/<id>` | admin | Revokes a machine token |
 | GET, POST, PUT | `/api/machine/...` | a machine token | The machine routes (above) |

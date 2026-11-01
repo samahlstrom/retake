@@ -237,22 +237,16 @@ func (s *Server) workerRoute(w http.ResponseWriter, r *http.Request, p []string,
 			return
 		}
 		// Notes originate in project-owned takes; never let an imported note read an arbitrary host path.
-		path := n.Detail.Snapshot
-		if len(p) == 6 {
-			images, e := st.ImagesOf([]project.Note{n}, s.takeDirOf(s.Family()))
-			if e != nil || !slices.ContainsFunc(images[n.ID], func(im project.TakeImage) bool { return im.File == p[5] }) {
-				s.fail(w, r, 404, "no image")
-				return
-			}
-			path = filepath.Join(s.takeDirOf(s.Family())(n), p[5])
-		}
-		if path == "" {
-			s.fail(w, r, 404, "no snapshot")
+		if len(p) == 5 {
+			s.serveSnapshot(w, r, st, n)
 			return
 		}
-		if !filepath.IsAbs(path) {
-			path = filepath.Join(s.root, path)
+		images, e := st.ImagesOf([]project.Note{n}, s.takeDirOf(s.Family()))
+		if e != nil || !slices.ContainsFunc(images[n.ID], func(im project.TakeImage) bool { return im.File == p[5] }) {
+			s.fail(w, r, 404, "no image")
+			return
 		}
+		path := filepath.Join(s.takeDirOf(s.Family())(n), p[5])
 		rel, e := filepath.Rel(s.root, path)
 		if e != nil || !filepath.IsLocal(rel) {
 			s.fail(w, r, 404, "no snapshot")

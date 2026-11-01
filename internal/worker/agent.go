@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/samahlstrom/retake/internal/agent"
+	"github.com/samahlstrom/retake/internal/family"
 	"github.com/samahlstrom/retake/internal/project"
 )
 
@@ -83,10 +84,10 @@ func (r *runner) execute(ctx context.Context, a project.WorkAssignment) outcome 
 	// A plain project's agent writes its video to output; the worker pushes it as the next version.
 	plain, output := r.timeline == "", filepath.Join(dir, "output.mp4")
 	var before []string
-	var taskContext any = a
+	var vs []family.Version
 	prompt := timelinePrompt(contextPath, r.timeline, reportPath)
 	if plain {
-		vs := r.onDisk(false)
+		vs = r.onDisk(false)
 		if len(vs) == 0 {
 			return paused("The project has no version that plays")
 		}
@@ -98,31 +99,19 @@ func (r *runner) execute(ctx context.Context, a project.WorkAssignment) outcome 
 			before = append(before, v.Label)
 		}
 		_ = os.Remove(output) // an earlier attempt's: this attempt writes its own
-		taskContext = r.plainContext(a, vs, output)
 		prompt = plainPrompt(contextPath, vs[len(vs)-1].Path, output, next, reportPath)
+	}
+	// The notes' stills and images: a missing one never stops the task (spec/automation.md, "A note's stills and
+	// images").
+	r.noteFiles(ctx, &a, dir)
+	var taskContext any = a
+	if plain {
+		taskContext = r.plainContext(a, vs, output)
 	}
 	askEnv, fresh, endAsk := r.beginAsk(a)
 	defer endAsk()
 	if e := writeJSON(contextPath, taskContext); e != nil {
 		return paused("Cannot save task context")
-	}
-	for _, n := range a.Notes {
-		if !slices.Contains(t.Notes, n.ID) {
-			continue
-		}
-		if n.Detail.Snapshot != "" {
-			if e := r.fetchArtifact(ctx, fmt.Sprintf("/api/worker/notes/%d/snapshot", n.ID), filepath.Join(dir, fmt.Sprintf("note-%d.png", n.ID))); e != nil {
-				return paused("Could not retrieve the annotated review frame: " + e.Error())
-			}
-		}
-		for _, im := range n.Images {
-			if !project.ValidImageName(im.File) {
-				return paused("Review image has an invalid file name")
-			}
-			if e := r.fetchArtifact(ctx, fmt.Sprintf("/api/worker/notes/%d/images/%s", n.ID, im.File), filepath.Join(dir, fmt.Sprintf("note-%d-%s", n.ID, im.File))); e != nil {
-				return paused("Could not retrieve an attached review image: " + e.Error())
-			}
-		}
 	}
 	p := r.opts.Profiles[index]
 	mode := r.openIn(p)
@@ -326,7 +315,7 @@ func reported(path string) bool {
 func timelinePrompt(contextPath, timeline, reportPath string) string {
 	return fmt.Sprintf(`You are editing a native Retake video project in the current working directory.
 Read the project instructions, then the durable task context at %q. The native timeline is %q.
-Only the note IDs in task.notes are assigned (minus task.done, finished in an earlier attempt). Other notes are context: check them and prior events for conflicting or already-applied feedback. Original note versions, timing, strokes and targets must be respected. Saved annotated stills, when available, are note-<id>.png in this task directory. Attached reference images are note-<id>-<file>; their boxes and original video times are in the context.
+Only the note IDs in task.notes are assigned (minus task.done, finished in an earlier attempt). Other notes are context: check them and prior events for conflicting or already-applied feedback. Original note versions, timing, strokes and targets must be respected. Saved annotated stills, when available, are note-<id>.png in this task directory. Attached reference images are note-<id>-<file>; their boxes and original video times are in the context. A note's "missing" says which of its files couldn't be given to you and what you have instead.
 Original local video revisions are retained in .retake/worker/renders/: each state.json gives its label (a draft such as v4-draft2 until a task completes it as v4), source.json is its timeline snapshot, and index.m3u8 is its video. Inspect the original frame there when needed; do not assume an old comment's time refers to the current source.
 Make the requested source edits in this project. Preserve all existing working changes, media and other people's work. Retake automatically renders valid saved source changes and streams them to reviewers. Do not run retake push or mark notes complete yourself.
 The next agent may differ from you; leave source changes and useful context on disk. Do not delete or edit the worker's identity, lock, logs, context files, ask.json or render output.

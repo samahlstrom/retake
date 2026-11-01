@@ -27,7 +27,7 @@ Run it through mise (`mise exec -- npm test`) to use the pinned node. Needs `ffm
 | `RETAKE_E2E_PORT_BASE` | `8831` | The first of the ten ports below; move it to run two checkouts side by side. |
 | `RETAKE_EDIT` | `<repo>/editor/target/release/retake-edit`, else `$PATH` | The editor, for `08-timemap` (it skips without one). |
 | `RETAKE_E2E_SHOTS` | unset | A folder: `05-sidebar` writes its screenshots there (1920×1080 and phone size). |
-| `RETAKE_E2E_THEME_SHOTS` | unset | A folder: `16-theme` writes the home and the review page there, desktop and phone, for the built-in look and both example themes. |
+| `RETAKE_E2E_THEME_SHOTS` | unset | A folder: `17-theme` writes the home and the review page there, desktop and phone, for the built-in look and both example themes. |
 
 Ports: the servers use 8831–8840 (scenario 8831, crash safety 8832 behind a proxy on 8834, HLS 8833, sidebar 8835,
 phone layout 8836, sharing 8837 behind a proxy on 8838, time map 8839, the team server 8840; the relay's server
@@ -187,7 +187,7 @@ CLI.
   shows its poster with "The editing computer is offline", not the "won't play" message. When `retake connect` runs
   again the caption goes within a few seconds and v1 plays. `RETAKE_E2E_SHOTS` gets a screenshot of the offline page.
 
-**`16-theme`** (new only; `spec/theme.md`): `retake open <folder>` on two generated projects, with a scratch
+**`17-theme`** (new only; `spec/theme.md`): `retake open <folder>` on two generated projects, with a scratch
 `XDG_CONFIG_HOME`, so the user's theme folder is `<it>/retake/theme`.
 - With no theme folder, the page is served as built (no theme link, no `data-theme`, `theme/theme.css` is 404), its
   tokens are the built-in values, and every answer says `X-Retake-Api-Version: 1`.

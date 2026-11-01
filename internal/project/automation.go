@@ -762,6 +762,9 @@ type WorkNote struct {
 	Note
 	Detail Detail      `json:"detail"`
 	Images []TakeImage `json:"images,omitempty"`
+	// Missing says, in plain words, which of the note's files the worker couldn't give its agent and what it gave
+	// instead (spec/automation.md, "A note's stills and images"). Only the task context the worker writes has it.
+	Missing []string `json:"missing,omitempty"`
 }
 
 // WorkAssignment is an execution lease and its original feedback, including other open notes for context. Versions

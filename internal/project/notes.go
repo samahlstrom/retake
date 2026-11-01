@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"slices"
 	"strings"
 )
@@ -14,12 +15,39 @@ type Stroke struct {
 	Shape string     `json:"shape"` // as the engine names it: circle, arrow, line, ...
 	Color string     `json:"color"`
 	Box   [4]float64 `json:"box"` // [x, y, w, h], normalized 0-1 to the frame
+	// Points is the line as drawn, normalized 0-1 to the frame (at most MaxStrokePoints, evenly picked), and T the
+	// video time of the frame it was drawn on. Notes stored before they were kept have neither.
+	Points [][2]float64 `json:"points,omitempty"`
+	T      float64      `json:"t,omitempty"`
 }
+
+// MaxStrokePoints is the most points a stored stroke keeps.
+const MaxStrokePoints = 64
+
+// FewerPoints picks at most MaxStrokePoints of pts, evenly, the first and the last included, each rounded to 4
+// decimals.
+func FewerPoints(pts [][2]float64) [][2]float64 {
+	if len(pts) == 0 {
+		return nil
+	}
+	n := min(len(pts), MaxStrokePoints)
+	out := make([][2]float64, n)
+	for i := range out {
+		j := 0
+		if n > 1 {
+			j = i * (len(pts) - 1) / (n - 1)
+		}
+		out[i] = [2]float64{round4(pts[j][0]), round4(pts[j][1])}
+	}
+	return out
+}
+
+func round4(f float64) float64 { return math.Round(f*1e4) / 1e4 }
 
 // Detail is what the notes engine knows about a note beyond its text, kept for the agent.
 type Detail struct {
 	Strokes  []Stroke `json:"strokes,omitempty"`  // the strokes drawn while it was said
-	Snapshot string   `json:"snapshot,omitempty"` // path of a still of the frame with the strokes
+	Snapshot string   `json:"snapshot,omitempty"` // a still of the frame with the strokes, relative to the root
 	Audio    bool     `json:"audio,omitempty"`    // an (audio) note: about sound, not the picture
 	// Targets are the timeline elements under the note, best first, from its version's render manifest
 	// (spec/bridge.md); Unit is the manifest unit at t0 and Word the spine word there. Empty without a manifest.
@@ -353,6 +381,7 @@ func unique(lists ...[]int64) []int64 {
 }
 
 func (t *tx) syncNote(c Comment, key string, res *SyncResult) error {
+	c.Detail.Snapshot = t.s.Rel(c.Detail.Snapshot) // kept relative to the project root (spec/notes.md, "Paths")
 	detail, err := json.Marshal(c.Detail)
 	if err != nil {
 		return err

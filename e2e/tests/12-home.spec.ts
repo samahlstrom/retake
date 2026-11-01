@@ -138,10 +138,11 @@ test('a home with one project opens straight to its videos, then a video, and ba
   await expect(page.getByRole('heading', {name:'home-folder',exact:true})).toBeVisible();
   await expect(page.locator('video')).toHaveCount(0);
   await expect(page.locator('a.card')).toHaveCount(3);
+  // The organizing that only lived in Retake's database is gone from the page: no Projects page, no ⋯ menus.
   await expect(page.locator('a.project-card')).toHaveCount(0);
   await expect(page.getByRole('link',{name:'Projects',exact:true})).toHaveCount(0);
-  // Nowhere to move a video yet (one project, no groups): no ⋯ on the cards.
   await expect(page.getByRole('button',{name:'Options for alpha',exact:true})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Options',exact:true})).toHaveCount(0);
   await page.locator('a.card[data-name="alpha"]').click();
   await page.waitForFunction(READY);
   await page.getByRole('link',{name:'Back to home-folder',exact:true}).click();
@@ -179,46 +180,6 @@ test('the home lists the projects with their first frames and statuses, to revie
   } finally {
     await context.close();
   }
-});
-
-test('⋯ menus open from the keyboard, are styled, and stay on a phone screen', async ({page}) => {
-  await page.route('**/api/home', async route => {
-    const response = await route.fetch();
-    const body = await response.json();
-    body.workspace.projects[0].groups = Array.from({length: 24}, (_, i) => ({id: `group-${i}`, title: `Group ${i + 1}`}));
-    await route.fulfill({response, json: body});
-  });
-  await openHome(page);
-  const options=page.getByRole('button',{name:'Project options',exact:true});
-  await options.focus();
-  await page.keyboard.press('Enter');
-  const menu=page.getByRole('menu');
-  await expect(menu).toBeVisible();
-  const style=await menu.evaluate(el=>({background:getComputedStyle(el).backgroundColor,radius:getComputedStyle(el).borderRadius}));
-  expect(style).toEqual({background:'rgb(29, 29, 33)',radius:'10px'});
-  await expect(page.getByRole('menuitem',{name:'New group',exact:true})).toBeVisible();
-  await expect(page.getByRole('menuitem',{name:'Rename project',exact:true})).toBeVisible();
-  await expect(page.getByRole('menuitem',{name:'New project',exact:true})).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(menu).toHaveCount(0);
-  await page.setViewportSize({width:390,height:844});
-  await page.getByRole('button',{name:'Options for alpha',exact:true}).click();
-  await page.getByRole('menuitem',{name:'Move alpha',exact:true}).click();
-  const sub=page.getByRole('menu').last();
-  await expect(page.getByRole('menuitem',{name:'Group 1',exact:true})).toBeVisible();
-  const bounds=await sub.boundingBox();
-  expect(bounds!.x).toBeGreaterThanOrEqual(0);
-  expect(bounds!.x+bounds!.width).toBeLessThanOrEqual(390);
-  expect(bounds!.y+bounds!.height).toBeLessThanOrEqual(844);
-  // 25 places to move to (Ungrouped is where it is): the list scrolls inside the screen.
-  expect(await sub.evaluate(el => el.scrollHeight > el.clientHeight)).toBe(true);
-  const last=page.getByRole('menuitem',{name:'Group 24',exact:true});
-  await last.scrollIntoViewIfNeeded();
-  const lb=await last.boundingBox();
-  const sb=await sub.boundingBox();
-  expect(lb!.y).toBeGreaterThanOrEqual(sb!.y);
-  expect(lb!.y+lb!.height).toBeLessThanOrEqual(sb!.y+sb!.height+1);
-  await page.keyboard.press('Escape');
 });
 
 test('a card opens its review page with the poster; Done makes it Reviewed; Next video goes on', async ({ browser }) => {
@@ -340,49 +301,6 @@ test('outside a home the review page is as it was', async () => {
   // other specs' pages, which never show #allVideos); here, the folder server's own 404s.
   const res = await fetch(`${server.url}p/nope/api/info`);
   expect(res.status).toBe(404);
-});
-
-test('owners organize projects and groups without moving their videos', async ({ page }) => {
-  await page.goto(server.url);
-  await page.getByRole('button',{name:'Project options',exact:true}).click();
-  await page.getByRole('menuitem',{name:'New project',exact:true}).click();
-  await page.getByLabel('Project name',{exact:true}).fill('Launch');
-  await page.getByRole('button',{name:'Create',exact:true}).click();
-  // Two projects: now the home starts at Projects.
-  await expect(page.locator('a.project-card')).toHaveCount(2);
-  await page.locator('a.project-card').filter({hasText:'Launch'}).click();
-  await page.getByRole('button',{name:'Project options',exact:true}).click();
-  await page.getByRole('menuitem',{name:'New group',exact:true}).click();
-  await page.getByLabel('Group name',{exact:true}).fill('Shorts');
-  await page.getByRole('button',{name:'Create',exact:true}).click();
-  await expect(page.getByRole('region',{name:'Shorts',exact:true})).toBeVisible();
-  await page.goto(`${server.url}?project=default`);
-  await page.getByRole('button',{name:'Options for alpha',exact:true}).click();
-  await page.getByRole('menuitem',{name:'Move alpha',exact:true}).click();
-  await page.getByRole('menuitem',{name:'Launch · Shorts',exact:true}).click();
-  await expect(page.locator('a.card[data-name="alpha"]')).toHaveCount(0);
-  await page.goto(server.url);
-  await page.locator('a.project-card').filter({hasText:'Launch'}).click();
-  await page.reload();
-  await expect(page.getByRole('region',{name:'Shorts',exact:true}).locator('a.card[data-name="alpha"]')).toBeVisible();
-  await page.locator('a.card[data-name="alpha"]').click();
-  await page.waitForURL(`${server.url}p/alpha/`);
-  await page.waitForFunction(READY);
-  await expect(page.getByRole('link',{name:'Back to Launch',exact:true})).toBeVisible();
-});
-
-test('a failed move says so and leaves the video where it was', async ({page}) => {
-  await page.goto(server.url);
-  await page.locator('a.project-card').filter({hasText:'Launch'}).click();
-  const inShorts=page.getByRole('region',{name:'Shorts',exact:true}).locator('a.card[data-name="alpha"]');
-  await expect(inShorts).toBeVisible();
-  await page.route('**/api/workspace',route=>route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:'Could not save projects'})}));
-  await page.getByRole('button',{name:'Options for alpha',exact:true}).click();
-  await page.getByRole('menuitem',{name:'Move alpha',exact:true}).click();
-  await expect(page.getByRole('menuitem',{name:'Launch · Shorts',exact:true})).toHaveCount(0); // where it is
-  await page.getByRole('menuitem',{name:'home-folder',exact:true}).click();
-  await expect(page.getByRole('alert')).toHaveText('Could not save projects');
-  await expect(inShorts).toBeVisible();
 });
 
 test('no uncaught page errors', async () => {

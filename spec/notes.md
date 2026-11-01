@@ -23,6 +23,19 @@ API all build against it. Change it here first.
 
   Milestone 3a adds `tokens` and `hosts`, for sharing (spec/team.md).
 
+- **Paths.** Every file path the store keeps is relative to the project root, with forward slashes: a note's
+  `snapshot` (`v6/clip_v6.review/snaps/02_00-20-1.png`), a pushed version's `path` and a transcribe job's take `dir`.
+  So a project folder can be moved, renamed or copied and still find its files. Readers resolve them against the root
+  where it is now (`Store.Abs`); the agent API gives them whole. A path outside the root is kept as given, and only a
+  file inside the project is ever served. Opening an older store fixes the absolute paths it holds: one inside the
+  root becomes relative; one outside it (the folder moved) becomes the longest tail of it, two parts at least, that
+  names a file (a folder, for a take) in this project, so `/old/place/demo/v6/demo_v6.review/snaps/02.png` becomes
+  `v6/demo_v6.review/snaps/02.png` when that file is here. Anything else stays as it was. Images, takes, threads,
+  the workspace, the hosts and the automation state keep no paths (names and labels only).
+- **A note's detail.** Each stroke is `{shape, color, box: [x, y, w, h], points?, t?}`: `points` is the line as drawn,
+  normalized 0–1 to the frame (at most 64, evenly picked, ends included), and `t` the video time of the frame it was
+  drawn on. Notes stored before these existed have neither.
+
 - **Note keys.** A note key is `<take>/<seg>/<n>`, where n is the comment's index within that segment from the notes
   engine. `take` is the take's folder name, `seg` the segment's own id in that take (`S2`, not the S-number notes.md
   renumbers across takes; `no-audio` for marks outside every segment), and n counts from 1, before inherited ranges
@@ -57,7 +70,10 @@ that aren't done (`{id, kind, state, attempts, error?, hint?, take?}`), so a pag
 - **On an older version:** that version's notes in their final state. Each has `status`, `text`, `t0`, `t1`, `by`, and
   then `change` and `answered_in` for answered ones, or the question text for asked ones.
 - **Item fields:** `{id, kind: "note"|"question", status, t0, t1, text, by, change?, answered_in?, question?, options?,
-  images?: [{url, box}], ask?}`. For a question item, `id` is the thread id (what `answer_to` takes), `text` is the
+  images?: [{url, box}], snapshot?, ask?}`. A note's `snapshot` is the URL of the still of its moment with its strokes
+  drawn on it (`GET /api/notes/<id>/snapshot?m=<file time>`), only when that file is in the project. A comment card
+  draws its drawing's thumbnail over it, else over the first frame of the version it was left on (that version's
+  poster), else on a plain dark box. For a question item, `id` is the thread id (what `answer_to` takes), `text` is the
   question, and an optional `note` is the id of the note it's about.
 - **A task's question.** A note in `question` whose newest question an agent asked from inside its editing task
   (`retake ask`) carries it as `ask: {id, task, t, from?, to?, version, text, visuals}`: the thread id, the task that
@@ -97,6 +113,7 @@ that aren't done (`{id, kind, state, attempts, error?, hint?, take?}`), so a pag
 | POST | `/api/notes/<id>/reopen`, `/api/versions/<label>/approve` | Reviewer actions. Origin-checked. |
 | GET | `/api/events?since=<seq>` | Server-sent events: `notes` (the sidebar should refresh), `job` (`{id, kind, state, error?, hint?}`; a failed job's `hint` is a one-line fix, such as how to set up transcription), `version` (the family changed: `{why, label, parent?, path?, stream?, error?}`, where `why` is `push`, or for a streamed version `rendering`, `progress`, `stopped`, `complete` and `failed`, with its `stream` state; spec/bridge.md, "Streaming"). |
 | GET | `/api/takes/<take>/<file>?v=` | Serves an image of a take, for the sidebar thumbnails. |
+| GET | `/api/notes/<id>/snapshot` | Serves a note's snapshot, for its card's drawing. Only a regular file inside the project (through `os.Root`); else 404. Same viewing permissions as `/api/takes/…`. |
 
 ## Jobs
 
@@ -164,9 +181,38 @@ whisper_cli = ""     # whisper-cli's path; "" = $PATH, then scripts/install-whis
 
 The review page opens the newest playable cut. A version picker exposes review checkpoints with their durations; choosing an older cut pins it until another is selected. The latest cut can still stream as it renders. Checkpoints do not require storing media in Git.
 
-`GET /api/notes?v=<label>&scope=review` includes that cut's notes, earlier unresolved notes, and notes resolved in that cut, excluding future cuts. Each note exposes its originating `version`. The sidebar has two tabs with counts: To do (Open, Working, Question, earlier cuts' unresolved notes included, tagged with their version) and Done (resolved, with the change and the version containing it). Flipping to an older cut shows that cut's notes in their final state the same way. Timeline markers follow the tab, one per comment, in its status color; a comment's pen strokes and voice fold into its marker once it is transcribed. Transcription completion is independent of resolution.
+`GET /api/notes?v=<label>&scope=review` includes that cut's notes, earlier unresolved notes, and notes resolved in that cut, excluding future cuts. Each note exposes its originating `version`. It stays for integrations; the review page reads `scope=video` (below) and does the per-version split itself.
 
-`GET /api/history?v=<label>&scope=review` includes actual strokes and images for earlier unresolved feedback, with timestamps mapped when manifests exist. Carried entries expose `source_version` and are read-only on the destination cut. History exposes `transcribed` only when all saved audio files have matching completed transcripts; completed recordings never regain waveforms after reload. Partially transcribed takes expose per-segment voice tracks when available.
+### Comments belong to their version
+
+A comment belongs to the version it was recorded on. A draft's comments (`v5-draft2`) belong to the version the draft
+heads for (`v5`), so they are still there once the draft becomes that version.
+
+- **What a version shows.** The sidebar and the timeline show the shown version's comments only, plus the agent's
+  questions about them (an item's `note`, else its own `version`), never another version's. The two tabs count that
+  version: To do (Open, Working, Question) and Done (resolved, with the change and "See vN" when another version holds
+  it). Timeline markers follow the tab, one per comment, in its status color, at the comment's own time on its own
+  version; a comment's pen strokes and voice fold into its marker once it is transcribed. Transcription completion is
+  independent of resolution. Switching the version, however it is switched (the picker, the strip below), switches
+  the comments, the markers and the drawings on the video with it.
+- **The page reads the whole family once.** `GET /api/notes?v=<label>&scope=video` returns every version's comments
+  with their `version`, also those recorded on a draft the family no longer lists (an older draft, or a promoted
+  draft's old label) while its version is listed (with `scope=review`, within the same version limit). The page keeps the shown version's for the list and the markers, and counts the rest per
+  version for the strip and the line below. A switch shows the new version's comments at once, from the same answer.
+- **The version strip.** With two or more entries in the family (a second version, or a draft), the top of the
+  comments panel has one row of versions, oldest first: `v1 v2 … v7`, the shown one highlighted, each with its To do
+  count when it has one (`v3 91`). Drafts of the next version are one quiet entry, `v8 · drafting`, which shows the
+  newest listed draft. A click shows that version, as the picker does (pinned unless it is the newest). The row has a
+  fixed height; on a phone it scrolls sideways inside its own row. The bar's version picker stays, for compact
+  layouts and phones.
+- **Open on earlier versions.** On the latest version (or a draft ahead of it), one quiet line at the top of the list
+  says what is still to do on older versions, newest first: `Open on earlier versions: v6 · 2, v3 · 91`. Each part
+  shows that version. The line is not there when nothing earlier is to do. A single version has no strip and no line.
+- **Send** counts and sends the shown version's open comments (spec/automation.md, "HTTP and UI"). An older version's
+  open comments are sent from that version. The agent still gets every open comment of every version as context with
+  each task (the poll answer's `notes`).
+
+`GET /api/history?v=<label>&scope=review` includes actual strokes and images for earlier unresolved feedback, with timestamps mapped when manifests exist. Carried entries expose `source_version` and are read-only on the destination cut. The review page reads the version's own history (no `scope`), so another version's drawings never show on this one. History exposes `transcribed` only when all saved audio files have matching completed transcripts; completed recordings never regain waveforms after reload. Partially transcribed takes expose per-segment voice tracks when available.
 
 The bar's one action, Send (spec/automation.md), stops and saves the current recording and queues final processing. When this page has no active take and nothing new to send, it says so, and that existing feedback is already saved; it must not claim there is no recording or resolve comments. Failed final requests remain retryable and never report successful completion.
 

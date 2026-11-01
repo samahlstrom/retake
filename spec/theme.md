@@ -269,7 +269,8 @@ Versioning). Classes and ids are not part of the API and can change in any relea
 | `keys-sheet` | The keys it shows | review |
 | `hint` | The one-line hint | review |
 | `toast` | A short message over the video | review |
-| `home-nav` | "← Projects", the project's name and "Next video" over the video | review |
+| `home-nav` | The back link and "Next video" over the video | review |
+| `review-back` | The back link over the video: "Project › video", back to the same place on the home | review |
 | `agent-visuals` | The agent's boxes, arrows and lines over the video | review |
 | `offline` | "The editing computer is offline" over the video | review |
 | `undo` | Undo (phone) | review |
@@ -282,19 +283,28 @@ Versioning). Classes and ids are not part of the API and can change in any relea
 | `reply-box` | The field to answer the agent | review |
 | `question-card` | The agent's question under its comment (thumbnail, choices) | review |
 | `progress` | The strip at the bottom of the comments (recording, transcribing, undo) | review |
+| `version-strip` | The versions over the comments (`v1 … v7`, each with what's still to do) | review |
+| `earlier-versions` | The line saying what's still open on earlier versions | review |
+| `sketch` | A comment's drawing, small, on the still of its moment | review |
 | `more` | A ⋯ button | both |
 | `menu` | A menu a ⋯ opens | both |
 | `select` | A dropdown's button (in the agent menu) | review |
 | `connect` | The "Connect your computer" command line and its Copy button | both |
-| `home` | The home page's content | home |
+| `home` | The home page: the folder tree and the videos | home |
+| `nav` | The folder tree on the left (a drawer on a phone) | home |
+| `nav-search` | The tree's filter | home |
+| `nav-all` | The tree's top row: every video | home |
+| `nav-folder` | A folder in the tree | home |
+| `nav-project` | A project in the tree | home |
+| `nav-video` | A video in the tree | home |
+| `nav-grip` | The handle that resizes the tree | home |
+| `nav-toggle` | ☰, which shows and hides the tree | home |
 | `brand` | The name (and logo) at the top left of the home | home |
 | `logo` | The theme's logo inside `brand` | home |
 | `brand-name` | The name inside `brand` | home |
 | `wordmark-dot` | The red period of the built-in wordmark "Retake." (not there with a theme's name or logo) | home |
 | `account` | Who is signed in, and Sign out | home |
 | `connect-card` | The "Connect your computer" card | home |
-| `project-grid` | The grid of projects | home |
-| `project-card` | One project | home |
 | `home-grid` | A grid of videos | home |
 | `video-card` | One video; `data-status` is its status | home |
 
