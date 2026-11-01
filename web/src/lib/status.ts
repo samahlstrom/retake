@@ -16,6 +16,8 @@ export interface CommentStatus {
   state: CommentState;
   /** A paused task (usage limit, offline machine, a pause by the owner): why, in a few words. It shows as Open. */
   paused: string | null;
+  /** A Working comment that hasn't started: why, in one short line ("Waiting for the editing computer"). */
+  waiting: string | null;
 }
 
 /** The task that owns a comment, if it is still running or waiting (a finished or cancelled one owns nothing). */
@@ -36,35 +38,58 @@ export function pausedReason(task: Pick<EditingTask, 'error'>): string {
   return `Paused: ${short.charAt(0).toLowerCase()}${short.slice(1)}`;
 }
 
+/** What the page knows besides the comment and its task: its take was sent and is still being processed (the
+ * server's `sending`), and the agent's status (for the waiting line). */
+export interface StatusContext {
+  sending?: boolean;
+  agent?: AgentStatus;
+}
+
 /**
  * The state a comment shows. `mark` is the note's own state on the server (answered and accepted are Done), `task`
  * the editing task that owns it, if any. A paused task shows as Open with its reason (it is not the reviewer's job to
- * understand task states); a cancelled or completed-but-reopened one is just Open again.
+ * understand task states); a cancelled or completed-but-reopened one is just Open again. A note of a take that was
+ * sent and is still being transcribed is Working already: it has no task yet, but it is on its way.
  */
 export function commentStatus(
   row: { mark: 'answered' | 'question' | 'open'; kind: 'note' | 'question' },
   task?: EditingTask | null,
+  ctx: StatusContext = {},
 ): CommentStatus {
-  if (row.mark === 'answered') return { state: 'done', paused: null };
+  const is = (state: CommentState, paused: string | null = null): CommentStatus => ({ state, paused, waiting: null });
+  if (row.mark === 'answered') return is('done');
   switch (task?.state) {
     case 'completed':
-      return row.mark === 'question' ? { state: 'question', paused: null } : { state: 'done', paused: null };
+      return row.mark === 'question' ? is('question') : is('done');
     case 'question':
-      return { state: 'question', paused: null };
+      return is('question');
     case 'queued':
+      return { state: 'working', paused: null, waiting: waitingLine(ctx.agent) };
     case 'running':
     case 'stopping':
-      return { state: 'working', paused: null };
+      return is('working');
     case 'paused':
-      return { state: 'open', paused: pausedReason(task) };
+      return is('open', pausedReason(task));
   }
-  if (row.mark === 'question') return { state: 'question', paused: null };
-  return { state: 'open', paused: null };
+  if (row.mark === 'question') return is('question');
+  if (ctx.sending && row.kind === 'note' && !activeTask(task))
+    return { state: 'working', paused: null, waiting: waitingLine(ctx.agent) };
+  return is('open');
 }
 
-/** A note nobody has sent yet: open, a note (not an agent's question), and no task waiting or running on it. */
-export const unsent = (row: { mark: string; kind: string }, task?: EditingTask | null): boolean =>
-  row.kind === 'note' && row.mark === 'open' && !activeTask(task);
+/** Why sent work hasn't started, when it's the computer's fault: none is online (hosted), or the built-in one can't
+ * edit (local mode, `blocked`). A queue behind another task needs no words. */
+export function waitingLine(s: AgentStatus | undefined): string | null {
+  if (!s?.available) return null;
+  if (s.local && s.blocked) return 'Waiting for the agent';
+  if (!s.online) return 'Waiting for the editing computer';
+  return null;
+}
+
+/** A note nobody has sent yet: open, a note (not an agent's question), no task waiting or running on it, and its
+ * take isn't on its way already (`sending`). */
+export const unsent = (row: { mark: string; kind: string }, task?: EditingTask | null, sending = false): boolean =>
+  row.kind === 'note' && row.mark === 'open' && !activeTask(task) && !sending;
 
 // ---------------------------------------------------------------- the agent and its machine
 
@@ -90,8 +115,6 @@ export interface AgentStatus {
   working: boolean;
   /** Local mode only: why the in-process worker can't edit (no agent installed, no timeline…), or "". */
   blocked: string;
-  /** "Send other reviewers' comments automatically". */
-  auto: boolean;
 }
 
 export function agentStatus(a: AutomationState | null, now: number): AgentStatus {
@@ -104,7 +127,6 @@ export function agentStatus(a: AutomationState | null, now: number): AgentStatus
       agent: '',
       working: false,
       blocked: '',
-      auto: false,
     };
   }
   const workers = a.workers ?? [];
@@ -125,23 +147,23 @@ export function agentStatus(a: AutomationState | null, now: number): AgentStatus
     agent: agent?.name ?? '',
     working: (a.tasks ?? []).some((t) => t.state === 'running' || t.state === 'stopping'),
     blocked,
-    auto: !!a.config?.enabled,
   };
 }
 
-/** What the agent status next to the button says. */
+/** What the agent status next to the button says. The owner is told what to do about a missing computer; everyone
+ * else only that the agent is away (their Send still queues). */
 export function statusText(s: AgentStatus, owner: boolean): string {
   if (s.online && !s.blocked) return s.agent || 'Agent';
   if (s.local && s.blocked) return 'Agent unavailable';
-  if (s.worker) return owner ? 'Computer offline' : 'Agent offline';
-  return owner ? 'Connect computer' : 'No agent';
+  if (!owner) return 'Agent offline';
+  return s.worker ? 'Computer offline' : 'Connect computer';
 }
 
 // ---------------------------------------------------------------- the primary button
 
 export interface SendInput {
-  role: Role | null;
-  canRecord: boolean;
+  /** Runs the agent here: chooses it and connects computers (the owner; an older server without roles). */
+  owner: boolean;
   status: AgentStatus;
   /** The reviewer recorded something this take and hasn't finished it yet. */
   takeOpen: boolean;
@@ -154,42 +176,33 @@ export interface SendInput {
 }
 
 /**
- * - `send`: finish the take with `send: true` and submit the other open notes.
- * - `finish`: finish the take (the reviewer's own job; the owner or auto-send takes it from there).
- * - `connect`: hosted, and no computer to send to: finish the take if one is open, then show how to connect one.
+ * - `send`: finish the take with `send: true` and submit the other open notes. With no computer online they queue
+ *   and start when one connects.
+ * - `save`: local mode whose built-in worker can't edit (`blocked`): finish the take without sending it. The agent
+ *   menu (the status next to the button) says what's missing; it doesn't pop up by itself.
  * - `none`: nothing new to send; say so.
  */
-export type SendAction = 'send' | 'finish' | 'connect' | 'none';
+export type SendAction = 'send' | 'save' | 'none';
 
 export interface SendButton {
   label: string;
   action: SendAction;
-  /** It's the dispatcher's Send (filled) rather than a reviewer's Finish. */
-  primary: boolean;
+  /** Pressing it also opens the agent menu: the owner with no computer online sees how to connect one. */
+  opens: boolean;
 }
 
-/** Only the owner sends (C2: other reviewers' finished reviews go automatically, when the owner turns that on). An
- * older server without roles is the owner's own `retake open`. */
-export const dispatcher = (role: Role | null, canRecord: boolean): boolean =>
-  canRecord && (role === null || role === 'owner');
+/** Runs the agent: the owner, or an older server without roles (the owner's own `retake open`). Everyone who can
+ * record sends; only this one chooses the agent and connects computers. */
+export const managesAgent = (role: Role | null): boolean => role === null || role === 'owner';
 
+/** The bar's one button, the same for everyone who can record (a viewer has none). */
 export function sendButton(i: SendInput): SendButton {
   const s = i.status;
-  const canSend = s.available && s.online && !s.blocked;
-  // Hosted (C1 `local: false`) with no computer connected keeps Send: it opens the way to connect one. Local mode that
-  // can't edit (no agent installed, …) and an older server that doesn't say keep Finish review; the agent status
-  // next to it says why.
-  const sends = dispatcher(i.role, i.canRecord) && (canSend || (s.available && s.local === false));
-  if (!sends) {
-    if (i.finishing) return { label: 'Saving…', action: 'finish', primary: false };
-    return { label: i.saved && !i.takeOpen ? 'Saved' : 'Finish review', action: 'finish', primary: false };
-  }
-  if (i.finishing) return { label: canSend ? 'Sending…' : 'Saving…', action: 'none', primary: true };
+  const blocked = !!(s.local && s.blocked);
   const label = i.unsent > 0 ? `Send ${i.unsent} to agent` : 'Send to agent';
-  if (!canSend) {
-    if (!i.takeOpen && !i.unsent && i.saved) return { label: 'Saved', action: 'connect', primary: true };
-    return { label, action: 'connect', primary: true };
-  }
-  if (i.takeOpen || i.unsent > 0) return { label, action: 'send', primary: true };
-  return { label: i.sent ? 'Sent' : i.saved ? 'Saved' : label, action: 'none', primary: true };
+  const opens = !blocked && i.owner && s.available && !s.online;
+  if (i.finishing) return { label: blocked ? 'Saving…' : 'Sending…', action: 'none', opens: false };
+  if (blocked) return { label: i.saved && !i.takeOpen ? 'Saved' : label, action: 'save', opens };
+  if (i.takeOpen || i.unsent > 0) return { label, action: 'send', opens };
+  return { label: i.sent ? 'Sent' : i.saved ? 'Saved' : label, action: 'none', opens };
 }

@@ -29,6 +29,7 @@ export interface EditingTask {
   usage?: { input_tokens?: number; output_tokens?: number; estimated_cost_usd?: number };
 }
 export interface AutomationConfig {
+  /** Older pages' "send finished reviews automatically". This page never sets it; it keeps whatever is there. */
   enabled: boolean;
   worker: string;
   agent: string;
@@ -44,6 +45,8 @@ export interface AutomationState {
   local?: boolean;
   /** Local mode: why the in-process worker can't edit (no agent installed, …). */
   blocked?: string;
+  /** Takes sent with Send whose notes are still being processed: they're on their way to the agent. */
+  sending?: { version: string; take: string }[];
 }
 
 /** The fallback when the server can't mint a connect command (an older server without POST /api/connect). */

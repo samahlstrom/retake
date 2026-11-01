@@ -140,6 +140,8 @@ test('a reviewer link records a take, saved with the link\'s label as its author
     await sleep(800);
     await ui.key('r');
     await ui.waitFor(() => !window.__review.seg, 8000);
+    // A reviewer has the same Send as the owner (this server's own worker can't edit, so Send saves the take).
+    await expect(page.locator('#done')).toHaveText(/^Send( \d+)? to agent$/);
     await ui.click('#done');
     await ui.waitFor(() => window.__review.take.closed && !window.__review.take.saving, 15_000);
     await sleep(300);

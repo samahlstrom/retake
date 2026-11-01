@@ -1,6 +1,7 @@
 <script lang="ts">
   // One comment: when, its words, what you drew, and one status (Open, Working, Question, Done). A question from the
-  // agent has the reply box under it; a paused one says why once, with Retry. Everything else is in its ⋯.
+  // agent has the reply box under it; a paused one says why once, with Retry; a Working one waiting for its computer
+  // says so. Everything else is in its ⋯.
   import type { Review } from '../../lib/review.svelte';
   import type { Row } from '../../lib/notes/view';
   import { STATE_TEXT } from '../../lib/status';
@@ -36,8 +37,9 @@
   }
   async function retry() {
     if (!task) return;
-    const agent = task.agent || review.agent.worker?.agents[0]?.id || '';
-    if (await review.automation.send(`/tasks/${task.id}/retry`, { agent })) await review.notes.refresh();
+    // The owner may pick the agent; anyone else's retry keeps the task's own (the server ignores theirs).
+    const body = review.owner ? { agent: task.agent || review.agent.worker?.agents[0]?.id || '' } : {};
+    if (await review.automation.send(`/tasks/${task.id}/retry`, body)) await review.notes.refresh();
     else review.toast.say(review.automation.error || 'Could not retry. Try again.', 5000);
   }
 </script>
@@ -80,9 +82,10 @@
   {/if}
   {#if status.paused}
     <p class="paused">
-      <span>{status.paused}</span>{#if review.owner && task}<button class="link" onclick={retry}>Retry</button>{/if}
+      <span>{status.paused}</span>{#if review.canRecord && task}<button class="link" onclick={retry}>Retry</button>{/if}
     </p>
   {/if}
+  {#if status.waiting}<p class="waiting">{status.waiting}</p>{/if}
   {#if asked}<p class="asked">{asked}</p>{/if}
   {#if voiceThread != null}
     <ReplyBox onmic={() => review.answer(voiceThread, row.t0)} recording={answering} />

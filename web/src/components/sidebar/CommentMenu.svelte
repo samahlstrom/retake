@@ -17,10 +17,13 @@
   const agents = $derived(review.agent.worker?.agents ?? []);
   const others = $derived(agents.filter((a) => a.id !== active?.agent));
 
+  // Anyone who records sends and retries (with no computer online it waits in the queue); the owner also switches
+  // the agent and pauses. Local mode that can't edit sends nothing, as the bar's Send only saves there.
+  const blocked = $derived(!!(review.agent.local && review.agent.blocked));
   const canSend = $derived(
-    owner && review.agent.online && row.kind === 'note' && status.state === 'open' && !status.paused && !active,
+    review.canRecord && !blocked && row.kind === 'note' && status.state === 'open' && !status.paused && !active,
   );
-  const canRetry = $derived(owner && !!status.paused && !!active);
+  const canRetry = $derived(review.canRecord && !!status.paused && !!active);
   const canSwitch = $derived(owner && !!active && active.state !== 'stopping' && others.length > 0);
   const canPause = $derived(owner && !!active && (active.state === 'running' || active.state === 'queued'));
   const hasHistory = $derived(!!task?.events.length);
@@ -53,7 +56,8 @@
         {#if canSend}<DropdownMenu.Item class="menu-item" onSelect={send}>Send to agent</DropdownMenu.Item>{/if}
         {#if canRetry}<DropdownMenu.Item
             class="menu-item"
-            onSelect={() => act('retry', { agent: active!.agent || agents[0]?.id || '' })}>Retry</DropdownMenu.Item
+            onSelect={() => act('retry', owner ? { agent: active!.agent || agents[0]?.id || '' } : {})}
+            >Retry</DropdownMenu.Item
           >{/if}
         {#if canSwitch}
           <DropdownMenu.Sub>

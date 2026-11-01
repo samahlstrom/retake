@@ -1,4 +1,4 @@
-/* Shared by the review page and the home: the status colors, and the look of Bits UI's menus, popovers and switch
+/* Shared by the review page and the home: the status colors, and the look of Bits UI's menus and popovers
    (they render in a portal, outside any component's styles). */
 :root {
   --st-open: #8e8e99;
@@ -132,6 +132,23 @@
   gap: 10px;
   margin-top: 2px;
 }
+.dot {
+  flex: none;
+  align-self: center;
+}
+.pop .field {
+  display: grid;
+  gap: 6px;
+  color: #a3a3ad;
+  font-size: 12px;
+}
+.pop .field .sub {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 2px;
+}
 .pop .toggle {
   display: flex;
   align-items: center;
@@ -169,35 +186,6 @@
   .dot.busy {
     animation: none;
   }
-}
-
-/* ---------------------------------------------------------------- switch */
-.switch {
-  flex: none;
-  position: relative;
-  width: 34px;
-  height: 20px;
-  padding: 0;
-  border: 0;
-  border-radius: 999px;
-  background: #3a3a42;
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-.switch[data-state='checked'] {
-  background: var(--st-done);
-}
-.switch-thumb {
-  display: block;
-  width: 16px;
-  height: 16px;
-  margin: 2px;
-  border-radius: 50%;
-  background: #fff;
-  transition: transform 0.15s ease;
-}
-.switch-thumb[data-state='checked'] {
-  transform: translateX(14px);
 }
 
 /* ---------------------------------------------------------------- the keys sheet */

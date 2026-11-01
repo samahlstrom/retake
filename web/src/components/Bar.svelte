@@ -1,6 +1,6 @@
 <script lang="ts">
   // The bar under the video, left to right: play, time, timeline, version, pen colors, then Record, the one action
-  // (Send N to agent / Finish review) and the agent's status; ? for the keys. A red top edge while recording. A
+  // (Send N to agent) and the agent's status; ? for the keys. A red top edge while recording. A
   // viewer's share link has no pen, no Record and no action.
   import type { Review } from '../lib/review.svelte';
   import VersionPicker from './VersionPicker.svelte';

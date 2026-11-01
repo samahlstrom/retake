@@ -1,9 +1,9 @@
 <script lang="ts">
   // Next to Send: which agent edits, and whether its computer is there ("● Claude Code", green when online). Click it
-  // for the few settings there are: the agent, what happens when its usage runs out, and whether other reviewers'
-  // comments go automatically. With no computer connected it shows how to connect one (hosted), or why the built-in
-  // one can't edit (local).
-  import { Popover, Switch } from 'bits-ui';
+  // for the few settings there are (the owner's): the agent, what happens when its usage runs out, and the computer.
+  // With no computer connected the owner sees how to connect one; everyone else sees that Send waits for it. Local
+  // mode that can't edit says what's missing.
+  import { Popover } from 'bits-ui';
   import type { Review } from '../lib/review.svelte';
   import { statusText } from '../lib/status';
   import StyledSelect from './ui/Select.svelte';
@@ -29,14 +29,14 @@
   const title = $derived(
     ready && machine
       ? `${s.agent || 'Agent'} ${s.working ? 'is editing' : 'is ready'} on ${machine.name}`
-      : s.blocked || text,
+      : s.blocked || (owner ? text : 'Waiting for the editing computer'),
   );
 
   $effect(() => {
     if (review.agentOpen && needsConnect) void automation.connect(review.homeCtx?.home ?? '');
   });
 
-  async function set(change: { worker?: string; agent?: string; fallback?: string; enabled?: boolean }) {
+  async function set(change: { worker?: string; agent?: string; fallback?: string }) {
     await automation.configure({ worker: machine?.id ?? '', agent, fallback, ...change });
   }
 </script>
@@ -97,32 +97,23 @@
               />
             </div>
           {/if}
-          <label class="toggle">
-            <span>Send other reviewers’ comments automatically</span>
-            <Switch.Root
-              class="switch"
-              checked={s.auto}
-              aria-label="Send other reviewers’ comments automatically"
-              onCheckedChange={(on) => set({ enabled: on })}><Switch.Thumb class="switch-thumb" /></Switch.Root
-            >
-          </label>
-        {:else}
-          <p class="note">
-            {s.auto ? 'Your comments go to the agent when you finish.' : 'The owner sends comments to the agent.'}
-          </p>
         {/if}
       {:else if s.local && s.blocked}
         <div class="pop-head">
           <span class="dot off" aria-hidden="true"></span><strong>The agent can’t edit yet</strong>
         </div>
         <p class="note">{s.blocked}</p>
-      {:else if owner}
-        {#if machine}<p class="note warn">
-            {machine.name} is offline. Start Retake there again, or connect a computer:
-          </p>{/if}
-        <ConnectBlock command={automation.command} title={machine ? 'Connect a computer' : 'Connect your computer'} />
       {:else}
-        <p class="note">No agent is connected. The owner connects one.</p>
+        <!-- Sent comments wait in the queue and start when a computer connects; only the owner can connect one. -->
+        <div class="pop-head">
+          <span class="dot off" aria-hidden="true"></span><strong>Waiting for the editing computer</strong>
+        </div>
+        {#if owner}
+          {#if machine}<p class="note warn">
+              {machine.name} is offline. Start Retake there again, or connect a computer:
+            </p>{/if}
+          <ConnectBlock command={automation.command} title={machine ? 'Connect a computer' : 'Connect your computer'} />
+        {/if}
       {/if}
       {#if automation.error}<p class="note err" role="alert">{automation.error}</p>{/if}
     </Popover.Content>

@@ -1,7 +1,7 @@
 <script lang="ts">
-  // The bar's one action. The owner sends: "Send 12 to agent" finishes this take and hands every open comment to the
-  // agent (lib/status.ts, sendButton). A reviewer finishes: "Finish review". With no computer to send to, it saves the
-  // take and opens the way to connect one, instead of failing.
+  // The bar's one action, the same for everyone who can record: "Send 12 to agent" finishes this take and hands every
+  // open comment to the agent (lib/status.ts, sendButton). With no computer online they wait in the queue and start
+  // when one connects; local mode that can't edit saves them, and the agent menu next to it says what's missing.
   import type { Review } from '../lib/review.svelte';
 
   let { review }: { review: Review } = $props();
@@ -10,11 +10,11 @@
 
 <button
   id="done"
-  class:primary={b.primary}
+  class="primary"
   class:saved={b.label === 'Saved' || b.label === 'Sent'}
-  aria-busy={review.finishing}
-  title={b.primary
-    ? 'Finish this take and send your open comments to the agent'
-    : 'Stop and save your feedback. Comments stay open until they are edited.'}
+  aria-busy={review.finishing || review.sending}
+  title={b.action === 'save'
+    ? 'Save this take. The agent menu says what it needs before it can edit.'
+    : 'Finish this take and send your open comments to the agent'}
   onclick={review.primary}>{b.label}</button
 >

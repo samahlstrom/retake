@@ -385,7 +385,7 @@ button {
   color: #111114;
   font-weight: 600;
 }
-#done.primary:hover {
+#done.primary:not(.saved):hover {
   background: #fff;
 }
 #done.saved {

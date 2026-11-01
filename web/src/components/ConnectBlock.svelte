@@ -2,6 +2,8 @@
   // "Connect your computer": the one line to run where your footage is, with a copy button. The server mints the line
   // (POST api/connect); an older server gets the CLI line instead.
   let { command, title = 'Connect your computer' }: { command: string; title?: string } = $props();
+  /** The space between two arguments: a text node of its own, so the line wraps there and never inside one. */
+  const GAP = ' ';
   let copied = $state(false);
   let code = $state<HTMLElement | null>(null);
 
@@ -33,7 +35,7 @@
   {#if command}
     <div class="cmd">
       <code bind:this={code}
-        >{#each command.split(' ') as part, i (i)}{#if i}{' '}{/if}<span class="arg">{part}</span>{/each}</code
+        >{#each command.split(' ') as part, i (i)}{#if i}{GAP}{/if}<span class="arg">{part}</span>{/each}</code
       >
       <button onclick={copy} aria-label="Copy the command">{copied ? 'Copied' : 'Copy'}</button>
     </div>

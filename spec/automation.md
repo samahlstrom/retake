@@ -147,7 +147,7 @@ the browser's Connect your computer card prints the line). It is `retake worker`
   other open comments. With no computer online it does the same: the comments show Working, "Waiting for the
   editing computer", and start when one connects; the owner's press also opens the agent popover with the connect
   command (`POST /api/connect`). In local mode, when the built-in worker can't edit (`blocked`), Send saves the take
-  without `send`, and the first press opens the popover, which says what's missing. There is no other action.
+  without `send`, and the popover says what's missing (it doesn't open by itself). There is no other action.
   Next to it, the agent's name with a dot (green: online) opens that popover. The owner chooses the agent, its
   fallback ("Pause and ask me" by default) and the computer there; everyone else sees the agent, or the one line
   "Waiting for the editing computer". Per-comment actions are in the card's ⋯ menu: send one, retry, history and

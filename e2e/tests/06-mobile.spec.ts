@@ -180,13 +180,16 @@ for (const o of [{ name: 'portrait', width: 390, height: 844 }, { name: 'landsca
       expect((await p.ui.state()).shown).toBe('v6');
     });
 
-    test('Done saves the take; its files validate against spec/take.schema.json', async () => {
+    test('Send saves the take; its files validate against spec/take.schema.json', async () => {
       await p.ui.tap('#rec'); // stop
       await p.ui.waitFor(() => !window.__review.seg, 5000);
+      // This server's own worker can't edit (a plain video): Send saves, and points at the agent menu for why.
+      await expect(p.page.locator('#done')).toHaveText(/^Send( \d+)? to agent$/);
       await p.ui.tap('#done');
       await p.ui.waitFor(notSaving, 10_000);
       await expect(p.page.locator('#done')).toHaveText('Saved');
-      expect((await p.ui.state()).toast).toBe('Saved. Your comments stay open until they are edited.');
+      expect((await p.ui.state()).toast).toBe('Saved. The agent can’t edit this project yet: its menu says why.');
+      await expect(p.page.locator('.agent-pop')).toHaveCount(0);
       const dirs = takeDirs(join(p.fam.dir, 'v6', 'clip_v6.review'));
       expect(dirs).toHaveLength(1);
       validateTakeDir(dirs[0]!);

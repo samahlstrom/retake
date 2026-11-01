@@ -66,9 +66,10 @@ import {
 } from './take';
 import { covers, drawTimeline, pendingStrokes, pendingVoiceBins, tlT, type VoiceTrack } from './timeline';
 import {
+  activeTask,
   agentStatus,
   commentStatus,
-  dispatcher,
+  managesAgent,
   sendButton,
   unsent,
   type AgentStatus,
@@ -202,6 +203,8 @@ export class Review {
   agentOpen = $state(false);
   /** The last finish also sent the take to the agent (the button then says Sent). */
   sent = $state(false);
+  /** Send is at work: finishing the take, submitting the other comments, reading back what's on its way. */
+  sending = $state(false);
   /** A clock for the agent's online state (a worker that stops polling goes offline without a new answer). */
   clock = $state(Date.now() / 1000);
   followLatest = true;
@@ -253,27 +256,47 @@ export class Review {
   readonly timelineComments = $derived(this.sidebar.rows);
   /** The task that owns each note, freshest first: the automation state, else the one the notes route carried. */
   readonly tasks = $derived.by(() => {
-    const live: Record<string, EditingTask> = Object.fromEntries(
-      (this.automation.state?.tasks ?? []).map((t) => [t.id, t]),
-    );
+    const all = this.automation.state?.tasks ?? [];
+    const live: Record<string, EditingTask> = Object.fromEntries(all.map((t) => [t.id, t]));
     const out: Record<string, EditingTask> = {};
-    for (const row of this.rows) if (row.work) out[row.key] = live[row.work.id] ?? row.work;
+    for (const row of this.rows) {
+      if (row.work) out[row.key] = live[row.work.id] ?? row.work;
+      else if (row.kind === 'note') {
+        // Queued since the notes were read (a sent take, just processed): the automation state knows first.
+        const t = all.findLast((t) => !!activeTask(t) && t.notes.includes(row.id));
+        if (t) out[row.key] = t;
+      }
+    }
     return out;
   });
+  /** Takes sent and still being processed (the server's `sending`): their notes are on their way to the agent. */
+  readonly sendingTakes = $derived(this.automation.state?.sending ?? []);
+  /** The note's take was sent and is still being processed. */
+  onItsWay(row: Row): boolean {
+    return (
+      !!row.take && this.sendingTakes.some((t) => t.take === row.take && (!row.version || t.version === row.version))
+    );
+  }
   readonly statuses: Record<string, CommentStatus> = $derived(
-    Object.fromEntries(this.rows.map((row) => [row.key, commentStatus(row, this.tasks[row.key])])),
+    Object.fromEntries(
+      this.rows.map((row) => [
+        row.key,
+        commentStatus(row, this.tasks[row.key], { sending: this.onItsWay(row), agent: this.agent }),
+      ]),
+    ),
   );
   readonly todoCount = $derived(this.rows.filter((row) => this.statusOf(row).state !== 'done').length);
   readonly doneCount = $derived(this.rows.length - this.todoCount);
   /** Open notes nobody has sent to the agent yet. */
-  readonly unsentRows = $derived(this.rows.filter((row) => unsent(row, this.tasks[row.key])));
+  readonly unsentRows = $derived(this.rows.filter((row) => unsent(row, this.tasks[row.key], this.onItsWay(row))));
   /** More than one person commented: then (only then) cards say who. */
   readonly manyAuthors = $derived.by(() => {
     const notes = this.rows.filter((row) => row.kind === 'note');
     return notes.some((row) => row.by !== notes[0]!.by);
   });
   readonly agent: AgentStatus = $derived(agentStatus(this.automation.state, this.clock));
-  readonly owner = $derived(dispatcher(this.role, this.canRecord));
+  /** Runs the agent: chooses it and connects computers. Everyone who can record sends. */
+  readonly owner = $derived(this.canRecord && managesAgent(this.role));
   historyTakeIds = $state.raw<string[]>([]);
   activeRow = $state<string | null>(null);
   /**
@@ -502,15 +525,14 @@ export class Review {
     return !!this.take.id && !this.take.closed;
   }
 
-  /** The bar's one button: Send N to agent, Finish review, … (lib/status.ts). */
+  /** The bar's one button: Send N to agent, Sent, … (lib/status.ts). */
   get button(): SendButton {
     return sendButton({
-      role: this.role,
-      canRecord: this.canRecord,
+      owner: this.owner,
       status: this.agent,
       takeOpen: this.takeOpen,
       unsent: this.unsentRows.length,
-      finishing: this.finishing,
+      finishing: this.finishing || this.sending,
       saved: this.doneSaved,
       sent: this.sent,
     });
@@ -520,18 +542,15 @@ export class Review {
   primary = async (): Promise<void> => {
     const b = this.button;
     switch (b.action) {
-      case 'finish':
-        await this.done();
-        break;
-      case 'connect':
-        if (this.takeOpen) await this.done();
-        this.agentOpen = true;
-        break;
       case 'send':
         await this.sendAll();
         break;
+      case 'save':
+        // Local mode that can't edit: the take is saved, and the agent menu next to the button says what's missing.
+        if (await this.done()) this.toast.say('Saved. The agent can’t edit this project yet: its menu says why.', 5000);
+        break;
       case 'none':
-        if (!this.finishing)
+        if (!this.finishing && !this.sending && !b.opens)
           this.toast.say(
             this.notes.job
               ? 'Your notes are still being transcribed. They go to the agent when ready.'
@@ -542,35 +561,45 @@ export class Review {
           );
         break;
     }
+    if (b.opens) this.agentOpen = true;
   };
 
   /** Send: the take in progress goes with `send: true` (its notes go once transcribed, contract C3), and every other
-   * open note nobody sent yet goes now. */
+   * open note nobody sent yet goes now. Anyone who can record sends; with no computer online it all waits in the
+   * queue and starts when one connects. */
   async sendAll(): Promise<void> {
+    if (this.sending) return;
     const t = this.take,
       open = !!t.id && !t.closed;
     const others = this.unsentRows.filter((row) => !open || row.take !== t.id).map((row) => row.id);
-    // Nothing chosen yet (a first send): the computer that's online and its first agent.
-    const w = this.agent.worker;
-    if (w && !this.automation.state?.config?.worker)
-      await this.automation.configure({ worker: w.id, agent: w.agents[0]?.id ?? '', fallback: '' });
-    if (open && !(await this.done(true))) return;
-    if (others.length) {
-      if (!(await this.automation.send('/tasks', { notes: others }))) {
-        this.toast.say(this.automation.error || 'Could not send. Try again.', 5000);
-        return;
-      }
-      void this.notes.refresh();
+    this.sending = true;
+    try {
+      // Nothing chosen yet (a first send by the owner): the computer that's online and its first agent.
+      const w = this.agent.worker;
+      if (this.owner && w && !this.automation.state?.config?.worker)
+        await this.automation.configure({ worker: w.id, agent: w.agents[0]?.id ?? '', fallback: '' });
+      if (open && !(await this.done(true))) return;
+      if (others.length) {
+        if (!(await this.automation.send('/tasks', { notes: others }))) {
+          this.toast.say(this.automation.error || 'Could not send. Try again.', 5000);
+          return;
+        }
+        void this.notes.refresh();
+      } else await this.automation.refresh(); // the take is on its way now (`sending`): its comments show Working
+      this.sent = true;
+      const n = others.length;
+      const what = open ? 'Sent.' : n === 1 ? 'Sent 1 comment.' : `Sent ${n} comments.`;
+      this.toast.say(
+        !this.agent.online
+          ? `${what} The agent starts when the editing computer is online.`
+          : open
+            ? 'Sent. The agent starts as soon as your notes are transcribed.'
+            : `${what.slice(0, -1)} to the agent.`,
+        4000,
+      );
+    } finally {
+      this.sending = false;
     }
-    this.sent = true;
-    this.toast.say(
-      open
-        ? 'Sent. The agent starts as soon as your notes are transcribed.'
-        : others.length === 1
-          ? 'Sent 1 comment to the agent.'
-          : `Sent ${others.length} comments to the agent.`,
-      4000,
-    );
   }
 
   /** The keyboard hint is shown until the first recording, once per browser (it's then behind ?). */
@@ -1894,7 +1923,7 @@ export class Review {
     this.eraser = false;
   };
 
-  /** Finish review: stop, save and close the take, then POST /done (with `send`, the notes go to the agent). Resolves
+  /** Send (or save): stop, save and close the take, then POST /done (with `send`, the notes go to the agent). Resolves
    * to whether the take was finished now. */
   done = async (send = false): Promise<boolean> => {
     if (this.finishing) return false;

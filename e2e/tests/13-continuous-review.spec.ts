@@ -152,11 +152,21 @@ test('recorded audio and drawings fold into one comment marker once transcribed'
   await page.keyboard.press('Tab');
 });
 
-test('Finish review explains already saved feedback after reopening the page', async ({page}) => {
+test('Send with nothing new says the feedback is saved; the agent menu says why it can\'t edit', async ({page}) => {
+  // This server's own worker can't edit (a plain video, no agent): Send saves, and never says Finish review.
+  await expect(page.locator('#agent')).toHaveText('Agent unavailable');
+  await expect(page.locator('#done')).toHaveText('Send 1 to agent');
   await page.locator('#done').click();
   await expect(page.locator('#toast')).toContainText('feedback is already saved');
   await expect(page.locator('#toast')).not.toContainText('Nothing recorded');
+  await page.waitForTimeout(300);
+  await expect(page.locator('.agent-pop')).toHaveCount(0); // it doesn't pop up over the review
   await expect(page.locator('#side .item')).toHaveCount(1);
+  await expect(page.locator('#side .item .status')).toHaveText('Open');
+  await page.locator('#agent').click();
+  await expect(page.locator('.agent-pop')).toContainText('The agent can’t edit yet');
+  await expect(page.locator('.agent-pop')).toContainText('no timeline');
+  await expect(page.locator('.agent-pop button')).toHaveCount(0); // nothing to press that does nothing
 });
 
 test('long recording publishes a completed clip while the next clip keeps recording, then finishes both', async ({page, context}) => {
@@ -213,7 +223,7 @@ test('reloaded completed audio stays gone while original carried drawings remain
   await expect(page.locator('#tip')).toContainText('Move this title.');
 });
 
-test('a failed Finish request retries without claiming success', async ({page,context}) => {
+test('a failed save on Send retries without claiming success', async ({page,context}) => {
   await context.grantPermissions(['microphone'],{origin:server.url});
   let attempts=0;
   await page.route('**/api/session/*/done?*', r => ++attempts === 1 ? r.fulfill({status:503,body:'retry'}) : json(r,{ok:true,jobs:[]}));
@@ -227,7 +237,7 @@ test('a failed Finish request retries without claiming success', async ({page,co
   await expect(page.locator('#done')).toHaveText('Saved');
 });
 
-test('Finish during recorder startup stops the pending encoder and saves its last bytes', async ({page,context}) => {
+test('Send during recorder startup stops the pending encoder and saves its last bytes', async ({page,context}) => {
   await context.grantPermissions(['microphone'],{origin:server.url});
   await page.evaluate(() => {
     const start=MediaRecorder.prototype.start;
@@ -339,38 +349,103 @@ test('agent status opens a small popover whose choices save at once', async ({pa
   await fallback.click();
   await expect(page.getByRole('option',{name:'Switch to Claude Code',exact:true})).toBeVisible();
   await page.keyboard.press('Escape');
-  await page.getByRole('switch',{name:'Send other reviewers’ comments automatically'}).click();
-  await expect.poll(() => posts.at(-1)).toMatchObject({agent:'codex',enabled:true});
+  // There is no auto-send switch any more: everyone sends. The config keeps whatever enabled it had.
+  await expect(page.getByRole('switch')).toHaveCount(0);
+  await expect(page.locator('.agent-pop')).not.toContainText('automatically');
+  expect(posts.every(p => p.enabled === false)).toBe(true);
 });
 
-test('Send hands the open comments to the agent; with no computer it shows how to connect one', async ({page}) => {
-  let workers: unknown[] = [];
-  const tasks: unknown[] = [];
-  await page.route('**/api/automation',route=>json(route,{
-    local:false, config:{worker:'machine',agent:'claude',fallback:'',enabled:false}, workers, tasks, renders:[],
+// A fake host for the agent: GET api/automation from `state`; a Send queues tasks and the notes carry them (`work`).
+async function fakeAgent(page: import('@playwright/test').Page, opts: { local: boolean; role?: string }) {
+  const state = {
+    workers: [] as unknown[],
+    tasks: [] as Record<string, unknown>[],
+    submitted: [] as unknown[],
+    retried: [] as unknown[],
+    minted: 0,
+  };
+  await page.route('**/api/automation', route => json(route, {
+    local: opts.local, config: {worker:'machine',agent:'claude',fallback:'',enabled:false},
+    workers: state.workers, tasks: state.tasks, renders: [], sending: [],
   }));
-  let submitted: unknown = null;
-  await page.route('**/api/automation/tasks',route=>{ submitted = JSON.parse(route.request().postData()!); return json(route,{ok:true}); });
-  let minted = 0;
-  await page.route('**/api/connect',route=>{ minted++; return json(route,{command:'retake connect https://review.example.com --token rk_test'}); });
-  await page.reload();await page.waitForFunction(READY);
+  await page.route('**/api/automation/tasks', route => {
+    const body = JSON.parse(route.request().postData()!) as { notes: number[] };
+    state.submitted.push(body);
+    for (const id of body.notes)
+      state.tasks.push({id:`t${id}`, notes:[id], version:'v6', state:'queued', agent:'', worker:'', attempt:0, events:[{at:1,text:'Feedback submitted'}]});
+    return json(route, {ok:true});
+  });
+  await page.route('**/api/automation/tasks/*/retry', route => {
+    state.retried.push(JSON.parse(route.request().postData()!));
+    const id = new URL(route.request().url()).pathname.split('/').at(-2);
+    const t = state.tasks.find(t => t.id === id)!;
+    t.state = 'queued'; t.error = '';
+    return json(route, {ok:true});
+  });
+  await page.route('**/api/notes?*', route => json(route, {version:'v6', newest:true, scope:'review', jobs:[],
+    items: items.map(n => ({...n, work: state.tasks.find(t => (t.notes as number[]).includes(n.id))}))}));
+  await page.route('**/api/connect', route => { state.minted++; return json(route, {command:'retake connect https://review.example.com --token rk_test'}); });
+  if (opts.role)
+    await page.route('**/api/info', async route => {
+      const real = await route.fetch();
+      return json(route, {...(await real.json()), role: opts.role});
+    });
+  await page.reload(); await page.waitForFunction(READY);
+  return state;
+}
+
+test('the owner sends with no computer: the comments wait for it, and the menu shows how to connect one', async ({page}) => {
+  const agent = await fakeAgent(page, {local:false});
   await expect(page.locator('#agent')).toHaveText('Connect computer');
   await expect(page.locator('#done')).toHaveText('Send 1 to agent');
   await page.locator('#done').click();
+  await expect.poll(() => agent.submitted).toEqual([{notes:[1]}]);
+  await expect(page.locator('#toast')).toContainText('The agent starts when the editing computer is online');
+  await expect(page.locator('.agent-pop')).toContainText('Waiting for the editing computer');
   await expect(page.locator('.agent-pop')).toContainText('retake connect https://review.example.com --token rk_test');
   await expect(page.getByRole('button',{name:'Copy the command'})).toBeVisible();
-  expect(submitted).toBeNull();
+  const card = page.locator('.item[data-key="note:1"]');
+  await expect(card.locator('.status')).toHaveText('Working');
+  await expect(card.locator('.waiting')).toHaveText('Waiting for the editing computer');
+  await expect(page.locator('#done')).toHaveText('Sent');
   await page.keyboard.press('Escape');
   await page.locator('#agent').click();
   await expect(page.locator('.agent-pop')).toContainText('rk_test');
-  expect(minted).toBe(1); // one token per page, not one per click
+  expect(agent.minted).toBe(1); // one token per page, not one per click
   await page.keyboard.press('Escape');
-  workers = [{id:'machine',name:'Editing computer',seen:Date.now()/1000,online:true,agents:[{id:'claude',name:'Claude Code'}]}];
-  // The page polls api/automation every 5 s: the computer shows up without a reload.
+  agent.workers.push({id:'machine',name:'Editing computer',seen:Date.now()/1000,online:true,agents:[{id:'claude',name:'Claude Code'}]});
+  // The page polls api/automation every 5 s: the computer shows up without a reload, and the line goes.
   await expect(page.locator('#agent')).toHaveText('Claude Code', {timeout:12_000});
+  await expect(card.locator('.status')).toHaveText('Working');
+  await expect(card.locator('.waiting')).toHaveCount(0);
+});
+
+test('a reviewer\'s link sends like the owner; with no computer it just waits, and a paused send retries', async ({page}) => {
+  const agent = await fakeAgent(page, {local:false, role:'reviewer'});
+  await expect(page.locator('#agent')).toHaveText('Agent offline');
+  await expect(page.locator('#done')).toHaveText('Send 1 to agent');
   await page.locator('#done').click();
-  await expect.poll(() => submitted).toEqual({notes:[1]});
-  await expect(page.locator('#toast')).toContainText('Sent 1 comment');
+  await expect.poll(() => agent.submitted).toEqual([{notes:[1]}]);
+  await expect(page.locator('#toast')).toContainText('The agent starts when the editing computer is online');
+  const card = page.locator('.item[data-key="note:1"]');
+  await expect(card.locator('.status')).toHaveText('Working');
+  await expect(card.locator('.waiting')).toHaveText('Waiting for the editing computer');
+  // No connect line for a reviewer: the menu only says what's happening.
+  await page.waitForTimeout(300);
+  await expect(page.locator('.agent-pop')).toHaveCount(0);
+  await page.locator('#agent').click();
+  await expect(page.locator('.agent-pop')).toHaveText('Waiting for the editing computer');
+  expect(agent.minted).toBe(0);
+  await page.keyboard.press('Escape');
+  // The computer went away mid-task: the comment is Open with why, and the reviewer retries it (with its own agent).
+  Object.assign(agent.tasks[0]!, {state:'paused', error:'Worker disconnected; retry or switch agent'});
+  await expect(card.locator('.paused')).toContainText('Paused: computer offline', {timeout:12_000}); // next poll
+  await card.getByRole('button',{name:'Retry',exact:true}).click();
+  await expect.poll(() => agent.retried).toEqual([{}]);
+  await card.hover();
+  await card.getByRole('button',{name:'More for this comment',exact:true}).click();
+  await expect(page.getByRole('menuitem',{name:'Pause',exact:true})).toHaveCount(0);
+  await expect(page.getByRole('menuitem',{name:'History',exact:true})).toBeVisible();
 });
 
 test('the keyboard hint shows once per browser; ? opens the keys', async ({page}) => {
