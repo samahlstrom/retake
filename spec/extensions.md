@@ -38,7 +38,7 @@ style = "ui/ignition.css"        # optional
 
 [nav]                            # optional: a section in the home's left column
 title = "Ignition"
-icon = "ui/spark.svg"
+icon = "ui/spark.svg"            # optional
 list = "kind-only"               # optional: list the videos whose only versions are this extension's kind
 action = { title = "New idea", route = "new" }   # optional: a + button on the section's row
 
@@ -422,7 +422,7 @@ retake ext list [--json]                      found extensions: id, version, whe
 retake ext enable <id> | disable <id>         edit [extensions] enabled (and pin a project's extension)
 retake ext install <dir> [--force] [--data-dir DIR]   copy into the user's folder (or a server's data dir)
 retake ext remove <id> [--data-dir DIR]
-retake ext check [DIR|ID] [--json]
+retake ext check [DIR|ID]... [--json]        none: every enabled extension
 retake ext init <id> [DIR]                    a starter: extension.toml, ui/<id>.js, ui/<id>.css, retake-ext.d.ts
 retake ext tool <id> <tool> [--args JSON]     run one of its agent tools (agents use this)
 ```
@@ -437,8 +437,8 @@ retake ext tool <id> <tool> [--args JSON]     run one of its agent tools (agents
   `retake theme check`);
 - agent Markdown over its cap.
 
-Exit 0 when nothing was found, 1 when something was, 2 for bad arguments. `--json` prints `{"dir", "id", "version",
-"api", "problems": [{"kind", "name", "message"}]}`.
+Exit 0 when nothing was found, 1 when something was, 2 for bad arguments. `--json` prints a list of `{"dir", "id",
+"version", "api", "problems": [{"kind", "name", "message"}]}`.
 
 ## Tests
 
