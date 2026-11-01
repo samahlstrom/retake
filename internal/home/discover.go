@@ -1,21 +1,52 @@
 package home
 
 import (
+	"cmp"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/samahlstrom/retake/internal/bridge"
 	"github.com/samahlstrom/retake/internal/family"
 	"github.com/samahlstrom/retake/internal/project"
 )
 
-// Found is a project in a folder (spec/home.md, "Which folders are projects").
+// Found is a video in a folder's tree (spec/home.md, "Folders, projects and videos"): a version family with its
+// project root. The routes and the cards call it a project: it has one review page, one store and one agent.
 type Found struct {
 	Name   string // URL-safe and unique in the folder: its address is /p/<Name>/
-	Title  string // the folder's name as it is
-	Root   string // the project root, absolute
-	Anchor string // the video its family is detected from
+	Title  string // its folder's name as it is
+	Root   string // the project root (the folder that holds it), absolute
+	Anchor string // the video its family is detected from; "" for a timeline project without a version yet
+	// Path is Root relative to the scanned folder, with "/" between names; "" for the folder itself.
+	Path string
+	// Project is the folder of the project it belongs to, relative like Path: Path itself, or a folder above it
+	// (item-shop for item-shop/shorts).
+	Project string
+}
+
+// The scan's limits (spec/home.md).
+const (
+	MaxDepth     = 6     // folders below the scanned one where projects are looked for
+	ProjectDepth = 2     // folders below a project where more of its videos are looked for
+	MaxDirs      = 20000 // folders one scan reads at most
+)
+
+// dirLimit is MaxDirs; tests lower it.
+var dirLimit = MaxDirs
+
+// Scan is one look at a folder's tree.
+type Scan struct {
+	// Videos are the videos, in name order: the folder's own first, then the shallowest, then by path.
+	Videos []Found
+	// Empty are the projects with a native timeline and no version yet (Anchor ""), named after the videos.
+	Empty  []Found
+	Dirs   int           // folders read
+	Capped bool          // the scan stopped at MaxDirs
+	Took   time.Duration // how long it took
 }
 
 // MaxName is the longest project name, as on the team server.
@@ -47,71 +78,111 @@ func Slug(s string) string {
 	return out
 }
 
-// skipDir reports whether a folder is never a candidate nor searched: hidden ones and takes' .review folders.
+// skipDir reports whether a folder is never a candidate nor searched: hidden ones (.retake among them), takes'
+// .review folders, and the package and cache folders tools leave in project folders.
 func skipDir(name string) bool {
-	return strings.HasPrefix(name, ".") || strings.HasSuffix(name, ".review")
+	return strings.HasPrefix(name, ".") || strings.HasSuffix(name, ".review") || name == "node_modules" ||
+		name == "__pycache__"
 }
 
-// subdirs lists the folders directly in dir that aren't skipped, by name.
-func subdirs(dir string) []string {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
+// scanner reads each folder once per scan.
+type scanner struct {
+	top    string // the scanned folder, absolute, symlinks resolved
+	lists  map[string][]os.DirEntry
+	subs   map[string][]subdir
+	dirs   int
+	capped bool
+	linked map[string]bool // the real folders reached through links, so each is entered once
+	videos []Found
+	empty  []Found
+}
+
+func newScanner(top string) *scanner {
+	return &scanner{top: filepath.Clean(top), lists: map[string][]os.DirEntry{}, subs: map[string][]subdir{},
+		linked: map[string]bool{}}
+}
+
+// list returns a folder's entries, reading it at most once and at most MaxDirs folders in all.
+func (s *scanner) list(dir string) []os.DirEntry {
+	if l, ok := s.lists[dir]; ok {
+		return l
+	}
+	if s.dirs >= dirLimit {
+		s.capped = true
 		return nil
 	}
-	var out []string
-	for _, e := range entries {
-		if skipDir(e.Name()) {
+	s.dirs++
+	l, err := os.ReadDir(dir)
+	if err != nil {
+		l = nil
+	}
+	s.lists[dir] = l
+	return l
+}
+
+type subdir struct{ name, path string }
+
+// subdirs lists the folders directly in dir that aren't skipped, by name. A link to a folder counts when the folder
+// is outside the scanned one (the scan finds the others anyway), once per scan.
+func (s *scanner) subdirs(dir string) []subdir {
+	if out, ok := s.subs[dir]; ok {
+		return out
+	}
+	out := []subdir{}
+	for _, e := range s.list(dir) {
+		name := e.Name()
+		if skipDir(name) {
 			continue
 		}
-		p := filepath.Join(dir, e.Name())
-		if st, err := os.Stat(p); err == nil && st.IsDir() { // follows a link to a folder
-			out = append(out, p)
+		p := filepath.Join(dir, name)
+		switch {
+		case e.IsDir():
+		case e.Type()&os.ModeSymlink != 0:
+			real, err := filepath.EvalSymlinks(p)
+			if err != nil {
+				continue
+			}
+			if st, err := os.Stat(real); err != nil || !st.IsDir() || inside(real, s.top) || s.linked[real] {
+				continue
+			}
+			s.linked[real] = true
+		default:
+			continue
 		}
+		out = append(out, subdir{name, p})
 	}
+	s.subs[dir] = out
 	return out
 }
 
-// Discover lists the projects in dir: the folder itself and its immediate subfolders, each when it holds a versioned
-// video whose project root it is. dir must be absolute with symlinks resolved. They come in name order, the folder
-// itself first.
-func Discover(dir string) []Found {
-	dir = filepath.Clean(dir)
-	var out []Found
-	used := map[string]bool{}
-	for _, c := range append([]string{dir}, subdirs(dir)...) {
-		anchor := Anchor(c)
-		if anchor == "" {
-			continue
-		}
-		title := filepath.Base(c)
-		name := unique(Slug(title), used)
-		used[name] = true
-		out = append(out, Found{Name: name, Title: title, Root: c, Anchor: anchor})
-	}
-	return out
+// inside reports whether p is dir or a folder in it.
+func inside(p, dir string) bool {
+	rel, err := filepath.Rel(dir, p)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) &&
+		!filepath.IsAbs(rel)
 }
 
-// unique returns name, or name-2, name-3, ... when it's taken, within MaxName characters.
-func unique(name string, used map[string]bool) string {
-	if !used[name] {
-		return name
-	}
-	for i := 2; ; i++ {
-		suffix := "-" + strconv.Itoa(i)
-		base := name
-		if len(base)+len(suffix) > MaxName {
-			base = strings.TrimRight(base[:MaxName-len(suffix)], "-")
-		}
-		if !used[base+suffix] {
-			return base + suffix
+// timeline reports whether dir is a native timeline project (spec/bridge.md). Only folders that list a retake.toml
+// or an edit folder are asked.
+func (s *scanner) timeline(dir string) bool {
+	maybe := false
+	for _, e := range s.list(dir) {
+		if e.Name() == bridge.ProjectConfig || e.Name() == "edit" {
+			maybe = true
+			break
 		}
 	}
+	if !maybe {
+		return false
+	}
+	_, err := bridge.FindTimeline(dir)
+	return err == nil
 }
 
-// Anchor returns the video the family of the project rooted at root is detected from: of the versioned videos in
-// root and in its own subfolders (one level) whose project root is root, the highest version number, a plain name
-// before one with more after the number, then the newest. "" when root isn't a project.
-func Anchor(root string) string {
+// anchor returns the video the family held by the folder root is detected from: of the versioned videos in root and
+// in its own subfolders (one level) whose project root is root, the highest version number, a plain name before one
+// with more after the number, then the newest. "" when root holds no video.
+func (s *scanner) anchor(root string) string {
 	type pick struct {
 		path  string
 		n     int
@@ -121,11 +192,7 @@ func Anchor(root string) string {
 	var best *pick
 	rootOf := map[string]string{} // folder + family prefix -> project root
 	scan := func(d string) {
-		entries, err := os.ReadDir(d)
-		if err != nil {
-			return
-		}
-		for _, e := range entries {
+		for _, e := range s.list(d) {
 			name := e.Name()
 			if strings.HasPrefix(name, ".") || !family.IsVideo(name) {
 				continue
@@ -158,11 +225,159 @@ func Anchor(root string) string {
 		}
 	}
 	scan(root)
-	for _, d := range subdirs(root) {
-		scan(d)
+	for _, d := range s.subdirs(root) {
+		scan(d.path)
 	}
 	if best == nil {
 		return ""
 	}
 	return best.path
+}
+
+func joinRel(rel, name string) string {
+	if rel == "" {
+		return name
+	}
+	return rel + "/" + name
+}
+
+func (s *scanner) add(dir, rel, proj, anchor string) {
+	f := Found{Root: dir, Anchor: anchor, Path: rel, Project: proj}
+	if anchor == "" {
+		s.empty = append(s.empty, f)
+	} else {
+		s.videos = append(s.videos, f)
+	}
+}
+
+// walk looks for projects in dir, depth folders below the scanned one. A project is not looked into for more
+// projects: only for more of its own videos (inner).
+func (s *scanner) walk(dir, rel string, depth int) {
+	anchor := s.anchor(dir)
+	if depth > 0 && (anchor != "" || s.timeline(dir)) {
+		s.add(dir, rel, rel, anchor)
+		s.inner(dir, rel, rel, 1, depth+1)
+		return
+	}
+	if depth == 0 && (anchor != "" || s.timeline(dir)) {
+		s.add(dir, "", "", anchor) // the scanned folder's own video: at the top, not a project
+	}
+	if depth >= MaxDepth {
+		return
+	}
+	for _, d := range s.subdirs(dir) {
+		s.walk(d.path, joinRel(rel, d.name), depth+1)
+	}
+}
+
+// inner adds the videos held by the folders in a project, up to ProjectDepth folders below it and MaxDepth below the
+// scanned folder, version folders left out (their videos are the family of the folder above them). in is how far
+// below the project the folders in dir are, at how far below the scanned folder.
+func (s *scanner) inner(dir, rel, proj string, in, at int) {
+	if at > MaxDepth {
+		return
+	}
+	for _, d := range s.subdirs(dir) {
+		if project.IsVersionDir(d.name) {
+			continue
+		}
+		r := joinRel(rel, d.name)
+		if a := s.anchor(d.path); a != "" {
+			s.add(d.path, r, proj, a)
+		}
+		if in < ProjectDepth {
+			s.inner(d.path, r, proj, in+1, at+1)
+		}
+	}
+}
+
+// ScanDir scans a folder's tree for its folders, projects and videos (spec/home.md). dir must be absolute with
+// symlinks resolved. It reads folders and stats the files named like versioned videos; it never opens a video.
+func ScanDir(dir string) Scan {
+	start := time.Now()
+	s := newScanner(dir)
+	if st, err := os.Stat(s.top); err == nil && st.IsDir() {
+		s.walk(s.top, "", 0)
+	}
+	used := map[string]bool{}
+	name := func(list []Found) []Found {
+		slices.SortStableFunc(list, func(a, b Found) int {
+			return cmp.Or(cmp.Compare(depthOf(a.Path), depthOf(b.Path)), strings.Compare(a.Path, b.Path))
+		})
+		for i := range list {
+			f := &list[i]
+			f.Title, f.Name = filepath.Base(f.Root), Slug(f.Path)
+			if f.Path == "" {
+				f.Name = Slug(f.Title)
+			}
+			f.Name = unique(f.Name, used)
+			used[f.Name] = true
+		}
+		return list
+	}
+	return Scan{Videos: name(s.videos), Empty: name(s.empty), Dirs: s.dirs, Capped: s.capped, Took: time.Since(start)}
+}
+
+func depthOf(rel string) int {
+	if rel == "" {
+		return 0
+	}
+	return strings.Count(rel, "/") + 1
+}
+
+// Discover lists the videos in dir's tree (ScanDir's Videos): the folder's own first, then the shallowest, then by
+// path. dir must be absolute with symlinks resolved.
+func Discover(dir string) []Found {
+	return ScanDir(dir).Videos
+}
+
+// unique returns name, or name-2, name-3, ... when it's taken, within MaxName characters.
+func unique(name string, used map[string]bool) string {
+	if !used[name] {
+		return name
+	}
+	for i := 2; ; i++ {
+		suffix := "-" + strconv.Itoa(i)
+		base := name
+		if len(base)+len(suffix) > MaxName {
+			base = strings.TrimRight(base[:MaxName-len(suffix)], "-")
+		}
+		if !used[base+suffix] {
+			return base + suffix
+		}
+	}
+}
+
+// Anchor returns the video the family held by the folder root is detected from: of the versioned videos in root and
+// in its own subfolders (one level) whose project root is root, the highest version number, a plain name before one
+// with more after the number, then the newest. "" when root holds no video.
+func Anchor(root string) string {
+	return newScanner(root).anchor(root)
+}
+
+// ValidPath reports whether p can be a video's or a project's place in a home's tree: "" or folder names joined by
+// "/", none empty, "." or "..", none with "\" or control characters, at most 1024 bytes in all.
+func ValidPath(p string) bool {
+	if p == "" {
+		return true
+	}
+	if len(p) > 1024 {
+		return false
+	}
+	for part := range strings.SplitSeq(p, "/") {
+		if part == "" || part == "." || part == ".." {
+			return false
+		}
+		for _, r := range part {
+			if r < 0x20 || r == 0x7f || r == '\\' {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// Within reports whether the folder proj is path or a folder above it (both as ValidPath).
+func Within(proj, path string) bool {
+	return proj == path || proj == "" || strings.HasPrefix(path, proj+"/")
 }

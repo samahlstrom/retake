@@ -71,6 +71,11 @@ CREATE TABLE machine_tokens (
 	revoked    TEXT NOT NULL DEFAULT ''            -- '' = not revoked, else when
 );
 `,
+	// 3: where a connected computer's project is in its folder (spec/home.md, the home's tree).
+	`
+ALTER TABLE projects ADD COLUMN path TEXT NOT NULL DEFAULT '';          -- the video's folder, relative
+ALTER TABLE projects ADD COLUMN project_path TEXT NOT NULL DEFAULT '';  -- its project's folder, relative
+`,
 }
 
 // pgMigrations are the same steps for Postgres, in the schema "retake": the same tables and columns, types mapped
@@ -143,5 +148,10 @@ CREATE TABLE machine_tokens (
 	used       TEXT NOT NULL DEFAULT '',
 	revoked    TEXT NOT NULL DEFAULT ''
 );
+`,
+	// 3: where a connected computer's project is in its folder (spec/home.md, the home's tree).
+	`
+ALTER TABLE projects ADD COLUMN path TEXT NOT NULL DEFAULT '';
+ALTER TABLE projects ADD COLUMN project_path TEXT NOT NULL DEFAULT '';
 `,
 }

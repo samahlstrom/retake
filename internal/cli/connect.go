@@ -246,44 +246,18 @@ type connectProject struct {
 	timeline bool
 }
 
-// connectProjects finds the folder's projects as retake open <folder> does, plus candidate folders with a native
-// timeline and no version yet (spec/automation.md).
+// connectProjects finds the folder's videos as retake open <folder> does (the same scan of its tree, spec/home.md),
+// plus the projects with a native timeline and no version yet, so their workers can render the first one
+// (spec/automation.md).
 func connectProjects(dir string) []connectProject {
-	found := home.Discover(dir)
-	used := map[string]bool{}
-	byRoot := map[string]bool{}
-	var out []connectProject
-	for _, f := range found {
+	scan := home.ScanDir(dir)
+	out := make([]connectProject, 0, len(scan.Videos)+len(scan.Empty))
+	for _, f := range scan.Videos {
 		_, err := bridge.FindTimeline(f.Root)
 		out = append(out, connectProject{Found: f, timeline: err == nil})
-		used[f.Name], byRoot[f.Root] = true, true
 	}
-	candidates := []string{dir}
-	if entries, err := os.ReadDir(dir); err == nil {
-		for _, e := range entries {
-			n := e.Name()
-			if strings.HasPrefix(n, ".") || strings.HasSuffix(n, ".review") {
-				continue
-			}
-			if p := filepath.Join(dir, n); isDir(p) {
-				candidates = append(candidates, p)
-			}
-		}
-	}
-	for _, c := range candidates {
-		if byRoot[c] {
-			continue
-		}
-		if _, err := bridge.FindTimeline(c); err != nil {
-			continue
-		}
-		title := filepath.Base(c)
-		name := home.Slug(title)
-		for i := 2; used[name]; i++ {
-			name = fmt.Sprintf("%s-%d", home.Slug(title), i)
-		}
-		used[name] = true
-		out = append(out, connectProject{Found: home.Found{Name: name, Title: title, Root: c}, timeline: true})
+	for _, f := range scan.Empty {
+		out = append(out, connectProject{Found: f, timeline: true})
 	}
 	return out
 }
@@ -291,6 +265,7 @@ func connectProjects(dir string) []connectProject {
 // running is one project's worker.
 type running struct {
 	root   string
+	place  string // its path and project when it was registered, so a move registers it again
 	cancel context.CancelFunc
 	done   chan struct{}
 	err    error // set before done closes
@@ -338,6 +313,12 @@ func (cn *connector) run(ctx context.Context) {
 				<-rw.done
 				rw = nil
 			}
+			if place := p.Path + "\x00" + p.Project; rw != nil && rw.place != place {
+				// Its project changed (a folder above it got a video): the server's tree is told, the worker runs on.
+				if err := cn.register(ctx, p); err == nil {
+					rw.place = place
+				}
+			}
 			if rw != nil && rw.exited() {
 				if rw.err != nil {
 					trouble(p.Name, rw.err.Error()+" (trying again)")
@@ -384,7 +365,7 @@ func (cn *connector) run(ctx context.Context) {
 func (cn *connector) register(ctx context.Context, p connectProject) error {
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
-	body, _ := json.Marshal(map[string]string{"name": p.Name, "title": p.Title})
+	body, _ := json.Marshal(map[string]string{"name": p.Name, "title": p.Title, "path": p.Path, "project": p.Project})
 	if err := cn.do(ctx, http.MethodPost, "/api/machine/projects", "application/json", body, nil); err != nil {
 		return err
 	}
@@ -405,7 +386,7 @@ func (cn *connector) register(ctx context.Context, p connectProject) error {
 // start runs a project's worker, as retake worker does, with the machine token as its agent token.
 func (cn *connector) start(ctx context.Context, p connectProject) *running {
 	wctx, cancel := context.WithCancel(ctx)
-	rw := &running{root: p.Root, cancel: cancel, done: make(chan struct{})}
+	rw := &running{root: p.Root, place: p.Path + "\x00" + p.Project, cancel: cancel, done: make(chan struct{})}
 	log := &prefixWriter{mu: &cn.logMu, w: cn.env.Stdout, prefix: p.Name + ": "}
 	go func() {
 		defer close(rw.done)

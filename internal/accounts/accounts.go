@@ -170,6 +170,10 @@ type Project struct {
 	Name    string `json:"name"`
 	Title   string `json:"title"`
 	Created string `json:"created"`
+	// Path and ProjectPath place it in the home's folder tree (spec/home.md): the folder that holds the video and its
+	// project's folder, relative to the folder retake connect runs in. "" when it was made another way.
+	Path        string `json:"path"`
+	ProjectPath string `json:"project_path"`
 }
 
 var nameRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`)
@@ -177,12 +181,26 @@ var nameRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`)
 // ValidName reports whether name can be a project's name (its /p/<name>/ address).
 func ValidName(name string) bool { return nameRE.MatchString(name) }
 
-const projectCols = `id, name, title, created`
+const projectCols = `id, name, title, created, path, project_path`
 
 func scanProject(r scanner) (Project, error) {
 	var p Project
-	err := r.Scan(&p.ID, &p.Name, &p.Title, &p.Created)
+	err := r.Scan(&p.ID, &p.Name, &p.Title, &p.Created, &p.Path, &p.ProjectPath)
 	return p, err
+}
+
+// SetProjectPlace sets where a project is in the home's folder tree (Project.Path and ProjectPath).
+func (s *Store) SetProjectPlace(name, path, projectPath string) error {
+	return s.write(func(tx *sqldb.Tx) error {
+		res, err := tx.Exec(`UPDATE projects SET path = ?, project_path = ? WHERE name = ?`, path, projectPath, name)
+		if err != nil {
+			return err
+		}
+		if n, err := res.RowsAffected(); err == nil && n == 0 {
+			return fmt.Errorf("project %s: %w", name, ErrNotFound)
+		}
+		return nil
+	})
 }
 
 // CreateProject adds a project. A taken name gives ErrExists.
@@ -495,7 +513,7 @@ func (s *Store) ProjectsOf(u User) ([]ProjectRole, error) {
 		}
 		return out, nil
 	}
-	rows, err := s.db.Query(`SELECT p.id, p.name, p.title, p.created, m.role FROM members m
+	rows, err := s.db.Query(`SELECT p.id, p.name, p.title, p.created, p.path, p.project_path, m.role FROM members m
 		JOIN projects p ON p.id = m.project_id WHERE m.user_id = ? ORDER BY p.name`, u.ID)
 	if err != nil {
 		return nil, err
@@ -504,7 +522,7 @@ func (s *Store) ProjectsOf(u User) ([]ProjectRole, error) {
 	for rows.Next() {
 		var pr ProjectRole
 		var role string
-		if err := rows.Scan(&pr.ID, &pr.Name, &pr.Title, &pr.Created, &role); err != nil {
+		if err := rows.Scan(&pr.ID, &pr.Name, &pr.Title, &pr.Created, &pr.Path, &pr.ProjectPath, &role); err != nil {
 			return nil, err
 		}
 		pr.Role = team.Role(role)

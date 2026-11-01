@@ -128,9 +128,16 @@ func TestConnectRegistersProjectsAndRunsWorkers(t *testing.T) {
 		t.Fatalf("projects: %s", names(h)) // the plain folder too: retake open shows it
 	}
 	for _, c := range h.Projects {
-		if c.Name == "intro-cut" && (c.Title != "Intro Cut" || c.Thumb != "p/intro-cut/api/poster") {
+		if c.Name == "intro-cut" && (c.Title != "Intro Cut" || c.Thumb != "p/intro-cut/api/poster" ||
+			c.Path != "Intro Cut" || c.Project != "Intro Cut") {
 			t.Errorf("intro-cut: %+v", c)
 		}
+	}
+	// The server's tree is the folder's, as retake open shows it.
+	if h.Tree == nil || len(h.Tree.Children) != 3 || h.Tree.Children[0].Title != "fresh" ||
+		h.Tree.Children[1].Title != "Intro Cut" || !h.Tree.Children[1].Project || len(h.Tree.Children[1].Videos) != 1 {
+		b, _ := json.Marshal(h.Tree)
+		t.Errorf("tree: %s", b)
 	}
 	// The poster is the version's first frame, sent from here.
 	req, _ := http.NewRequest(http.MethodGet, base+"/p/intro-cut/api/poster", nil)
@@ -246,15 +253,20 @@ func TestConnectProjects(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "A", "edit", "timeline.json"), fakeTimeline) // no version yet; "a" is taken
 	writeFile(t, filepath.Join(dir, ".hidden", "edit", "timeline.json"), fakeTimeline)
 	writeFile(t, filepath.Join(dir, "notes", "readme.txt"), "x")
+	// Deeper: a dated folder's project, a project's short, and a timeline project in a folder, as retake open finds.
+	writeFile(t, filepath.Join(dir, "2026", "jump", "v2", "jump_v2.mp4"), "x")
+	writeFile(t, filepath.Join(dir, "b", "shorts", "one_v1.mp4"), "x")
+	writeFile(t, filepath.Join(dir, "drafts", "next", "edit", "timeline.json"), fakeTimeline)
 	var got []string
 	for _, p := range connectProjects(dir) {
-		s := p.Name + "=" + filepath.Base(p.Root)
+		s := p.Name + "=" + filepath.Base(p.Root) + "@" + p.Path + ":" + p.Project
 		if p.timeline {
 			s += "+timeline"
 		}
 		got = append(got, s)
 	}
-	if strings.Join(got, " ") != "a=a+timeline b=b a-2=A+timeline" {
+	if strings.Join(got, " ") != "a=a@a:a+timeline b=b@b:b 2026-jump=jump@2026/jump:2026/jump "+
+		"b-shorts=shorts@b/shorts:b a-2=A@A:A+timeline drafts-next=next@drafts/next:drafts/next+timeline" {
 		t.Fatalf("%v", got)
 	}
 }
