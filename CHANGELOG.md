@@ -20,8 +20,14 @@ All notable changes are listed here. Versions follow semver once the first relea
 - Every answer carries `X-Retake-Api-Version: 1` (spec/api.md, "API versions"), for teams that ship their own page
   with `--ui-dir`.
 - **Theme API:** v1, all tokens and parts new. After updating, run `retake theme check`.
-- The built-in look is the same, except for a few near-identical greys merged into one token each (the list is in
-  the commit that tokenized the page).
+- The wordmark is "Retake." with the period in the record red (`--wordmark-dot`), on the home and the server's
+  sign-in and setup pages; titles stay plain. A theme's name or logo replaces it. `retake serve`'s sign-in, setup and
+  message pages wear the host's theme too.
+- The built-in look is otherwise the same: before/after screenshots of the review page (desktop, phone) are identical
+  to the pixel, and the home differs only in the length on each card (`#ececef` → `#dcdce1`, the over-the-video
+  text). States the screenshots don't show moved a few levels to the nearest token: menu and popover text
+  (`#e8e8ef` → `#e4e4ea`), the timeline tip, the agent select, error lines (→ `#ff8f86`), the sidebar's focus ring
+  (`#b7a6ff` → `#a693fa`), and the reply box's idle colours.
 
 ### Agents ask on the video, never in the terminal
 - The built-in agents never stop for a permission prompt: Claude Code runs with `--dangerously-skip-permissions`
