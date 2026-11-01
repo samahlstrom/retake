@@ -4,6 +4,18 @@ All notable changes are listed here. Versions follow semver once the first relea
 
 ## Unreleased
 
+### Agents ask on the video, never in the terminal
+- The built-in agents never stop for a permission prompt: Claude Code runs with `--dangerously-skip-permissions`
+  (and without its own question tool), Codex with `--dangerously-bypass-approvals-and-sandbox`, in the background and
+  in herdr or tmux. The docs say plainly that the agent has full access to the editing machine.
+- `retake ask --note 12 --at 1:23 "question"` from inside a task asks about a moment of the video, with boxes,
+  arrows, freehand lines, images and tap-to-answer choices; no video path or token (a per-attempt local endpoint and
+  secret from the worker). It works in `retake open` and through `retake connect`.
+- The question shows under its comment (a thumbnail of the frame with the agent's drawing, its choices, the reply
+  box) and as a "?" on the timeline; the agent's visuals draw on the video in their own dashed violet style. The
+  answer (typed, tapped or spoken) goes back to the same task: into the live herdr or tmux session, or the next
+  attempt's context. A task can end an attempt with some notes Done and some still Question.
+
 ### Hosting in two commands
 - `docker compose up -d` in `deploy/` runs one container with one volume (SQLite and local files). Postgres and
   MinIO moved to the compose file's `scale` profile. `deploy/Caddyfile` is a ready HTTPS front.
