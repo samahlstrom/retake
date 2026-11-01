@@ -29,7 +29,7 @@ const pageStyle = `body{margin:0;min-height:100vh;display:grid;place-items:cente
 	`form.inline{display:inline}.muted{color:#888}h2{font-size:1rem;font-weight:600;margin-top:1.75rem}` +
 	`.field label{display:block;margin-bottom:.25rem;color:#aaa}.field input{width:100%;box-sizing:border-box}` +
 	`pre{white-space:pre-wrap;word-break:break-all;background:#1a1a1c;border:1px solid #333;border-radius:6px;` +
-	`padding:.75rem;user-select:all}code{font:14px/1.5 ui-monospace,monospace}`
+	`padding:.75rem;user-select:all}code{font:14px/1.5 ui-monospace,monospace;font-variant-ligatures:none}`
 
 // page sends one short HTML page. body is HTML; callers escape what they put in it.
 func (h *Hub) page(w http.ResponseWriter, r *http.Request, code int, title, body string) {

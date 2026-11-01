@@ -236,6 +236,7 @@ email. A share guest's get the token's label, else "guest".
 | GET, POST | `/setup` | the setup code, and no users yet | First run (above) |
 | GET, POST | `/signin` | nothing | The sign-in page (above). |
 | GET, POST | `/signin/<code>` | nothing | A sign-in link (above). |
+| GET | `/signout` | a session (else 303 to `/signin`) | A page with one button, Sign out, which posts: the home screen links here |
 | POST | `/signout` | a session | Ends it. |
 | GET | `/api/me` | a session | `{email, name, admin, projects: [{name, title, role}]}` |
 | GET | `/api/projects` | a session | `{projects: [{name, title, role, versions}]}`: the ones you can see |

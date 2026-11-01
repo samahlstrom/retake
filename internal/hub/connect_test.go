@@ -258,3 +258,21 @@ func fstestUI() fstest.MapFS {
 	return fstest.MapFS{"index.html": {Data: []byte(pageHTML)}, "home.html": {Data: []byte("<!doctype html><title>home</title>")},
 		"assets/home.js": {Data: []byte("console.log(1)")}, "assets/.secret": {Data: []byte("x")}}
 }
+
+func TestSignOutPage(t *testing.T) {
+	x := newTH(t, Config{}, nil)
+	s := x.session(x.user("ana@example.com", false))
+	if r := x.do(http.MethodGet, "/signout", ""); r.code != 303 || r.hdr.Get("Location") != "/signin" {
+		t.Fatalf("signed out: %d", r.code)
+	}
+	r := x.do(http.MethodGet, "/signout", "", cookie(SessionCookie, s))
+	if r.code != 200 || !strings.Contains(r.body, `action="/signout"`) || !strings.Contains(r.body, "ana@example.com") {
+		t.Fatalf("page: %d %s", r.code, r.body)
+	}
+	if r := x.post("/signout", "", cookie(SessionCookie, s)); r.code != 303 || r.hdr.Get("Location") != "/signin" {
+		t.Fatalf("post: %d", r.code)
+	}
+	if r := x.do(http.MethodGet, "/api/me", "", cookie(SessionCookie, s)); r.code != 401 {
+		t.Fatalf("after: %d", r.code)
+	}
+}
