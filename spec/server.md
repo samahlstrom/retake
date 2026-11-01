@@ -32,6 +32,7 @@ Settings come from the flags, else the environment, else `[server]` in config.to
 | S3 over plain HTTP | `--s3-insecure` | `RETAKE_S3_INSECURE=1` | `s3_insecure` | false (HTTPS) |
 | SMTP | none (secrets) | `RETAKE_SMTP_URL` | `smtp_url` | none: links are printed |
 | Mail sender | `--smtp-from` | `RETAKE_SMTP_FROM` | `smtp_from` | `retake@<public host>` |
+| Relay cache size | `--relay-cache` | `RETAKE_RELAY_CACHE` | `relay_cache` | `20GB` (`0`: off) |
 
 - `RETAKE_SMTP_URL` is `smtp://user:password@host:587` (STARTTLS, required) or `smtps://user:password@host:465`
   (TLS from the start).
@@ -51,6 +52,8 @@ DIR/
     media/<name>_v1.review/      their takes, notes.md, notes.json and snaps/
     .retake/project.db           the project store (SQLite driver); jobs.lock
   uploads/<id>.json, <id><ext>   tus uploads in progress (below)
+  relay-cache/<name>/            chunks of relayed video, kept to spare the connected computer's upload
+                                 (spec/automation.md, "The media relay"); safe to delete
 ```
 
 A project's workspace is a plain retake project folder: `retake open DIR/projects/<name>/media/<name>_v1.mp4` opens
@@ -195,7 +198,9 @@ without a token per project.
 - The poster is kept as `.retake/poster.jpg` in the project's workspace. Until the project's page has a version,
   `GET /p/<name>/api/poster` serves it (watch permission), and the project's home card uses it as `thumb`.
 - Nothing else is sent: never footage, source or renders. Video reaches the server only through the worker's relay
-  (spec/automation.md), or a `retake push --remote`.
+  (spec/automation.md), or a `retake push --remote`. Every folder `retake open <folder>` shows is registered, with
+  or without a timeline; the worker then sends its version files' metadata (`POST /api/worker/files`), and their
+  video plays through the relay.
 
 ## Who a request is
 
