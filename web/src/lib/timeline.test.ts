@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TL_PAD } from './constants';
+import { DEFAULT_PALETTE, palette } from './theme';
 import {
   covers,
   drawTimeline,
@@ -74,6 +75,14 @@ describe('the timeline', () => {
     expect(rects[0]).toEqual({ fill: TRACK_PENDING, x: TL_PAD, w: 1000 }); // the whole expected length, faint
     expect(rects[1]).toEqual({ fill: TRACK, x: TL_PAD, w: 410 }); // rendered so far
     expect(rects[2]!.w).toBeCloseTo(100); // the played part on top, at the same scale
+  });
+
+  it("draws in the theme's colours when it has them (lib/theme.ts)", () => {
+    const { g, rects } = recorder();
+    const colors = { ...DEFAULT_PALETTE, track: 'rgb(1, 2, 3)', trackPlayed: 'rgb(4, 5, 6)', playhead: 'rgb(7, 8, 9)' };
+    drawTimeline(g, W, 20, { ...base, colors });
+    expect(rects.map((r) => r.fill)).toEqual(['rgb(1, 2, 3)', 'rgb(4, 5, 6)']);
+    expect(palette()).toBe(DEFAULT_PALETTE); // no document here: the built-in look
   });
 });
 

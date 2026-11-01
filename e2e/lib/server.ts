@@ -61,10 +61,14 @@ async function ping(port: number): Promise<boolean> {
   }
 }
 
-/** Starts a server for `video` and waits until it answers /api/ping. `extra`: more flags (new server only). */
-export async function startServer(name: string, video: string, port: number, extra: string[] = []): Promise<Server> {
+/**
+ * Starts a server for `video` and waits until it answers /api/ping. `extra`: more flags (new server only). `opts`:
+ * another binary (an update), and environment variables over the usual ones (another config folder).
+ */
+export async function startServer(name: string, video: string, port: number, extra: string[] = [],
+  opts: { bin?: string; env?: Record<string, string> } = {}): Promise<Server> {
   const [cmd, args] = serverCommand(video, port, extra);
-  return startProcess(name, cmd, args, port);
+  return startProcess(name, opts.bin ?? cmd, args, port, opts.env);
 }
 
 /** Starts `retake serve` (spec/server.md) with these arguments and waits until it answers /api/ping. */
@@ -72,7 +76,8 @@ export async function startTeamServer(name: string, port: number, args: string[]
   return startProcess(name, RETAKE_BIN, ['serve', '--listen', `127.0.0.1:${port}`, ...args], port);
 }
 
-async function startProcess(name: string, cmd: string, args: string[], port: number): Promise<Server> {
+async function startProcess(name: string, cmd: string, args: string[], port: number,
+  env: Record<string, string> = {}): Promise<Server> {
   if (!existsSync(cmd)) {
     throw new Error(LEGACY ? `legacy launcher not found: ${cmd} (set RETAKE_LEGACY_REVIEW)`
       : `${cmd} not found: run \`make build\` first (or set RETAKE_BIN)`);
@@ -85,7 +90,7 @@ async function startProcess(name: string, cmd: string, args: string[], port: num
   const proc = spawn(cmd, args, {
     detached: true, // own process group, so stop() reaches the launcher's children too
     stdio: ['ignore', fd, fd],
-    env: { ...process.env, XDG_CONFIG_HOME: CONFIG_HOME },
+    env: { ...process.env, XDG_CONFIG_HOME: CONFIG_HOME, RETAKE_THEME: '', ...env }, // no theme unless a test sets one
   });
   closeSync(fd);
   const server = new Server(name, port, proc, log);

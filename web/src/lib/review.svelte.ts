@@ -2277,35 +2277,30 @@ export class Review {
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     const md = this.mediaDuration(),
       rendered = renderedEnd(this.shownVersion());
-    drawTimeline(
-      g,
-      w,
-      h,
-      {
-        // an incomplete stream's length is known before its video is (its poster shows until the first segment)
-        d: this.video.duration || rendered !== null ? md : 0,
-        xd: md || 1,
-        rendered,
-        vt,
-        recording: !!this.seg,
-        takeBins: pendingVoiceBins(
-          this.take.segments.map((seg) => ({
-            take: this.take.id ?? '',
-            seg: seg.id,
-            bins: seg.voiceBins ?? new Float32Array(0),
-            active: seg === this.seg,
-            transcribed:
-              this.transcribedTakes.includes(this.take.id ?? '') ||
-              this.transcribedClips.includes(`${this.take.id}/${seg.id}`),
-          })),
-          this.rows,
-        ),
-        histBins: this.pendingHistoryVoice,
-        ...this.#pendingTicks(),
-        knob: this.touch ? 8 : undefined,
-      },
-      palette(),
-    );
+    drawTimeline(g, w, h, {
+      // an incomplete stream's length is known before its video is (its poster shows until the first segment)
+      d: this.video.duration || rendered !== null ? md : 0,
+      xd: md || 1,
+      rendered,
+      vt,
+      recording: !!this.seg,
+      takeBins: pendingVoiceBins(
+        this.take.segments.map((seg) => ({
+          take: this.take.id ?? '',
+          seg: seg.id,
+          bins: seg.voiceBins ?? new Float32Array(0),
+          active: seg === this.seg,
+          transcribed:
+            this.transcribedTakes.includes(this.take.id ?? '') ||
+            this.transcribedClips.includes(`${this.take.id}/${seg.id}`),
+        })),
+        this.rows,
+      ),
+      histBins: this.pendingHistoryVoice,
+      ...this.#pendingTicks(),
+      knob: this.touch ? 8 : undefined,
+      colors: palette(),
+    });
   }
 
   #drawWave(): void {

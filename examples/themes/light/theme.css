@@ -68,7 +68,7 @@
   background: #111114;
 }
 
-/* The white pen on a white bar: a hairline so it shows. */
+/* The white pen on a white bar: a soft edge so it shows (it follows the dot, at any size). */
 [data-part~='pen'][data-color='white'] {
-  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.3);
+  filter: drop-shadow(0 0 1px rgb(0 0 0 / 0.55));
 }

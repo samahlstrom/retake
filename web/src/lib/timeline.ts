@@ -74,20 +74,16 @@ export interface TimelineData {
   knob?: number;
   /** A streamed render still filling in: the seconds rendered so far. The track after it is drawn fainter. */
   rendered?: number | null;
+  /** The theme's canvas colours (lib/theme.ts); the built-in look's when left out. */
+  colors?: Readonly<Palette>;
 }
 
 /** The track's fill before and after what a streamed render has rendered so far (the built-in look's). */
 export const TRACK = DEFAULT_PALETTE.track;
 export const TRACK_PENDING = DEFAULT_PALETTE.trackPending;
 
-/** Draws the timeline in the theme's canvas colours (lib/theme.ts; the built-in look's by default). */
-export function drawTimeline(
-  g: CanvasRenderingContext2D,
-  w: number,
-  h: number,
-  x: TimelineData,
-  colors: Readonly<Palette> = DEFAULT_PALETTE,
-): void {
+export function drawTimeline(g: CanvasRenderingContext2D, w: number, h: number, x: TimelineData): void {
+  const colors = x.colors ?? DEFAULT_PALETTE;
   g.clearRect(0, 0, w, h);
   const y = Math.round(h / 2),
     d = x.d,

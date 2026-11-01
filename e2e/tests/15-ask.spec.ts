@@ -123,9 +123,9 @@ test("the agent's question: under its comment, on the timeline, on the video in 
   await expect(layer.locator('.agent-arrow')).toHaveCount(1);
   await expect(layer.locator('.agent-chip text').first()).toHaveText('this title');
   await expect(layer.locator('.agent-chip text').nth(1)).toHaveText('Agent'); // an arrow without a label says whose
-  // Its own style: the Question violet, dashed, never a pen colour.
-  const style = await layer.locator('.agent-box').evaluate((el) => ({ stroke: el.getAttribute('stroke'), dash: el.getAttribute('stroke-dasharray') }));
-  expect(style).toEqual({ stroke: '#a693fa', dash: '6 4' });
+  // Its own style: the Question violet (the theme's --agent), dashed, never a pen colour.
+  const style = await layer.locator('.agent-box').evaluate((el) => ({ stroke: getComputedStyle(el).stroke, dash: el.getAttribute('stroke-dasharray') }));
+  expect(style).toEqual({ stroke: 'rgb(166, 147, 250)', dash: '6 4' });
   // It takes no pointer: the pen (while recording) goes over it.
   expect(await layer.evaluate((el) => getComputedStyle(el).pointerEvents)).toBe('none');
   await page.waitForTimeout(1000); // the arrival highlight is over
