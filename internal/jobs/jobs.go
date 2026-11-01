@@ -367,6 +367,13 @@ func (r *Runner) run(ctx context.Context, job project.Job, h Handler) {
 	if err != nil && j.State == project.JobFailed {
 		_, _ = fmt.Fprintf(r.Log, "retake: %s job %d failed: %s\n", j.Kind, j.ID, j.Error)
 	}
+	if j.State == project.JobDone {
+		// A sent review is queued for the agent as soon as it is processed, whether or not its computer is online
+		// (spec/automation.md, "Submission and comment state"): the queue waits for the computer, not the review.
+		if e := r.Store.ReadyFeedback(); e != nil {
+			_, _ = fmt.Fprintf(r.Log, "retake: queueing sent reviews: %v\n", e)
+		}
+	}
 }
 
 // panicSite picks the panicking function out of a stack trace, to keep the job's error to one line.

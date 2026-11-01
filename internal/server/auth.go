@@ -100,7 +100,8 @@ func permFor(method string, parts []string) team.Perm {
 		return team.PermAgent
 	}
 	if method == http.MethodPost && len(parts) >= 2 && parts[0] == "api" && parts[1] == "automation" {
-		if is(parts, "api", "automation", "tasks") || len(parts) == 5 && parts[4] == "answer" {
+		// Anyone who records sends, answers and retries (spec/automation.md); the rest is the owner's.
+		if is(parts, "api", "automation", "tasks") || len(parts) == 5 && (parts[4] == "answer" || parts[4] == "retry") {
 			return team.PermRecord
 		}
 		return team.PermManage

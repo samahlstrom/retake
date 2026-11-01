@@ -30,9 +30,9 @@ upload or an inbound connection to the worker. This is an addition to the existi
 - A project owner chooses its worker and default agent in the browser. A task may override that agent. Credentials
   are supplied by the agent's own local configuration; they are never returned by the worker or shown to viewers.
   The first connected worker is selected as the initial stream source, so an empty hosted project can show its
-  first video without an upload. Sending feedback (below) always reaches the selected worker; `config.enabled`
-  only decides whether finished reviews that weren't sent are sent automatically, and it is off until the owner
-  turns it on. Turning it off doesn't stop a running task (pause the task for that).
+  first video without an upload. Sending feedback (below) always reaches the selected worker, and anyone who can
+  record a review sends. `config.enabled` is kept for older pages: it sends finished reviews that weren't sent, it
+  is off until set, and turning it off doesn't stop a running task. The page no longer shows it.
 - There is at most one editing task running in a project. Task state, assignments, attempts, questions, answers
   and results survive server restart. A lease identifies each attempt; late reports from a replaced attempt are
   rejected. A local process lock prevents duplicate workers for one project.
@@ -70,17 +70,24 @@ the browser's Connect your computer card prints the line). It is `retake worker`
 
 ## Submission and comment state
 
-- Recording and incremental transcription do not launch editing. Finish review closes the take and queues its
-  processing. Once the final notes job succeeds, the take's open notes enter the editing queue when the request
-  said `"send": true`, or else when `config.enabled` is on. Each finished take is considered once: if neither
-  applies, its notes stay Open until someone sends them, and turning `enabled` on later doesn't sweep up old
-  reviews. Finishing again with `"send": true` sends a take that was already processed. The browser can also
-  submit selected existing open comments explicitly (Send); that always queues, whatever `config.enabled` says.
-  Submission is idempotent while an unfinished task owns a note. Reopened notes may be submitted again.
+- Recording and incremental transcription do not launch editing. Send closes the take (`/done` with
+  `"send": true`) and queues its processing. Once the final notes job succeeds, the take's open notes enter the
+  editing queue: right away, in the process that ran the job, whether or not a worker is connected. A `/done`
+  without `send` (an older page) queues them only when `config.enabled` is on. Each finished take is considered
+  once: if neither applies, its notes stay Open until someone sends them, and turning `enabled` on later doesn't
+  sweep up old reviews. Finishing again with `"send": true` sends a take that was already processed. Send also
+  submits the other open comments (`POST /api/automation/tasks`); that always queues. Submission is idempotent
+  while an unfinished task owns a note. Reopened notes may be submitted again.
+- Any role that can record (reviewer, approver, owner; signed in or through a share link, local or hosted) sends
+  and retries. A queued task waits for the selected worker, or for the first worker to connect when none was ever
+  selected, and starts by itself when it polls: no worker online is not an error. A retry by a reviewer or an
+  approver keeps the task's agent; choosing an agent, switching and pausing stay with the owner.
 - A comment shows one of four states: Open, Working, Question, Done (the page maps them in `web/src/lib/status.ts`).
   No task, a cancelled one, or a paused one is Open (a pause adds its reason once, such as "Paused: usage limit",
-  with Retry); queued, running and stopping are Working; an agent's question is Question; completed, answered and
-  accepted are Done. Existing approval and retraction remain intact. Working comes from a task. Done requires a
+  with Retry); queued, running and stopping are Working, and so is an open note of a take that was sent and is
+  still being processed (`sending`, below); an agent's question is Question; completed, answered and accepted are
+  Done. A Working comment whose task hasn't started says why in one short line: "Waiting for the editing computer"
+  while no worker is online, "Waiting for the agent" while Local mode is `blocked`. Existing approval and retraction remain intact. Working comes from a task. Done requires a
   successfully rendered result plus an explicit per-note change description; an agent process exit alone never
   completes feedback.
 - A question and its answer stay on the task/comment. Answering resumes the same task. Operational pauses (usage
@@ -126,24 +133,27 @@ the browser's Connect your computer card prints the line). It is `retake worker`
 - `/api/automation`: GET for viewers, configuration changes for owners only. GET returns the state (`config`,
   `workers`, `tasks`, `renders`; a render has `draft` while it is one) plus `"local": true` when this process runs
   the project's worker itself (Local mode) and `false` on a hosted server, and, in Local mode only,
-  `"blocked": "<why>"` while that worker can't run. Then `workers` may not list it.
-- `/api/automation/tasks`: submit feedback as a reviewer; task assignment, cancellation, retry and switching are
-  owner actions. Answers can be submitted by reviewers.
+  `"blocked": "<why>"` while that worker can't run. Then `workers` may not list it. `sending` lists the takes
+  finished with `"send": true` whose processing hasn't finished yet (and hasn't failed): `[{"version", "take"}]`.
+- `POST /api/automation/tasks` (submit feedback), `.../tasks/<id>/answer` and `.../tasks/<id>/retry`: any role that
+  can record. A retry's `agent` counts only from the owner. Switching, pausing and the config are owner actions.
 - `/api/worker/*`: Bearer agent token only, including local requests. Worker registration, polling/heartbeats,
   attempt reports, render registration/progress, note artifacts and relay response endpoints. The poll answer has
   `config`, `task`, `notes` and `versions` (how many versions the family has, drafts not counted). In Local mode
   the in-process worker reaches these handlers without HTTP or a token.
 - Existing video URLs serve remote versions through the relay. Existing viewing permissions apply to all media.
-- The bar has one action. The owner's is Send (`Send N to agent`, N the open comments no task owns): it finishes
-  the take in progress with `send: true` on its `/done` and submits the other open comments. Other reviewers have
-  Finish review. Hosted with no computer online, Send saves the take and opens the agent popover with the connect
-  command (`POST /api/connect`). In local mode, when the built-in worker can't edit (`blocked`), the action is
-  Finish review and the popover says why. Next to the action,
-  the agent's name with a dot (green: online) opens that popover: the agent, its fallback ("Pause and ask me" by
-  default) and "Send other reviewers' comments automatically" (`config.enabled`). Per-comment actions (send one,
-  retry, switch agent, pause, history, reopen, delete) are in the card's ⋯ menu. A worker's question takes a typed
-  answer (`…/answer`); a question asked through the notes takes a recorded one (`answer_to`), in the same reply
-  box. Comment cards show current task state and result links regardless of which version is selected.
+- The bar has one action for everyone who can record: Send (`Send N to agent`, N the open comments no task owns
+  and no `sending` take holds). It finishes the take in progress with `send: true` on its `/done` and submits the
+  other open comments. With no computer online it does the same: the comments show Working, "Waiting for the
+  editing computer", and start when one connects; the owner's press also opens the agent popover with the connect
+  command (`POST /api/connect`). In local mode, when the built-in worker can't edit (`blocked`), Send saves the take
+  without `send`, and the first press opens the popover, which says what's missing. There is no other action.
+  Next to it, the agent's name with a dot (green: online) opens that popover. The owner chooses the agent, its
+  fallback ("Pause and ask me" by default) and the computer there; everyone else sees the agent, or the one line
+  "Waiting for the editing computer". Per-comment actions are in the card's ⋯ menu: send one, retry, history and
+  delete as the role allows; switch agent and pause for the owner; reopen for approvers. A worker's question takes
+  a typed answer (`…/answer`); a question asked through the notes takes a recorded one (`answer_to`), in the same
+  reply box. Comment cards show current task state and result links regardless of which version is selected.
 
 ## Required verification
 
@@ -151,6 +161,7 @@ Use disposable native timelines and generated media. Test persistence, single cl
 before switching, rate-limit handoff, final submission versus incremental transcription, questions and replies,
 role restrictions, revoked tokens, bounded relay, path safety, server/worker reconnect, cached incremental
 rendering and actual browser playback after source changes. Exercise both existing saved comments and new
-submissions, Send with automation off, Finish with and without `send`, drafts versus versions, a worker restart
+submissions, Send by every recording role (a share link too) with no worker online and with automation off,
+`/done` with and without `send`, a sent take queuing without a worker poll, drafts versus versions, a worker restart
 with unchanged source, profile `env` expansion, and Local mode's in-process worker and `blocked` reasons. Provider adapters are tested with deterministic executables; live paid-provider execution is reported
 separately if it is not exercised.

@@ -49,8 +49,13 @@ func (s *Server) automationRoute(w http.ResponseWriter, r *http.Request, p []str
 			s.storeFailed(w, r, err)
 			return
 		}
+		sending, err := st.Sending()
+		if err != nil {
+			s.storeFailed(w, r, err)
+			return
+		}
 		redactAutomation(&a)
-		view := automationView{AutomationState: a, Local: s.opts.LocalWorker != nil}
+		view := automationView{AutomationState: a, Local: s.opts.LocalWorker != nil, Sending: sending}
 		if view.Local {
 			view.Blocked = s.inproc.reason()
 		}
@@ -88,7 +93,11 @@ func (s *Server) automationRoute(w http.ResponseWriter, r *http.Request, p []str
 		// Reviewers may submit notes, but only owners choose executable profiles.
 		_, err = st.QueueFeedback(b.Notes, "")
 	case len(p) == 5 && p[2] == "tasks":
-		err = st.ControlTask(p[3], p[4], b.Agent, b.Message)
+		agent := b.Agent
+		if !accessOf(r).role.Can(team.PermManage) {
+			agent = "" // a reviewer's retry keeps the task's agent
+		}
+		err = st.ControlTask(p[3], p[4], agent, b.Message)
 	default:
 		s.fail(w, r, 404, "not found")
 		return
@@ -105,6 +114,8 @@ type automationView struct {
 	project.AutomationState
 	Local   bool   `json:"local"`
 	Blocked string `json:"blocked,omitempty"`
+	// Sending is the takes sent to the agent whose processing hasn't finished: their notes show Working.
+	Sending []project.TakeRef `json:"sending"`
 }
 
 func redactAutomation(a *project.AutomationState) {

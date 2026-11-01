@@ -432,9 +432,41 @@ func (s *Store) SubmitReview(version, take string, after []int64, send bool) err
 	})
 }
 
+// TakeRef names one take of one version.
+type TakeRef struct {
+	Version string `json:"version"`
+	Take    string `json:"take"`
+}
+
+// Sending lists the takes finished with send whose processing hasn't finished yet and hasn't failed: their notes
+// are on their way to the agent (spec/automation.md, "HTTP and UI").
+func (s *Store) Sending() ([]TakeRef, error) {
+	a, err := s.Automation()
+	if err != nil {
+		return nil, err
+	}
+	out := []TakeRef{}
+	for _, sub := range a.Submissions {
+		if !sub.Send || sub.Done {
+			continue
+		}
+		failed := false
+		for _, id := range sub.After {
+			if j, e := s.Job(id); e == nil && j.State == JobFailed {
+				failed = true
+				break
+			}
+		}
+		if !failed {
+			out = append(out, TakeRef{Version: sub.Version, Take: sub.Take})
+		}
+	}
+	return out, nil
+}
+
 // ReadyFeedback considers each finished review once its final processing jobs succeeded: its open notes are queued
 // when it was sent, or when automation is enabled; otherwise they stay for a manual Send. It is safe to call
-// repeatedly.
+// repeatedly. The job runner calls it after every job, and a worker's poll calls it too.
 func (s *Store) ReadyFeedback() error {
 	a, err := s.Automation()
 	if err != nil {

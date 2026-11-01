@@ -134,6 +134,12 @@ func TestRoleChecksOnEveryRoute(t *testing.T) {
 		{"POST", "/api/nope", team.PermRecord},
 		{"POST", "/api/notes/99/reopen", team.PermApprove},
 		{"POST", "/api/versions/v99/approve", team.PermApprove},
+		{"POST", "/api/automation/tasks", team.PermRecord},
+		{"POST", "/api/automation/tasks/nope/answer", team.PermRecord},
+		{"POST", "/api/automation/tasks/nope/retry", team.PermRecord},
+		{"POST", "/api/automation/tasks/nope/switch", team.PermManage},
+		{"POST", "/api/automation/tasks/nope/pause", team.PermManage},
+		{"POST", "/api/automation", team.PermManage},
 		{"POST", "/mcp", team.PermAgent},
 		{"GET", "/mcp", team.PermAgent},
 	}

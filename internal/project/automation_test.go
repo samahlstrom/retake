@@ -366,3 +366,67 @@ func TestDraftLabelsAndPromotion(t *testing.T) {
 		}
 	}
 }
+
+// Sent feedback queues without a computer, and starts by itself when one connects: the first one ever (it becomes
+// the selected one, with its first agent), or the selected one coming back after being offline.
+func TestQueuedFeedbackWaitsForAComputer(t *testing.T) {
+	s, c := newStore(t)
+	if _, e := s.Sync(Run{Version: "v6", Comments: []Comment{{Key: "first", Take: take1, Text: "make the title blue"}, {Key: "second", Take: take1, Text: "trim the pause"}}}); e != nil {
+		t.Fatal(e)
+	}
+	queued, e := s.QueueFeedback([]int64{1}, "")
+	if e != nil || len(queued) != 1 || queued[0].State != "queued" || queued[0].Worker != "" {
+		t.Fatal("no computer, no queue:", queued, e)
+	}
+	w := EditingWorker{ID: "machine", Session: "one", Agents: []AgentProfile{{ID: "codex"}, {ID: "claude"}}}
+	j, e := s.PollWork(w, "", "")
+	if e != nil || j == nil || j.ID != queued[0].ID || j.Agent != "codex" || j.Worker != "machine" {
+		t.Fatal("the first computer didn't pick the queue up:", j, e)
+	}
+	if _, e = s.ReportWork(WorkReport{Worker: w.ID, Task: j.ID, Lease: j.Lease, State: "question", Message: "which blue?"}, 0); e != nil {
+		t.Fatal(e)
+	}
+	// The computer goes away; a send waits for it, and it picks the send up when it comes back.
+	c.add(WorkerLease + time.Minute)
+	if _, e = s.QueueFeedback([]int64{2}, ""); e != nil {
+		t.Fatal(e)
+	}
+	w.Session = "two"
+	j, e = s.PollWork(w, "", "")
+	if e != nil || j == nil || j.Notes[0] != 2 || j.State != "running" {
+		t.Fatal("the returning computer didn't pick the send up:", j, e)
+	}
+}
+
+// Sending lists the takes sent with Send until their processing finished; a failed processing job ends it, so its
+// comments don't look like they're on their way forever.
+func TestSendingListsSentTakesUntilProcessed(t *testing.T) {
+	s, _ := newStore(t)
+	submit := func(take string, send bool) []Job {
+		t.Helper()
+		jobs, e := s.QueueTake("v6", take, t.TempDir())
+		if e != nil {
+			t.Fatal(e)
+		}
+		var after []int64
+		for _, j := range jobs {
+			after = append(after, j.ID)
+		}
+		if e = s.SubmitReview("v6", take, after, send); e != nil {
+			t.Fatal(e)
+		}
+		return jobs
+	}
+	sent := submit(take1, true)
+	submit(take2, false)
+	got, e := s.Sending()
+	if e != nil || len(got) != 1 || got[0] != (TakeRef{Version: "v6", Take: take1}) {
+		t.Fatal("sending:", got, e)
+	}
+	if _, e = s.Finish(sent[0].ID, Fatal, "whisper.cpp isn't installed", "", 1); e != nil {
+		t.Fatal(e)
+	}
+	if got, e = s.Sending(); e != nil || len(got) != 0 {
+		t.Fatal("a failed take is still sending:", got, e)
+	}
+}

@@ -12,7 +12,7 @@ to `127.0.0.1:<port>` or `localhost:<port>` without a token has full access, exa
 | Role | Can | Through |
 |---|---|---|
 | `viewer` | watch: the page, the versions, history, the sidebar, events, take images | a share link |
-| `reviewer` | watch, and record: takes (data, audio, images, Done). Answering a question is recording. | a share link |
+| `reviewer` | watch, and record: takes (data, audio, images, Done), and Send to the agent. Answering a question is recording. | a share link |
 | `approver` | everything a reviewer can, plus approve a version and reopen a note | a share link |
 | `agent` | agent operations only: the `/mcp` route (notes_list, notes_wait, note_ask, note_set, version_push, versions_list). Not the page. | `Authorization: Bearer` |
 | `owner` | everything the page does (an approver's rights). Not a token role: it is a local request without a token. | localhost |
@@ -28,7 +28,7 @@ Permissions by route:
 | `/mcp` (any method) | agent, by Bearer token only, local requests too |
 | `/api/worker/*` | agent, by Bearer token only, local requests too (spec/automation.md) |
 | `GET /api/automation` | watch |
-| `POST /api/automation/tasks`, `POST /api/automation/tasks/<id>/answer` | record |
+| `POST /api/automation/tasks`, `POST /api/automation/tasks/<id>/answer` and `/retry` | record |
 | `POST /api/automation`, other `POST /api/automation/tasks/<id>/<action>` | owner only |
 | `GET /s/<token>` | nothing: it is how a token arrives |
 

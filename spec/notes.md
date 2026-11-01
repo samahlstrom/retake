@@ -160,7 +160,7 @@ The review page opens the newest playable cut. A version picker exposes review c
 
 `GET /api/history?v=<label>&scope=review` includes actual strokes and images for earlier unresolved feedback, with timestamps mapped when manifests exist. Carried entries expose `source_version` and are read-only on the destination cut. History exposes `transcribed` only when all saved audio files have matching completed transcripts; completed recordings never regain waveforms after reload. Partially transcribed takes expose per-segment voice tracks when available.
 
-The bar's action (Finish review, or the owner's Send, spec/automation.md) stops and saves the current recording and queues final processing. When this page has no active take, it explains that existing feedback is already saved and edits remain open (Send says there is nothing new to send); it must not claim there is no recording or resolve comments. Failed final requests remain retryable and never report successful completion.
+The bar's one action, Send (spec/automation.md), stops and saves the current recording and queues final processing. When this page has no active take and nothing new to send, it says so, and that existing feedback is already saved; it must not claim there is no recording or resolve comments. Failed final requests remain retryable and never report successful completion.
 
 The keyboard hint under the video shows until the first recording, once per browser (localStorage `retake.hint`); after that the keys are behind `?` (a key and a button in the bar).
 
