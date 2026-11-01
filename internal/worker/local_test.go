@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -97,19 +98,35 @@ func TestBlockedReasonsAreShortSentences(t *testing.T) {
 	if got := Reason(ErrBusy); got != "Another retake worker is editing this project." {
 		t.Fatal(got)
 	}
-	// Local keeps checking: blocked first, running once the agent appears.
+	// Local keeps checking: blocked first, then it runs once an agent is installed.
 	old := LocalRetry
 	LocalRetry = 20 * time.Millisecond
 	t.Cleanup(func() { LocalRetry = old })
 	ctx, cancel := context.WithCancel(context.Background())
 	reasons := make(chan string, 100)
 	done := make(chan struct{})
+	var installed atomic.Bool
+	profiles := func() []Profile {
+		if !installed.Load() {
+			return nil
+		}
+		return []Profile{{AgentProfile: project.AgentProfile{ID: "fake"}, Command: []string{"true"}}}
+	}
 	go func() {
 		defer close(done)
-		Local(ctx, o, http.NotFoundHandler(), func(why string) { reasons <- why })
+		Local(ctx, o, profiles, http.NotFoundHandler(), func(why string) { reasons <- why })
 	}()
 	if got := <-reasons; got != "No agent found. Install Claude Code or Codex." {
 		t.Fatal(got)
+	}
+	installed.Store(true)
+	for got := range reasons {
+		if got == "" {
+			break // found it and started
+		}
+		if got != "No agent found. Install Claude Code or Codex." {
+			t.Fatal(got)
+		}
 	}
 	cancel()
 	select {

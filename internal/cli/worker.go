@@ -76,7 +76,7 @@ func agentProfiles(env Env, cfg config.Config) []worker.Profile {
 // worker in this process, named after the machine (spec/automation.md, "Local mode").
 func localWorker(env Env, cfg config.Config) func(context.Context, string, http.Handler, func(string)) {
 	return func(ctx context.Context, root string, h http.Handler, blocked func(string)) {
-		worker.Local(ctx, worker.Options{Root: root, Profiles: agentProfiles(env, cfg), Editor: editorOf(env),
-			Log: env.Stderr}, h, blocked)
+		worker.Local(ctx, worker.Options{Root: root, Editor: editorOf(env), Log: env.Stderr},
+			func() []worker.Profile { return agentProfiles(env, cfg) }, h, blocked)
 	}
 }

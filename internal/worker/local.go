@@ -15,10 +15,12 @@ var LocalRetry = 15 * time.Second
 
 // Local runs the editing worker of a project that this process serves (spec/automation.md, "Local mode"), until ctx
 // is done. h serves the project's /api/worker/* routes. When the project can't be edited here, Local tells blocked
-// why (Reason) and checks again every LocalRetry; it calls blocked("") once the worker runs. o.Handler is set to h.
-func Local(ctx context.Context, o Options, h http.Handler, blocked func(string)) {
+// why (Reason) and checks again every LocalRetry, asking profiles for the agents each time, so an agent installed
+// meanwhile is found; it calls blocked("") once the worker runs. o.Handler is set to h.
+func Local(ctx context.Context, o Options, profiles func() []Profile, h http.Handler, blocked func(string)) {
 	o.Handler = h
 	for ctx.Err() == nil {
+		o.Profiles = profiles()
 		err := Check(o)
 		if err == nil {
 			blocked("")
