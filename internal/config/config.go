@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 
 	"github.com/BurntSushi/toml"
@@ -30,6 +31,7 @@ type Config struct {
 	Transcribe Transcribe `toml:"transcribe"`
 	Share      Share      `toml:"share"`
 	Edit       Edit       `toml:"edit"`
+	Render     Render     `toml:"render"`
 	Server     Server     `toml:"server"`
 }
 
@@ -86,6 +88,17 @@ type Share struct {
 type Edit struct {
 	RetakeEdit *string `toml:"retake_edit"` // the retake-edit binary; unset = $RETAKE_EDIT, $PATH, editor/target/release
 }
+
+// Render is the [render] table (editor/README.md, "Encoders"): how retake-edit renders on this machine. Retake passes
+// it to retake-edit as RETAKE_ENCODER.
+type Render struct {
+	// Encoder is the H.264 encoder: auto (default: NVENC on NVIDIA, VideoToolbox on macOS, else x264), x264, nvenc,
+	// videotoolbox, qsv or vaapi.
+	Encoder *string `toml:"encoder"`
+}
+
+// Encoders are the values [render] encoder takes.
+var Encoders = []string{"auto", "x264", "nvenc", "videotoolbox", "qsv", "vaapi"}
 
 // Transcribe is the [transcribe] table (spec/notes.md, "Config additions"). internal/transcribe reads it.
 type Transcribe struct {
@@ -157,6 +170,9 @@ func Parse(s string) (Config, []string, error) {
 	}
 	if d := c.Transcribe.Device; d != nil && *d != "auto" && *d != "cuda" && *d != "cpu" {
 		return Config{}, warnings, fmt.Errorf("transcribe.device %q isn't auto, cuda or cpu", *d)
+	}
+	if e := c.Render.Encoder; e != nil && !slices.Contains(Encoders, *e) {
+		return Config{}, warnings, fmt.Errorf("render.encoder %q isn't auto, x264, nvenc, videotoolbox, qsv or vaapi", *e)
 	}
 	if o := c.OpenAgentsIn; o != nil && !ValidOpenIn(*o) {
 		return Config{}, warnings, fmt.Errorf("open_agents_in %q isn't background, herdr or tmux", *o)

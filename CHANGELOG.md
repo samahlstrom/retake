@@ -61,6 +61,19 @@ All notable changes are listed here. Versions follow semver once the first relea
 - On the newest version, one quiet line says what's still open earlier (`Open on earlier versions: v6 · 2, v3 · 91`),
   and each part goes there. The agent still gets every open comment of every version as context.
 - Comments recorded on a draft stay on its version after the family stops listing that draft.
+### Faster renders
+- The pilot's first 40 s render at 50 fps instead of 17 (one render, 16 threads, NVENC), and 8 renders at once at 90
+  fps in all, where before 4 at once ran the machine out of memory. The whole 190 s pilot renders in 197 s.
+- Layers that read the same frames of a file share one decoder. The item-shop pilot's first 40 s went from 109
+  ffmpeg decoders (96 of them the tiles of one 3D panel) to 14, decode CPU from 864 to 71 seconds, and peak memory at
+  `--jobs 8` from 17 GB to 4.5 GB.
+- Footage is converted to RGB by zimg when ffmpeg has `zscale`: within 0.1–0.7 dB of rounding a float reference
+  (swscale was 7–14 dB further), at a third of the CPU. Untagged footage looks as before.
+- Each unit is a pipeline: decoders read ahead on their own threads, the encoder is fed from another, frame buffers
+  are reused. The same bytes as before the change of threading.
+- `retake-edit --encoder auto|x264|nvenc|videotoolbox|qsv|vaapi`, `[render] encoder` in the config. `auto` uses NVENC
+  on NVIDIA (tuned to match x264 CRF 18 on the pilot), VideoToolbox on macOS (untested), else x264, after a test
+  encode cached per machine. Changing it re-renders each shot once.
 
 ### Agents ask on the video, never in the terminal
 - The built-in agents never stop for a permission prompt: Claude Code runs with `--dangerously-skip-permissions`

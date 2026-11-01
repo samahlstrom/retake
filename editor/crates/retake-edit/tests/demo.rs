@@ -14,8 +14,10 @@ fn demo_src() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/demo")
 }
 
+/// Runs retake-edit with x264, whose bytes are the same on every run (the cold-cache check below needs that).
 fn edit(args: &[&str]) -> Value {
-    let out = Command::new(BIN).args(args).arg("--json").output().expect("retake-edit runs");
+    let out =
+        Command::new(BIN).args(args).arg("--json").env("RETAKE_ENCODER", "x264").output().expect("retake-edit runs");
     let v: Value = serde_json::from_slice(&out.stdout).unwrap_or_else(|e| {
         panic!("{args:?}: {e}\n{}\n{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr))
     });

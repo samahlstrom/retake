@@ -20,7 +20,9 @@ fn demo_src() -> PathBuf {
 
 /// Runs a streamed render; returns its report and the progress lines it printed, while `watch` sees each playlist
 /// read along the way.
+#[allow(clippy::too_many_arguments)]
 fn stream(
+    enc: &str,
     tl: &Path,
     playlist: &Path,
     extra: &[&str],
@@ -47,6 +49,7 @@ fn stream(
         .args(["--scale", "0.25", "--jobs", "3", "--progress", "--json"])
         .args(extra)
         .env("RETAKE_EDIT_TEST_UNIT_DELAY_MS", delay)
+        .env("RETAKE_ENCODER", enc)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -114,7 +117,22 @@ fn frame_md5s(input: &Path) -> Vec<String> {
 
 #[test]
 fn streamed_render() {
-    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("stream");
+    streamed_render_with("x264");
+}
+
+/// The same stream with NVENC, when it works on this machine (RETAKE_TEST_HW=0 skips it).
+#[test]
+fn streamed_render_nvenc() {
+    let hw = std::env::var("RETAKE_TEST_HW").map(|v| v != "0").unwrap_or(true);
+    if !hw || !retake_render::caps::test_encode(retake_render::ffmpeg::EncoderKind::Nvenc) {
+        eprintln!("skipped: no NVENC here");
+        return;
+    }
+    streamed_render_with("nvenc");
+}
+
+fn streamed_render_with(enc: &str) {
+    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("stream-{enc}"));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("patches")).unwrap();
     for f in ["timeline.json", "vo.words.json", "patches/01-note-pop.json", "patches/02-trim-vo.json"] {
@@ -136,7 +154,7 @@ fn streamed_render() {
     let seen: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(vec![]));
     let log = seen.clone();
     let t = Instant::now();
-    let (rep, lines) = stream(&tl, &playlist, &["-o", export.to_str().unwrap()], "900,0", move |s| {
+    let (rep, lines) = stream(enc, &tl, &playlist, &["-o", export.to_str().unwrap()], "900,0", move |s| {
         let mut log = log.lock().unwrap();
         if log.last().map(String::as_str) != Some(s) {
             parse(s); // whole, every time
@@ -159,6 +177,7 @@ fn streamed_render() {
     assert_eq!(done, (1..=units as u64).collect::<Vec<_>>(), "units publish in timeline order");
     assert!(publishes[0]["elapsed"].as_f64().unwrap() >= 0.9, "the first unit held everything back");
     assert_eq!(lines.last().unwrap()["progress"], "end");
+    assert_eq!(rep["encoder"], enc);
 
     let text = std::fs::read_to_string(&playlist).unwrap();
     let (segs, ended, target) = parse(&text);
@@ -221,7 +240,7 @@ fn streamed_render() {
     // A patch that changes one unit: everything before it is cached and published at once.
     let st = Command::new(BIN).args(["patch", "apply"]).arg(&tl).arg(dir.join("patches/01-note-pop.json")).status();
     assert!(st.unwrap().success());
-    let (rep2, lines2) = stream(&tl, &dir.join("v2/demo_v2.m3u8"), &[], "", |_| {});
+    let (rep2, lines2) = stream(enc, &tl, &dir.join("v2/demo_v2.m3u8"), &[], "", |_| {});
     assert_eq!(rep2["reused"].as_u64(), Some(5), "{rep2:#}");
     assert!(rep2.get("output").is_none(), "no MP4 unless asked");
     let first = lines2.iter().find(|l| l["progress"] == "publish").unwrap();
@@ -253,6 +272,7 @@ fn streamed_render() {
         .arg(&v2b)
         .args(["--scale", "0.25", "--jobs", "1", "--progress", "--json"])
         .env("RETAKE_EDIT_TEST_UNIT_DELAY_MS", "0,0,60000")
+        .env("RETAKE_ENCODER", enc)
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
         .spawn()
@@ -267,7 +287,7 @@ fn streamed_render() {
     child.wait().unwrap();
     let stopped = std::fs::read_to_string(&v2b).unwrap();
     assert!(stopped.ends_with("# unit 2\n") && !stopped.contains("ENDLIST"), "{stopped}");
-    let (rep3, lines3) = stream(&tl, &v2b, &[], "", |_| {});
+    let (rep3, lines3) = stream(enc, &tl, &v2b, &[], "", |_| {});
     assert_eq!(lines3[0]["published"], 2, "{:?}", lines3[0]);
     let done: Vec<u64> =
         lines3.iter().filter(|l| l["progress"] == "publish").map(|l| l["done"].as_u64().unwrap()).collect();
@@ -286,7 +306,7 @@ fn streamed_render() {
     std::fs::copy(&tl, &snap).unwrap();
     let st = Command::new(BIN).args(["patch", "apply"]).arg(&tl).arg(dir.join("patches/02-trim-vo.json")).status();
     assert!(st.unwrap().success(), "the timeline moves on");
-    let (rep4, _) = stream(&tl, &dir.join("v2c/demo_v2.m3u8"), &["--doc", snap.to_str().unwrap()], "", |_| {});
+    let (rep4, _) = stream(enc, &tl, &dir.join("v2c/demo_v2.m3u8"), &["--doc", snap.to_str().unwrap()], "", |_| {});
     assert_eq!(rep4["reused"], 6, "the snapshot's units are all cached: {rep4:#}");
     assert_eq!(std::fs::read_to_string(dir.join("v2c/demo_v2.m3u8")).unwrap(), whole);
 

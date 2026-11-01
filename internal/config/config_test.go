@@ -96,6 +96,17 @@ func TestParse(t *testing.T) {
 					t.Errorf("%+v", c)
 				}
 			}},
+		{name: "render table", in: "[render]\nencoder = \"nvenc\"\n", check: func(t *testing.T, c Config) {
+			if *c.Render.Encoder != "nvenc" {
+				t.Errorf("%+v", c.Render)
+			}
+		}},
+		{name: "render unset", in: "", check: func(t *testing.T, c Config) {
+			if c.Render.Encoder != nil {
+				t.Errorf("%+v", c.Render)
+			}
+		}},
+		{name: "bad encoder", in: "[render]\nencoder = \"h265\"", wantErr: "render.encoder"},
 		{name: "bad open_agents_in", in: `open_agents_in = "kitty"`, wantErr: "open_agents_in"},
 		{name: "bad open_in", in: "[[agents]]\nid = \"a\"\ncommand = [\"x\"]\nopen_in = \"window\"\n", wantErr: "open_in"},
 		{name: "open_in herdr needs interactive", in: "[[agents]]\nid = \"a\"\ncommand = [\"x\"]\nopen_in = \"herdr\"\n",

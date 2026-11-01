@@ -33,7 +33,7 @@ retake-edit patch apply <timeline.json> <patch.json|-> [--dry-run]
 retake-edit patch log  <timeline.json>
 retake-edit patch revert <timeline.json> <p3>
 retake-edit plan       <timeline.json> [--range a-b] [--draft]   # hits, misses, estimate
-retake-edit render     <timeline.json> [--range a-b] [--draft] [-o out.mp4]
+retake-edit render     <timeline.json> [--range a-b] [--draft] [-o out.mp4] [--encoder auto|x264|nvenc|…]
 retake-edit frames     <timeline.json> 3.5 12.0 [-o dir]   # PNG stills
 retake-edit manifest   <timeline.json>                     # renders what's missing, prints the manifest
 retake-edit resolve-note <manifest.json> 9.0 0.7 0.65 0.1 0.1     # t and a normalized stroke box
@@ -84,7 +84,7 @@ has a matte or is one becomes its own run and an item with `Fx`, since the compo
 against what's under it; a group of graphics only is drawn by Skia inside its run (children blend within it); a
 group with footage is an `Item::Group`, composited into its own picture first. Every item has a `slot` for its
 decode state and its manifest boxes. `resample: lanczos` resizes images with a Pillow-exact Lanczos-3
-(`resample.rs`) and decodes footage with ffmpeg's Lanczos scaler, cropped in the pipe when the crop is constant
+(`resample.rs`) and decodes footage with a Lanczos scaler (zimg's; ffmpeg's for RGB sources), cropped in the pipe when the crop is constant
 (`unit.rs`, `decode_plan`); `delogo` runs first in that pipe. `crates/render/tests/picture.rs` checks each against an
 independent reference (ffmpeg's `perspective`, `crop,scale` and `delogo`, the W3C formulas) or its other path, and
 `tests/pillow.rs` text placement and Lanczos against Pillow (skipped without it; `RETAKE_PILLOW_PYTHON`).
@@ -139,7 +139,8 @@ recording isn't re-read on every plan.
   length. An animated run skips drawing a frame whose layers evaluate to the same state as the frame before (a pop
   that has settled). Layers that show on no frame of the range are left out.
 - **Video is decoded at its displayed size**: the source times the largest scale it's shown at in the unit (never
-  above the render scale), scaled in the ffmpeg pipe. A picture-in-picture at 30% decodes at 30%.
+  above the render scale), scaled in the ffmpeg pipe. A picture-in-picture at 30% decodes at 30%. Layers that read
+  the same frames of a file share that decode ("Rendering fast", below).
 - **Proxies.** `retake-edit proxy` makes a short-GOP (a keyframe every 0.5 s), 540-line H.264 copy of each video
   asset into the cache, keyed by the source's content hash. Draft renders decode the proxy when there is one (it's
   part of their unit keys); full renders always read the source. Worth it for long recordings with sparse keyframes,
@@ -151,7 +152,89 @@ and 2.1 s with proxies (2.9 s to 2.1 s when the footage has one keyframe in 30 s
 went from 2.8 s to 2.3 s; after the VO-trim patch it draws no graphics at all (it drew two runs before), and the time
 left is encoding the three units that changed.
 - **Unit key**: the hash of the fully resolved unit description, the only input the compositor gets: canvas, frame
-  count, encoder settings (including the ffmpeg build), each layer with its source's content hash and source times
+  count, encoder settings (the encoder and every option it gets, the ffmpeg build), the colour converter, each layer with its source's content hash and source times
   (including absolute-time inputs such as a `clock: timeline` background), and the layer keys on it.
 - Segments are stored by content and reused byte for byte. With a cold cache on the same machine, x264 with pinned
-  threads and bitexact muxing reproduces the same bytes (the end-to-end test checks it).
+  threads and bitexact muxing reproduces the same bytes (the end-to-end test checks it). Hardware encoders make no
+  such promise; the cache's reuse is what keeps a unit's bytes.
+
+## Rendering fast
+
+A unit is one shot (or insert): its footage decoded by ffmpeg, composited in Rust, encoded by ffmpeg. Units render
+`--jobs` at a time. Within a unit:
+
+- **One decode per source.** Video layers that read the same frames of the same file share one ffmpeg decoder
+  (`unit.rs`, `feeds`): the same file and decode (crop, delogo, scaler, colour), the same `in`, clock, loop and hold,
+  over the same active frames. Bilinear layers share at the largest size any of them needs; a Lanczos decode is its
+  exact displayed size, so only equal ones share. A layer that shows on none of its unit's frames decodes nothing.
+  The item-shop pilot's 3D panels are 96 tiles of one clip: 96 decoders became one.
+- **Colour conversion with zimg.** When the ffmpeg in use has the `zscale` filter (probed once, cached per machine),
+  YUV footage is converted to RGB by zimg in the decode pipe, scaled with spline36 (Lanczos for `resample: lanczos`),
+  and comes out as planar RGB that the reader packs into RGBA. It reads the source's matrix and range from its tags;
+  untagged sources are read as BT.601 limited range, as ffmpeg's own scaler reads them, so footage looks the same
+  either way. RGB, grey and palette sources, and an ffmpeg without zscale, keep ffmpeg's scaler (`swscale`), the old
+  path. The choice is in every unit key (`convert`); `RETAKE_CONVERT=swscale` forces the old path. zimg is closer to
+  exact and costs a third of the CPU (numbers below).
+- **A pipeline per unit.** Each decoder has a reader thread that decodes ahead into a two-frame queue (and starts a
+  quarter second before its layer appears); the compositor draws on the unit's thread (rows in parallel); a writer
+  thread feeds the encoder. Frame buffers go round (decoders to the compositor and back, the compositor to the
+  encoder and back) instead of being allocated per frame. The bytes are the same as composing in lockstep
+  (`crates/render/tests/pipeline.rs` checks frames and segments).
+- **Hardware encoders.** `--encoder auto|x264|nvenc|videotoolbox|qsv|vaapi` (or `RETAKE_ENCODER`; Retake passes
+  `[render] encoder` from its config this way). `auto`, the CLI's default, picks NVENC on NVIDIA, VideoToolbox on
+  macOS, else x264, after a real one-frame test encode with the render's own settings, cached for a day per ffmpeg
+  build in `<user cache>/retake/ffmpeg-caps.json` (`$XDG_CACHE_HOME/retake`, `~/Library/Caches/retake`,
+  `%LOCALAPPDATA%\retake`). Every encoder's settings are in the unit key, so switching re-renders each unit once and
+  segments of two encoders never mix. All encoders get the same RGB → YUV conversion (ffmpeg's scaler, BT.709
+  limited), the same colour tags, and a keyframe every 2 s (hardware encoders have one forced on every GOP), so stream
+  segments cut where they're planned. A process holds at most `RETAKE_HW_SESSIONS` (default 4) hardware sessions;
+  a unit whose hardware encoder fails is tried twice more before the render fails. The library's default is x264 (no
+  device, the same bytes every run); there is no CUDA, Metal or VAAPI code: only ffmpeg's encoders.
+
+### Numbers
+
+The item-shop pilot's first 40 s (11 shots, 2648 frames at 1080p60), cold cache, on a 16-thread Ryzen 7 7800X3D with
+an RTX 4090 (`auto` = NVENC). A cold cache also hashes the source recordings, about 15 s here, before and after.
+
+| | Before | After |
+|---|---|---|
+| One render, `--jobs 1 / 2 / 4 / 8 / 11` | 13.1 / 16.4 / 16.8 / 16.6 / 16.5 fps | 34.5 / 45.9 / 48.7 / 49.7 / 50.7 fps |
+| 2 / 4 / 8 renders at once, `--jobs 1` each | 16.6 fps in all / did not finish (out of memory) | 55.7 / 76.0 / 90.1 fps in all |
+| Video decoders, decode CPU (`--jobs 8`) | 109, 864 cpu-s | 14, 71 cpu-s |
+| Encode CPU | 234 cpu-s (x264) | 35 cpu-s (NVENC); 236 with x264 |
+| Compositor CPU | 266 cpu-s | 250 cpu-s |
+| Peak memory (`--jobs 8`) | 17.0 GB | 4.5 GB (8.1 GB with x264) |
+| The whole 190 s pilot, `--jobs 8` | about 11 min at the rate above | 197 s, 57.7 fps, 5.8 GB |
+
+With the asset hashes already known, the slice takes 38 s with NVENC and 49 s with x264. What's left is compositing
+and graphics: Skia draws the animated runs (11 s of the 38), and the 3D-panel shot's 96 tiles cost 96 QuickJS
+transforms and warps a frame (about 45 fps for that shot alone; a plain shot composites at about 150).
+
+Colour, against a float64 reference (Lanczos-3 chroma upsampling with H.264 siting, the source's matrix) on frames
+of the pilot's sources, where rounding alone gives 58.9–61.6 dB: zimg 58.2–61.5 dB, swscale 44.6–55.1 dB; zimg against
+swscale 44.8–56.0 dB.
+
+### Encoders
+
+NVENC was tuned on the item-shop pilot's first 40 s (11 units, 2648 frames of 1080p60 game footage, graphics and 3D
+panels): each unit's lossless composite encoded on its own, as renders do, and scored against it with libvmaf
+(frame-weighted over the units; p5 is the 5th-percentile frame).
+
+| Settings | Size | VMAF | VMAF p5 | PSNR-Y | SSIM | Encode |
+|---|---|---|---|---|---|---|
+| x264 medium, CRF 18 (the CPU path) | 50.0 MB | 96.75 | 93.89 | 46.41 dB | 0.99909 | 71 fps |
+| NVENC p5, CQ 18 (no tuning) | 128.8 MB | 97.98 | 96.24 | 51.75 dB | 0.99966 | 208 fps |
+| NVENC p6 hq, spatial AQ, CQ 24 / 25 / 26 / 28 | 67.5 / 60.4 / 54.2 / 43.6 MB | 97.00 / 96.74 / 96.44 / 95.62 | 94.47 / 94.00 / 93.35 / 91.58 | 47.37 / 46.70 / 46.04 / 44.65 | 0.99933 / 0.99920 / 0.99905 / 0.99862 | 190–195 fps |
+| **NVENC p7 hq, multipass, spatial + temporal AQ, B-frames as references, CQ 26** (the default) | 56.0 MB | 96.86 | 94.04 | 46.95 dB | 0.99913 | 153 fps |
+| the same at CQ 25 | 62.5 MB | 97.09 | 94.61 | 47.58 dB | 0.99927 | 154 fps |
+
+The default matches or beats x264 CRF 18 on every score at 12% more bytes, and one session encodes about twice as
+fast as a whole render composites. Drafts use p4, CQ 29, no multipass (not tuned). It needs a Turing or newer GPU
+(B-frames as references); on an older one the test encode fails and `auto` picks x264.
+
+VideoToolbox (`h264_videotoolbox -profile:v high -q:v 65 -realtime 0 -allow_sw 0 -g 120 -bf 2`, drafts `-q:v 50`)
+is a starting point that **needs a real Mac**: only its command line is tested here. `-q:v` is constant quality,
+which only Apple Silicon offers; an Intel Mac fails the test encode and gets x264. Tune `-q:v` the same way: render a
+slice losslessly, encode each unit, and compare VMAF and size with x264 CRF 18. QSV (`-preset slower
+-global_quality 19`) and VAAPI (`-rc_mode CQP -qp 19`, `RETAKE_VAAPI_DEVICE`) are only used when asked for, and are
+untested.

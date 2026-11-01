@@ -27,6 +27,12 @@ one seam is the environment Retake gives `retake-edit` (catalog-provided variabl
 `$RETAKE_EDIT`, else `retake-edit` on `$PATH`, else `editor/target/release/retake-edit` in the repo the `retake`
 binary was built in (`<bin>/../editor/…`) or under the current folder.
 
+**How it renders here:** `[render] encoder` in the user config (`auto`, `x264`, `nvenc`, `videotoolbox`, `qsv`,
+`vaapi`) reaches `retake-edit` as `RETAKE_ENCODER` in its environment; unset, `retake-edit` uses `auto` (NVENC on
+NVIDIA, VideoToolbox on macOS, else x264, after a test encode cached per machine). The encoder is part of every unit
+key (editor/README.md, "Rendering fast"), and `render --json` and `plan --json` report it (`encoder`) with the
+colour converter (`convert`: `zimg` or `swscale`).
+
 **Render manifest of a version.** A version file `X.mp4` has its manifest at `X.manifest.json` beside it (what
 `retake-edit render -o X.mp4` writes). A version without one has none; everything below then falls back.
 

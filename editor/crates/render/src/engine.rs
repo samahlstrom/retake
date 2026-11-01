@@ -2,7 +2,7 @@
 //! two cache keys (layer and unit) computed.
 
 use crate::audio::{AUDIO_VERSION, AudioPlan, Clip, DuckPlan, GainCurve, Loudness, MasterPlan};
-use crate::ffmpeg::{self, EncodeSettings, MediaInfo, StreamSel};
+use crate::ffmpeg::{self, Convert, EncodeSettings, EncoderChoice, EncoderKind, MediaInfo, SrcColor, StreamSel};
 use crate::graphics::{DISPLAY_FONT, DISPLAY_WEIGHT, FontData, GRAPHICS_VERSION, ImageData, Resources};
 use crate::store::{Store, hex_of};
 use anyhow::{Context, Result};
@@ -19,8 +19,9 @@ use std::sync::Arc;
 
 /// Part of every unit key: bump when compositing code changes pixels. compositor/2: graphics split into static and
 /// animated runs, and video decoded at its displayed size. compositor/3: projective warps, blend modes, masks,
-/// mattes, groups, Lanczos decodes cropped in the pipe, delogo.
-pub const ENGINE_VERSION: &str = "retake-render/0.1 compositor/3";
+/// mattes, groups, Lanczos decodes cropped in the pipe, delogo. compositor/4: layers that read the same frames of a
+/// file share one decode, at the largest size any of them needs.
+pub const ENGINE_VERSION: &str = "retake-render/0.1 compositor/4";
 
 #[derive(Debug, Clone)]
 pub struct Options {
@@ -33,11 +34,21 @@ pub struct Options {
     pub jobs: usize,
     /// The cache directory; default `<project>/.retake/cache`.
     pub cache: Option<PathBuf>,
+    /// The H.264 encoder (the CLI's default is `auto`; the library's x264, which needs no device and gives the same
+    /// bytes on every run).
+    pub encoder: EncoderChoice,
 }
 
 impl Default for Options {
     fn default() -> Self {
-        Options { draft: false, scale: None, range: None, jobs: 3, cache: None }
+        Options {
+            draft: false,
+            scale: None,
+            range: None,
+            jobs: 3,
+            cache: None,
+            encoder: EncoderChoice::Fixed(EncoderKind::X264),
+        }
     }
 }
 
@@ -65,6 +76,8 @@ pub struct Asset {
     pub info: MediaInfo,
     /// Drafts: a short-GOP proxy made by `retake-edit proxy` (its path and content hash).
     pub proxy: Option<(PathBuf, String)>,
+    /// How the file decoded (the source, or its proxy) is read: its pixel format and colour tags.
+    pub color: SrcColor,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -81,6 +94,9 @@ pub struct Src {
     pub path: PathBuf,
     #[serde(skip)]
     pub asset: String,
+    /// How the decoded file's colour is read (a function of its content, which `hash` and `proxy` already key).
+    #[serde(skip)]
+    pub color: SrcColor,
 }
 
 /// How an item combines with what's under it: its blend mode and track matte (both applied by the compositor).
@@ -210,6 +226,8 @@ pub struct UnitDesc {
     pub fps: u32,
     pub frames: i64,
     pub encode: EncodeSettings,
+    /// How footage is converted to RGB (zimg or ffmpeg's scaler).
+    pub convert: Convert,
     pub items: Vec<Item>,
 }
 
@@ -315,6 +333,7 @@ pub struct Engine {
     pub opts: Options,
     pub canvas: Canvas,
     pub encode: EncodeSettings,
+    pub convert: Convert,
     pub assets: BTreeMap<String, Asset>,
     pub resources: Arc<Resources>,
 }
@@ -459,7 +478,8 @@ impl Engine {
         let scale = opts.scale.unwrap_or(if opts.draft { 0.5 } else { 1.0 });
         let [cw, ch] = project.tl.format.size;
         let canvas = Canvas { w: even(cw as f64 * scale), h: even(ch as f64 * scale), scale, comp: [cw, ch] };
-        let encode = EncodeSettings::new(opts.draft, project.tl.format.fps);
+        let encode = EncodeSettings::new(opts.draft, project.tl.format.fps, opts.encoder.resolve());
+        let convert = Convert::detect();
 
         // Assets the render reads.
         let mut used: BTreeSet<String> = BTreeSet::new();
@@ -482,21 +502,29 @@ impl Engine {
                 }
             }
         }
+        // probe3: probes with the pixel format and colour tags (probe2 has the audio streams, "probe" neither).
+        let probed = |p: &Path, hash: &str, what: &str| -> Result<MediaInfo> {
+            match store.get_index("probe3", hash).and_then(|v| serde_json::from_value(v).ok()) {
+                Some(i) => Ok(i),
+                None => {
+                    let i = ffmpeg::probe(p).with_context(|| what.to_string())?;
+                    store.set_index("probe3", hash, &serde_json::to_value(&i)?)?;
+                    Ok(i)
+                }
+            }
+        };
         let mut assets = BTreeMap::new();
         for id in &used {
             let p = project.asset_path(id)?;
             let hash = store.asset_hash(&p)?;
-            // probe2: probes that list the audio streams (older ones under "probe" don't).
-            let info = match store.get_index("probe2", &hash).and_then(|v| serde_json::from_value(v).ok()) {
-                Some(i) => i,
-                None => {
-                    let i = ffmpeg::probe(&p).with_context(|| format!("asset {id}"))?;
-                    store.set_index("probe2", &hash, &serde_json::to_value(&i)?)?;
-                    i
-                }
-            };
+            let info = probed(&p, &hash, &format!("asset {id}"))?;
             let proxy = if opts.draft { crate::proxy::lookup(&store, &hash) } else { None };
-            assets.insert(id.clone(), Asset { id: id.clone(), path: p, hash, info, proxy });
+            // A proxy is read with its own tags (a full-range source may make a limited-range proxy).
+            let color = match &proxy {
+                Some((pp, ph)) => SrcColor::of(&probed(pp, ph, &format!("the proxy of {id}"))?),
+                None => SrcColor::of(&info),
+            };
+            assets.insert(id.clone(), Asset { id: id.clone(), path: p, hash, info, proxy, color });
         }
         let mut resources = Resources::default();
         resources.fonts.insert(
@@ -519,7 +547,7 @@ impl Engine {
         }
         store.save_asset_hashes()?;
         check_streams(&project, &res, &assets)?;
-        Ok(Engine { project, res, store, opts, canvas, encode, assets, resources: Arc::new(resources) })
+        Ok(Engine { project, res, store, opts, canvas, encode, convert, assets, resources: Arc::new(resources) })
     }
 
     pub fn fps(&self) -> u32 {
@@ -708,6 +736,7 @@ impl Engine {
                         proxy: a.proxy.as_ref().map(|(_, h)| h.clone()),
                         path: a.proxy.as_ref().map(|(p, _)| p.clone()).unwrap_or_else(|| a.path.clone()),
                         asset: a.id.clone(),
+                        color: a.color.clone(),
                     },
                     props: list.props.clone(),
                     k0: at.k0,
@@ -815,6 +844,7 @@ impl Engine {
             fps,
             frames: n,
             encode: self.encode.clone(),
+            convert: self.convert,
             items,
         };
         let key = desc.key();
