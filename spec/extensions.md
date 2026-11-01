@@ -374,7 +374,7 @@ what any script in the page could.
 - the tool would then feel like an embed. Tokens and the user's theme would have to be copied in, layout and focus
   would cross a frame edge, R and the page's keys wouldn't reach it, and every call would be a `postMessage` RPC to
   version and keep in step;
-- Sam's rule is no iframes in the product.
+- the product's rule is no iframes anywhere.
 
 So slots are plain elements and the module runs in the page. A frame stays possible later, as an opt-in per extension
 (`[ui] isolate = true`), without changing the `ctx` API.

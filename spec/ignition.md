@@ -230,8 +230,8 @@ in the cut is left out.
 
 ## What stays out
 
-- **Sam's own skills, prompts and workflows.** They belong to his agent setup. His Claude Code loads them as it always
-  does, and Ignition never names, installs or calls them. Its instructions are neutral and short.
+- **Your own skills, prompts and workflows.** They belong to your agent's setup. Your Claude Code or Codex loads them as
+  it always does, and Ignition never names, installs or calls them. Its instructions are neutral and short.
 - A chat with the agent. The agent works through comments, Send and questions, the same loop as on a video.
 - Generated voices, text-to-speech or voice-over. The voice is the person's own.
 - Editing the video by its transcript, a project board, titles, thumbnails, publishing. Those are other extensions, or
