@@ -35,6 +35,10 @@ const PLAIN: Record<string, Action> = {
   ',': 'framePrev',
   '.': 'frameNext',
   Escape: 'escape',
+  // Versions (spec/notes.md, "Comments belong to their version"): the comments and markers follow.
+  c: 'flip',
+  '[': 'stepPrev',
+  ']': 'stepNext',
   '1': 'color1',
   '2': 'color2',
   '3': 'color3',
