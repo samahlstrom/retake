@@ -31,6 +31,9 @@ pub struct Entry {
     pub zscale: Option<Probed<bool>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub auto: Option<Probed<EncoderKind>>,
+    /// The test encodes `auto` was decided by: other encoder settings (a new version's) decide again.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub auto_for: String,
 }
 
 fn now() -> u64 {
@@ -142,9 +145,15 @@ pub fn auto_candidates() -> Vec<EncoderKind> {
 pub fn auto_encoder() -> EncoderKind {
     static A: OnceLock<EncoderKind> = OnceLock::new();
     *A.get_or_init(|| {
+        let tests = crate::store::hex_of(
+            format!("{:?}", auto_candidates().into_iter().map(test_command).collect::<Vec<_>>()).as_bytes(),
+        );
         cached(
-            |e| e.auto,
-            |e, p| e.auto = Some(p),
+            |e| e.auto.filter(|_| e.auto_for == tests),
+            |e, p| {
+                e.auto = Some(p);
+                e.auto_for = tests.clone();
+            },
             || auto_candidates().into_iter().find(|k| test_encode(*k)).unwrap_or(EncoderKind::X264),
         )
     })

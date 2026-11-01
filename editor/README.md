@@ -190,3 +190,28 @@ A unit is one shot (or insert): its footage decoded by ffmpeg, composited in Rus
   segments cut where they're planned. A process holds at most `RETAKE_HW_SESSIONS` (default 4) hardware sessions;
   a unit whose hardware encoder fails is tried twice more before the render fails. The library's default is x264 (no
   device, the same bytes every run); there is no CUDA, Metal or VAAPI code: only ffmpeg's encoders.
+
+### Encoders
+
+NVENC was tuned on the item-shop pilot's first 40 s (11 units, 2648 frames of 1080p60 game footage, graphics and 3D
+panels): each unit's lossless composite encoded on its own, as renders do, and scored against it with libvmaf
+(frame-weighted over the units; p5 is the 5th-percentile frame).
+
+| Settings | Size | VMAF | VMAF p5 | PSNR-Y | SSIM | Encode |
+|---|---|---|---|---|---|---|
+| x264 medium, CRF 18 (the CPU path) | 50.0 MB | 96.75 | 93.89 | 46.41 dB | 0.99909 | 71 fps |
+| NVENC p5, CQ 18 (no tuning) | 128.8 MB | 97.98 | 96.24 | 51.75 dB | 0.99966 | 208 fps |
+| NVENC p6 hq, spatial AQ, CQ 24 / 25 / 26 / 28 | 67.5 / 60.4 / 54.2 / 43.6 MB | 97.00 / 96.74 / 96.44 / 95.62 | 94.47 / 94.00 / 93.35 / 91.58 | 47.37 / 46.70 / 46.04 / 44.65 | 0.99933 / 0.99920 / 0.99905 / 0.99862 | 190–195 fps |
+| **NVENC p7 hq, multipass, spatial + temporal AQ, B-frames as references, CQ 26** (the default) | 56.0 MB | 96.86 | 94.04 | 46.95 dB | 0.99913 | 153 fps |
+| the same at CQ 25 | 62.5 MB | 97.09 | 94.61 | 47.58 dB | 0.99927 | 154 fps |
+
+The default matches or beats x264 CRF 18 on every score at 12% more bytes, and one session encodes about twice as
+fast as a whole render composites. Drafts use p4, CQ 29, no multipass (not tuned). It needs a Turing or newer GPU
+(B-frames as references); on an older one the test encode fails and `auto` picks x264.
+
+VideoToolbox (`h264_videotoolbox -profile:v high -q:v 65 -realtime 0 -allow_sw 0 -g 120 -bf 2`, drafts `-q:v 50`)
+is a starting point that **needs a real Mac**: only its command line is tested here. `-q:v` is constant quality,
+which only Apple Silicon offers; an Intel Mac fails the test encode and gets x264. Tune `-q:v` the same way: render a
+slice losslessly, encode each unit, and compare VMAF and size with x264 CRF 18. QSV (`-preset slower
+-global_quality 19`) and VAAPI (`-rc_mode CQP -qp 19`, `RETAKE_VAAPI_DEVICE`) are only used when asked for, and are
+untested.

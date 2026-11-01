@@ -587,38 +587,20 @@ impl EncodeSettings {
                 ],
                 "yuv420p",
             ),
-            EncoderKind::Nvenc => (
-                "h264_nvenc",
-                vec![
-                    "-preset",
-                    if draft { "p3" } else { "p6" },
-                    "-tune",
-                    "hq",
-                    "-rc",
-                    "vbr",
-                    "-cq",
-                    if draft { "25" } else { "19" },
-                    "-b:v",
-                    "0",
-                    "-profile:v",
-                    "high",
-                    "-g",
-                    g.as_str(),
-                    "-bf",
-                    "2",
-                    "-spatial-aq",
-                    "1",
-                    "-rc-lookahead",
-                    "20",
-                    "-no-scenecut",
-                    "1",
-                    "-strict_gop",
-                    "1",
-                    "-forced-idr",
-                    "1",
-                ],
-                "yuv420p",
-            ),
+            // Tuned on the item-shop pilot against x264 medium CRF 18 (editor/README.md, "Encoders"): VMAF, PSNR and
+            // SSIM at or above it, 12% larger. B-frames as references (`middle`) need a Turing or newer GPU; older
+            // ones fail the test encode and `auto` picks x264.
+            EncoderKind::Nvenc => {
+                let mut a = vec!["-preset", if draft { "p4" } else { "p7" }, "-tune", "hq", "-rc", "vbr", "-cq"];
+                a.extend([if draft { "29" } else { "26" }, "-b:v", "0", "-profile:v", "high", "-g", g.as_str()]);
+                a.extend(["-bf", "2", "-b_ref_mode", "middle", "-spatial-aq", "1", "-temporal-aq", "1"]);
+                a.extend(["-rc-lookahead", if draft { "20" } else { "32" }]);
+                if !draft {
+                    a.extend(["-multipass", "fullres"]);
+                }
+                a.extend(["-no-scenecut", "1", "-strict_gop", "1", "-forced-idr", "1"]);
+                ("h264_nvenc", a, "yuv420p")
+            }
             EncoderKind::Videotoolbox => (
                 "h264_videotoolbox",
                 vec![
@@ -1097,13 +1079,16 @@ mod tests {
     #[test]
     fn nvenc_command_line() {
         let c = cmd(EncoderKind::Nvenc, false);
-        assert!(c.contains("-c:v h264_nvenc -preset "), "{c}");
-        for want in ["-rc vbr", "-b:v 0", "-g 120", "-bf 2", "-no-scenecut 1", "-strict_gop 1", "-forced-idr 1"] {
+        assert!(c.contains("-c:v h264_nvenc -preset p7 -tune hq -rc vbr -cq 26 -b:v 0 -profile:v high -g 120"), "{c}");
+        for want in
+            ["-bf 2 -b_ref_mode middle", "-multipass fullres", "-no-scenecut 1", "-strict_gop 1", "-forced-idr 1"]
+        {
             assert!(c.contains(want), "{want} in {c}");
         }
         assert!(c.contains("-pix_fmt yuv420p -force_key_frames expr:eq(mod(n,120),0)"), "{c}");
         assert!(c.contains("-colorspace bt709"), "VUI tags like x264's");
-        assert_ne!(cmd(EncoderKind::Nvenc, true), c, "drafts are faster");
+        let d = cmd(EncoderKind::Nvenc, true);
+        assert!(d.contains("-preset p4") && d.contains("-cq 29") && !d.contains("multipass"), "drafts are faster: {d}");
     }
 
     /// Needs a real Mac to run; here only the command line is checked.
