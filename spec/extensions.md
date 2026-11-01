@@ -215,7 +215,7 @@ interface Ctx {
   files(video?: string): Files;                        // its owned files in a video's folder (default: this one)
   comments(video?: string): Comments;                  // comments on this video's versions
   createVideo(v: { project: string; name: string; files: Record<string, string> }): Promise<{ name: string; url: string }>;
-  transcribe(path: string, video?: string): Promise<{ text: string; words: Word[] }>;
+  transcribe(path: string, video?: string): Promise<{ text: string; words: Word[] }>;  // waits for the job
   onRecorded(cb: (a: { blob: Blob; type: string; duration: number; started: string }) => void): () => void;
   player?: Player;                                     // sidebar-tab and review-panel on a video version
   on(event: 'notes' | 'job' | 'version' | 'automation' | 'files', cb: (data: unknown) => void): () => void;
