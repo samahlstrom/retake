@@ -88,6 +88,19 @@ func TestParse(t *testing.T) {
 					t.Errorf("%+v", c.Share)
 				}
 			}},
+		{name: "where agents open", in: "open_agents_in = \"herdr\"\n[[agents]]\nid = \"cc\"\ncommand = [\"claude\", \"-p\"]\n" +
+			"open_in = \"tmux\"\ninteractive = [\"claude\"]\n[[agents]]\nid = \"bg\"\ncommand = [\"x\"]\n",
+			check: func(t *testing.T, c Config) {
+				if *c.OpenAgentsIn != OpenHerdr || c.Agents[0].OpenIn != OpenTmux || c.Agents[0].Interactive[0] != "claude" ||
+					c.Agents[1].OpenIn != "" || c.Agents[1].Interactive != nil {
+					t.Errorf("%+v", c)
+				}
+			}},
+		{name: "bad open_agents_in", in: `open_agents_in = "kitty"`, wantErr: "open_agents_in"},
+		{name: "bad open_in", in: "[[agents]]\nid = \"a\"\ncommand = [\"x\"]\nopen_in = \"window\"\n", wantErr: "open_in"},
+		{name: "open_in herdr needs interactive", in: "[[agents]]\nid = \"a\"\ncommand = [\"x\"]\nopen_in = \"herdr\"\n",
+			wantErr: "needs an interactive command"},
+		{name: "empty interactive", in: "[[agents]]\nid = \"a\"\ncommand = [\"x\"]\ninteractive = []\n", wantErr: "interactive is empty"},
 		{name: "bad engine", in: "[transcribe]\nengine = \"vosk\"", wantErr: "transcribe.engine"},
 		{name: "bad device", in: "[transcribe]\ndevice = \"gpu\"", wantErr: "transcribe.device"},
 		{name: "wrong type", in: `port = "8777"`, wantErr: "port"},
