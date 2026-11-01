@@ -193,7 +193,7 @@ test('a link with a hash opens that place; the rest is remembered', async ({ bro
     expect(await cardNames(page)).toEqual(['item-shop-shorts-honored']);
     await expect(row(page, 'item-shop/shorts')).toHaveAttribute('aria-selected', 'true');
     await expect(row(page, 'item-shop')).toHaveAttribute('aria-expanded', 'true');
-    await expect(page.locator('.breadcrumbs')).toHaveText(/Retake\s*\/\s*item-shop\s*\/\s*shorts/);
+    await expect(page.locator('.breadcrumbs')).toHaveText(/Retake\.\s*\/\s*item-shop\s*\/\s*shorts/); // the wordmark: Retake and its red period
 
     // A place that's gone shows everything.
     await page.goto(`${server.url}#/nope`);
