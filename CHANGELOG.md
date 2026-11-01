@@ -4,6 +4,18 @@ All notable changes are listed here. Versions follow semver once the first relea
 
 ## Unreleased
 
+### Hosting in two commands
+- `docker compose up -d` in `deploy/` runs one container with one volume (SQLite and local files). Postgres and
+  MinIO moved to the compose file's `scale` profile. `deploy/Caddyfile` is a ready HTTPS front.
+- First run: with no accounts, `retake serve` prints a one-time setup link. `/setup` creates the owner in the
+  browser and is gone afterwards; nobody without the server's log can claim a fresh server.
+- Connect your computer: `POST /api/connect` (admins) makes a machine token and its `retake connect` line.
+  `retake connect` registers the folder's timeline projects (name, title, poster; never footage) and runs one worker
+  per project in one process, picks up new projects, and reconnects with a bare `retake connect`.
+- `GET /api/home` gains `machines` (from worker heartbeats, in hosted and `retake open` mode); the signed-in `/` of
+  the team server is the home screen, with `GET /signout` for its Sign out link.
+- `docs/editing-workers.md` is now `docs/hosting.md`, the short story.
+
 ### On-demand streaming and review home
 - Rendered pushes register a poster and pending HLS version immediately. Opening the version starts rendering;
   closing the last viewer stops it. Completed units stay cached, and reopening resumes. `--no-stream` keeps the
