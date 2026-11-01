@@ -1,13 +1,11 @@
 <script lang="ts">
-  // The notes sidebar (milestone 2). On the newest version: the agent's open questions, and this session's notes as
-  // they are transcribed. On an older version: its notes as they were resolved (✓ the change, ? the question).
-  // Desktop: a column right of the video; N or its › hides it (remembered), and a quiet pill over the video brings it
-  // back. Phone: a list under the controls behind the same pill. Nothing at all until there is something to show, so
-  // the page looks exactly as before.
+  // The comments, beside the video (desktop) or under the controls (phone): two tabs, To do and Done, and a search
+  // behind its icon. Progress (recording, transcribing, an undo after a delete) floats at the bottom of the column, so
+  // nothing in the list moves. N or the › hides it (remembered); a quiet pill over the video brings it back.
   import { Collapsible, ScrollArea, Tooltip } from 'bits-ui';
+  import { tick } from 'svelte';
   import type { Review } from '../../lib/review.svelte';
   import SidebarItem from './SidebarItem.svelte';
-  import StyledSelect from '../ui/Select.svelte';
   import './sidebar.css';
 
   let { review }: { review: Review } = $props();
@@ -16,10 +14,30 @@
   const view = $derived(review.sidebar);
   const res = $derived(notes.res);
   const job = $derived(notes.job);
-  const pill = $derived(job && !view.rows.length ? job.text : `${review.rows.length} comments`);
+  const pill = $derived(
+    job && !view.rows.length
+      ? job.text
+      : review.todoCount === 1
+        ? '1 to do'
+        : review.todoCount
+          ? `${review.todoCount} to do`
+          : `${review.rows.length} comments`,
+  );
   const setOpen = (v: boolean) => {
     if (v !== view.panel) review.toggleSidebar();
   };
+
+  let searching = $state(false);
+  let input = $state<HTMLInputElement | null>(null);
+  async function openSearch() {
+    searching = true;
+    await tick();
+    input?.focus();
+  }
+  function closeSearch() {
+    searching = false;
+    review.commentSearch = '';
+  }
 </script>
 
 {#if notes.available}
@@ -43,15 +61,62 @@
         {/if}
         <Collapsible.Content id="side" aria-label="Comments">
           <header>
-            <span class="h">Comments <span class="count">{review.shown}</span></span>
-            {#if !view.phone}
-              <Collapsible.Trigger class="hide" title="Hide comments (N)" aria-label="Hide comments">
-                <svg viewBox="0 0 24 24"
+            {#if searching}
+              <input
+                bind:this={input}
+                class="search"
+                type="search"
+                placeholder="Search comments"
+                aria-label="Search comments"
+                bind:value={review.commentSearch}
+                onkeydown={(e) => {
+                  if (e.key === 'Escape') {
+                    e.stopPropagation();
+                    closeSearch();
+                  }
+                }}
+                onblur={() => {
+                  if (!review.commentSearch.trim()) searching = false;
+                }}
+              />
+            {:else}
+              <span class="h">Comments</span>
+            {/if}
+            <button
+              class="icon"
+              class:on={searching}
+              aria-label={searching ? 'Close search' : 'Search comments'}
+              title={searching ? 'Close search' : 'Search'}
+              onclick={() => (searching ? closeSearch() : openSearch())}
+            >
+              {#if searching}
+                <svg viewBox="0 0 20 20" aria-hidden="true"
                   ><path
-                    d="M9.5 6l6 6-6 6"
+                    d="M5.5 5.5l9 9m0-9-9 9"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                    stroke-linecap="round"
+                  /></svg
+                >
+              {:else}
+                <svg viewBox="0 0 20 20" aria-hidden="true"
+                  ><circle cx="8.75" cy="8.75" r="5" fill="none" stroke="currentColor" stroke-width="1.6" /><path
+                    d="m12.5 12.5 4 4"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                    stroke-linecap="round"
+                  /></svg
+                >
+              {/if}
+            </button>
+            {#if !view.phone}
+              <Collapsible.Trigger class="icon hide" title="Hide comments (N)" aria-label="Hide comments">
+                <svg viewBox="0 0 20 20" aria-hidden="true"
+                  ><path
+                    d="M8 5l5 5-5 5"
                     fill="none"
                     stroke="currentColor"
-                    stroke-width="2"
+                    stroke-width="1.7"
                     stroke-linecap="round"
                     stroke-linejoin="round"
                   /></svg
@@ -59,96 +124,20 @@
               </Collapsible.Trigger>
             {/if}
           </header>
-          <div class="review-status" aria-label="Review progress">
+          <div class="tabs" role="tablist" aria-label="Comments">
             <button
-              class:on={review.commentScope === 'current' && review.commentFilter === 'open'}
-              onclick={() => {
-                review.commentScope = 'current';
-                review.commentFilter = 'open';
-              }}>Open <b>{review.currentOpenCount}</b></button
+              role="tab"
+              aria-selected={review.commentFilter === 'todo'}
+              class:on={review.commentFilter === 'todo'}
+              onclick={() => (review.commentFilter = 'todo')}>To do <b>{review.todoCount}</b></button
             >
             <button
-              class:on={review.commentScope === 'current' && review.commentFilter === 'resolved'}
-              onclick={() => {
-                review.commentScope = 'current';
-                review.commentFilter = 'resolved';
-              }}>Resolved <b>{review.resolvedCount}</b></button
-            >
-            <button
-              class:on={review.commentScope === 'earlier'}
-              onclick={() => {
-                review.commentScope = 'earlier';
-                review.commentFilter = 'open';
-              }}>Earlier <b>{review.earlierCount}</b></button
+              role="tab"
+              aria-selected={review.commentFilter === 'done'}
+              class:on={review.commentFilter === 'done'}
+              onclick={() => (review.commentFilter = 'done')}>Done <b>{review.doneCount}</b></button
             >
           </div>
-          {#if review.commentScope === 'earlier'}<p class="scope-help">
-              Unresolved feedback from earlier versions. Original drawings are included.
-            </p>{/if}
-          <div class="comment-tools">
-            <label class="comment-search"
-              ><span aria-hidden="true">⌕</span><input
-                type="search"
-                placeholder="Search comments"
-                aria-label="Search comments"
-                bind:value={review.commentSearch}
-              /></label
-            >
-            <div class="comment-filters">
-              <StyledSelect
-                label="Filter comments"
-                compact
-                value={review.commentFilter}
-                options={[
-                  { value: 'all', label: 'All comments' },
-                  { value: 'open', label: 'Open' },
-                  { value: 'resolved', label: 'Resolved' },
-                ]}
-                onValueChange={(value) => {
-                  review.commentFilter = value as typeof review.commentFilter;
-                }}
-              />
-              <StyledSelect
-                label="Comment version"
-                compact
-                value={review.commentScope}
-                options={[
-                  { value: 'current', label: `${review.shown} review` },
-                  { value: 'earlier', label: 'Earlier unresolved' },
-                  { value: 'all', label: 'All relevant feedback' },
-                ]}
-                onValueChange={(value) => {
-                  review.commentScope = value as typeof review.commentScope;
-                }}
-              />
-            </div>
-          </div>
-          {#if review.seg}<div class="recording-comment">
-              <span class="pulse"></span>Recording feedback…<small
-                >Comments arrive as short clips finish transcribing.</small
-              >
-            </div>{/if}
-          {#if notes.deleted.length}
-            <div class="deleted-comment" role="status">
-              <span>{notes.deleted.length === 1 ? 'Comment deleted' : `${notes.deleted.length} comments deleted`}</span
-              ><button disabled={notes.deleting} onclick={notes.undoDelete}>Undo</button>
-            </div>
-          {/if}
-          {#if notes.deleteError}<p class="delete-error" role="alert">{notes.deleteError}</p>{/if}
-          {#if job}
-            <button
-              class="job"
-              class:err={job.error}
-              disabled={!job.error}
-              title={job.error ? 'Dismiss' : ''}
-              onclick={notes.dismissJob}
-            >
-              <span class="pulse"></span>
-              <span class="jt"
-                >{job.text}{#if job.hint}<span class="hint">{job.hint}</span>{/if}</span
-              >
-            </button>
-          {/if}
           <ScrollArea.Root class="scroll" type="hover">
             <ScrollArea.Viewport class="vp">
               {#if view.rows.length}
@@ -157,14 +146,18 @@
                     <SidebarItem {review} {row} active={row.key === view.active} />
                   {/each}
                 </ol>
+              {:else if review.commentSearch.trim()}
+                <p class="empty">No comments match “{review.commentSearch.trim()}”</p>
+              {:else if review.commentFilter === 'done'}
+                <p class="empty">Nothing done yet<span>Comments the agent finishes land here.</span></p>
               {:else if !job}
                 <p class="empty">
-                  {review.rows.length ? 'No matching comments' : 'Start the conversation'}<span
-                    >{review.rows.length
-                      ? 'Try another search or filter.'
-                      : review.canRecord
-                        ? 'Press R to leave a voice comment at this moment.'
-                        : 'Comments will appear here.'}</span
+                  {review.rows.length ? 'All done' : 'No comments yet'}<span
+                    >{review.canRecord
+                      ? review.touch
+                        ? 'Tap ● and talk to leave one at this moment.'
+                        : 'Press R and talk to leave one at this moment.'
+                      : 'Comments will show up here.'}</span
                   >
                 </p>
               {/if}
@@ -173,7 +166,28 @@
               <ScrollArea.Thumb class="thumb" />
             </ScrollArea.Scrollbar>
           </ScrollArea.Root>
-          <footer class="comment-footer">Saved feedback stays open until the editor resolves it.</footer>
+          <div class="strip" aria-live="polite">
+            {#if notes.deleted.length}
+              <div class="deleted-comment" role="status">
+                <span
+                  >{notes.deleted.length === 1 ? 'Comment deleted' : `${notes.deleted.length} comments deleted`}</span
+                ><button onclick={notes.undoDelete}>Undo</button>
+              </div>
+            {:else if notes.deleteError}
+              <p class="delete-error" role="alert">{notes.deleteError}</p>
+            {:else if job}
+              <button class="job" class:err={job.error} title={job.error ? 'Dismiss' : ''} onclick={notes.dismissJob}>
+                <span class="pulse"></span>
+                <span class="jt"
+                  >{job.text}{#if job.hint}<span class="hint">{job.hint}</span>{/if}</span
+                >
+              </button>
+            {:else if review.seg}
+              <div class="recording-comment">
+                <span class="pulse"></span>Recording. Comments appear here as you talk.
+              </div>
+            {/if}
+          </div>
         </Collapsible.Content>
       {/snippet}
     </Collapsible.Root>

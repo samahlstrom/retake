@@ -258,9 +258,16 @@ export class Notes {
 
   /** Done: the take is closed; the server queues its transcription and notes. Resolves to the HTTP status (0 when
    * unreachable). */
-  async postDone(take: string, version: string | null): Promise<number> {
+  async postDone(take: string, version: string | null, send = false): Promise<number> {
     try {
-      const r = await this.#fetch(doneUrl(take, version), { method: 'POST' });
+      // `send`: queue the take's notes for the agent once they're processed (contract C3). An older server ignores the
+      // body and does what it always did.
+      const r = await this.#fetch(
+        doneUrl(take, version),
+        send
+          ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ send: true }) }
+          : { method: 'POST' },
+      );
       await r.body?.cancel().catch(() => {});
       return r.status;
     } catch {

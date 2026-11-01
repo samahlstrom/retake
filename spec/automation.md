@@ -30,9 +30,12 @@ upload or an inbound connection to the worker. This is an addition to the existi
   processing. Once the final notes job succeeds, submitted open notes enter the editing queue when automation is
   enabled. The browser can also submit selected existing open comments explicitly. Submission is idempotent while
   an unfinished task owns a note. Reopened notes may be submitted again.
-- Public comment states are Commented, In progress, Question, Completed. Existing approval and retraction remain
-  intact. In progress comes from a live task claim. Completed requires a successfully rendered result plus an
-  explicit per-note change description; an agent process exit alone never completes feedback.
+- A comment shows one of four states: Open, Working, Question, Done (the page maps them in `web/src/lib/status.ts`).
+  No task, a cancelled one, or a paused one is Open (a pause adds its reason once, such as "Paused: usage limit",
+  with Retry); queued, running and stopping are Working; an agent's question is Question; completed, answered and
+  accepted are Done. Existing approval and retraction remain intact. Working comes from a task. Done requires a
+  successfully rendered result plus an explicit per-note change description; an agent process exit alone never
+  completes feedback.
 - A question and its answer stay on the task/comment. Answering resumes the same task. Operational pauses (usage
   limits, offline, failed render) are displayed separately from creative questions.
 - Every task records the original note IDs and versions. Completion links the original notes to the resulting
@@ -68,9 +71,15 @@ upload or an inbound connection to the worker. This is an addition to the existi
 - `/api/worker/*`: Bearer agent token only, including local requests. Worker registration, polling/heartbeats,
   attempt reports, render registration/progress, note artifacts and relay response endpoints.
 - Existing video URLs serve remote versions through the relay. Existing viewing permissions apply to all media.
-- Agent controls in the browser show worker availability, default agent, per-task assignment and history, questions,
-  pause reasons, and available usage estimates. Comment cards show current task state and result links regardless
-  of which version is selected.
+- The bar has one action. The owner's is Send (`Send N to agent`, N the open comments no task owns): it finishes
+  the take in progress with `send: true` on its `/done` and submits the other open comments. Other reviewers have
+  Finish review. With no computer to send to, Send saves the take and opens the agent popover, which shows the
+  connect command (`POST /api/connect`), or, in local mode, why the built-in worker can't edit. Next to the action,
+  the agent's name with a dot (green: online) opens that popover: the agent, its fallback ("Pause and ask me" by
+  default) and "Send other reviewers' comments automatically" (`config.enabled`). Per-comment actions (send one,
+  retry, switch agent, pause, history, reopen, delete) are in the card's ⋯ menu. A worker's question takes a typed
+  answer (`…/answer`); a question asked through the notes takes a recorded one (`answer_to`), in the same reply
+  box. Comment cards show current task state and result links regardless of which version is selected.
 
 ## Required verification
 

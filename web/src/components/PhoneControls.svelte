@@ -1,14 +1,15 @@
 <script lang="ts">
   // The phone layout's controls (the desktop has the bar instead). Same parts, sized for a thumb:
-  //  - portrait, under the video: the timeline; play, time, version and flip; the pen colors and undo (#pbar). At the
-  //    bottom, in the thumb zone: the hint, Record and Done (#precord). The free space between is the grid's `side`
-  //    row (phone.css).
-  //  - landscape, around the video (which fills the height): the pen colors and undo at the left edge, Done and a big
-  //    round Record at the right edge, and a slim bar at the bottom with play, time, the timeline, version and flip.
-  // A viewer's share link has no pen, undo, Record or Done; the hint says "View only".
+  //  - portrait, under the video: the timeline; play, time, version and the agent's dot; the pen colors and undo
+  //    (#pbar). At the bottom, in the thumb zone: the hint (once), Record and Send (#precord). The free space between is
+  //    the grid's `side` row (phone.css), where the comments open.
+  //  - landscape, around the video (which fills the height): the pen colors and undo at the left edge, Send and a big
+  //    round Record at the right edge, and a slim bar at the bottom with play, time, the timeline, version and agent.
+  // A viewer's share link has no pen, undo, Record or Send; the hint says "View only".
   import type { Review } from '../lib/review.svelte';
   import VersionPicker from './VersionPicker.svelte';
-  import AgentPanel from './AgentPanel.svelte';
+  import AgentStatus from './AgentStatus.svelte';
+  import SendButton from './SendButton.svelte';
   import PlayButton from './PlayButton.svelte';
   import Timeline from './Timeline.svelte';
   import PenColors from './PenColors.svelte';
@@ -24,15 +25,6 @@
     <span id="cur">{review.curText}</span> <span class="dim">/ <span id="dur">{review.durText}</span></span>
   </div>
 {/snippet}
-{#snippet done()}
-  <button
-    id="done"
-    class:saved={review.doneSaved}
-    disabled={review.finishing}
-    title="Stop and save feedback. Comments stay open until their edits are completed."
-    onclick={review.done}>{review.finishing ? 'Saving…' : review.doneSaved ? 'Saved' : 'Finish review'}</button
-  >
-{/snippet}
 
 {#if review.layoutMode === 'portrait'}
   <div id="pbar" class="portrait" class:recording={!!review.seg}>
@@ -41,8 +33,8 @@
       <PlayButton paused={review.paused} onclick={review.togglePlay} />
       {@render time()}
       <VersionPicker {review} />
-      <AgentPanel {review} />
       <span class="grow"></span>
+      {#if review.canRecord && review.agent.available}<AgentStatus {review} />{/if}
     </div>
     {#if review.canRecord}
       <div class="prow">
@@ -62,7 +54,7 @@
     {#if review.canRecord}
       <div class="prow">
         <PhoneRecord {review} />
-        {@render done()}
+        <SendButton {review} />
       </div>
     {/if}
   </div>
@@ -80,7 +72,7 @@
   </div>
   <div id="pright" class:recording={!!review.seg}>
     {#if review.canRecord}
-      {@render done()}
+      <SendButton {review} />
       <span class="grow"></span>
       <PhoneRecord {review} round />
     {/if}
@@ -90,6 +82,6 @@
     {@render time()}
     <Timeline {review} />
     <VersionPicker {review} />
-    <AgentPanel {review} />
+    {#if review.canRecord && review.agent.available}<AgentStatus {review} compact />{/if}
   </div>
 {/if}

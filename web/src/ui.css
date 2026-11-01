@@ -1,0 +1,275 @@
+/* Shared by the review page and the home: the status colors, and the look of Bits UI's menus, popovers and switch
+   (they render in a portal, outside any component's styles). */
+:root {
+  --st-open: #8e8e99;
+  --st-working: #efb441;
+  --st-question: #a693fa;
+  --st-done: #3cd38a;
+  --pop-bg: #1d1d21;
+  --pop-line: rgba(255, 255, 255, 0.1);
+}
+
+/* ---------------------------------------------------------------- menus (⋯) */
+.menu {
+  z-index: 120;
+  min-width: 168px;
+  padding: 5px;
+  border: 1px solid var(--pop-line);
+  border-radius: 10px;
+  background: var(--pop-bg);
+  color: #e8e8ef;
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.55),
+    0 2px 8px rgba(0, 0, 0, 0.3);
+  font:
+    13px/1.4 Inter,
+    'Adwaita Sans',
+    system-ui,
+    sans-serif;
+  outline: none;
+}
+.menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 32px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  user-select: none;
+  outline: none;
+}
+.menu-item[data-highlighted] {
+  background: rgba(255, 255, 255, 0.07);
+}
+.menu-item[data-disabled] {
+  opacity: 0.4;
+  cursor: default;
+}
+.menu-item.danger {
+  color: #ff8f86;
+}
+.menu-item.sub::after {
+  content: '›';
+  color: #8e8e99;
+}
+.menu-item .check {
+  color: #c9c1ff;
+}
+.menu-sep {
+  height: 1px;
+  margin: 5px 4px;
+  background: var(--pop-line);
+}
+.menu-label {
+  padding: 6px 10px 4px;
+  color: #8e8e99;
+  font-size: 11.5px;
+}
+
+/* ---------------------------------------------------------------- popovers */
+.pop {
+  z-index: 110;
+  box-sizing: border-box;
+  width: min(340px, calc(100vw - 24px));
+  max-height: min(620px, calc(100dvh - 90px));
+  overflow: auto;
+  padding: 16px;
+  border: 1px solid var(--pop-line);
+  border-radius: 12px;
+  background: var(--pop-bg);
+  color: #e8e8ef;
+  box-shadow: 0 16px 60px rgba(0, 0, 0, 0.6);
+  font:
+    13px/1.45 Inter,
+    'Adwaita Sans',
+    system-ui,
+    sans-serif;
+  outline: none;
+  display: grid;
+  gap: 14px;
+}
+.pop .note {
+  margin: 0;
+  color: #a3a3ad;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.pop .note.warn {
+  color: #e6c27a;
+}
+.pop .note.err {
+  color: #ff8f86;
+}
+.pop-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 14px;
+}
+.pop-head .dim {
+  color: #8e8e99;
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pop-head .dot {
+  flex: none;
+  align-self: center;
+}
+.pop .field {
+  display: grid;
+  gap: 6px;
+  color: #a3a3ad;
+  font-size: 12px;
+}
+.pop .field .sub {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 2px;
+}
+.pop .toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--pop-line);
+  color: #d6d6de;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--st-open);
+}
+.dot.ok {
+  background: var(--st-done);
+}
+.dot.busy {
+  background: var(--st-working);
+  animation: dot-pulse 1.4s ease-in-out infinite;
+}
+.dot.off {
+  background: #5c5c66;
+}
+@keyframes dot-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dot.busy {
+    animation: none;
+  }
+}
+
+/* ---------------------------------------------------------------- switch */
+.switch {
+  flex: none;
+  position: relative;
+  width: 34px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: #3a3a42;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.switch[data-state='checked'] {
+  background: var(--st-done);
+}
+.switch-thumb {
+  display: block;
+  width: 16px;
+  height: 16px;
+  margin: 2px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.15s ease;
+}
+.switch-thumb[data-state='checked'] {
+  transform: translateX(14px);
+}
+
+/* ---------------------------------------------------------------- the keys sheet */
+.keys-pop {
+  width: min(360px, calc(100vw - 24px));
+}
+.keys-pop dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 7px 14px;
+  margin: 0;
+  align-items: center;
+}
+.keys-pop dt {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+}
+.keys-pop dd {
+  margin: 0;
+  color: #c9c9d1;
+}
+.keys-pop kbd {
+  min-width: 22px;
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font:
+    600 11.5px/1.4 Inter,
+    system-ui,
+    sans-serif;
+  text-align: center;
+}
+
+/* ---------------------------------------------------------------- a task's history */
+.history {
+  z-index: 115;
+  box-sizing: border-box;
+  width: min(320px, calc(100vw - 24px));
+  max-height: min(420px, 70dvh);
+  overflow: auto;
+  padding: 14px 16px;
+  border: 1px solid var(--pop-line);
+  border-radius: 12px;
+  background: var(--pop-bg);
+  color: #e8e8ef;
+  box-shadow: 0 16px 60px rgba(0, 0, 0, 0.6);
+  font:
+    12.5px/1.5 Inter,
+    system-ui,
+    sans-serif;
+  outline: none;
+}
+.history ol {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.history li {
+  display: grid;
+  gap: 2px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.history .when,
+.history .usage {
+  color: #8e8e99;
+  font-size: 11.5px;
+}
+.history .usage {
+  margin: 12px 0 0;
+}

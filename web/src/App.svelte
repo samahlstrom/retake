@@ -10,6 +10,7 @@
   onMount(() => {
     void review.automation.refresh();
     const timer = setInterval(() => {
+      review.clock = Date.now() / 1000;
       void review.automation.refresh();
     }, 5000);
     return () => clearInterval(timer);

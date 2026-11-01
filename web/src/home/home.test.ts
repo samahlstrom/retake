@@ -73,3 +73,34 @@ it('keeps project organization on save and refreshes conflicts without overwriti
   expect(home.saveError).toBe('Changed in another window');
   expect(home.workspace.projects[0].title).toBe('Shows');
 });
+
+it('a home with one project opens straight to it; with more, the Projects page', async () => {
+  let body: unknown = {
+    role: 'owner',
+    projects: [{ name: 'a', status: 'to_review' }],
+    workspace: { revision: 1, projects: [{ id: 'default', title: 'Shows', groups: [] }], placements: [] },
+  };
+  const home = new Home({ fetch: (async () => answer(200, body)) as unknown as typeof fetch });
+  await home.refresh();
+  expect(home.single).toBe(true);
+  expect(home.project?.id).toBe('default');
+  body = {
+    role: 'owner',
+    projects: [{ name: 'a', status: 'to_review' }],
+    workspace: {
+      revision: 2,
+      projects: [
+        { id: 'default', title: 'Shows', groups: [] },
+        { id: 'l', title: 'Launch', groups: [] },
+      ],
+      placements: [],
+    },
+  };
+  await home.refresh();
+  expect(home.single).toBe(false);
+  expect(home.project).toBeUndefined();
+  home.selected = 'l';
+  expect(home.project?.title).toBe('Launch');
+  home.selected = 'gone';
+  expect(home.project).toBeUndefined();
+});

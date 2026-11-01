@@ -425,3 +425,31 @@ html[data-layout='landscape'] #side {
   width: min(320px, 70%);
   z-index: 5;
 }
+
+/* ------------------------------------------------------------------ the bar's parts, phone sized */
+html[data-phone] #rec.pill,
+html[data-phone] #rec.round {
+  width: auto;
+}
+html[data-phone] #done {
+  min-width: 0;
+}
+html[data-layout='portrait'] #done {
+  padding: 0 18px;
+}
+html[data-layout='landscape'] #pright #done {
+  width: 100%;
+  padding: 0 6px;
+  font-size: 13px;
+  white-space: normal;
+  line-height: 1.2;
+}
+html[data-phone] .agent-status {
+  width: auto;
+  max-width: 150px;
+  min-height: 44px;
+  padding: 0 6px;
+}
+html[data-phone] .agent-status.compact {
+  max-width: 120px;
+}

@@ -230,6 +230,22 @@ describe('Notes', () => {
     expect(srv.calls).toContain('POST api/session/2026-10-29_20-41-05/done?v=v8');
   });
 
+  it('Send finishes the take with send: true (C3); plain Finish sends no body', async () => {
+    const sent: { url: string; init?: RequestInit }[] = [];
+    const notes = new Notes({
+      fetch: (async (url: string, init?: RequestInit) => {
+        sent.push({ url, init });
+        return new Response('{"ok":true}', { status: 200 });
+      }) as typeof fetch,
+    });
+    expect(await notes.postDone('t1', 'v8', true)).toBe(200);
+    expect(sent[0]!.url).toBe('api/session/t1/done?v=v8');
+    expect(JSON.parse(String(sent[0]!.init!.body))).toEqual({ send: true });
+    expect(new Headers(sent[0]!.init!.headers).get('Content-Type')).toBe('application/json');
+    await notes.postDone('t2', 'v8');
+    expect(sent[1]!.init).toEqual({ method: 'POST' });
+  });
+
   it('postDone and reopen survive an unreachable server', async () => {
     const notes = new Notes({ fetch: (() => Promise.reject(new TypeError('Failed to fetch'))) as typeof fetch });
     expect(await notes.postDone('2026-10-29_20-41-05', 'v8')).toBe(0);

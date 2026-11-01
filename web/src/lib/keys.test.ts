@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { keyAction, type KeyLike } from './keys';
+import { HINT_KEY, hintSeen, KEY_SHEET, keyAction, markHintSeen, type KeyLike } from './keys';
 
 const k = (key: string, mods: Partial<KeyLike> = {}): KeyLike => ({
   key,
@@ -77,5 +77,39 @@ describe('keys', () => {
   it('ignores inherited object keys', () => {
     expect(keyAction(k('constructor'))).toBeNull();
     expect(keyAction(k('toString'))).toBeNull();
+  });
+});
+
+describe('? and the hint that shows once', () => {
+  it('? opens the keys sheet, and holding it does not flicker', () => {
+    expect(keyAction(k('?'))).toEqual({ act: 'help', stop: true });
+    expect(keyAction(k('?', { repeat: true }))).toEqual({ act: null, stop: true });
+  });
+  it('the sheet lists every key the player handles', () => {
+    const listed = KEY_SHEET.flatMap((s) => s.keys);
+    for (const key of ['R', 'Space', '←', '→', ',', '.', '1', '4', 'E', 'Z', 'C', '[', ']', 'N', '>', 'F', '?'])
+      expect(listed).toContain(key);
+  });
+  it('remembers the dismissal, and survives blocked storage', () => {
+    const store = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, v: string) => void store.set(key, v),
+    };
+    expect(hintSeen(storage)).toBe(false);
+    markHintSeen(storage);
+    expect(store.get(HINT_KEY)).toBe('seen');
+    expect(hintSeen(storage)).toBe(true);
+    const blocked = {
+      getItem: () => {
+        throw new Error('blocked');
+      },
+      setItem: () => {
+        throw new Error('blocked');
+      },
+    };
+    expect(hintSeen(blocked)).toBe(false);
+    expect(() => markHintSeen(blocked)).not.toThrow();
+    expect(hintSeen(null)).toBe(false);
   });
 });
