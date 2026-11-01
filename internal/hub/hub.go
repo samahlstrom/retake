@@ -52,8 +52,11 @@ type Hub struct {
 	uploads *tus.Handler
 	secure  bool // cookies get Secure
 
-	tokenFails  *team.Limiter // bad Bearer tokens, share links and cookies, sign-in codes
+	tokenFails  *team.Limiter // bad Bearer tokens, share links and cookies, sign-in and setup codes
 	signinMails *team.Limiter // POST /signin
+
+	setupMu   sync.Mutex
+	setupCode string // the first-run setup code while there are no users; "" before SetupURL and once used
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -296,6 +299,10 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.home(w, r, ri)
 	case parts[0] == "signin":
 		h.signinRoute(w, r, ri, parts[1:])
+	case parts[0] == "setup":
+		h.setupRoute(w, r, ri, parts[1:])
+	case parts[0] == "assets":
+		h.static(w, r, parts)
 	case len(parts) == 1 && parts[0] == "signout":
 		h.signout(w, r, ri)
 	case parts[0] == "api":
@@ -351,7 +358,7 @@ func writeJSON(w http.ResponseWriter, r *http.Request, code int, v any) {
 	hd.Set("Cache-Control", "no-store")
 	w.WriteHeader(code)
 	if r.Method != http.MethodHead {
-		_, _ = w.Write(body) //nolint:gosec // JSON with Content-Type application/json and nosniff
+		_, _ = w.Write(body) // JSON with Content-Type application/json and nosniff
 	}
 }
 

@@ -19,6 +19,10 @@ import (
 // need a session; admins and project owners manage things.
 
 func (h *Hub) apiRoute(w http.ResponseWriter, r *http.Request, ri reqInfo, parts []string) {
+	if len(parts) >= 1 && parts[0] == "machine" { // a machine token, never a session
+		h.machineRoute(w, r, ri, parts[1:])
+		return
+	}
 	s, err := h.session(w, r)
 	if err != nil {
 		h.storeFailed(w, r, err)
@@ -104,6 +108,8 @@ func (h *Hub) apiRoute(w http.ResponseWriter, r *http.Request, ri reqInfo, parts
 		default:
 			h.notFound(w, r)
 		}
+	case len(parts) >= 1 && parts[0] == "connect":
+		h.connectRoute(w, r, ri, s, parts[1:])
 	case len(parts) >= 1 && parts[0] == "users":
 		if !s.user.Admin {
 			h.fail(w, r, http.StatusForbidden, "admins only")

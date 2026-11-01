@@ -221,7 +221,7 @@ func (h *Hub) signout(w http.ResponseWriter, r *http.Request, _ reqInfo) {
 type who struct {
 	role   team.Role
 	author string
-	via    string // bearer | session | share
+	via    string // bearer | machine | session | share
 	label  string // a token's label
 	user   *accounts.User
 }
@@ -232,6 +232,12 @@ var errRefused = errors.New("refused") // who answered the request itself
 // agent routes, where only a Bearer token counts. It answers refused requests itself and returns errRefused.
 func (h *Hub) identify(w http.ResponseWriter, r *http.Request, ri reqInfo, p *proj, page, bearerOnly bool) (who, error) {
 	if tok := bearer(r); tok != "" {
+		if accounts.WellFormed(accounts.MachinePrefix, tok) { // a machine token: the agent of every project
+			if !h.machine(w, r, ri, tok, page) {
+				return who{}, errRefused
+			}
+			return who{role: team.Agent, author: "agent", via: "machine"}, nil
+		}
 		t, ok := h.checkToken(w, r, ri, p, tok, page, false)
 		if !ok {
 			return who{}, errRefused
