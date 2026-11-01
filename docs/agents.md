@@ -19,18 +19,90 @@ What it needs: a timeline project (`edit/timeline.json`, or `[edit] timeline` in
 `retake-edit` ([timeline.md](timeline.md)), and Claude Code or Codex installed and signed in. When something is
 missing, the agent menu next to Send says what, and it picks the fix up within 15 seconds without a restart.
 
-- One task runs at a time; each Send queues one. The agent works in the project folder with its own sign-in and
-  settings.
+- Each video (project) has its own agent: one task runs at a time per video, and each Send queues one. Different
+  videos edit at the same time, so ten videos with work means ten agents working at once. The agent works in the
+  project folder with its own sign-in and settings.
 - While it works, the page follows its drafts (`v4-draft1`, `v4-draft2`, ...). Only a finished task makes a version
   (`v4`), and restarting `retake open` makes none.
 - Anyone you share the review with (`retake share`) has the same Send button, and their comments go to this agent.
-- Each task's prompt, context, log and report are in `.retake/worker/tasks/<task>/`.
+- Each task's prompt, context, log and report are in `.retake/worker/tasks/<task>/` (no log in herdr or tmux: the
+  session is the log).
 
 Reviewing on a hosted server instead? Run `retake connect` and the same worker connects out to it: [hosting.md](hosting.md).
 
+## Watch and talk to your agents (herdr, tmux)
+
+By default the agents run in the background, and you only see what they did. To watch each one work and type into it
+whenever you like, open them in [herdr](https://herdr.dev) or tmux instead. In `~/.config/retake/config.toml`:
+
+```toml
+open_agents_in = "herdr"   # or "tmux"; "background" is the default
+```
+
+Each video then gets its own interactive Claude Code or Codex session (not `claude -p` or `codex exec`), named after
+the video:
+
+- **herdr**: a workspace labelled `retake · item-shop` in the herdr session you started `retake` from (or herdr's
+  default one). It opens without taking focus or switching your view.
+- **tmux**: a window `item-shop` in a tmux session `retake`, made detached. `tmux attach -t retake` to look.
+
+Retake writes the task prompt to `.retake/worker/tasks/<task>/prompt-<n>.md` and sends the agent one line: "New Retake
+task for item-shop (task …, attempt 1): follow the instructions in …/prompt-1.md". From there it's a normal session:
+watch it, answer it, interrupt it, ask it something. When the agent writes its report, the comment moves on exactly as
+in the background (a completed report still waits for a checked render), and the session stays open so you can scroll
+back and keep talking. The video's next task goes to the same session if it's still there.
+
+What's different from the background:
+
+- Retake reads nothing from the terminal. Only the report file finishes a task. If the agent asks you something in
+  the terminal instead of in its report, or hits a usage limit, the comment stays Working until it reports; answer it
+  there, or pause the comment from the page.
+- Closing the session (or quitting the agent) before it reports pauses the comment. Pausing or switching agents from
+  the page closes the agent's pane. After the report, the pane is left alone.
+- No usage or cost is recorded: an interactive session has no JSON stream to read it from.
+- The agent's environment is herdr's or tmux's, plus the agent's `env` from your config. `RETAKE_CONTEXT` and
+  `RETAKE_REPORT` aren't set; the prompt names both files.
+- The first time an agent runs in a folder it may ask whether to trust it. In herdr Retake waits for you to answer that
+  in the workspace before it sends the task, and says so in its log.
+- An agent from `[[agents]]` needs an `interactive` command to open in herdr or tmux; without one it stays in the
+  background ([config.md](config.md#agents)). In herdr, the program's name must be one herdr knows (`claude`, `codex`,
+  `gemini`, ...), because herdr starts it by that name.
+
+The built-in agents run as `claude --permission-mode acceptEdits` and
+`codex --sandbox workspace-write -c approval_policy="never"`, the same permissions as in the background. A `[[agents]]`
+entry can set `open_in` to put just that agent somewhere else.
+
+These are the commands Retake runs. In herdr, for a video's first task (`<name>` is `retake-<video>-<4 hex>`):
+
+```
+herdr workspace create --cwd <project> --label "retake · <video>" --no-focus [--env KEY=VALUE ...]
+herdr agent start <name> --kind claude --pane <pane> --timeout 60000 -- --permission-mode acceptEdits
+herdr agent prompt <name> "New Retake task for <video> (...): follow the instructions in <prompt file>"
+herdr agent get <name>        # every 2 s until the report: is the session still there?
+herdr pane close <pane>       # only on pause, switch or a lost connection, before the report
+```
+
+The next task checks `herdr pane get <pane>` and `herdr agent get <name>`, then sends `herdr agent prompt` again. If the
+agent had quit, it runs `herdr agent start` in the same pane first; if the pane is gone, `herdr tab create --workspace
+<workspace> ...` (or a new workspace when that's gone too). A startup question makes `agent start` answer
+`agent_not_ready`, and Retake runs `herdr agent wait <name> --until idle --until done` before the prompt.
+
+In tmux:
+
+```
+tmux has-session -t =retake
+tmux new-session -d -s retake -P -F '#{pane_id}' -n <video> -c <project> [-e KEY=VALUE ...] -- claude --permission-mode acceptEdits "<line>"
+    (or: tmux new-window -d -t =retake: -P -F '#{pane_id}' -n <video> -c <project> ... when the session exists)
+tmux set-option -w -t <pane> remain-on-exit on
+tmux list-panes -a -F '#{pane_id} #{pane_dead}'    # every 2 s until the report
+tmux send-keys -t <pane> -l "<line>"; tmux send-keys -t <pane> Enter    # the next task, into the running agent
+tmux respawn-pane -k -t <pane> -c <project> ... -- <agent> "<line>"     # the next task when the agent had quit, or another agent
+tmux kill-pane -t <pane>                                               # pause, switch or a lost connection
+```
+
 ## How the worker runs an agent
 
-The worker runs the agent's command in the project folder, with the task prompt on stdin. `RETAKE_CONTEXT` names a
+In the background, the worker runs the agent's command in the project folder, with the task prompt on stdin. `RETAKE_CONTEXT` names a
 JSON file with the task and its notes (text, times, strokes, snapshots and images), and the agent writes its answer
 to `RETAKE_REPORT`: `{"state": "completed", "message": "what changed"}` or `{"state": "question", "message": "..."}`.
 A completed task still waits for a checked, playable render of the agent's final source before the comment is Done.
@@ -102,6 +174,9 @@ command = ["codex", "exec", "--json", "--sandbox", "workspace-write", "-c", "app
 ```
 
 `find_agents = false` hides the agents found on `PATH`, so only yours are offered.
+
+To open one of these in herdr or tmux too (`open_agents_in` above), give it `interactive`, the same command without the
+headless flags, for example `interactive = ["claude", "--permission-mode", "acceptEdits"]` for the Claude Code ones.
 
 ## Drive an agent yourself (MCP and the CLI)
 

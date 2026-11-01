@@ -17,14 +17,19 @@ import (
 	"github.com/samahlstrom/retake/internal/project"
 )
 
-// DefaultProfiles uses the installed CLIs' own authentication and model settings.
+// DefaultProfiles uses the installed CLIs' own authentication and model settings. Interactive is the same agent as
+// a session the person can watch (herdr, tmux), with the same permissions as the headless command.
 func DefaultProfiles() []Profile {
 	var out []Profile
 	if bin, e := exec.LookPath("codex"); e == nil {
-		out = append(out, Profile{AgentProfile: project.AgentProfile{ID: "codex", Name: "Codex"}, Command: []string{bin, "exec", "--json", "--sandbox", "workspace-write", "-c", "approval_policy=\"never\"", "--skip-git-repo-check", "-"}})
+		out = append(out, Profile{AgentProfile: project.AgentProfile{ID: "codex", Name: "Codex"},
+			Command:     []string{bin, "exec", "--json", "--sandbox", "workspace-write", "-c", "approval_policy=\"never\"", "--skip-git-repo-check", "-"},
+			Interactive: []string{bin, "--sandbox", "workspace-write", "-c", "approval_policy=\"never\""}})
 	}
 	if bin, e := exec.LookPath("claude"); e == nil {
-		out = append(out, Profile{AgentProfile: project.AgentProfile{ID: "claude", Name: "Claude Code"}, Command: []string{bin, "-p", "--output-format", "stream-json", "--verbose", "--permission-mode", "acceptEdits"}})
+		out = append(out, Profile{AgentProfile: project.AgentProfile{ID: "claude", Name: "Claude Code"},
+			Command:     []string{bin, "-p", "--output-format", "stream-json", "--verbose", "--permission-mode", "acceptEdits"},
+			Interactive: []string{bin, "--permission-mode", "acceptEdits"}})
 	}
 	return out
 }
@@ -98,39 +103,28 @@ Only the note IDs in task.notes are assigned. Other notes are context: check the
 Original local video revisions are retained in .retake/worker/renders/: each state.json gives its label (a draft such as v4-draft2 until a task completes it as v4), source.json is its timeline snapshot, and index.m3u8 is its video. Inspect the original frame there when needed; do not assume an old comment's time refers to the current source.
 Make the requested source edits in this project. Preserve all existing working changes, media and other people's work. Retake automatically renders valid saved source changes and streams them to reviewers. Do not run retake push or mark notes complete yourself.
 If feedback conflicts, the target is ambiguous, or needed material is missing, ask a concise specific question instead of guessing.
-Before exiting, write a JSON object to %q with exactly: {"state":"completed","message":"concrete description of the change and checks"} OR {"state":"question","message":"your question"}.
+Before you finish, write a JSON object to %q with exactly: {"state":"completed","message":"concrete description of the change and checks"} OR {"state":"question","message":"your question"}.
 A completed report is only a request: Retake waits for a checked playable render before resolving the comment.
 The next agent may differ from you; leave source changes and useful context on disk. Do not delete or edit the worker's identity, lock, logs, context files or render output.
 `, contextPath, r.timeline, reportPath)
 	p := r.opts.Profiles[index]
-	cmd := exec.CommandContext(ctx, p.Command[0], p.Command[1:]...) //nolint:gosec // trusted local argv, never supplied by the host
-	cmd.Dir = r.opts.Root
-	cmd.Stdin = strings.NewReader(prompt)
-	cmd.Env = agentEnv(os.Environ(), contextPath, reportPath, p.Env)
-	ownGroup(cmd)
-	cmd.Cancel = func() error { return stopGroup(cmd.Process) }
-	cmd.WaitDelay = 3 * time.Second
-	log, e := os.OpenFile(filepath.Join(dir, fmt.Sprintf("agent-%d.log", t.Attempt)), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600) //nolint:gosec // generated name under a validated task ID
-	if e != nil {
-		return paused("Cannot open the local agent log")
+	mode := r.openIn(p)
+	if mode != OpenBackground {
+		prompt += `This is an interactive session that the person can watch and type into. It stays open after your report: later Retake tasks for this video arrive here as new messages, each with its own context and report file.
+`
 	}
-	w := &boundedLog{file: log}
-	cmd.Stdout = w
-	cmd.Stderr = w
-	e = cmd.Run()
-	if cmd.Process != nil {
-		killGroup(cmd.Process)
+	promptPath := filepath.Join(dir, fmt.Sprintf("prompt-%d.md", t.Attempt))
+	if e := os.WriteFile(promptPath, []byte(prompt), 0o600); e != nil {
+		return paused("Cannot save the task prompt")
 	}
-	_ = log.Close()
-	if ctx.Err() != nil {
-		return outcome{state: "stopped", message: "Agent stopped"}
-	}
-	usage, limited := telemetry(w.tail)
-	if limited {
-		return outcome{state: "paused", message: "Usage limit reached. Switch agents or retry after the provider resets your allowance.", usage: usage}
-	}
-	if e != nil {
-		return outcome{state: "paused", message: "Agent stopped without finishing. Check its local task log, then retry or switch agents.", usage: usage}
+	var usage *project.AgentUsage
+	if mode == OpenBackground {
+		var stop *outcome
+		if usage, stop = r.background(ctx, p, prompt, dir, contextPath, reportPath, t.Attempt); stop != nil {
+			return *stop
+		}
+	} else if stop := r.interactive(ctx, mode, p, t, promptPath, reportPath); stop != nil {
+		return *stop
 	}
 	b, e := os.ReadFile(reportPath) //nolint:gosec // generated report path in this task's directory
 	if e != nil {
@@ -177,6 +171,89 @@ The next agent may differ from you; leave source changes and useful context on d
 	}
 }
 
+// background runs p's headless command with the prompt on stdin until it exits. A non-nil outcome ends the task.
+func (r *runner) background(ctx context.Context, p Profile, prompt, dir, contextPath, reportPath string, attempt int) (*project.AgentUsage, *outcome) {
+	cmd := exec.CommandContext(ctx, p.Command[0], p.Command[1:]...) //nolint:gosec // trusted local argv, never supplied by the host
+	cmd.Dir = r.opts.Root
+	cmd.Stdin = strings.NewReader(prompt)
+	cmd.Env = agentEnv(os.Environ(), contextPath, reportPath, p.Env)
+	ownGroup(cmd)
+	cmd.Cancel = func() error { return stopGroup(cmd.Process) }
+	cmd.WaitDelay = 3 * time.Second
+	log, e := os.OpenFile(filepath.Join(dir, fmt.Sprintf("agent-%d.log", attempt)), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600) //nolint:gosec // generated name under a validated task ID
+	if e != nil {
+		return nil, &outcome{state: "paused", message: "Cannot open the local agent log"}
+	}
+	w := &boundedLog{file: log}
+	cmd.Stdout = w
+	cmd.Stderr = w
+	e = cmd.Run()
+	if cmd.Process != nil {
+		killGroup(cmd.Process)
+	}
+	_ = log.Close()
+	if ctx.Err() != nil {
+		return nil, &outcome{state: "stopped", message: "Agent stopped"}
+	}
+	usage, limited := telemetry(w.tail)
+	if limited {
+		return usage, &outcome{state: "paused", message: "Usage limit reached. Switch agents or retry after the provider resets your allowance.", usage: usage}
+	}
+	if e != nil {
+		return usage, &outcome{state: "paused", message: "Agent stopped without finishing. Check its local task log, then retry or switch agents.", usage: usage}
+	}
+	return usage, nil
+}
+
+// interactive runs p's agent as a session in herdr or tmux and waits for its report. The session stays open after
+// the report; stopping before one closes its pane. A non-nil outcome ends the task. Interactive agents report no
+// usage: there is no JSON stream to read it from.
+func (r *runner) interactive(ctx context.Context, mode string, p Profile, t *project.EditingTask, promptPath, reportPath string) *outcome {
+	v, e := r.newView(mode, p)
+	if e != nil {
+		return &outcome{state: "paused", message: e.Error()}
+	}
+	line := fmt.Sprintf("New Retake task for %s (task %s, attempt %d): follow the instructions in %s", v.name, t.ID, t.Attempt, promptPath)
+	if e = v.start(ctx, p, line); e != nil {
+		if ctx.Err() != nil {
+			v.stop()
+			return &outcome{state: "stopped", message: "Agent stopped"}
+		}
+		return &outcome{state: "paused", message: fmt.Sprintf("Couldn't open the agent in %s: %v", mode, e)}
+	}
+	r.log("%s: %s is working in %s (%s)", v.name, p.Name, mode, v.label())
+	poll := time.NewTicker(viewPoll)
+	defer poll.Stop()
+	checked, misses := time.Now(), 0
+	for {
+		select {
+		case <-ctx.Done():
+			v.stop()
+			return &outcome{state: "stopped", message: "Agent stopped"}
+		case <-poll.C:
+		}
+		if reported(reportPath) {
+			return nil
+		}
+		if time.Since(checked) < viewCheck {
+			continue
+		}
+		checked = time.Now()
+		if v.alive(ctx) {
+			misses = 0
+		} else if misses++; misses >= 2 && ctx.Err() == nil && !reported(reportPath) {
+			return &outcome{state: "paused", message: "The agent's session ended without a report; working files are preserved"}
+		}
+	}
+}
+
+// reported is whether the agent has written its report: a whole JSON object, not one still being written.
+func reported(path string) bool {
+	b, e := os.ReadFile(path) //nolint:gosec // generated report path in this task's directory
+	var report agentResult
+	return e == nil && len(b) <= 64<<10 && json.Unmarshal(b, &report) == nil
+}
+
 func (r *runner) fetchArtifact(ctx context.Context, path, destination string) error {
 	resp, e := r.request(ctx, http.MethodGet, path, nil)
 	if e != nil {
@@ -196,32 +273,45 @@ func (r *runner) fetchArtifact(ctx context.Context, path, destination string) er
 	return os.WriteFile(destination, b, 0o600)
 }
 
+func reservedEnv(k string) bool {
+	return k == "RETAKE_TOKEN" || k == "RETAKE_CONTEXT" || k == "RETAKE_REPORT"
+}
+
 // agentEnv is the agent's environment: the worker's own without its token, the profile's extra variables (their
 // $VAR and ${VAR} read from that same environment), then the task's context and report paths.
 func agentEnv(env []string, contextPath, reportPath string, extra map[string]string) []string {
-	reserved := func(k string) bool { return k == "RETAKE_TOKEN" || k == "RETAKE_CONTEXT" || k == "RETAKE_REPORT" }
-	own := map[string]string{}
 	out := make([]string, 0, len(env)+len(extra)+2)
 	for _, v := range env {
-		k, val, _ := strings.Cut(v, "=")
-		if !reserved(k) && !hasKey(extra, k) {
+		k, _, _ := strings.Cut(v, "=")
+		if !reservedEnv(k) && !hasKey(extra, k) {
 			out = append(out, v)
 		}
-		if !reserved(k) {
+	}
+	out = append(out, profileEnv(env, extra)...)
+	return append(out, "RETAKE_CONTEXT="+contextPath, "RETAKE_REPORT="+reportPath)
+}
+
+// profileEnv is a profile's extra variables as sorted K=V, their $VAR and ${VAR} read from env without the worker's
+// own reserved variables.
+func profileEnv(env []string, extra map[string]string) []string {
+	own := map[string]string{}
+	for _, v := range env {
+		if k, val, _ := strings.Cut(v, "="); !reservedEnv(k) {
 			own[k] = val
 		}
 	}
 	keys := make([]string, 0, len(extra))
 	for k := range extra {
-		if k != "" && !strings.ContainsAny(k, "=\x00") && !reserved(k) {
+		if k != "" && !strings.ContainsAny(k, "=\x00") && !reservedEnv(k) {
 			keys = append(keys, k)
 		}
 	}
 	slices.Sort(keys)
+	out := make([]string, 0, len(keys))
 	for _, k := range keys {
 		out = append(out, k+"="+os.Expand(extra[k], func(name string) string { return own[name] }))
 	}
-	return append(out, "RETAKE_CONTEXT="+contextPath, "RETAKE_REPORT="+reportPath)
+	return out
 }
 
 func hasKey(m map[string]string, k string) bool {

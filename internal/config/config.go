@@ -21,8 +21,11 @@ type Config struct {
 	IdleExitMinutes *float64 `toml:"idle_exit_minutes"` // 0 = never
 	OpenBrowser     *bool    `toml:"open_browser"`
 	// FindAgents adds Claude Code and Codex found on PATH to the agents (default true); false offers only Agents.
-	FindAgents *bool   `toml:"find_agents"`
-	Agents     []Agent `toml:"agents"` // [[agents]]: what retake open and retake worker may run
+	FindAgents *bool `toml:"find_agents"`
+	// OpenAgentsIn is where agents run (spec/automation.md, "Watching the agents"): "background" (default), "herdr"
+	// or "tmux". An [[agents]] entry's open_in wins.
+	OpenAgentsIn *string `toml:"open_agents_in"`
+	Agents       []Agent `toml:"agents"` // [[agents]]: what retake open and retake worker may run
 
 	Transcribe Transcribe `toml:"transcribe"`
 	Share      Share      `toml:"share"`
@@ -50,14 +53,27 @@ type Server struct {
 
 // Agent is one [[agents]] entry (docs/config.md): a program the editing worker runs for a task. Env is added to its
 // environment; a value may name the worker's own variables ($VAR, ${VAR}), so keys needn't be written here. An
-// entry whose id is "claude" or "codex" replaces the one found on PATH.
+// entry whose id is "claude" or "codex" replaces the one found on PATH. OpenIn overrides open_agents_in for this
+// agent; Interactive is its command in herdr or tmux, where it runs as an interactive session.
 type Agent struct {
-	ID      string            `toml:"id"`
-	Name    string            `toml:"name"`
-	Model   string            `toml:"model"`
-	Command []string          `toml:"command"`
-	Env     map[string]string `toml:"env"`
+	ID          string            `toml:"id"`
+	Name        string            `toml:"name"`
+	Model       string            `toml:"model"`
+	Command     []string          `toml:"command"`
+	Env         map[string]string `toml:"env"`
+	OpenIn      string            `toml:"open_in"`
+	Interactive []string          `toml:"interactive"`
 }
+
+// OpenIn values: where an agent runs (spec/automation.md, "Watching the agents").
+const (
+	OpenBackground = "background"
+	OpenHerdr      = "herdr"
+	OpenTmux       = "tmux"
+)
+
+// ValidOpenIn reports whether s is a place an agent can run.
+func ValidOpenIn(s string) bool { return s == OpenBackground || s == OpenHerdr || s == OpenTmux }
 
 // Share is the [share] table (spec/team.md): the tunnel binaries `retake share` runs.
 type Share struct {
@@ -141,6 +157,9 @@ func Parse(s string) (Config, []string, error) {
 	if d := c.Transcribe.Device; d != nil && *d != "auto" && *d != "cuda" && *d != "cpu" {
 		return Config{}, warnings, fmt.Errorf("transcribe.device %q isn't auto, cuda or cpu", *d)
 	}
+	if o := c.OpenAgentsIn; o != nil && !ValidOpenIn(*o) {
+		return Config{}, warnings, fmt.Errorf("open_agents_in %q isn't background, herdr or tmux", *o)
+	}
 	ids := map[string]bool{}
 	for i, a := range c.Agents {
 		if !agentID.MatchString(a.ID) || ids[a.ID] {
@@ -149,6 +168,15 @@ func Parse(s string) (Config, []string, error) {
 		ids[a.ID] = true
 		if len(a.Command) == 0 || a.Command[0] == "" {
 			return Config{}, warnings, fmt.Errorf("agents[%d] (%s): command is empty", i, a.ID)
+		}
+		if a.OpenIn != "" && !ValidOpenIn(a.OpenIn) {
+			return Config{}, warnings, fmt.Errorf("agents[%d] (%s): open_in %q isn't background, herdr or tmux", i, a.ID, a.OpenIn)
+		}
+		if a.Interactive != nil && (len(a.Interactive) == 0 || a.Interactive[0] == "") {
+			return Config{}, warnings, fmt.Errorf("agents[%d] (%s): interactive is empty", i, a.ID)
+		}
+		if (a.OpenIn == OpenHerdr || a.OpenIn == OpenTmux) && a.Interactive == nil {
+			return Config{}, warnings, fmt.Errorf("agents[%d] (%s): open_in %q needs an interactive command", i, a.ID, a.OpenIn)
 		}
 		if c.Agents[i].Name == "" {
 			c.Agents[i].Name = a.ID

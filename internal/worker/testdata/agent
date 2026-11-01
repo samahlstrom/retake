@@ -1,0 +1,39 @@
+#!/bin/sh
+# A stand-in for an interactive Claude Code or Codex session in tests. It takes Retake's line as its last argument (and
+# later lines typed into its terminal), finds the report path in the prompt file the line names, and acts by
+# $FAKE_AGENT_MODE: question (asks "Blue or teal?"), edit (waits until $FAKE_BARRIER has two started-* files, makes
+# the first shot blue and reports), hang (never reports) or exit (quits without a report). Like an interactive agent
+# it stays open after its report, until it's killed or $FAKE_LIFELINE disappears. It never calls a provider.
+handle() {
+	prompt=${1##*follow the instructions in }
+	report=$(grep -o '"[^"]*/report-[0-9]*\.json"' "$prompt" | head -n 1 | tr -d '"')
+	printf '%s\n' "$1" >>"${FAKE_AGENT_SEEN:-/dev/null}"
+	case "${FAKE_AGENT_MODE:-question}" in
+	question)
+		printf '{"state":"question","message":"Blue or teal?"}' >"$report"
+		;;
+	edit)
+		: >"$FAKE_BARRIER/started-${PWD##*/}"
+		i=0
+		while [ "$(find "$FAKE_BARRIER" -name 'started-*' | wc -l)" -lt 2 ]; do
+			i=$((i + 1))
+			if [ "$i" -gt 600 ]; then
+				printf '{"state":"question","message":"No other project was editing at the same time."}' >"$report"
+				return
+			fi
+			sleep 0.1
+		done
+		sed "s/#aa3322/#2255dd/" edit/timeline.json >edit/timeline.json.new && mv edit/timeline.json.new edit/timeline.json
+		printf '{"state":"completed","message":"Made the first shot %s."}' "${SHOT_COLOUR:-blue}" >"$report"
+		;;
+	exit)
+		rm -f "${FAKE_HERDR_DIR:-/nonexistent}/agent-${FAKE_AGENT_NAME:-}"
+		exit 0
+		;;
+	esac
+}
+for arg; do line=$arg; done # the line is the last argument, after the agent's own flags
+handle "$line"
+while [ -d "${FAKE_LIFELINE:-/nonexistent}" ]; do
+	if IFS= read -r line; then handle "$line"; else sleep 1; fi
+done

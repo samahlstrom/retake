@@ -37,7 +37,8 @@ func workerCmd(ctx context.Context, args []string, env Env) int {
 	if !ok {
 		return usageError(env, "worker", fmt.Errorf("remote %q does not exist; use retake remote add", remote))
 	}
-	ps := agentProfiles(env, loadConfig(env))
+	cfg := loadConfig(env)
+	ps := agentProfiles(env, cfg)
 	if profiles != "" {
 		ps = nil // --profiles replaces the configured and found agents
 		b, e := os.ReadFile(absPath(profiles, env.Getenv))
@@ -49,6 +50,7 @@ func workerCmd(ctx context.Context, args []string, env Env) int {
 		if err != nil {
 			return usageError(env, "worker", err)
 		}
+		ps = openAgentsIn(ps, cfg)
 	}
 	err = worker.Run(ctx, worker.Options{URL: r.URL, Token: r.Token, Root: absPath(root, env.Getenv), Name: name, Profiles: ps, Editor: editorOf(env), Log: env.Stderr})
 	if err != nil {
@@ -67,9 +69,22 @@ func agentProfiles(env Env, cfg config.Config) []worker.Profile {
 	var configured []worker.Profile
 	for _, a := range cfg.Agents {
 		configured = append(configured, worker.Profile{AgentProfile: project.AgentProfile{ID: a.ID, Name: a.Name,
-			Model: a.Model}, Command: a.Command, Env: a.Env})
+			Model: a.Model}, Command: a.Command, Env: a.Env, OpenIn: a.OpenIn, Interactive: a.Interactive})
 	}
-	return worker.Profiles(configured, cfg.FindAgents == nil || *cfg.FindAgents)
+	return openAgentsIn(worker.Profiles(configured, cfg.FindAgents == nil || *cfg.FindAgents), cfg)
+}
+
+// openAgentsIn gives the profiles that don't say where they run the config's open_agents_in.
+func openAgentsIn(ps []worker.Profile, cfg config.Config) []worker.Profile {
+	if cfg.OpenAgentsIn == nil {
+		return ps
+	}
+	for i := range ps {
+		if ps[i].OpenIn == "" {
+			ps[i].OpenIn = *cfg.OpenAgentsIn
+		}
+	}
+	return ps
 }
 
 // localWorker is server.Options.LocalWorker for retake open and share: each project they serve gets its editing

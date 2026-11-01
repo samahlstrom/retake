@@ -22,11 +22,14 @@ import (
 
 // Profile is a trusted local executable and argument vector. Retake never executes a server-supplied command. Env
 // is added to the agent's environment; its values may name the worker's own variables ($VAR, ${VAR}), so keys
-// needn't be written into files.
+// needn't be written into files. OpenIn is where the agent runs ("" is the background; spec/automation.md,
+// "Watching the agents"), and Interactive is its command there when that's herdr or tmux.
 type Profile struct {
 	project.AgentProfile
-	Command []string          `json:"command"`
-	Env     map[string]string `json:"env,omitempty"`
+	Command     []string          `json:"command"`
+	Env         map[string]string `json:"env,omitempty"`
+	OpenIn      string            `json:"open_in,omitempty"`
+	Interactive []string          `json:"interactive,omitempty"`
 }
 
 // Options connects a native project to one hosted project using an agent token, or (Handler) to the project served
@@ -60,7 +63,8 @@ type runner struct {
 	render                project.LiveRender
 	renderErr             string
 	finalTask             string
-	versions              int // the family's versions, from the last poll: outside a task, render only while 0
+	versions              int             // the family's versions, from the last poll: outside a task, render only while 0
+	warned                map[string]bool // profiles already logged as having no interactive command
 }
 
 type httpError struct {
@@ -176,7 +180,9 @@ func Run(ctx context.Context, o Options) error {
 	r.identity = project.EditingWorker{ID: id, Name: o.Name, Session: session}
 	seen := map[string]bool{}
 	for _, p := range o.Profiles {
-		if !project.ValidWorkID(p.ID) || len(p.Command) == 0 || seen[p.ID] {
+		if !project.ValidWorkID(p.ID) || len(p.Command) == 0 || seen[p.ID] ||
+			p.OpenIn != "" && p.OpenIn != OpenBackground && p.OpenIn != OpenHerdr && p.OpenIn != OpenTmux ||
+			p.Interactive != nil && (len(p.Interactive) == 0 || p.Interactive[0] == "") {
 			return errors.New("invalid or duplicate local agent profile")
 		}
 		seen[p.ID] = true

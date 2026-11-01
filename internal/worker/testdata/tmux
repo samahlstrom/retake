@@ -1,0 +1,122 @@
+#!/bin/sh
+# A stand-in for tmux in tests. It logs its argv (fields end with \037, one call per line) to $FAKE_TMUX_DIR/argv.log
+# and keeps the session and panes as files there. A new window or respawned pane runs its command in the background,
+# in its folder and environment; "send-keys -l" then "send-keys Enter" runs $FAKE_AGENT with the typed line, the way
+# a running interactive agent gets it. It never talks to a tmux server.
+set -u
+D=$FAKE_TMUX_DIR
+until mkdir "$D/lock" 2>/dev/null; do sleep 0.01; done
+trap 'rmdir "$D/lock"' EXIT
+printf '%s\037' "$@" >>"$D/argv.log"
+printf '\n' >>"$D/argv.log"
+alive() { [ -f "$D/pid-$1" ] && kill -0 "$(cat "$D/pid-$1")" 2>/dev/null; }
+# run PANE ARGS...: parse -c and -e up to --, then start the command in the background as the pane's program.
+run() {
+	pane=$1
+	shift
+	cwd=.
+	: >"$D/env-$pane"
+	while [ $# -gt 0 ] && [ "$1" != "--" ]; do
+		case "$1" in
+		-c) cwd=$2 && shift 2 ;;
+		-e) printf '%s\n' "$2" >>"$D/env-$pane" && shift 2 ;;
+		-t | -n | -s | -F) shift 2 ;;
+		*) shift ;;
+		esac
+	done
+	shift
+	printf '%s\n' "$cwd" >"$D/cwd-$pane"
+	(
+		cd "$cwd" || exit 1
+		while IFS= read -r kv; do export "${kv?}"; done <"$D/env-$pane"
+		exec "$@"
+	) </dev/null >/dev/null 2>&1 &
+	echo "$!" >"$D/pid-$pane"
+}
+target() {
+	while [ $# -gt 0 ]; do
+		[ "$1" = "-t" ] && echo "$2" && return
+		shift
+	done
+}
+case "$1" in
+has-session)
+	[ -f "$D/session" ] || {
+		echo "can't find session: retake" >&2
+		exit 1
+	}
+	;;
+new-session | new-window)
+	if [ "$1" = new-session ]; then
+		[ -f "$D/session" ] && {
+			echo "duplicate session: retake" >&2
+			exit 1
+		}
+		: >"$D/session"
+	else
+		[ -f "$D/session" ] || {
+			echo "can't find session: retake" >&2
+			exit 1
+		}
+	fi
+	n=$(($(cat "$D/next" 2>/dev/null || echo 0) + 1))
+	echo "$n" >"$D/next"
+	shift
+	run "%$n" "$@"
+	echo "%$n"
+	;;
+respawn-pane)
+	pane=$(target "$@")
+	[ -f "$D/pid-$pane" ] || {
+		echo "can't find pane: $pane" >&2
+		exit 1
+	}
+	kill "$(cat "$D/pid-$pane")" 2>/dev/null
+	shift
+	run "$pane" "$@"
+	;;
+set-option) ;;
+list-panes)
+	found=""
+	for f in "$D"/pid-*; do
+		[ -f "$f" ] || continue
+		pane=${f##*/pid-}
+		found=1
+		if alive "$pane"; then echo "$pane 0"; else echo "$pane 1"; fi
+	done
+	[ -n "$found" ] || {
+		echo "no server running" >&2
+		exit 1
+	}
+	;;
+send-keys)
+	pane=$(target "$@")
+	alive "$pane" || {
+		echo "can't find pane: $pane" >&2
+		exit 1
+	}
+	if [ "$4" = "-l" ]; then
+		printf '%s' "$5" >"$D/keys-$pane"
+	elif [ "$4" = "Enter" ]; then
+		(
+			cd "$(cat "$D/cwd-$pane")" || exit 1
+			while IFS= read -r kv; do export "${kv?}"; done <"$D/env-$pane"
+			exec "$FAKE_AGENT" "$(cat "$D/keys-$pane")"
+		) </dev/null >/dev/null 2>&1 &
+		echo "$!" >>"$D/typed-$pane"
+	fi
+	;;
+kill-pane)
+	pane=$(target "$@")
+	[ -f "$D/pid-$pane" ] || {
+		echo "can't find pane: $pane" >&2
+		exit 1
+	}
+	kill "$(cat "$D/pid-$pane")" 2>/dev/null
+	rm -f "$D/pid-$pane"
+	;;
+*)
+	echo "fake tmux can't $*" >&2
+	exit 1
+	;;
+esac

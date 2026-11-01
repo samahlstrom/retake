@@ -42,6 +42,47 @@ upload or an inbound connection to the worker. This is an addition to the existi
 - Agent usage failures pause a task with an explanation and a Switch agent / Retry action. No silent change to
   billing method. Available structured token/cost reports are recorded as estimates; absent limits remain unknown.
 
+## Watching the agents: background, herdr or tmux
+
+Every project (one video family) has its own worker, and so its own agent: ten projects with work run ten tasks at
+the same time, one per project. Nothing serializes tasks across projects.
+
+Where a worker runs its agent is a user setting: `open_agents_in` in the user config, or `open_in` on one
+`[[agents]]` entry, which wins (docs/config.md). Values: `"background"` (the default), `"herdr"`, `"tmux"`.
+`--profiles FILE` entries take `open_in` and `interactive` too.
+
+- `background`: as above. The agent's headless command (`command`) runs in the project folder with the prompt on
+  stdin, its output goes to `tasks/<task>/agent-<attempt>.log`, and its JSON stream gives usage and usage limits.
+- `herdr` and `tmux`: the agent runs as a normal interactive session, which the person can watch and type into at any
+  time. Its command is the profile's `interactive` argv: the built-in `claude` is `claude --permission-mode
+  acceptEdits` and `codex` is `codex --sandbox workspace-write -c approval_policy="never"`. A configured agent without
+  `interactive` runs in the background, and the worker says so once in its log; an entry whose own `open_in` asks for
+  herdr or tmux without `interactive` is a config error.
+- One session per project, named after the project folder (the video): in herdr a workspace labelled
+  `retake · <project>`, in tmux a window `<project>` in a session `retake`. Creating it never takes focus or
+  switches the person's view (herdr `--no-focus`, tmux `-d`). Its working folder is the project folder, and its
+  environment is herdr's or tmux's plus the profile's `env` (given on creation; `$VAR` reads the worker's own).
+  `RETAKE_CONTEXT` and `RETAKE_REPORT` aren't set there: the prompt names both files.
+- The prompt is written to `tasks/<task>/prompt-<attempt>.md` (in every mode), and the session gets one line:
+  `New Retake task for <project> (task <id>, attempt <n>): follow the instructions in <prompt file>`. In herdr the
+  agent is started with `herdr agent start` and gets the line with `herdr agent prompt`; in tmux the line is the
+  command's last argument, or typed into a session that's still running (`send-keys -l`, then Enter).
+- The session stays open after the report, so the person can scroll back and keep talking. The project's next task
+  reuses it while it's there and runs the same agent: the line goes into the running agent, or the agent starts again
+  in the same pane when it had exited. A different agent replaces it (herdr: its pane is closed and a new tab opens in
+  the workspace; tmux: the pane is respawned). The pane, and in herdr the workspace and agent name, are kept in
+  `.retake/worker/view.json`.
+- Completion is unchanged: the report file plus a verified render. Nothing is read from the terminal. A session that
+  ends before a report (the pane is closed, the agent quits) pauses the task: "The agent's session ended without a
+  report". An agent that stops at a question or a usage limit in the terminal, without a report, leaves the task
+  Working until it reports, its session ends, or someone pauses it.
+- Stopping a task before its report (pause, switch agent, lost connection, retake quitting) closes the agent's pane:
+  `herdr pane close` or `tmux kill-pane`. After the report it's left open.
+- No usage is recorded in these modes: there's no JSON stream to read it from. Usage limits show in the session.
+- An agent that stops at a startup question in herdr (such as "trust this folder?") makes `herdr agent start` answer
+  `agent_not_ready`: the worker logs that the agent is waiting for the person and waits (`herdr agent wait`) before
+  sending the line. A missing `herdr` or `tmux` binary, or a herdr or tmux error, pauses the task with that error.
+
 ## Connect your computer: `retake connect`
 
 ```
@@ -163,5 +204,7 @@ role restrictions, revoked tokens, bounded relay, path safety, server/worker rec
 rendering and actual browser playback after source changes. Exercise both existing saved comments and new
 submissions, Send by every recording role (a share link too) with no worker online and with automation off,
 `/done` with and without `send`, a sent take queuing without a worker poll, drafts versus versions, a worker restart
-with unchanged source, profile `env` expansion, and Local mode's in-process worker and `blocked` reasons. Provider adapters are tested with deterministic executables; live paid-provider execution is reported
+with unchanged source, profile `env` expansion, Local mode's in-process worker and `blocked` reasons, the exact herdr
+and tmux commands (fake binaries on `PATH` that log their argv), completion by report with no agent output, stop
+closing the pane, and two projects' tasks running at the same time. Provider adapters are tested with deterministic executables; live paid-provider execution is reported
 separately if it is not exercised.
