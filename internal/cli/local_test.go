@@ -162,6 +162,100 @@ func TestOpenFolderEditsWithItsOwnWorker(t *testing.T) {
 	}
 }
 
+// plainAgent is a stand-in agent for a folder without a timeline: it writes its video (here a copy of v2) to
+// $RETAKE_OUTPUT and reports. It never calls a provider.
+const plainAgent = `#!/bin/sh
+cat >/dev/null
+cp clip_v2.mp4 "$RETAKE_OUTPUT"
+printf '{"state":"completed","message":"Made v2 again as v3."}' > "$RETAKE_REPORT"
+`
+
+// TestOpenPlainFolderSendsToItsAgent: a folder of finished videos, no timeline and no retake-edit. retake open runs
+// its worker anyway, Send reaches the agent, and the agent's video becomes the next version file, which answers the
+// comment.
+func TestOpenPlainFolderSendsToItsAgent(t *testing.T) {
+	testmedia.Need(t)
+	scratch, err := filepath.Abs("../../.retake-work")
+	if err == nil {
+		err = os.MkdirAll(scratch, 0o700)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir, err := os.MkdirTemp(scratch, "local-plain-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	root := filepath.Join(dir, "promo")
+	testmedia.Video(t, filepath.Join(root, "clip_v1.mp4"), 2)
+	testmedia.Video(t, filepath.Join(root, "clip_v2.mp4"), 3)
+	agentPath := filepath.Join(dir, "fake-agent")
+	if err = os.WriteFile(agentPath, []byte(plainAgent), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	w := &world{root: dir, stdout: &buffer{}, stderr: &buffer{}}
+	w.env = map[string]string{"XDG_CONFIG_HOME": filepath.Join(dir, "config"), "HOME": dir, "USER": "osuser",
+		"RETAKE_EDIT": filepath.Join(dir, "no-retake-edit")}
+	w.config(t, "idle_exit_minutes = 0\n")
+	env := w.environment(nil)
+	env.Agents = func() []worker.Profile {
+		return []worker.Profile{{AgentProfile: project.AgentProfile{ID: "fake", Name: "Fake agent"}, Command: []string{agentPath}}}
+	}
+	type view struct {
+		project.AutomationState
+		Local   bool   `json:"local"`
+		Blocked string `json:"blocked"`
+	}
+	url, stop, done := w.serve(t, env, "open", dir, "--port", "0", "--no-open")
+	var v view
+	deadline := time.Now().Add(30 * time.Second)
+	for !(v.Local && v.Blocked == "" && len(v.Workers) == 1 && v.Config.Agent == "fake") {
+		if time.Now().After(deadline) {
+			t.Fatalf("no local worker: %+v\n%s", v, w.stderr)
+		}
+		time.Sleep(100 * time.Millisecond)
+		v = view{}
+		getJSON(t, url+"p/promo/api/automation", &v)
+	}
+	st, err := project.Open(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = st.Close() }()
+	if _, err = st.Sync(project.Run{Version: "v2", Comments: []project.Comment{{Key: "again", Text: "Once more", T0: 0, T1: 1}}}); err != nil {
+		t.Fatal(err)
+	}
+	res, err := http.Post(url+"p/promo/api/automation/tasks", "application/json", strings.NewReader(`{"notes":[1]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = res.Body.Close()
+	deadline = time.Now().Add(30 * time.Second)
+	for len(v.Tasks) == 0 || v.Tasks[0].State != "completed" {
+		if time.Now().After(deadline) {
+			t.Fatalf("the task never completed: %+v\n%s", v.Tasks, w.stderr)
+		}
+		time.Sleep(100 * time.Millisecond)
+		v = view{}
+		getJSON(t, url+"p/promo/api/automation", &v)
+	}
+	if v.Tasks[0].Result != "v3" {
+		t.Fatalf("result %q", v.Tasks[0].Result)
+	}
+	if _, err = os.Stat(filepath.Join(root, "clip_v3.mp4")); err != nil {
+		t.Fatal("the agent's video isn't the next version file:", err)
+	}
+	n, err := st.Note(1)
+	if err != nil || n.Status != project.StatusAnswered || n.AnsweredIn != "v3" || n.Change != "Made v2 again as v3." {
+		t.Fatalf("note: %+v %v", n, err)
+	}
+	stop()
+	if code := wait(t, done); code != ExitOK {
+		t.Fatalf("exit %d: %s", code, w.stderr)
+	}
+}
+
 func TestAgentsComeFromTheUserConfig(t *testing.T) {
 	c, warnings, err := config.Parse(`find_agents = false
 [[agents]]

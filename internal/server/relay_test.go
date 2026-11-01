@@ -361,3 +361,19 @@ func TestTheCacheKeepsItsSizeAndAWorkerOnlyChangesItsOwnFiles(t *testing.T) {
 		t.Fatal("an unregistered worker sent files", r.code)
 	}
 }
+
+func TestTakesOnAVersionFileAreKeptOnTheServer(t *testing.T) {
+	h, _, _ := relayFixture(t, 1<<30)
+	h.saveTake(take, "v1")
+	r := h.get("/api/history?v=v1", nil)
+	if r.code != 200 || !strings.Contains(string(r.body), take) {
+		t.Fatalf("history: %d %s", r.code, r.body)
+	}
+	v, ok := h.srv.version("v1")
+	if !ok || !strings.Contains(v.Path, ".retake/remote/v1/") {
+		t.Fatalf("v1's takes go under .retake/remote: %+v", v)
+	}
+	if r = h.get("/api/poster?v=v1", nil); r.code != 404 {
+		t.Fatalf("the server has no frame of a relayed version: %d", r.code)
+	}
+}
