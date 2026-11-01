@@ -70,11 +70,8 @@ describe('keys', () => {
       expect(keyAction(k(key, { repeat: true }))?.act).not.toBeNull();
   });
 
-  it('C flips and [ ] step the version, once per press', () => {
-    expect(keyAction(k('c'))).toEqual({ act: 'flip', stop: true });
-    expect(keyAction(k('['))).toEqual({ act: 'stepPrev', stop: true });
-    expect(keyAction(k(']'))).toEqual({ act: 'stepNext', stop: true });
-    for (const key of ['c', '[', ']']) expect(keyAction(k(key, { repeat: true }))).toEqual({ act: null, stop: true });
+  it('does not expose version switching shortcuts', () => {
+    for (const key of ['c', '[', ']']) expect(keyAction(k(key))).toBeNull();
   });
 
   it('ignores inherited object keys', () => {
