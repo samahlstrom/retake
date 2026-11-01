@@ -2,7 +2,7 @@
   let { paused, onclick }: { paused: boolean; onclick: () => void } = $props();
 </script>
 
-<button id="play" aria-label={paused ? 'Play' : 'Pause'} {onclick}>
+<button id="play" data-part="play" aria-label={paused ? 'Play' : 'Pause'} {onclick}>
   {#if paused}
     <svg viewBox="0 0 24 24"
       ><path

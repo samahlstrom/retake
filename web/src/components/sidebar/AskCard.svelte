@@ -34,7 +34,7 @@
   }
 </script>
 
-<div class="agent-ask" data-ask={ask.id}>
+<div class="agent-ask" data-part="question-card" data-ask={ask.id}>
   {#if shot}
     <button
       class="ask-shot"
@@ -98,129 +98,131 @@
 </div>
 
 <style>
-  .agent-ask {
-    margin-top: 10px;
-    padding: 10px;
-    border: 1px dashed rgba(166, 147, 250, 0.55);
-    border-radius: 10px;
-    background: rgba(166, 147, 250, 0.06);
-  }
-  .ask-shot {
-    display: block;
-    width: 100%;
-    margin: 0 0 8px;
-    padding: 0;
-    border: 1px solid rgba(166, 147, 250, 0.35);
-    border-radius: 7px;
-    overflow: hidden;
-    background: #18181c;
-    cursor: pointer;
-  }
-  .ask-shot.on,
-  .ask-shot:hover {
-    border-color: var(--st-question);
-  }
-  .ask-shot svg {
-    display: block;
-    width: 100%;
-    height: auto;
-  }
-  .ask-text {
-    margin: 0;
-    color: var(--text);
-    font-size: 13px;
-    line-height: 1.45;
-  }
-  .agent-chip {
-    display: inline-block;
-    margin-right: 6px;
-    padding: 1px 7px;
-    border-radius: 999px;
-    background: var(--st-question);
-    color: #16121f;
-    font-size: 10.5px;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-    vertical-align: 1px;
-  }
-  .ask-time {
-    margin-right: 6px;
-    padding: 0;
-    border: 0;
-    background: none;
-    color: var(--st-question);
-    font: inherit;
-    font-variant-numeric: tabular-nums;
-    cursor: pointer;
-  }
-  .ask-images {
-    display: flex;
-    gap: 8px;
-    margin-top: 8px;
-    flex-wrap: wrap;
-  }
-  .agent-card {
-    display: block;
-    border: 1.5px solid var(--st-question);
-    border-radius: 7px;
-    overflow: hidden;
-    background: #111114;
-  }
-  .ask-images .agent-card {
-    width: calc(50% - 4px);
-  }
-  .agent-card img {
-    display: block;
-    width: 100%;
-    height: auto;
-    max-height: 120px;
-    object-fit: contain;
-  }
-  .choices {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 10px;
-  }
-  .choice {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 6px;
-    flex: 1 1 calc(50% - 4px);
-    min-width: 0;
-    padding: 6px;
-    border: 1px solid rgba(166, 147, 250, 0.45);
-    border-radius: 9px;
-    background: rgba(255, 255, 255, 0.03);
-    color: var(--text);
-    font: inherit;
-    font-size: 13px;
-    cursor: pointer;
-  }
-  .choice:not(.pic) {
-    flex: 0 1 auto;
-    padding: 7px 12px;
-  }
-  .choice:hover:not(:disabled),
-  .choice:focus-visible {
-    border-color: var(--st-question);
-    background: rgba(166, 147, 250, 0.14);
-  }
-  .choice:disabled {
-    opacity: 0.6;
-    cursor: default;
-  }
-  .choice-text {
-    text-align: center;
-  }
-  .choices-read {
-    margin: 8px 0 0;
-    padding-left: 18px;
-    color: var(--dim);
-    font-size: 12.5px;
-  }
-  :global(html[data-phone]) .choice {
-    min-height: 44px;
+  @layer retake {
+    .agent-ask {
+      margin-top: 10px;
+      padding: 10px;
+      border: 1px dashed color-mix(in srgb, var(--agent) 55%, transparent);
+      border-radius: var(--radius-md);
+      background: color-mix(in srgb, var(--agent) 6%, transparent);
+    }
+    .ask-shot {
+      display: block;
+      width: 100%;
+      margin: 0 0 8px;
+      padding: 0;
+      border: 1px solid color-mix(in srgb, var(--agent) 35%, transparent);
+      border-radius: 7px;
+      overflow: hidden;
+      background: var(--surface-control);
+      cursor: pointer;
+    }
+    .ask-shot.on,
+    .ask-shot:hover {
+      border-color: var(--agent);
+    }
+    .ask-shot svg {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+    .ask-text {
+      margin: 0;
+      color: var(--text);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .agent-chip {
+      display: inline-block;
+      margin-right: 6px;
+      padding: 1px 7px;
+      border-radius: 999px;
+      background: var(--agent);
+      color: var(--agent-ink);
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      vertical-align: 1px;
+    }
+    .ask-time {
+      margin-right: 6px;
+      padding: 0;
+      border: 0;
+      background: none;
+      color: var(--agent);
+      font: inherit;
+      font-variant-numeric: tabular-nums;
+      cursor: pointer;
+    }
+    .ask-images {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+      flex-wrap: wrap;
+    }
+    .agent-card {
+      display: block;
+      border: 1.5px solid var(--agent);
+      border-radius: 7px;
+      overflow: hidden;
+      background: var(--surface-sunken);
+    }
+    .ask-images .agent-card {
+      width: calc(50% - 4px);
+    }
+    .agent-card img {
+      display: block;
+      width: 100%;
+      height: auto;
+      max-height: 120px;
+      object-fit: contain;
+    }
+    .choices {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .choice {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 6px;
+      flex: 1 1 calc(50% - 4px);
+      min-width: 0;
+      padding: 6px;
+      border: 1px solid color-mix(in srgb, var(--agent) 45%, transparent);
+      border-radius: 9px;
+      background: color-mix(in srgb, var(--overlay) 3%, transparent);
+      color: var(--text);
+      font: inherit;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .choice:not(.pic) {
+      flex: 0 1 auto;
+      padding: 7px 12px;
+    }
+    .choice:hover:not(:disabled),
+    .choice:focus-visible {
+      border-color: var(--agent);
+      background: color-mix(in srgb, var(--agent) 14%, transparent);
+    }
+    .choice:disabled {
+      opacity: 0.6;
+      cursor: default;
+    }
+    .choice-text {
+      text-align: center;
+    }
+    .choices-read {
+      margin: 8px 0 0;
+      padding-left: 18px;
+      color: var(--dim);
+      font-size: 12.5px;
+    }
+    :global(html[data-phone]) .choice {
+      min-height: 44px;
+    }
   }
 </style>

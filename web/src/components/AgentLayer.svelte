@@ -15,6 +15,7 @@
 {#if review.shownAsks.length}
   <svg
     id="agentLayer"
+    data-part="agent-visuals"
     aria-hidden="true"
     style:left="{review.frame.left}px"
     style:top="{review.frame.top}px"
@@ -33,30 +34,32 @@
 {/if}
 
 <style>
-  #agentLayer {
-    position: absolute;
-    pointer-events: none;
-    overflow: visible;
-  }
-  .ask {
-    animation: agent-arrive 900ms ease-out;
-    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55));
-  }
-  @keyframes agent-arrive {
-    0% {
-      opacity: 0;
+  @layer retake {
+    #agentLayer {
+      position: absolute;
+      pointer-events: none;
+      overflow: visible;
     }
-    25% {
-      opacity: 1;
-      filter: drop-shadow(0 0 8px rgba(166, 147, 250, 0.95));
-    }
-    100% {
-      filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55));
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
     .ask {
-      animation: none;
+      animation: agent-arrive 900ms ease-out;
+      filter: drop-shadow(0 1px 2px color-mix(in srgb, var(--shadow) 55%, transparent));
+    }
+    @keyframes agent-arrive {
+      0% {
+        opacity: 0;
+      }
+      25% {
+        opacity: 1;
+        filter: drop-shadow(0 0 8px color-mix(in srgb, var(--agent) 95%, transparent));
+      }
+      100% {
+        filter: drop-shadow(0 1px 2px color-mix(in srgb, var(--shadow) 55%, transparent));
+      }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .ask {
+        animation: none;
+      }
     }
   }
 </style>

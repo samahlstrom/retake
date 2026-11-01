@@ -12,6 +12,7 @@
 {#if pair}
   <button
     id="flip"
+    data-part="flip"
     class:flipped={review.flipped}
     aria-disabled={review.flipBlocked ? 'true' : undefined}
     aria-label="Compare {pair[0]} with {pair[1]} (C)"

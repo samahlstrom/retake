@@ -21,13 +21,13 @@
 </script>
 
 {#snippet time()}
-  <div id="time">
+  <div id="time" data-part="time">
     <span id="cur">{review.curText}</span> <span class="dim">/ <span id="dur">{review.durText}</span></span>
   </div>
 {/snippet}
 
 {#if review.layoutMode === 'portrait'}
-  <div id="pbar" class="portrait" class:recording={!!review.seg}>
+  <div id="pbar" data-part="bar" class="portrait" class:recording={!!review.seg}>
     <Timeline {review} />
     <div class="prow">
       <PlayButton paused={review.paused} onclick={review.togglePlay} />
@@ -49,7 +49,7 @@
       </div>
     {/if}
   </div>
-  <div id="precord">
+  <div id="precord" data-part="bar">
     <Hint gone={review.hintGone} touch inline viewOnly={!review.canRecord} />
     {#if review.canRecord}
       <div class="prow">
@@ -59,7 +59,7 @@
     {/if}
   </div>
 {:else}
-  <div id="pleft">
+  <div id="pleft" data-part="bar">
     {#if review.canRecord}
       <PenColors
         color={review.penColor}
@@ -70,14 +70,14 @@
       <UndoButton onclick={review.undo} compact />
     {/if}
   </div>
-  <div id="pright" class:recording={!!review.seg}>
+  <div id="pright" data-part="bar" class:recording={!!review.seg}>
     {#if review.canRecord}
       <SendButton {review} />
       <span class="grow"></span>
       <PhoneRecord {review} round />
     {/if}
   </div>
-  <div id="pbar" class="landscape" class:recording={!!review.seg}>
+  <div id="pbar" data-part="bar" class="landscape" class:recording={!!review.seg}>
     <PlayButton paused={review.paused} onclick={review.togglePlay} />
     {@render time()}
     <Timeline {review} />

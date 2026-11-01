@@ -42,12 +42,17 @@
 </script>
 
 <Popover.Root bind:open={() => review.agentOpen, (v) => (review.agentOpen = v)}>
-  <Popover.Trigger id="agent" class="agent-status {tone} {compact ? 'compact' : ''}" aria-label="Agent: {text}" {title}
-    ><span class="dot" aria-hidden="true"></span><span class="name">{text}</span></Popover.Trigger
+  <Popover.Trigger
+    id="agent"
+    data-part="agent-status"
+    class="agent-status {tone} {compact ? 'compact' : ''}"
+    aria-label="Agent: {text}"
+    {title}><span class="dot" aria-hidden="true"></span><span class="name">{text}</span></Popover.Trigger
   >
   <Popover.Portal>
     <Popover.Content
       class="pop agent-pop"
+      data-part="agent-menu"
       side="top"
       align="end"
       sideOffset={12}

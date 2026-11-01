@@ -10,10 +10,11 @@
   }: { color: PenColor; onpick: (c: PenColor) => void; eraser?: boolean; onerase?: () => void } = $props();
 </script>
 
-<div id="colors">
+<div id="colors" data-part="pens">
   {#each COLOR_KEYS as c, i (c)}
     <button
       class="sw"
+      data-part="pen"
       class:on={c === color && !eraser}
       data-color={c}
       title="{c} ({i + 1})"
@@ -25,6 +26,7 @@
   {#if onerase}
     <button
       id="eraser"
+      data-part="eraser"
       class="sw er"
       class:on={eraser}
       title="eraser (E)"

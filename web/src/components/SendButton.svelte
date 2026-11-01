@@ -10,6 +10,7 @@
 
 <button
   id="done"
+  data-part="send"
   class="primary"
   class:saved={b.label === 'Saved' || b.label === 'Sent'}
   aria-busy={review.finishing || review.sending}

@@ -15,9 +15,9 @@
   let { review }: { review: Review } = $props();
 </script>
 
-<div id="bar" class:recording={!!review.seg}>
+<div id="bar" data-part="bar" class:recording={!!review.seg}>
   <PlayButton paused={review.paused} onclick={review.togglePlay} />
-  <div id="time">
+  <div id="time" data-part="time">
     <span id="cur">{review.curText}</span> <span class="dim">/ <span id="dur">{review.durText}</span></span>
   </div>
   <Timeline {review} />

@@ -8,12 +8,14 @@
   let { review }: { review: Review } = $props();
 </script>
 
-<div id="timeline" {@attach review.attachTimeline}>
+<div id="timeline" data-part="timeline" {@attach review.attachTimeline}>
   <canvas id="tl" bind:this={review.el.tl}></canvas>
   {#each review.timelineComments as row (row.key)}
     {@const state = review.statusOf(row).state}
     <button
       class="comment-marker {state}"
+      data-part="marker"
+      data-state={state}
       data-comment={row.key}
       class:resolved={state === 'done'}
       style:left={`calc(8px + (100% - 16px) * ${Math.min(1, Math.max(0, row.t0 / (review.timelineDuration || 1)))})`}
@@ -35,6 +37,7 @@
     {@const ask = row.ask!}
     <button
       class="ask-marker"
+      data-part="ask-marker"
       data-ask={ask.id}
       class:on={review.selectedAsk === ask.id}
       style:left={`calc(8px + (100% - 16px) * ${Math.min(1, Math.max(0, ask.t / (review.timelineDuration || 1)))})`}
@@ -45,6 +48,7 @@
   {/each}
   <div
     id="tip"
+    data-part="tip"
     style:display={review.tip.show ? 'block' : null}
     style:left={review.tip.left == null ? null : `${review.tip.left}px`}
   >

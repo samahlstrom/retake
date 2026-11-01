@@ -3,11 +3,9 @@
 // draws what agentShapes returns.
 import type { AgentVisuals, TaskAsk } from './types';
 
-/** The agent's style: the Question violet, dashed, with a chip on each box and arrow. */
+/** The agent's style: dashed, with a chip on each box and arrow. Its colours are the theme's --agent (the Question
+ * violet) and --agent-ink (theme/tokens.css), set in AgentDrawing.svelte's style. */
 export const AGENT = {
-  color: '#a693fa',
-  /** Chip text on the violet. */
-  ink: '#16121f',
   dash: '6 4',
   width: 2,
   /** A box or arrow without a label says whose it is. */

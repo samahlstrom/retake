@@ -26,7 +26,7 @@
   }
 </script>
 
-<div class="connect">
+<div class="connect" data-part="connect">
   <strong>{title}</strong>
   <p>
     Run this in your projects folder, on the computer with your footage. It connects out to this server; your footage
@@ -45,63 +45,61 @@
 </div>
 
 <style>
-  .connect {
-    display: grid;
-    gap: 8px;
-  }
-  strong {
-    font-size: 13.5px;
-    font-weight: 600;
-    color: var(--text, #ececef);
-  }
-  p {
-    margin: 0;
-    color: #a3a3ad;
-    font-size: 12.5px;
-    line-height: 1.5;
-  }
-  .cmd {
-    display: flex;
-    align-items: stretch;
-    margin-top: 4px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
-    background: #0c0c0f;
-    overflow: hidden;
-  }
-  code {
-    flex: 1;
-    min-width: 0;
-    padding: 9px 10px;
-    font:
-      12px/1.45 ui-monospace,
-      'JetBrains Mono',
-      Menlo,
-      monospace;
-    color: #e2e2e8;
-    overflow-x: auto;
-    user-select: all;
-  }
-  .arg {
-    /* wrap between arguments only, never inside --token or the URL */
-    white-space: nowrap;
-  }
-  .loading code {
-    color: #7d7d88;
-  }
-  button {
-    flex: none;
-    padding: 0 12px;
-    border: 0;
-    border-left: 1px solid rgba(255, 255, 255, 0.1);
-    background: rgba(255, 255, 255, 0.04);
-    color: #e2e2e8;
-    font: inherit;
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-  }
-  button:hover {
-    background: rgba(255, 255, 255, 0.09);
+  @layer retake {
+    .connect {
+      display: grid;
+      gap: 8px;
+    }
+    strong {
+      font-size: 13.5px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    p {
+      margin: 0;
+      color: var(--text-6);
+      font-size: 12.5px;
+      line-height: 1.5;
+    }
+    .cmd {
+      display: flex;
+      align-items: stretch;
+      margin-top: 4px;
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius);
+      background: var(--surface-sunken);
+      overflow: hidden;
+    }
+    code {
+      flex: 1;
+      min-width: 0;
+      padding: 9px 10px;
+      font: 12px/1.45 var(--font-mono);
+      color: var(--text-2);
+      overflow-x: auto;
+      user-select: all;
+    }
+    .arg {
+      /* wrap between arguments only, never inside --token or the URL */
+      white-space: nowrap;
+    }
+    .loading code {
+      color: var(--dim);
+    }
+    button {
+      flex: none;
+      padding: 0 12px;
+      border: 0;
+      border-left: 1px solid var(--line-strong);
+      background: color-mix(in srgb, var(--overlay) 4%, transparent);
+      color: var(--text-2);
+      font: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:hover {
+      background: color-mix(in srgb, var(--overlay) 9%, transparent);
+    }
   }
 </style>

@@ -24,13 +24,20 @@
   <Popover.Root bind:open={() => review.verOpen, (v) => (review.verOpen = v)}>
     <Popover.Trigger
       id="verBtn"
+      data-part="version-picker"
       class={[review.flipped && 'flipped', shownStreaming && 'rendering'].filter(Boolean).join(' ')}
       {title}
       >{shownDraft ?? review.shown ?? ''}{#if shownDraft}<span class="draft">draft</span>{/if}<span
         class="version-chevron">⌄</span
       ></Popover.Trigger
     >
-    <Popover.ContentStatic id="verList" trapFocus={false} onOpenAutoFocus={keepFocus} onCloseAutoFocus={keepFocus}>
+    <Popover.ContentStatic
+      id="verList"
+      data-part="version-list"
+      trapFocus={false}
+      onOpenAutoFocus={keepFocus}
+      onCloseAutoFocus={keepFocus}
+    >
       {#each newestFirst as v (v.label)}
         {@const chip = streamChip(v)}
         {@const draft = draftOf(v.label)}

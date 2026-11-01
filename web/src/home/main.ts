@@ -1,3 +1,4 @@
+import '../theme/tokens.css';
 import '../ui.css';
 import './home.css';
 import { mount } from 'svelte';

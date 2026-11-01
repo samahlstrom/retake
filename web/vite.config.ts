@@ -89,6 +89,7 @@ export default defineConfig({
     },
   },
   server: { proxy: { '/api': proxy, '/video': proxy } },
-  // phone.css is read as text by a unit test (its media query must match lib/layout.ts).
-  test: { include: ['src/**/*.test.ts'], environment: 'node', css: { include: [/phone\.css/] } },
+  // Unit tests read stylesheets as text (?raw): phone.css's media query must match lib/layout.ts, and the theme lint
+  // (src/theme/theme.test.ts) reads every one. Without this, Vitest hands them over empty.
+  test: { include: ['src/**/*.test.ts'], environment: 'node', css: { include: [/\.css/] } },
 });

@@ -46,13 +46,19 @@
 
 {#if any}
   <DropdownMenu.Root>
-    <DropdownMenu.Trigger class="more" aria-label="More for this comment" title="More" bind:ref={trigger}>
+    <DropdownMenu.Trigger
+      class="more"
+      data-part="more"
+      aria-label="More for this comment"
+      title="More"
+      bind:ref={trigger}
+    >
       <svg viewBox="0 0 20 20" aria-hidden="true"
         ><circle cx="4.5" cy="10" r="1.5" /><circle cx="10" cy="10" r="1.5" /><circle cx="15.5" cy="10" r="1.5" /></svg
       >
     </DropdownMenu.Trigger>
     <DropdownMenu.Portal>
-      <DropdownMenu.Content class="menu" align="end" sideOffset={4} collisionPadding={10}>
+      <DropdownMenu.Content class="menu" data-part="menu" align="end" sideOffset={4} collisionPadding={10}>
         {#if canSend}<DropdownMenu.Item class="menu-item" onSelect={send}>Send to agent</DropdownMenu.Item>{/if}
         {#if canRetry}<DropdownMenu.Item
             class="menu-item"
@@ -62,7 +68,7 @@
         {#if canSwitch}
           <DropdownMenu.Sub>
             <DropdownMenu.SubTrigger class="menu-item sub">Switch agent</DropdownMenu.SubTrigger>
-            <DropdownMenu.SubContent class="menu" sideOffset={6} collisionPadding={10}>
+            <DropdownMenu.SubContent class="menu" data-part="menu" sideOffset={6} collisionPadding={10}>
               {#each others as a (a.id)}
                 <DropdownMenu.Item class="menu-item" onSelect={() => act('switch', { agent: a.id })}
                   >{a.name}{a.model ? ` · ${a.model}` : ''}</DropdownMenu.Item

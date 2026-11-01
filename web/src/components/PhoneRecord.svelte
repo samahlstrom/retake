@@ -18,6 +18,7 @@
   <canvas id="wave" class={recClass} bind:this={review.el.wave}></canvas>
   <button
     id="rec"
+    data-part="record"
     class="round {recClass}"
     aria-label={seg ? `Stop recording ${seg.id}` : 'Record'}
     onclick={review.toggleRec}><span class="dot"></span></button
@@ -25,6 +26,7 @@
 {:else}
   <button
     id="rec"
+    data-part="record"
     class="pill {recClass}"
     aria-label={seg ? `Stop recording ${seg.id}` : 'Record'}
     onclick={review.toggleRec}

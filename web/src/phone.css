@@ -1,460 +1,461 @@
 /* The phone layout. lib/layout.ts picks it and the script marks <html> with data-layout (portrait or landscape) and
    data-phone. Every rule here is scoped to those (or to elements only the phone layout has), so the desktop page,
    styled by app.css, is untouched. Tap targets are at least 44 px. */
-
-/* Until the script has picked the layout, a phone shows nothing rather than the prerendered desktop bar. This is
-   lib/layout.ts's PHONE_MEDIA (a unit test keeps the two the same). */
-@media (max-width: 799.98px),
-  (max-height: 419.98px),
-  (pointer: coarse) and (max-width: 900px),
-  (pointer: coarse) and (max-height: 600px) {
-  html:not([data-layout]) #app {
-    visibility: hidden;
+@layer retake {
+  /* Until the script has picked the layout, a phone shows nothing rather than the prerendered desktop bar. This is
+     lib/layout.ts's PHONE_MEDIA (a unit test keeps the two the same). */
+  @media (max-width: 799.98px),
+    (max-height: 419.98px),
+    (pointer: coarse) and (max-width: 900px),
+    (pointer: coarse) and (max-height: 600px) {
+    html:not([data-layout]) #app {
+      visibility: hidden;
+    }
   }
-}
 
-html[data-phone] {
-  touch-action: manipulation; /* no double-tap zoom */
-  overscroll-behavior: none;
-  -webkit-text-size-adjust: 100%;
-  -webkit-tap-highlight-color: transparent;
-}
-html[data-phone] body {
-  position: fixed;
-  inset: 0;
-  font-size: 15px;
-  -webkit-user-select: none;
-  -webkit-touch-callout: none;
-}
-html[data-phone] #app {
-  height: 100vh;
-  height: 100dvh;
-}
-html[data-phone] button {
-  touch-action: manipulation;
-}
-/* The pen: a drag on the video never scrolls or zooms the page. */
-html[data-phone] #stage {
-  touch-action: none;
-}
-html[data-phone] .float {
-  font-size: 14px;
-  width: max-content;
-  max-width: calc(100% - 24px);
-  white-space: normal;
-  text-align: center;
-}
-html[data-phone] #fatal {
-  padding: 20px;
-}
+  html[data-phone] {
+    touch-action: manipulation; /* no double-tap zoom */
+    overscroll-behavior: none;
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+  html[data-phone] body {
+    position: fixed;
+    inset: 0;
+    font-size: 15px;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+  }
+  html[data-phone] #app {
+    height: 100vh;
+    height: 100dvh;
+  }
+  html[data-phone] button {
+    touch-action: manipulation;
+  }
+  /* The pen: a drag on the video never scrolls or zooms the page. */
+  html[data-phone] #stage {
+    touch-action: none;
+  }
+  html[data-phone] .float {
+    font-size: 14px;
+    width: max-content;
+    max-width: calc(100% - 24px);
+    white-space: normal;
+    text-align: center;
+  }
+  html[data-phone] #fatal {
+    padding: 20px;
+  }
 
-/* ------------------------------------------------------------------ shared controls */
-html[data-phone] #timeline {
-  touch-action: none; /* a thumb drag scrubs */
-}
-html[data-phone] #play {
-  width: 44px;
-  height: 44px;
-  margin-left: -6px;
-}
-html[data-phone] #play:hover {
-  background: transparent;
-}
-html[data-phone] #play svg {
-  width: 28px;
-  height: 28px;
-}
-html[data-phone] #verBtn {
-  min-width: 52px;
-  min-height: 44px;
-  padding: 0 12px;
-  border-radius: 10px;
-}
-html[data-phone] #verBtn:hover {
-  border-color: rgba(255, 255, 255, 0.14);
-}
-html[data-phone] #verBtn.flipped:hover {
-  border-color: rgba(255, 207, 110, 0.5);
-}
-html[data-phone] #verList {
-  left: auto;
-  right: 0;
-  transform: none;
-  min-width: 150px;
-  overflow-y: auto;
-}
-/* Portrait: the list opens downward, over the free space (the video stays in view). Landscape: upward, from the bar. */
-html[data-layout='portrait'] #verList {
-  top: calc(100% + 8px);
-  bottom: auto;
-  max-height: 50vh;
-}
-html[data-layout='landscape'] #verList {
-  bottom: calc(100% + 8px);
-  max-height: calc(100vh - 80px);
-}
-html[data-phone] #verList button {
-  align-items: center;
-  min-height: 44px;
-  padding: 0 14px;
-}
-html[data-phone] #verList button:hover {
-  background: transparent;
-}
-#flip {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 44px;
-  padding: 0 12px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 10px;
-  background: transparent;
-  color: var(--dim);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-#flip .on {
-  color: var(--text);
-}
-#flip .arr {
-  font-weight: 400;
-}
-#flip.flipped {
-  border-color: rgba(255, 207, 110, 0.5);
-}
-#flip.flipped .on {
-  color: #ffcf6e;
-}
-#flip[aria-disabled='true'] {
-  opacity: 0.35;
-}
-html[data-phone] #colors {
-  gap: 2px;
-}
-/* A 44 px button with a 26 px dot in it: the color (an inline background) is painted in the content box only. */
-html[data-phone] .sw {
-  width: 44px;
-  height: 44px;
-  padding: 9px;
-  background-clip: content-box !important;
-}
-html[data-phone] .sw.er svg {
-  width: 22px;
-  height: 22px;
-}
-html[data-phone] .sw.on::after {
-  inset: 4px;
-  border-width: 2px;
-}
-#undo {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-width: 44px;
-  min-height: 44px;
-  padding: 0 14px 0 12px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 10px;
-  background: transparent;
-}
-#undo svg {
-  width: 20px;
-  height: 20px;
-}
-#undo.compact {
-  padding: 0;
-  border-color: transparent;
-}
-#undo.compact svg {
-  width: 24px;
-  height: 24px;
-}
-html[data-phone] #done {
-  min-height: 44px;
-  padding: 0 18px;
-  border-radius: 12px;
-}
-html[data-phone] #done:hover {
-  border-color: rgba(255, 255, 255, 0.14);
-}
-html[data-phone] #done.saved:hover {
-  border-color: var(--hair);
-}
-html[data-phone] #rec:hover {
-  border-color: rgba(255, 255, 255, 0.14);
-}
-#hint .recdot {
-  color: var(--live);
-}
+  /* ------------------------------------------------------------------ shared controls */
+  html[data-phone] #timeline {
+    touch-action: none; /* a thumb drag scrubs */
+  }
+  html[data-phone] #play {
+    width: 44px;
+    height: 44px;
+    margin-left: -6px;
+  }
+  html[data-phone] #play:hover {
+    background: transparent;
+  }
+  html[data-phone] #play svg {
+    width: 28px;
+    height: 28px;
+  }
+  html[data-phone] #verBtn {
+    min-width: 52px;
+    min-height: 44px;
+    padding: 0 12px;
+    border-radius: var(--radius-md);
+  }
+  html[data-phone] #verBtn:hover {
+    border-color: var(--border);
+  }
+  html[data-phone] #verBtn.flipped:hover {
+    border-color: color-mix(in srgb, var(--flip) 50%, transparent);
+  }
+  html[data-phone] #verList {
+    left: auto;
+    right: 0;
+    transform: none;
+    min-width: 150px;
+    overflow-y: auto;
+  }
+  /* Portrait: the list opens downward, over the free space (the video stays in view). Landscape: upward, from the bar. */
+  html[data-layout='portrait'] #verList {
+    top: calc(100% + 8px);
+    bottom: auto;
+    max-height: 50vh;
+  }
+  html[data-layout='landscape'] #verList {
+    bottom: calc(100% + 8px);
+    max-height: calc(100vh - 80px);
+  }
+  html[data-phone] #verList button {
+    align-items: center;
+    min-height: 44px;
+    padding: 0 14px;
+  }
+  html[data-phone] #verList button:hover {
+    background: transparent;
+  }
+  #flip {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 44px;
+    padding: 0 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--dim);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  #flip .on {
+    color: var(--text);
+  }
+  #flip .arr {
+    font-weight: 400;
+  }
+  #flip.flipped {
+    border-color: color-mix(in srgb, var(--flip) 50%, transparent);
+  }
+  #flip.flipped .on {
+    color: var(--flip);
+  }
+  #flip[aria-disabled='true'] {
+    opacity: 0.35;
+  }
+  html[data-phone] #colors {
+    gap: 2px;
+  }
+  /* A 44 px button with a 26 px dot in it: the color (an inline background) is painted in the content box only. */
+  html[data-phone] .sw {
+    width: 44px;
+    height: 44px;
+    padding: 9px;
+    background-clip: content-box !important;
+  }
+  html[data-phone] .sw.er svg {
+    width: 22px;
+    height: 22px;
+  }
+  html[data-phone] .sw.on::after {
+    inset: 4px;
+    border-width: 2px;
+  }
+  #undo {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0 14px 0 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: transparent;
+  }
+  #undo svg {
+    width: 20px;
+    height: 20px;
+  }
+  #undo.compact {
+    padding: 0;
+    border-color: transparent;
+  }
+  #undo.compact svg {
+    width: 24px;
+    height: 24px;
+  }
+  html[data-phone] #done {
+    min-height: 44px;
+    padding: 0 18px;
+    border-radius: var(--radius-lg);
+  }
+  html[data-phone] #done:hover {
+    border-color: var(--border);
+  }
+  html[data-phone] #done.saved:hover {
+    border-color: var(--line);
+  }
+  html[data-phone] #rec:hover {
+    border-color: var(--border);
+  }
+  #hint .recdot {
+    color: var(--record);
+  }
 
-/* ------------------------------------------------------------------ portrait: video on top, controls under it */
-/* Rows: the video in its own shape (a tall one shrinks to what's left), the controls, free space, and Record at the
-   bottom. The free row is `side`: the notes list goes there, between the controls and Record. */
-html[data-layout='portrait'] #app {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: minmax(120px, auto) auto minmax(0, 1fr) auto;
-  grid-template-areas: 'stage' 'pbar' 'side' 'rec';
-  padding-top: env(safe-area-inset-top);
-  background: var(--bar);
-}
-html[data-layout='portrait'] #stage {
-  grid-area: stage;
-  align-self: stretch;
-  width: 100%; /* the ratio only sizes the row: a tall video's stage stays full width, the video centered in it */
-  aspect-ratio: var(--ar, 16 / 9);
-  min-height: 0;
-}
-html[data-layout='portrait'] #side {
-  grid-area: side;
-  width: auto;
-  min-height: 0;
-  border-left: 0;
-  border-top: 1px solid var(--hair);
-}
-#pbar.portrait {
-  grid-area: pbar;
-  display: flex;
-  flex-direction: column;
-  padding: 0 max(14px, env(safe-area-inset-right)) 0 max(14px, env(safe-area-inset-left));
-  background: var(--bar);
-  border-top: 1px solid var(--hair);
-  transition: box-shadow 0.2s ease;
-}
-#precord {
-  grid-area: rec;
-  display: flex;
-  flex-direction: column;
-  padding: 14px max(14px, env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom))
-    max(14px, env(safe-area-inset-left));
-  background: var(--bar);
-}
-#precord .prow {
-  gap: 12px;
-}
-#pbar.recording {
-  box-shadow: inset 0 2px 0 var(--live);
-}
-#pbar.portrait #timeline {
-  flex: none;
-  height: 48px;
-  margin: 4px -6px 0;
-}
-.prow {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 56px;
-}
-#pbar .grow,
-#pright .grow {
-  flex: 1;
-}
-#hint.inline {
-  padding-bottom: 12px;
-  color: var(--dim);
-  font-size: 14px;
-  text-align: center;
-  transition: opacity 0.6s ease;
-}
-html[data-layout='portrait'] #done {
-  height: 64px;
-  min-width: 96px;
-  border-radius: 16px;
-  font-size: 16px;
-}
-html[data-phone] #rec.pill {
-  flex: 1;
-  min-width: 0;
-  height: 64px;
-  justify-content: center;
-  gap: 10px;
-  padding: 0 18px;
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.04);
-  font-size: 17px;
-  font-weight: 600;
-}
-html[data-phone] #rec.pill .dot {
-  width: 16px;
-  height: 16px;
-  background: var(--live);
-}
-html[data-phone] #rec.pill .k {
-  margin-left: 0;
-  font-size: 14px;
-}
-html[data-phone] #rec.pill #wave {
-  display: none;
-}
-html[data-phone] #rec.pill.on {
-  justify-content: flex-start;
-  border-color: rgba(255, 69, 58, 0.6);
-  background: rgba(255, 69, 58, 0.14);
-}
-html[data-phone] #rec.pill.on .dot {
-  width: 14px;
-  height: 14px;
-  border-radius: 3px; /* a stop square */
-}
-html[data-phone] #rec.pill.on #wave {
-  display: block;
-  flex: 1;
-  min-width: 0;
-  height: 30px;
-}
-html[data-phone] #rec.pill.wait .dot {
-  background: #d9a441;
-}
+  /* ------------------------------------------------------------------ portrait: video on top, controls under it */
+  /* Rows: the video in its own shape (a tall one shrinks to what's left), the controls, free space, and Record at the
+     bottom. The free row is `side`: the notes list goes there, between the controls and Record. */
+  html[data-layout='portrait'] #app {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(120px, auto) auto minmax(0, 1fr) auto;
+    grid-template-areas: 'stage' 'pbar' 'side' 'rec';
+    padding-top: env(safe-area-inset-top);
+    background: var(--surface);
+  }
+  html[data-layout='portrait'] #stage {
+    grid-area: stage;
+    align-self: stretch;
+    width: 100%; /* the ratio only sizes the row: a tall video's stage stays full width, the video centered in it */
+    aspect-ratio: var(--ar, 16 / 9);
+    min-height: 0;
+  }
+  html[data-layout='portrait'] #side {
+    grid-area: side;
+    width: auto;
+    min-height: 0;
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+  #pbar.portrait {
+    grid-area: pbar;
+    display: flex;
+    flex-direction: column;
+    padding: 0 max(14px, env(safe-area-inset-right)) 0 max(14px, env(safe-area-inset-left));
+    background: var(--surface);
+    border-top: 1px solid var(--line);
+    transition: box-shadow 0.2s ease;
+  }
+  #precord {
+    grid-area: rec;
+    display: flex;
+    flex-direction: column;
+    padding: 14px max(14px, env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom))
+      max(14px, env(safe-area-inset-left));
+    background: var(--surface);
+  }
+  #precord .prow {
+    gap: 12px;
+  }
+  #pbar.recording {
+    box-shadow: inset 0 2px 0 var(--record);
+  }
+  #pbar.portrait #timeline {
+    flex: none;
+    height: 48px;
+    margin: 4px -6px 0;
+  }
+  .prow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 56px;
+  }
+  #pbar .grow,
+  #pright .grow {
+    flex: 1;
+  }
+  #hint.inline {
+    padding-bottom: 12px;
+    color: var(--dim);
+    font-size: 14px;
+    text-align: center;
+    transition: opacity 0.6s ease;
+  }
+  html[data-layout='portrait'] #done {
+    height: 64px;
+    min-width: 96px;
+    border-radius: 16px;
+    font-size: 16px;
+  }
+  html[data-phone] #rec.pill {
+    flex: 1;
+    min-width: 0;
+    height: 64px;
+    justify-content: center;
+    gap: 10px;
+    padding: 0 18px;
+    border-radius: 16px;
+    background: color-mix(in srgb, var(--overlay) 4%, transparent);
+    font-size: 17px;
+    font-weight: 600;
+  }
+  html[data-phone] #rec.pill .dot {
+    width: 16px;
+    height: 16px;
+    background: var(--record);
+  }
+  html[data-phone] #rec.pill .k {
+    margin-left: 0;
+    font-size: 14px;
+  }
+  html[data-phone] #rec.pill #wave {
+    display: none;
+  }
+  html[data-phone] #rec.pill.on {
+    justify-content: flex-start;
+    border-color: color-mix(in srgb, var(--record) 60%, transparent);
+    background: color-mix(in srgb, var(--record) 14%, transparent);
+  }
+  html[data-phone] #rec.pill.on .dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px; /* a stop square */
+  }
+  html[data-phone] #rec.pill.on #wave {
+    display: block;
+    flex: 1;
+    min-width: 0;
+    height: 30px;
+  }
+  html[data-phone] #rec.pill.wait .dot {
+    background: var(--record-wait);
+  }
 
-/* ------------------------------------------------------------------ landscape: the video fills the height */
-html[data-layout='landscape'] #app {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  grid-template-rows: minmax(0, 1fr) auto;
-  grid-template-areas:
-    'left stage right'
-    'bar bar right';
-}
-html[data-layout='landscape'] #stage {
-  grid-area: stage;
-}
-#pleft {
-  grid-area: left;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 8px 4px 8px max(8px, env(safe-area-inset-left));
-}
-#pleft #colors {
-  flex-direction: column;
-}
-#pright {
-  grid-area: right;
-  box-sizing: content-box;
-  width: 92px; /* fixed: the video doesn't move when "Record" turns into "REC 0:03 S1" */
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  padding: max(10px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
-    max(12px, env(safe-area-inset-bottom)) 12px;
-  background: var(--bar);
-  border-left: 1px solid var(--hair);
-  transition: box-shadow 0.2s ease;
-}
-#pright.recording {
-  box-shadow: inset 2px 0 0 var(--live);
-}
-#pbar.landscape {
-  grid-area: bar;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 56px;
-  padding: 0 12px env(safe-area-inset-bottom) max(12px, env(safe-area-inset-left));
-  background: var(--bar);
-  border-top: 1px solid var(--hair);
-  transition: box-shadow 0.2s ease;
-}
-#pbar.landscape #timeline {
-  height: 44px;
-  min-width: 0;
-}
-#recInfo {
-  display: flex;
-  gap: 6px;
-  min-height: 18px;
-  color: var(--dim);
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-#recInfo.on {
-  color: #ff7a70;
-  font-weight: 600;
-}
-#recInfo .k {
-  color: var(--dim);
-  font-weight: 400;
-}
-#pright #wave {
-  width: 76px;
-  height: 22px;
-}
-html[data-phone] #rec.round {
-  display: grid;
-  place-items: center;
-  width: 76px;
-  min-width: 0;
-  height: 76px;
-  padding: 0;
-  border: 2px solid rgba(255, 255, 255, 0.2);
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.04);
-}
-html[data-phone] #rec.round .dot {
-  width: 30px;
-  height: 30px;
-  background: var(--live);
-}
-html[data-phone] #rec.round.on {
-  border-color: var(--live);
-  background: rgba(255, 69, 58, 0.16);
-}
-html[data-phone] #rec.round.on .dot {
-  width: 24px;
-  height: 24px;
-  border-radius: 5px; /* a stop square */
-}
-html[data-phone] #rec.round.wait .dot {
-  background: #d9a441;
-}
+  /* ------------------------------------------------------------------ landscape: the video fills the height */
+  html[data-layout='landscape'] #app {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-rows: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'left stage right'
+      'bar bar right';
+  }
+  html[data-layout='landscape'] #stage {
+    grid-area: stage;
+  }
+  #pleft {
+    grid-area: left;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 4px 8px max(8px, env(safe-area-inset-left));
+  }
+  #pleft #colors {
+    flex-direction: column;
+  }
+  #pright {
+    grid-area: right;
+    box-sizing: content-box;
+    width: 92px; /* fixed: the video doesn't move when "Record" turns into "REC 0:03 S1" */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: max(10px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+      max(12px, env(safe-area-inset-bottom)) 12px;
+    background: var(--surface);
+    border-left: 1px solid var(--line);
+    transition: box-shadow 0.2s ease;
+  }
+  #pright.recording {
+    box-shadow: inset 2px 0 0 var(--record);
+  }
+  #pbar.landscape {
+    grid-area: bar;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 56px;
+    padding: 0 12px env(safe-area-inset-bottom) max(12px, env(safe-area-inset-left));
+    background: var(--surface);
+    border-top: 1px solid var(--line);
+    transition: box-shadow 0.2s ease;
+  }
+  #pbar.landscape #timeline {
+    height: 44px;
+    min-width: 0;
+  }
+  #recInfo {
+    display: flex;
+    gap: 6px;
+    min-height: 18px;
+    color: var(--dim);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  #recInfo.on {
+    color: var(--record-text);
+    font-weight: 600;
+  }
+  #recInfo .k {
+    color: var(--dim);
+    font-weight: 400;
+  }
+  #pright #wave {
+    width: 76px;
+    height: 22px;
+  }
+  html[data-phone] #rec.round {
+    display: grid;
+    place-items: center;
+    width: 76px;
+    min-width: 0;
+    height: 76px;
+    padding: 0;
+    border: 2px solid color-mix(in srgb, var(--overlay) 20%, transparent);
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--overlay) 4%, transparent);
+  }
+  html[data-phone] #rec.round .dot {
+    width: 30px;
+    height: 30px;
+    background: var(--record);
+  }
+  html[data-phone] #rec.round.on {
+    border-color: var(--record);
+    background: color-mix(in srgb, var(--record) 16%, transparent);
+  }
+  html[data-phone] #rec.round.on .dot {
+    width: 24px;
+    height: 24px;
+    border-radius: 5px; /* a stop square */
+  }
+  html[data-phone] #rec.round.wait .dot {
+    background: var(--record-wait);
+  }
 
-/* The notes sidebar in landscape: an overlay on the right of the video (the grid has no row to spare). */
-html[data-layout='landscape'] #side {
-  grid-area: stage;
-  justify-self: end;
-  align-self: stretch;
-  width: min(320px, 70%);
-  z-index: 5;
-}
+  /* The notes sidebar in landscape: an overlay on the right of the video (the grid has no row to spare). */
+  html[data-layout='landscape'] #side {
+    grid-area: stage;
+    justify-self: end;
+    align-self: stretch;
+    width: min(320px, 70%);
+    z-index: 5;
+  }
 
-/* ------------------------------------------------------------------ the bar's parts, phone sized */
-html[data-phone] #rec.pill {
-  width: auto;
-}
-html[data-phone] #done {
-  min-width: 0;
-}
-html[data-layout='portrait'] #done {
-  padding: 0 18px;
-}
-html[data-layout='landscape'] #pright #done {
-  width: 100%;
-  padding: 0 6px;
-  font-size: 13px;
-  white-space: normal;
-  line-height: 1.2;
-}
-html[data-phone] .agent-status {
-  width: auto;
-  max-width: 150px;
-  min-height: 44px;
-  padding: 0 6px;
-}
-/* Landscape's bar is the timeline's: the agent is its dot (tap it for the name and settings). */
-html[data-phone] .agent-status.compact {
-  justify-content: center;
-  width: 44px;
-  padding: 0;
-}
-html[data-phone] .agent-status.compact .name {
-  display: none;
+  /* ------------------------------------------------------------------ the bar's parts, phone sized */
+  html[data-phone] #rec.pill {
+    width: auto;
+  }
+  html[data-phone] #done {
+    min-width: 0;
+  }
+  html[data-layout='portrait'] #done {
+    padding: 0 18px;
+  }
+  html[data-layout='landscape'] #pright #done {
+    width: 100%;
+    padding: 0 6px;
+    font-size: 13px;
+    white-space: normal;
+    line-height: 1.2;
+  }
+  html[data-phone] .agent-status {
+    width: auto;
+    max-width: 150px;
+    min-height: 44px;
+    padding: 0 6px;
+  }
+  /* Landscape's bar is the timeline's: the agent is its dot (tap it for the name and settings). */
+  html[data-phone] .agent-status.compact {
+    justify-content: center;
+    width: 44px;
+    padding: 0;
+  }
+  html[data-phone] .agent-status.compact .name {
+    display: none;
+  }
 }

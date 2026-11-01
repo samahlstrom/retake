@@ -9,10 +9,11 @@
 </script>
 
 <Popover.Root bind:open={() => review.keysOpen, (v) => (review.keysOpen = v)}>
-  <Popover.Trigger id="keys" aria-label="Keyboard shortcuts" title="Keys (?)">?</Popover.Trigger>
+  <Popover.Trigger id="keys" data-part="keys" aria-label="Keyboard shortcuts" title="Keys (?)">?</Popover.Trigger>
   <Popover.Portal>
     <Popover.Content
       class="pop keys-pop"
+      data-part="keys-sheet"
       side="top"
       align="end"
       sideOffset={12}

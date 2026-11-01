@@ -11,7 +11,7 @@
   );
 </script>
 
-<li class="video-card">
+<li class="video-card" data-part="video-card" data-status={video.status}>
   <a class="card" href={video.url} data-name={video.name} data-status={video.status}>
     <div class="thumb">
       {#if video.thumb && !home.broken.has(video.name)}
@@ -23,13 +23,20 @@
       <span class="title">{video.title}</span>
       <span class="row">
         <span class="ver">{video.version}</span>
-        <span class="chip {status.tone}"><span class="dot" aria-hidden="true"></span>{status.text}</span>
+        <span class="chip {status.tone}" data-part="status"
+          ><span class="dot" aria-hidden="true"></span>{status.text}</span
+        >
       </span>
     </div>
   </a>
   {#if targets.length}
     <DropdownMenu.Root>
-      <DropdownMenu.Trigger class="more card-more" aria-label={`Options for ${video.title}`} title="More">
+      <DropdownMenu.Trigger
+        class="more card-more"
+        data-part="more"
+        aria-label={`Options for ${video.title}`}
+        title="More"
+      >
         <svg viewBox="0 0 20 20" aria-hidden="true"
           ><circle cx="4.5" cy="10" r="1.5" /><circle cx="10" cy="10" r="1.5" /><circle
             cx="15.5"
@@ -39,12 +46,12 @@
         >
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
-        <DropdownMenu.Content class="menu" align="end" sideOffset={6} collisionPadding={12}>
+        <DropdownMenu.Content class="menu" data-part="menu" align="end" sideOffset={6} collisionPadding={12}>
           <DropdownMenu.Sub>
             <DropdownMenu.SubTrigger class="menu-item sub" aria-label={`Move ${video.title}`}
               >Move to</DropdownMenu.SubTrigger
             >
-            <DropdownMenu.SubContent class="menu menu-scroll" sideOffset={6} collisionPadding={12}>
+            <DropdownMenu.SubContent class="menu menu-scroll" data-part="menu" sideOffset={6} collisionPadding={12}>
               {#each targets as t (t.value)}
                 <DropdownMenu.Item
                   class="menu-item"

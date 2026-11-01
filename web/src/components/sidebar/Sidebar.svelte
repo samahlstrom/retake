@@ -49,7 +49,7 @@
           <Tooltip.Root>
             <Tooltip.Trigger id="sideToggle">
               {#snippet child({ props })}
-                <Collapsible.Trigger {...props} class={view.panel ? 'open' : ''}
+                <Collapsible.Trigger {...props} data-part="sidebar-toggle" class={view.panel ? 'open' : ''}
                   ><span class="dot {job?.error ? 'err' : job ? 'busy' : asking ? 'q' : working ? 'w' : ''}"
                   ></span>{pill}</Collapsible.Trigger
                 >
@@ -60,7 +60,7 @@
             </Tooltip.Content>
           </Tooltip.Root>
         {/if}
-        <Collapsible.Content id="side" aria-label="Comments">
+        <Collapsible.Content id="side" data-part="sidebar" aria-label="Comments">
           <header>
             {#if searching}
               <input
@@ -125,7 +125,7 @@
               </Collapsible.Trigger>
             {/if}
           </header>
-          <div class="tabs" role="tablist" aria-label="Comments">
+          <div class="tabs" data-part="tabs" role="tablist" aria-label="Comments">
             <button
               role="tab"
               aria-selected={review.commentFilter === 'todo'}
@@ -167,7 +167,7 @@
               <ScrollArea.Thumb class="thumb" />
             </ScrollArea.Scrollbar>
           </ScrollArea.Root>
-          <div class="strip" aria-live="polite">
+          <div class="strip" data-part="progress" aria-live="polite">
             {#if notes.deleted.length}
               <div class="deleted-comment" role="status">
                 <span

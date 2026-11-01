@@ -114,6 +114,8 @@ import {
 } from './versions';
 import { Watcher } from './watch';
 import { addVoice, drawWave, levelDb, newAcc, newVad, pushBars, vadStep, type WaveBar } from './voice';
+import { palette } from './theme';
+import { brandOf, reviewTitle } from './brand';
 import { clamp, fmt, isoLocal, now, r3, stamp } from './util';
 
 export interface Elements {
@@ -2275,29 +2277,35 @@ export class Review {
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     const md = this.mediaDuration(),
       rendered = renderedEnd(this.shownVersion());
-    drawTimeline(g, w, h, {
-      // an incomplete stream's length is known before its video is (its poster shows until the first segment)
-      d: this.video.duration || rendered !== null ? md : 0,
-      xd: md || 1,
-      rendered,
-      vt,
-      recording: !!this.seg,
-      takeBins: pendingVoiceBins(
-        this.take.segments.map((seg) => ({
-          take: this.take.id ?? '',
-          seg: seg.id,
-          bins: seg.voiceBins ?? new Float32Array(0),
-          active: seg === this.seg,
-          transcribed:
-            this.transcribedTakes.includes(this.take.id ?? '') ||
-            this.transcribedClips.includes(`${this.take.id}/${seg.id}`),
-        })),
-        this.rows,
-      ),
-      histBins: this.pendingHistoryVoice,
-      ...this.#pendingTicks(),
-      knob: this.touch ? 8 : undefined,
-    });
+    drawTimeline(
+      g,
+      w,
+      h,
+      {
+        // an incomplete stream's length is known before its video is (its poster shows until the first segment)
+        d: this.video.duration || rendered !== null ? md : 0,
+        xd: md || 1,
+        rendered,
+        vt,
+        recording: !!this.seg,
+        takeBins: pendingVoiceBins(
+          this.take.segments.map((seg) => ({
+            take: this.take.id ?? '',
+            seg: seg.id,
+            bins: seg.voiceBins ?? new Float32Array(0),
+            active: seg === this.seg,
+            transcribed:
+              this.transcribedTakes.includes(this.take.id ?? '') ||
+              this.transcribedClips.includes(`${this.take.id}/${seg.id}`),
+          })),
+          this.rows,
+        ),
+        histBins: this.pendingHistoryVoice,
+        ...this.#pendingTicks(),
+        knob: this.touch ? 8 : undefined,
+      },
+      palette(),
+    );
   }
 
   #drawWave(): void {
@@ -2313,7 +2321,7 @@ export class Review {
     const g = wave.getContext('2d') as CanvasRenderingContext2D;
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.clearRect(0, 0, w, h);
-    drawWave(g, w, h, this.seg ? this.bars : null);
+    drawWave(g, w, h, this.seg ? this.bars : null, palette());
   }
 
   loop = (): void => {
@@ -2395,7 +2403,7 @@ export class Review {
     } catch {
       this.toast.say('Review server not reachable', 8000);
     }
-    document.title = `Review · ${this.info.name}`;
+    document.title = reviewTitle(this.info.name, brandOf());
     this.role = this.info.role ?? null;
     // Shown once per browser, then it's behind ?. A viewer's "View only" always shows.
     if (!this.take.id) this.hintGone = this.canRecord && hintSeen();

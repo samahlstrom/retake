@@ -1,9 +1,10 @@
 // Every tuning constant of the legacy player, unchanged.
 
+/** The pen colours. They are part of the review (the agent reads them as words), not of the look: no theme changes
+ * them (spec/theme.md). */
 export const COLORS = { red: '#ff3b30', yellow: '#ffd60a', green: '#30d158', white: '#ffffff' } as const;
 export type PenColor = keyof typeof COLORS;
 export const COLOR_KEYS: readonly PenColor[] = ['red', 'yellow', 'green', 'white'];
-export const VOICE = '#5ac8fa';
 
 /** A stroke shows within ±SHOW s of its video time, fully opaque within ±SOLID s. */
 export const SHOW = 1.5;

@@ -8,6 +8,7 @@
   import type { Home } from './home.svelte';
   import VideoCard from './VideoCard.svelte';
   import ConnectBlock from '../components/ConnectBlock.svelte';
+  import { brandOf, homeTitle } from '../lib/brand';
 
   let { home }: { home: Home } = $props();
   let search = $state('');
@@ -33,6 +34,8 @@
   );
   const connect = $derived(needsComputer(home.res));
   const user = $derived(home.res.user);
+  // The theme's name and logo (spec/theme.md), or Retake.
+  const brand = brandOf();
 
   function startForm(kind: typeof form, title = '', group = '') {
     form = kind;
@@ -72,26 +75,30 @@
   }
 
   $effect(() => {
-    document.title = `${title} · Retake`;
+    document.title = homeTitle(title, brand);
   });
 </script>
 
 {#snippet more(label: string)}
-  <DropdownMenu.Trigger class="more" aria-label={label} title="More">
+  <DropdownMenu.Trigger class="more" data-part="more" aria-label={label} title="More">
     <svg viewBox="0 0 20 20" aria-hidden="true"
       ><circle cx="4.5" cy="10" r="1.5" /><circle cx="10" cy="10" r="1.5" /><circle cx="15.5" cy="10" r="1.5" /></svg
     >
   </DropdownMenu.Trigger>
 {/snippet}
 
-<main class="home">
+<main class="home" data-part="home">
   <div class="top">
     <nav class="breadcrumbs" aria-label="Breadcrumb">
-      <a class="brand" href="./">Retake</a>
+      <a class="brand" class:with-logo={!!brand.logo} data-part="brand" href="./"
+        >{#if brand.logo}<img data-part="logo" src={brand.logo} alt="" />{/if}<span data-part="brand-name"
+          >{brand.name}</span
+        ></a
+      >
       {#if home.selected && !home.single}<span aria-hidden="true">/</span><a href="./">Projects</a>{/if}
     </nav>
     {#if user}
-      <div class="account">
+      <div class="account" data-part="account">
         <span class="who" title={user.email}>{user.name || user.email}</span>
         <a href="/signout">Sign out</a>
       </div>
@@ -112,7 +119,7 @@
       <DropdownMenu.Root>
         {@render more(project ? 'Project options' : 'Options')}
         <DropdownMenu.Portal>
-          <DropdownMenu.Content class="menu" align="end" sideOffset={6} collisionPadding={12}>
+          <DropdownMenu.Content class="menu" data-part="menu" align="end" sideOffset={6} collisionPadding={12}>
             {#if project}
               <DropdownMenu.Item class="menu-item" onSelect={() => startForm('group')}>New group</DropdownMenu.Item>
               <DropdownMenu.Item class="menu-item" onSelect={() => startForm('rename', project.title)}
@@ -164,7 +171,7 @@
   {/if}
 
   {#if connect}
-    <section class="connect-card" aria-label="Connect your computer">
+    <section class="connect-card" data-part="connect-card" aria-label="Connect your computer">
       {#if asking}
         <ConnectBlock {command} />
       {:else}
@@ -202,7 +209,13 @@
                 <DropdownMenu.Root>
                   {@render more(`${section.title} options`)}
                   <DropdownMenu.Portal>
-                    <DropdownMenu.Content class="menu" align="start" sideOffset={6} collisionPadding={12}>
+                    <DropdownMenu.Content
+                      class="menu"
+                      data-part="menu"
+                      align="start"
+                      sideOffset={6}
+                      collisionPadding={12}
+                    >
                       <DropdownMenu.Item
                         class="menu-item"
                         onSelect={() => startForm('rename', section.title, section.id)}>Rename group</DropdownMenu.Item
@@ -214,7 +227,7 @@
             </div>
           {/if}
           {#if groupVideos.length}
-            <ul class="grid">
+            <ul class="grid" data-part="home-grid">
               {#each groupVideos as video (video.name)}<VideoCard {video} {home} />{/each}
             </ul>
           {:else}<p class="empty">Nothing here yet. Use ⋯ on a video to move it here.</p>{/if}
@@ -225,11 +238,11 @@
       <p class="empty">No videos yet. Put a versioned video (like <code>clip_v1.mp4</code>) in this folder.</p>
     {:else if search && !videos.some(matches)}<p class="empty">No videos match “{search}”.</p>{/if}
   {:else if home.loaded}
-    <ul class="grid project-grid">
+    <ul class="grid project-grid" data-part="project-grid">
       {#each visibleProjects as p (p.id)}
         {@const projectVideos = home.videos(p.id)}
         <li>
-          <a class="project-card" href={workspaceUrl('./', p.id)} data-project={p.id}>
+          <a class="project-card" data-part="project-card" href={workspaceUrl('./', p.id)} data-project={p.id}>
             <div class="project-cover" aria-hidden="true">
               {#each projectVideos.slice(0, 3) as video (video.name)}
                 <div>

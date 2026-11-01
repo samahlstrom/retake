@@ -1,5 +1,6 @@
 // The timeline canvas: the playhead, where you talked (blue, above the track) and where you drew (ticks below it).
-import { BIN, COLORS, TL_PAD, VOICE } from './constants';
+import { BIN, COLORS, TL_PAD } from './constants';
+import { DEFAULT_PALETTE, type Palette } from './theme';
 import type { HistoryStroke } from './types';
 import { clamp } from './util';
 
@@ -75,11 +76,18 @@ export interface TimelineData {
   rendered?: number | null;
 }
 
-/** The track's fill before and after what a streamed render has rendered so far. */
-export const TRACK = 'rgba(255,255,255,.14)';
-export const TRACK_PENDING = 'rgba(255,255,255,.05)';
+/** The track's fill before and after what a streamed render has rendered so far (the built-in look's). */
+export const TRACK = DEFAULT_PALETTE.track;
+export const TRACK_PENDING = DEFAULT_PALETTE.trackPending;
 
-export function drawTimeline(g: CanvasRenderingContext2D, w: number, h: number, x: TimelineData): void {
+/** Draws the timeline in the theme's canvas colours (lib/theme.ts; the built-in look's by default). */
+export function drawTimeline(
+  g: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  x: TimelineData,
+  colors: Readonly<Palette> = DEFAULT_PALETTE,
+): void {
   g.clearRect(0, 0, w, h);
   const y = Math.round(h / 2),
     d = x.d,
@@ -89,7 +97,7 @@ export function drawTimeline(g: CanvasRenderingContext2D, w: number, h: number, 
     // voice above the track: taller and brighter where you talked more
     const cols = Math.max(1, Math.floor(x1 - x0)),
       per = d / BIN / cols;
-    g.fillStyle = VOICE;
+    g.fillStyle = colors.voice;
     for (let c = 0; c < cols; c++) {
       const a = Math.floor(c * per),
         b = Math.max(a + 1, Math.floor((c + 1) * per));
@@ -106,15 +114,15 @@ export function drawTimeline(g: CanvasRenderingContext2D, w: number, h: number, 
   if (x.rendered != null) {
     // a rendering version: the part it has rendered, then the rest, fainter, filling in as it renders
     const xr = tlX(x.rendered, w, x.xd);
-    g.fillStyle = TRACK_PENDING;
+    g.fillStyle = colors.trackPending;
     roundRect(g, x0, y - 2, x1 - x0, 4, 2);
-    g.fillStyle = TRACK;
+    g.fillStyle = colors.track;
     roundRect(g, x0, y - 2, Math.max(0, xr - x0), 4, 2);
   } else {
-    g.fillStyle = TRACK;
+    g.fillStyle = colors.track;
     roundRect(g, x0, y - 2, x1 - x0, 4, 2);
   }
-  g.fillStyle = 'rgba(255,255,255,.82)';
+  g.fillStyle = colors.trackPlayed;
   roundRect(g, x0, y - 2, Math.max(0, tlX(x.vt, w, x.xd) - x0), 4, 2);
   if (d) {
     // pen marks under the track: this take's brighter than earlier ones
@@ -131,7 +139,7 @@ export function drawTimeline(g: CanvasRenderingContext2D, w: number, h: number, 
     }
     g.globalAlpha = 1;
   }
-  g.fillStyle = x.recording ? '#ff6a60' : '#fff';
+  g.fillStyle = x.recording ? colors.playheadRecording : colors.playhead;
   g.beginPath();
   g.arc(tlX(x.vt, w, x.xd), y, x.knob ?? 6, 0, Math.PI * 2);
   g.fill();

@@ -66,48 +66,50 @@
 </div>
 
 <style>
-  /* No z-index or opacity on the layer and the card: they must not form stacking contexts, so the grip's z-index lifts
-     it over the pen canvas while the image stays under it. */
-  #images {
-    position: absolute;
-    pointer-events: none;
-  }
-  .card {
-    position: absolute;
-  }
-  img {
-    display: block;
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-    border-radius: 6px;
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    background: rgba(9, 9, 10, 0.55);
-    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
-  }
-  .grip {
-    position: absolute;
-    right: -9px;
-    bottom: -9px;
-    width: 22px;
-    height: 22px;
-    padding: 0;
-    border: 0;
-    background: none;
-    z-index: 1;
-    pointer-events: auto;
-    touch-action: none;
-    cursor: nwse-resize;
-  }
-  .grip::after {
-    content: '';
-    position: absolute;
-    right: 7px;
-    bottom: 7px;
-    width: 8px;
-    height: 8px;
-    border-right: 2px solid rgba(255, 255, 255, 0.85);
-    border-bottom: 2px solid rgba(255, 255, 255, 0.85);
-    border-bottom-right-radius: 3px;
+  @layer retake {
+    /* No z-index or opacity on the layer and the card: they must not form stacking contexts, so the grip's z-index lifts
+       it over the pen canvas while the image stays under it. */
+    #images {
+      position: absolute;
+      pointer-events: none;
+    }
+    .card {
+      position: absolute;
+    }
+    img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      border-radius: var(--radius-sm);
+      border: 1px solid color-mix(in srgb, var(--on-scrim-strong) 30%, transparent);
+      background: color-mix(in srgb, var(--scrim) 55%, transparent);
+      box-shadow: 0 10px 28px color-mix(in srgb, var(--shadow) 50%, transparent);
+    }
+    .grip {
+      position: absolute;
+      right: -9px;
+      bottom: -9px;
+      width: 22px;
+      height: 22px;
+      padding: 0;
+      border: 0;
+      background: none;
+      z-index: 1;
+      pointer-events: auto;
+      touch-action: none;
+      cursor: nwse-resize;
+    }
+    .grip::after {
+      content: '';
+      position: absolute;
+      right: 7px;
+      bottom: 7px;
+      width: 8px;
+      height: 8px;
+      border-right: 2px solid color-mix(in srgb, var(--on-scrim-strong) 85%, transparent);
+      border-bottom: 2px solid color-mix(in srgb, var(--on-scrim-strong) 85%, transparent);
+      border-bottom-right-radius: 3px;
+    }
   }
 </style>

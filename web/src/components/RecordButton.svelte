@@ -13,7 +13,7 @@
   );
 </script>
 
-<button id="rec" aria-label="Record" class={recClass} title={recTitle} onclick={review.toggleRec}
+<button id="rec" data-part="record" aria-label="Record" class={recClass} title={recTitle} onclick={review.toggleRec}
   ><span class="dot"></span><span id="recLabel">{label}</span><canvas
     id="wave"
     title="Your voice (live while recording)"

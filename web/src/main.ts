@@ -1,3 +1,4 @@
+import './theme/tokens.css';
 import './app.css';
 import './ui.css';
 import './phone.css';

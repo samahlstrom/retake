@@ -42,6 +42,7 @@
   items={options}
 >
   <Select.Trigger
+    data-part="select"
     aria-label={label}
     class={`retake-select-trigger ${compact ? 'is-compact' : ''} ${fullWidth ? 'is-fluid' : ''}`}
     title={selected}
@@ -74,158 +75,152 @@
 </Select.Root>
 
 <style>
-  :global(.retake-select-trigger),
-  :global(.retake-select-option) {
-    -webkit-tap-highlight-color: transparent;
-  }
-  :global(.retake-select-trigger) {
-    box-sizing: border-box;
-    display: inline-flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    min-width: 0;
-    max-width: 100%;
-    min-height: 40px;
-    padding: 9px 12px;
-    border: 1px solid #ffffff20;
-    border-radius: 8px;
-    background: #1a1a1e;
-    color: #dddde5;
-    font:
-      13px/1.4 Inter,
-      'Adwaita Sans',
-      system-ui,
-      sans-serif;
-    text-align: left;
-    cursor: pointer;
-    transition:
-      background 120ms ease,
-      border-color 120ms ease;
-  }
-  :global(.retake-select-trigger:hover:not(:disabled)) {
-    background: #242429;
-    border-color: #ffffff38;
-  }
-  :global(.retake-select-trigger:focus-visible),
-  :global(.retake-select-trigger[data-state='open']) {
-    border-color: #a99ae7;
-    outline: 2px solid #a99ae733;
-    outline-offset: 2px;
-  }
-  :global(.retake-select-trigger:disabled) {
-    opacity: 0.45;
-    cursor: not-allowed;
-  }
-  :global(.retake-select-trigger.is-compact) {
-    min-height: 32px;
-    padding: 6px 8px;
-    font-size: 12px;
-    gap: 8px;
-  }
-  :global(.retake-select-trigger.is-fluid) {
-    width: 100%;
-  }
-  .selected-label {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .chevron {
-    width: 14px;
-    height: 14px;
-    flex-shrink: 0;
-    color: #96969f;
-    transition: transform 120ms ease;
-  }
-  :global(.retake-select-trigger[data-state='open']) .chevron {
-    transform: rotate(180deg);
-  }
-  svg path {
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 1.6;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-  }
-  :global(.retake-select-menu) {
-    z-index: 200;
-    box-sizing: border-box;
-    min-width: var(--bits-floating-anchor-width);
-    width: max-content;
-    max-width: min(420px, calc(100vw - 24px));
-    max-height: min(320px, var(--bits-floating-available-height));
-    padding: 5px;
-    border: 1px solid #ffffff24;
-    border-radius: 10px;
-    background: #242428;
-    color: #e8e8ef;
-    box-shadow:
-      0 12px 40px #0008,
-      0 2px 8px #0004;
-    font:
-      13px/1.4 Inter,
-      'Adwaita Sans',
-      system-ui,
-      sans-serif;
-    overflow: hidden;
-  }
-  :global(.retake-select-viewport) {
-    min-height: 0;
-    overflow-y: auto;
-    scrollbar-width: thin;
-    scrollbar-color: #55555f transparent;
-    overscroll-behavior: contain;
-  }
-  :global(.retake-select-option) {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    min-height: 36px;
-    padding: 8px 10px;
-    border-radius: 6px;
-    cursor: pointer;
-    user-select: none;
-    outline: none;
-  }
-  :global(.retake-select-option[data-highlighted]) {
-    background: #ffffff10;
-  }
-  :global(.retake-select-option[data-selected]) {
-    color: #d3c7ff;
-    background: #a99ae710;
-  }
-  :global(.retake-select-option[data-selected][data-highlighted]) {
-    background: #a99ae724;
-  }
-  :global(.retake-select-option[data-disabled]) {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
-  .option-label {
-    min-width: 0;
-    overflow-wrap: anywhere;
-  }
-  .check {
-    display: flex;
-    width: 16px;
-    height: 16px;
-    flex-shrink: 0;
-  }
-  .check svg {
-    width: 16px;
-    height: 16px;
-  }
-  .no-options {
-    padding: 10px;
-    color: #9898a3;
-  }
-  @media (pointer: coarse) {
+  @layer retake {
     :global(.retake-select-trigger),
-    :global(.retake-select-trigger.is-compact),
     :global(.retake-select-option) {
-      min-height: 44px;
+      -webkit-tap-highlight-color: transparent;
+    }
+    :global(.retake-select-trigger) {
+      box-sizing: border-box;
+      display: inline-flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-width: 0;
+      max-width: 100%;
+      min-height: 40px;
+      padding: 9px 12px;
+      border: 1px solid color-mix(in srgb, var(--overlay) 12.5%, transparent);
+      border-radius: var(--radius);
+      background: var(--surface-control);
+      color: var(--text-3);
+      font: 13px/1.4 var(--font-ui);
+      text-align: left;
+      cursor: pointer;
+      transition:
+        background 120ms ease,
+        border-color 120ms ease;
+    }
+    :global(.retake-select-trigger:hover:not(:disabled)) {
+      background: var(--surface-control-hover);
+      border-color: color-mix(in srgb, var(--overlay) 22%, transparent);
+    }
+    :global(.retake-select-trigger:focus-visible),
+    :global(.retake-select-trigger[data-state='open']) {
+      border-color: var(--focus);
+      outline: 2px solid color-mix(in srgb, var(--focus) 20%, transparent);
+      outline-offset: 2px;
+    }
+    :global(.retake-select-trigger:disabled) {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+    :global(.retake-select-trigger.is-compact) {
+      min-height: 32px;
+      padding: 6px 8px;
+      font-size: 12px;
+      gap: 8px;
+    }
+    :global(.retake-select-trigger.is-fluid) {
+      width: 100%;
+    }
+    .selected-label {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .chevron {
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+      color: var(--muted);
+      transition: transform 120ms ease;
+    }
+    :global(.retake-select-trigger[data-state='open']) .chevron {
+      transform: rotate(180deg);
+    }
+    svg path {
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.6;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    :global(.retake-select-menu) {
+      z-index: 200;
+      box-sizing: border-box;
+      min-width: var(--bits-floating-anchor-width);
+      width: max-content;
+      max-width: min(420px, calc(100vw - 24px));
+      max-height: min(320px, var(--bits-floating-available-height));
+      padding: 5px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--surface-control-hover);
+      color: var(--text-2);
+      box-shadow:
+        0 12px 40px color-mix(in srgb, var(--shadow) 53.3%, transparent),
+        0 2px 8px color-mix(in srgb, var(--shadow) 26.7%, transparent);
+      font: 13px/1.4 var(--font-ui);
+      overflow: hidden;
+    }
+    :global(.retake-select-viewport) {
+      min-height: 0;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: var(--faintest) transparent;
+      overscroll-behavior: contain;
+    }
+    :global(.retake-select-option) {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      min-height: 36px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      user-select: none;
+      outline: none;
+    }
+    :global(.retake-select-option[data-highlighted]) {
+      background: color-mix(in srgb, var(--overlay) 6.3%, transparent);
+    }
+    :global(.retake-select-option[data-selected]) {
+      color: var(--agent-text-2);
+      background: color-mix(in srgb, var(--focus) 6.3%, transparent);
+    }
+    :global(.retake-select-option[data-selected][data-highlighted]) {
+      background: color-mix(in srgb, var(--focus) 14%, transparent);
+    }
+    :global(.retake-select-option[data-disabled]) {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .option-label {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+    .check {
+      display: flex;
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+    }
+    .check svg {
+      width: 16px;
+      height: 16px;
+    }
+    .no-options {
+      padding: 10px;
+      color: var(--muted);
+    }
+    @media (pointer: coarse) {
+      :global(.retake-select-trigger),
+      :global(.retake-select-trigger.is-compact),
+      :global(.retake-select-option) {
+        min-height: 44px;
+      }
     }
   }
 </style>

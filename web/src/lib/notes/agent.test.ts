@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import tokens from '../../theme/tokens.css?raw';
 import { COLORS } from '../constants';
 import { AGENT, agentShapes, askRange, drawsOnVideo, inRange, loose } from './agent';
 import type { AgentVisuals } from './types';
@@ -22,8 +23,9 @@ const visuals: AgentVisuals = {
 
 describe("the agent's visuals: their own style", () => {
   it('are never in a pen colour', () => {
-    expect(Object.values(COLORS)).not.toContain(AGENT.color);
-    expect(AGENT.color).toBe('#a693fa'); // the Question violet (ui.css --st-question)
+    const agent = /--agent:\s*(#[0-9a-f]+);/.exec(tokens)?.[1];
+    expect(agent).toBe('#a693fa'); // the Question violet (--status-question is var(--agent))
+    expect(Object.values(COLORS)).not.toContain(agent);
     expect(AGENT.dash).toMatch(/\d+ \d+/); // dashed
   });
   it('scale to the frame and label every box and arrow, "Agent" when the agent gave none', () => {

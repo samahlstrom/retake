@@ -1,6 +1,7 @@
 // Voice activity (only while recording): level above an adaptive noise floor, with a short hangover. It feeds the live
 // waveform next to REC and the voice bins above the timeline.
-import { BIN, VOICE, WAVE_STEP } from './constants';
+import { BIN, WAVE_STEP } from './constants';
+import { DEFAULT_PALETTE, type Palette } from './theme';
 import { clamp } from './util';
 
 export interface Vad {
@@ -70,13 +71,20 @@ export function addVoice(
   } else bins[Math.floor(vt / BIN)] += dt;
 }
 
-/** The live waveform: newest bar at the right edge, scrolling left while recording; a flat grey line when idle. */
-export function drawWave(g: CanvasRenderingContext2D, w: number, h: number, bars: WaveBar[] | null): void {
+/** The live waveform: newest bar at the right edge, scrolling left while recording; a flat grey line when idle. In the
+ * theme's canvas colours (lib/theme.ts). */
+export function drawWave(
+  g: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  bars: WaveBar[] | null,
+  colors: Readonly<Palette> = DEFAULT_PALETTE,
+): void {
   const pitch = 3,
     n = Math.floor(w / pitch),
     mid = h / 2;
   if (!bars) {
-    g.fillStyle = 'rgba(255,255,255,.12)';
+    g.fillStyle = colors.waveIdle;
     for (let i = 0; i < n; i++) g.fillRect(w - (n - i) * pitch, mid - 0.75, 2, 1.5);
     return;
   }
@@ -85,7 +93,7 @@ export function drawWave(g: CanvasRenderingContext2D, w: number, h: number, bars
     const b = recent[recent.length - n + i],
       x = w - (n - i) * pitch;
     const bh = b ? Math.max(1.5, b[0] * (h - 2)) : 1.5;
-    g.fillStyle = b && b[1] ? VOICE : 'rgba(255,255,255,.35)';
+    g.fillStyle = b && b[1] ? colors.voice : colors.wave;
     g.fillRect(x, mid - bh / 2, 2, bh);
   }
 }

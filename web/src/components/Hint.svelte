@@ -12,7 +12,7 @@
 </script>
 
 {#if !touch}
-  <div id="hint" class="float" class:gone>
+  <div id="hint" data-part="hint" class="float" class:gone>
     {#if viewOnly}
       <b>View only</b> · <b>Space</b> play · <b>←/→</b> 5 s
     {:else}
@@ -21,7 +21,7 @@
     {/if}
   </div>
 {:else}
-  <div id="hint" class={inline ? 'touch inline' : 'float touch'} class:gone>
+  <div id="hint" data-part="hint" class={inline ? 'touch inline' : 'float touch'} class:gone>
     {#if viewOnly}
       <b>View only</b>
     {:else}

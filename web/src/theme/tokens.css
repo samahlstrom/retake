@@ -1,0 +1,120 @@
+/* The look's tokens (spec/theme.md, "Tokens"): every colour and font of the built-in page comes from one of these.
+   A theme (theme.css, outside the install) sets them on :root; it isn't in a layer, so it wins over this file.
+   This is the only file with colour and font literals: web/src/theme/theme.test.ts fails on one anywhere else.
+   Renaming or removing a token is a major change (spec/theme.md, "Versioning"). */
+@layer retake {
+  :root {
+    /* surfaces */
+    --bg: #09090a;
+    --surface: #0e0e10;
+    --surface-raised: #121215;
+    --surface-sunken: #0c0c0f;
+    --surface-control: #17171a;
+    --surface-control-hover: #242429;
+    --surface-popover: #1d1d21;
+    --overlay: #fff;
+    --shadow: #000;
+    --line: color-mix(in srgb, var(--overlay) 7%, transparent);
+    --line-strong: color-mix(in srgb, var(--overlay) 10%, transparent);
+    --border: color-mix(in srgb, var(--overlay) 14%, transparent);
+    --border-hover: color-mix(in srgb, var(--overlay) 32%, transparent);
+
+    /* over the video */
+    --scrim: #09090a;
+    --on-scrim: #dcdce1;
+    --on-scrim-strong: #fff;
+
+    /* text, strongest first */
+    --text-strong: #fff;
+    --text: #ececef;
+    --text-2: #e4e4ea;
+    --text-3: #d8d8df;
+    --text-4: #c9c9d1;
+    --text-5: #b9b9c4;
+    --text-6: #a3a3ad;
+    --muted: #8e8e99;
+    --dim: #85858d;
+    --faint: #6f6f7a;
+    --faintest: #5c5c66;
+
+    /* actions */
+    --accent: #ececef;
+    --accent-hover: #fff;
+    --on-accent: #111114;
+    --focus: #a693fa;
+    --link: #9edcff;
+
+    /* recording and voice */
+    --record: #ff453a;
+    --record-text: #ff7a70;
+    --record-wait: #d9a441;
+    --voice: #5ac8fa;
+    --voice-text: #d6eefa;
+    --flip: #ffcf6e;
+
+    /* a comment's status */
+    --status-open: #8e8e99;
+    --status-working: #efb441;
+    --status-question: var(--agent);
+    --status-done: #3cd38a;
+    --status-off: #5c5c66;
+
+    /* the agent */
+    --agent: #a693fa;
+    --agent-ink: #16121f;
+    --agent-text: #ddd7ff;
+    --agent-text-2: #c9bfff;
+
+    /* feedback */
+    --danger: #ff8f86;
+    --warn: #e2bd73;
+    --change: #9ccfb3;
+
+    /* drawn on the timeline's and the waveform's canvas (lib/theme.ts reads them) */
+    --track: color-mix(in srgb, var(--overlay) 14%, transparent);
+    --track-pending: color-mix(in srgb, var(--overlay) 5%, transparent);
+    --track-played: color-mix(in srgb, var(--overlay) 82%, transparent);
+    --playhead: var(--text-strong);
+    --playhead-recording: #ff6a60;
+    --wave: color-mix(in srgb, var(--overlay) 35%, transparent);
+    --wave-idle: color-mix(in srgb, var(--overlay) 12%, transparent);
+
+    /* type */
+    --font-ui: Inter, 'Adwaita Sans', system-ui, 'Noto Sans', sans-serif;
+    --font-mono: ui-monospace, 'JetBrains Mono', Menlo, monospace;
+    --font-size: 13px;
+
+    /* radii */
+    --radius-sm: 6px;
+    --radius: 8px;
+    --radius-md: 10px;
+    --radius-lg: 12px;
+    --radius-pill: 999px;
+
+    /* sizes and spacing of the key parts */
+    --bar-height: 64px;
+    --bar-padding: 24px;
+    --bar-gap: 18px;
+    --record-width: 172px;
+    --send-min-width: 136px;
+    --agent-status-width: 140px;
+    --sidebar-width: 360px;
+    --home-max-width: 1480px;
+    --card-min-width: 260px;
+    --grid-gap: 28px 20px;
+  }
+
+  /* Wide screens (2200 px and up): bigger type and a roomier bar. */
+  @media (min-width: 2200px) {
+    :root {
+      --font-size: 14.5px;
+      --bar-height: 76px;
+      --bar-padding: 40px;
+      --bar-gap: 28px;
+      --record-width: 188px;
+      --sidebar-width: 400px;
+      --home-max-width: 2000px;
+      --card-min-width: 340px;
+    }
+  }
+}
