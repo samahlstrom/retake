@@ -323,6 +323,10 @@ func (s *Server) workerRoute(w http.ResponseWriter, r *http.Request, p []string,
 			}
 			stream := remoteStream(v)
 			err = st.EmitVersion(project.VersionEvent{Label: v.Label, Why: "push", Stream: &stream})
+		} else if err == nil && b.State == "completed" && b.VersionChecked && !s.opts.RemoteFiles {
+			// A plain project's new version file on this computer (no files report tells the pages): say it, so they
+			// follow it (a video with only v0 gets its first cut, say).
+			err = st.EmitVersion(project.VersionEvent{Label: b.Version, Why: "push"})
 		}
 	case is(p, "api", "worker", "render") && r.Method == http.MethodPost:
 		var b struct {

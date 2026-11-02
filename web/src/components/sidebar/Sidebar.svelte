@@ -27,7 +27,9 @@
         ? '1 to do'
         : review.todoCount
           ? `${review.todoCount} to do`
-          : `${review.versionRows.length} comments`,
+          : review.versionRows.length === 1
+            ? '1 comment'
+            : `${review.versionRows.length} comments`,
   );
   const asking = $derived(review.versionRows.some((row) => review.statusOf(row).state === 'question'));
   const working = $derived(review.versionRows.some((row) => review.statusOf(row).state === 'working'));
