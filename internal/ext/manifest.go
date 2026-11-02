@@ -167,8 +167,14 @@ func (e *Ext) validateKinds() []string {
 		} else {
 			folders = append(folders, k.Folder)
 		}
-		if !ValidPath(k.Marker) || strings.Contains(k.Marker, "/") || isFamilyVideo(k.Marker) {
-			e.bad(key+".marker", "%s: marker %q must be a file name (no folder, not hidden)", key, k.Marker)
+		if len(k.Marker) == 0 {
+			e.bad(key+".marker", "%s: a kind needs a marker: the file (or glob) that makes its folder the kind", key)
+		}
+		for _, m := range k.Marker {
+			_, perr := path.Match(m, "")
+			if perr != nil || !ValidPath(m) || strings.Contains(m, "/") || isFamilyVideo(m) {
+				e.bad(key+".marker", "%s: marker %q must be a file name or a glob (no folder, not hidden)", key, m)
+			}
 		}
 	}
 	return folders

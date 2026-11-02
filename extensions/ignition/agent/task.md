@@ -1,25 +1,26 @@
-`v0/` is this video's plan: plain Markdown files the person and you both edit.
+This video's plan is one Markdown document, `v0/<video>_v0.md` (the one `*_v0.md` file in `v0/`). The person and you
+both edit it.
 
-- `v0/idea.md` is the person's own words: don't rewrite or remove them.
-- Make `v0/outline.md` the beats, with one `##` heading each, and `v0/script.md` the same beats as `##` sections,
-  with what's said as paragraphs and what's shown in `[brackets]`. Keep the person's phrasing where it works.
-- Talk-outs are in `v0/voice/`: `<stamp>.md` is a transcript, and a `<!-- talk-out voice/<stamp>.webm -->` line marks
-  where one was put into a document.
-- Edit the files in place. Keep headings stable, because they're anchors and links. Move text rather than delete it,
-  and list anything cut under `## Cut` at the end of `outline.md`.
+- The person's own words under its `#` title are theirs: don't rewrite or remove them.
+- Shape it in that same file: a `## Outline` section with the beats, then a `## Script` section with the same beats as
+  `###` headings, what's said as paragraphs and what's shown in `[brackets]`. Keep the person's phrasing where it
+  works. Don't make other files in `v0/`.
+- Talk-outs: the person's spoken words are already in the document as plain paragraphs; `v0/voice/<stamp>.md` says
+  which audio each came from, if you need it.
+- Edit in place. Keep headings stable, because they're anchors. Move text rather than delete it, and list anything
+  cut under `## Cut` at the end.
 - Each comment's change says what you did (the report).
-- When unsure, ask about a place in a document and carry on:
-  `retake ask --note 12 --file v0/script.md --heading "Cold open" --option "Start with the result" --option "Start with the problem" "Which opening?"`
+- When unsure, ask about a place in the document and carry on:
+  `retake ask --note 12 --file v0/<video>_v0.md --heading "Cold open" --option "Start with the result" --option "Start with the problem" "Which opening?"`
 
 ## When a comment wants a version
 
-A comment that wants a version (such as "Build the first cut (v1) from script.md.") is done only with a new video
+A comment that wants a version (such as "Build the first cut (v1) from the script.") is done only with a new video
 version:
 
-- Build it from `v0/script.md`, section by section in order, with the footage and assets in the video's folder (not
-  `v0/voice/`).
+- Build it from the document's `## Script`, section by section in order, with the footage and assets in the video's
+  folder (not `v0/voice/`).
 - A plain project (no timeline): write the video to `$RETAKE_OUTPUT`. The worker pushes it as `v1/<folder>_v1.mp4`.
-  The folder already uses version folders, since `v0/` is one.
 - A timeline project (`edit/timeline.json` or `retake.toml`): edit the timeline, and the worker renders the version as
   for any task.
 - Then write `v0/cuts/<label>.json` (`v0/cuts/v1.json` for v1): which script sections the version covers, and where.
@@ -30,5 +31,5 @@ version:
                   { "heading": "The trick", "from": 12.4, "to": 61.0 } ] }
   ```
 
-  `heading` is a `##` heading of `script.md`, without the `## `. Times are seconds in that version. A section that
-  isn't in the cut is left out.
+  `heading` is a heading of the script, without its `#`s. Times are seconds in that version. A section that isn't in
+  the cut is left out.

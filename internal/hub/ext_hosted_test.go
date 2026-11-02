@@ -52,7 +52,7 @@ func TestHostedExtensions(t *testing.T) {
 	}
 
 	// New idea with no computer connected: offline.
-	body := `{"project": "deadlock", "name": "jump-souls", "files": {"v0/idea.md": "# Jump souls\n\n"}}`
+	body := `{"project": "deadlock", "name": "jump-souls", "files": {"v0/jump-souls_v0.md": "# Jump souls\n\n"}}`
 	if r := x.do(http.MethodPost, "/api/ext/ignition/videos", body, cookie(SessionCookie, as), origin(x.url)); r.code != 503 ||
 		!strings.Contains(r.body, "offline") {
 		t.Fatalf("offline: %d %s", r.code, r.body)
@@ -113,7 +113,7 @@ func TestHostedExtensions(t *testing.T) {
 		t.Fatal("too slow")
 	}
 	root := <-served
-	if b, err := os.ReadFile(filepath.Join(root, "v0", "idea.md")); err != nil || string(b) != "# Jump souls\n\n" {
+	if b, err := os.ReadFile(filepath.Join(root, "v0", "jump-souls_v0.md")); err != nil || string(b) != "# Jump souls\n\n" {
 		t.Fatalf("on the computer: %q %v (%s)", b, err, root)
 	}
 	if !strings.HasSuffix(root, filepath.Join("deadlock", "jump-souls")) {

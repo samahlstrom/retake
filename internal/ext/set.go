@@ -143,15 +143,20 @@ func (s *Set) KindAt(videoDir string) string {
 	return ""
 }
 
-// isKindFolder reports whether dir is a folder that holds marker and no versioned video file.
-func isKindFolder(dir, marker string) bool {
+// isKindFolder reports whether dir is a folder that holds a regular file matching one of the markers, and no
+// versioned video file.
+func isKindFolder(dir string, markers Markers) bool {
 	if st, err := os.Lstat(dir); err != nil || !st.IsDir() {
 		return false
 	}
-	if st, err := os.Lstat(filepath.Join(dir, marker)); err != nil || !st.Mode().IsRegular() {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
 		return false
 	}
-	return !holdsVideo(dir)
+	found := slices.ContainsFunc(entries, func(en os.DirEntry) bool {
+		return en.Type().IsRegular() && !strings.HasPrefix(en.Name(), ".") && markers.Matches(en.Name())
+	})
+	return found && !holdsVideo(dir)
 }
 
 // holdsVideo reports whether the folder dir holds a versioned video file (clip_v0.mp4).

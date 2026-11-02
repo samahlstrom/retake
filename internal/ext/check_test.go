@@ -90,7 +90,8 @@ func TestCheckIgnition(t *testing.T) {
 		}
 		t.Errorf("ignition: %+v", p)
 	}
-	if e.ID != "ignition" || e.Version != "1.0.0" || len(e.Kinds) != 1 || e.Kinds[0].Marker != "idea.md" ||
+	if e.ID != "ignition" || e.Version != "1.0.0" || len(e.Kinds) != 1 ||
+		!slices.Equal([]string(e.Kinds[0].Marker), []string{"*_v0.md", "idea.md"}) ||
 		!slices.Equal(e.Files.Owns, []string{"v0/**"}) || e.Nav.Icon != "ui/spark.svg" {
 		t.Errorf("manifest %+v", e.Manifest)
 	}

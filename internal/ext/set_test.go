@@ -94,7 +94,7 @@ func TestSetLookups(t *testing.T) {
 	if !slices.Equal(ids(s), []string{"hello", "ignition"}) || s.Get("ignition") == nil || s.Get("nope") != nil {
 		t.Fatalf("set %v", ids(s))
 	}
-	if e, k, ok := s.Kind("ignition.doc"); !ok || e.ID != "ignition" || k.Marker != "idea.md" {
+	if e, k, ok := s.Kind("ignition.doc"); !ok || e.ID != "ignition" || !slices.Equal([]string(k.Marker), []string{"idea.md"}) {
 		t.Errorf("Kind: %v %+v %v", e, k, ok)
 	}
 	for _, full := range []string{"ignition.talk", "hello.doc", "ignition", ""} {
@@ -134,5 +134,45 @@ func TestKindAt(t *testing.T) {
 		if got := s.KindAt(filepath.Join(root, dir)); got != want {
 			t.Errorf("KindAt(%s) = %q, want %q", dir, got, want)
 		}
+	}
+}
+
+// A marker given as a glob or a list (spec/extensions.md, "Version kinds"): Ignition's one document, *_v0.md, or the
+// idea.md of a v0 from before it was one file.
+func TestKindAtGlobMarkers(t *testing.T) {
+	dir := t.TempDir()
+	write := func(rel, body string) {
+		t.Helper()
+		p := filepath.Join(dir, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ext := filepath.Join(dir, "ext", "ignition")
+	write("ext/ignition/extension.toml", manifestOf("ignition")+"\n[[kinds]]\nid = \"doc\"\nfolder = \"v0\"\nmarker = [\"*_v0.md\", \"idea.md\"]\n")
+	e := LoadDir(ext)
+	if !e.OK() {
+		t.Fatalf("%v", e.Problems)
+	}
+	s, _ := Resolve([]*Ext{e}, []string{"ignition"}, nil)
+	write("promo/v0/promo_v0.md", "# Promo\n")
+	write("old/v0/idea.md", "# Old\n")
+	write("other/v0/notes.md", "x")
+	write("hidden/v0/._v0.md", "x")
+	write("clip/v0/clip_v0.mp4", "video")
+	write("clip/v0/clip_v0.md", "# Clip\n")
+	for video, want := range map[string]string{"promo": "ignition.doc", "old": "ignition.doc", "other": "",
+		"hidden": "", "clip": ""} {
+		if got := s.KindAt(filepath.Join(dir, video)); got != want {
+			t.Errorf("%s: %q, want %q", video, got, want)
+		}
+	}
+	write("ext/bad/extension.toml", manifestOf("bad")+"\n[[kinds]]\nid = \"doc\"\nfolder = \"v0\"\nmarker = [\"[\"]\n")
+	bad := LoadDir(filepath.Join(dir, "ext", "bad"))
+	if bad.OK() {
+		t.Error("a bad glob loads")
 	}
 }

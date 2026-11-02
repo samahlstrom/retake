@@ -2,6 +2,7 @@ package ext
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/fs"
 	"net/http"
@@ -163,7 +164,8 @@ func TestAPIList(t *testing.T) {
 		t.Errorf("x: %v", x)
 	}
 	kind := x["kinds"].([]any)[0].(map[string]any)
-	if kind["id"] != "x.doc" || kind["kind"] != "doc" || kind["folder"] != "v0" || kind["marker"] != "idea.md" ||
+	if kind["id"] != "x.doc" || kind["kind"] != "doc" || kind["folder"] != "v0" ||
+		fmt.Sprint(kind["marker"]) != "[idea.md]" ||
 		kind["label"] != "Script" || kind["status"] != "Idea" || kind["record"] != true {
 		t.Errorf("kind: %v", kind)
 	}

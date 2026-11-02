@@ -17,8 +17,8 @@ action = { title = "New idea", route = "new" }
 [[kinds]]
 id = "doc"
 folder = "v0"
-marker = "idea.md"
-label = "Script"
+marker = ["*_v0.md", "idea.md"]   # the one document; idea.md: a v0 from before (migrated)
+label = "Doc"
 status = "Idea"
 record = true
 

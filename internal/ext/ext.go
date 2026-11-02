@@ -5,8 +5,10 @@
 package ext
 
 import (
+	"fmt"
 	"io"
 	"io/fs"
+	"path"
 	"regexp"
 	"slices"
 	"strings"
@@ -87,12 +89,47 @@ type Action struct {
 
 // Kind is one [[kinds]]: a kind of version that isn't a video.
 type Kind struct {
-	ID     string `toml:"id" json:"id"`
-	Folder string `toml:"folder" json:"folder"` // API 1: v0
-	Marker string `toml:"marker" json:"marker"`
-	Label  string `toml:"label" json:"label"`
-	Status string `toml:"status" json:"status"`
-	Record bool   `toml:"record" json:"record"`
+	ID     string  `toml:"id" json:"id"`
+	Folder string  `toml:"folder" json:"folder"` // API 1: v0
+	Marker Markers `toml:"marker" json:"marker"`
+	Label  string  `toml:"label" json:"label"`
+	Status string  `toml:"status" json:"status"`
+	Record bool    `toml:"record" json:"record"`
+}
+
+// Markers is a kind's marker: a file name or a glob (*_v0.md), or a list of them; the kind's folder is the kind when
+// any one matches a regular file in it.
+type Markers []string
+
+// UnmarshalTOML reads one string or a list of strings.
+func (m *Markers) UnmarshalTOML(v any) error {
+	switch x := v.(type) {
+	case string:
+		*m = Markers{x}
+	case []any:
+		out := make(Markers, 0, len(x))
+		for _, item := range x {
+			s, ok := item.(string)
+			if !ok {
+				return fmt.Errorf("a marker is a file name or a glob, not %v", item)
+			}
+			out = append(out, s)
+		}
+		*m = out
+	default:
+		return fmt.Errorf("a marker is a file name, a glob or a list of them, not %v", v)
+	}
+	return nil
+}
+
+// Matches reports whether the file name matches one of the markers.
+func (m Markers) Matches(name string) bool {
+	for _, g := range m {
+		if ok, err := path.Match(g, name); err == nil && ok {
+			return true
+		}
+	}
+	return false
 }
 
 // Slot is one [[slots]]: where its UI mounts.

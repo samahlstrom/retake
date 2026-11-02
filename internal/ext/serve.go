@@ -122,13 +122,13 @@ type APIExt struct {
 
 // APIKind is a kind in GET api/ext.
 type APIKind struct {
-	ID     string `json:"id"`   // the full id: ignition.doc
-	Kind   string `json:"kind"` // its own id: doc
-	Folder string `json:"folder"`
-	Marker string `json:"marker"`
-	Label  string `json:"label"`
-	Status string `json:"status"`
-	Record bool   `json:"record"`
+	ID     string   `json:"id"`   // the full id: ignition.doc
+	Kind   string   `json:"kind"` // its own id: doc
+	Folder string   `json:"folder"`
+	Marker []string `json:"marker"`
+	Label  string   `json:"label"`
+	Status string   `json:"status"`
+	Record bool     `json:"record"`
 }
 
 // APISlot is a slot in GET api/ext.

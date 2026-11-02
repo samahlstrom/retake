@@ -37,7 +37,7 @@ module = "ui/ignition.js"
 [[kinds]]
 id = "doc"
 folder = "v0"
-marker = "idea.md"
+marker = ["*_v0.md", "idea.md"]
 label = "Script"
 status = "Idea"
 record = true
@@ -93,7 +93,7 @@ func TestIdeaThroughAConnectedComputer(t *testing.T) {
 	if e = os.MkdirAll(filepath.Join(local, "v0"), 0o755); e != nil {
 		t.Fatal(e)
 	}
-	if e = os.WriteFile(filepath.Join(local, "v0", "idea.md"), []byte("# Jump souls\n\nThe jump works if you time it.\n"), 0o600); e != nil {
+	if e = os.WriteFile(filepath.Join(local, "v0", "jump-souls_v0.md"), []byte("# Jump souls\n\nThe jump works if you time it.\n"), 0o600); e != nil {
 		t.Fatal(e)
 	}
 	set := testIgnition(t)
@@ -180,10 +180,10 @@ func TestIdeaThroughAConnectedComputer(t *testing.T) {
 	})
 	// Its files through the relay: list, read with the sha, write with If-Match, a stale write.
 	code, _, body := do(http.MethodGet, "/api/ext/ignition/files", "")
-	if code != 200 || !strings.Contains(body, `"v0/idea.md"`) {
+	if code != 200 || !strings.Contains(body, `"v0/jump-souls_v0.md"`) {
 		t.Fatalf("list: %d %s", code, body)
 	}
-	code, hdr, body := do(http.MethodGet, "/api/ext/ignition/files/v0/idea.md", "")
+	code, hdr, body := do(http.MethodGet, "/api/ext/ignition/files/v0/jump-souls_v0.md", "")
 	if code != 200 || !strings.HasPrefix(body, "# Jump souls") || hdr.Get("ETag") == "" {
 		t.Fatalf("read: %d %q %v", code, body, hdr)
 	}
@@ -202,7 +202,7 @@ func TestIdeaThroughAConnectedComputer(t *testing.T) {
 	}
 
 	// A typed comment, sent: the agent edits script.md and asks about "Cold open"; the task waits for the answer.
-	if code, _, body = do(http.MethodPost, "/api/notes", `{"version": "v0", "text": "Work this talk-out into the outline and script.", "anchor": {"file": "v0/idea.md", "line": 3}}`); code != 201 {
+	if code, _, body = do(http.MethodPost, "/api/notes", `{"version": "v0", "text": "Work this talk-out into the outline and script.", "anchor": {"file": "v0/jump-souls_v0.md", "line": 3}}`); code != 201 {
 		t.Fatalf("typed comment: %d %s", code, body)
 	}
 	if e = st.UpdateAutomation(func(a *project.AutomationState) (bool, error) { a.Config.Agent = "doc"; return true, nil }); e != nil {

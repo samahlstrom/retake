@@ -36,7 +36,7 @@ action = { title = "New idea", route = "new" }
 [[kinds]]
 id = "doc"
 folder = "v0"
-marker = "idea.md"
+marker = ["*_v0.md", "idea.md"]
 label = "Script"
 status = "Idea"
 record = true
@@ -169,7 +169,7 @@ func TestHomeExtensions(t *testing.T) {
 	}
 
 	// New idea: alpha/ is a video, so the project is the top; a new folder there becomes an idea.
-	body := `{"project": "", "name": "jump-souls", "files": {"v0/idea.md": "# Jump souls\n\n"}}`
+	body := `{"project": "", "name": "jump-souls", "files": {"v0/jump-souls_v0.md": "# Jump souls\n\n"}}`
 	r = x.do(http.MethodPost, "/api/ext/ignition/videos", body)
 	if r.code != 201 {
 		t.Fatalf("create: %d %s", r.code, r.body)
@@ -184,9 +184,9 @@ func TestHomeExtensions(t *testing.T) {
 	}
 	for name, bad := range map[string]string{
 		"not owned":  `{"project": "", "name": "other", "files": {"notes.md": "x"}}`,
-		"bad name":   `{"project": "", "name": "Has Spaces", "files": {"v0/idea.md": "x"}}`,
-		"no project": `{"project": "nope", "name": "other", "files": {"v0/idea.md": "x"}}`,
-		"traversal":  `{"project": "..", "name": "other", "files": {"v0/idea.md": "x"}}`,
+		"bad name":   `{"project": "", "name": "Has Spaces", "files": {"v0/jump-souls_v0.md": "x"}}`,
+		"no project": `{"project": "nope", "name": "other", "files": {"v0/jump-souls_v0.md": "x"}}`,
+		"traversal":  `{"project": "..", "name": "other", "files": {"v0/jump-souls_v0.md": "x"}}`,
 	} {
 		if r = x.do(http.MethodPost, "/api/ext/ignition/videos", bad); r.code != 400 {
 			t.Errorf("%s: %d %s", name, r.code, r.body)
@@ -230,8 +230,8 @@ func TestHomeExtensions(t *testing.T) {
 func TestVideoExtensionFiles(t *testing.T) {
 	x := extFT(t)
 	idea := filepath.Join(x.dir, "jump-souls")
-	file(t, filepath.Join(idea, "v0", "idea.md"), time.Now())
-	if err := os.WriteFile(filepath.Join(idea, "v0", "idea.md"), []byte("# Jump souls\n"), 0o600); err != nil {
+	file(t, filepath.Join(idea, "v0", "jump-souls_v0.md"), time.Now())
+	if err := os.WriteFile(filepath.Join(idea, "v0", "jump-souls_v0.md"), []byte("# Jump souls\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	base := "/p/jump-souls/api/ext/ignition/files"
@@ -240,11 +240,11 @@ func TestVideoExtensionFiles(t *testing.T) {
 		Files []ext.FileInfo `json:"files"`
 	}
 	jsonBody(t, r, &list)
-	if len(list.Files) != 1 || list.Files[0].Path != "v0/idea.md" || list.Files[0].SHA256 == "" {
+	if len(list.Files) != 1 || list.Files[0].Path != "v0/jump-souls_v0.md" || list.Files[0].SHA256 == "" {
 		t.Fatalf("list: %s", r.body)
 	}
 	sha := list.Files[0].SHA256
-	if r = x.get(base + "/v0/idea.md"); r.code != 200 || r.body != "# Jump souls\n" || r.hdr.Get("ETag") != `"`+sha+`"` {
+	if r = x.get(base + "/v0/jump-souls_v0.md"); r.code != 200 || r.body != "# Jump souls\n" || r.hdr.Get("ETag") != `"`+sha+`"` {
 		t.Fatalf("read: %d %q %v", r.code, r.body, r.hdr)
 	}
 	// The watch: an outside edit comes as an ext.files event.
@@ -253,13 +253,13 @@ func TestVideoExtensionFiles(t *testing.T) {
 	}
 	time.Sleep(150 * time.Millisecond) // the first look
 	// A write with the sha read: 200; with an old one: 409 with the new sha.
-	r = x.do(http.MethodPut, base+"/v0/idea.md", "# Jump souls\n\nThe trick.\n", withHeader("If-Match", `"`+sha+`"`))
+	r = x.do(http.MethodPut, base+"/v0/jump-souls_v0.md", "# Jump souls\n\nThe trick.\n", withHeader("If-Match", `"`+sha+`"`))
 	var fi ext.FileInfo
 	jsonBody(t, r, &fi)
 	if r.code != 200 || fi.SHA256 == sha {
 		t.Fatalf("write: %d %s", r.code, r.body)
 	}
-	r = x.do(http.MethodPut, base+"/v0/idea.md", "stale", withHeader("If-Match", `"`+sha+`"`))
+	r = x.do(http.MethodPut, base+"/v0/jump-souls_v0.md", "stale", withHeader("If-Match", `"`+sha+`"`))
 	if r.code != 409 || !strings.Contains(r.body, fi.SHA256) {
 		t.Fatalf("stale write: %d %s", r.code, r.body)
 	}
@@ -291,7 +291,7 @@ func TestVideoExtensionFiles(t *testing.T) {
 	}
 
 	// A typed comment on v0, anchored; none on a video version.
-	note := `{"version": "v0", "text": "Work this talk-out in", "anchor": {"file": "v0/idea.md", "line": 3, "heading": "Jump souls", "quote": "The trick."}}`
+	note := `{"version": "v0", "text": "Work this talk-out in", "anchor": {"file": "v0/jump-souls_v0.md", "line": 3, "heading": "Jump souls", "quote": "The trick."}}`
 	if r = x.do(http.MethodPost, "/p/jump-souls/api/notes", note); r.code != 201 {
 		t.Fatalf("typed comment: %d %s", r.code, r.body)
 	}
@@ -330,25 +330,25 @@ func TestVideoExtensionFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(idea, "v0", "idea.md"), []byte("agent's words\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(idea, "v0", "jump-souls_v0.md"), []byte("agent's words\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := snap.Finish(); err != nil {
 		t.Fatal(err)
 	}
-	r = x.get("/p/jump-souls/api/ext/ignition/history?path=v0/idea.md")
+	r = x.get("/p/jump-souls/api/ext/ignition/history?path=v0/jump-souls_v0.md")
 	var hist struct {
 		Edits []ext.Edit `json:"edits"`
 	}
 	jsonBody(t, r, &hist)
-	if len(hist.Edits) != 1 || hist.Edits[0].Path != "v0/idea.md" {
+	if len(hist.Edits) != 1 || hist.Edits[0].Path != "v0/jump-souls_v0.md" {
 		t.Fatalf("history: %s", r.body)
 	}
-	undo, _ := json.Marshal(map[string]string{"id": hist.Edits[0].ID, "path": "v0/idea.md"})
+	undo, _ := json.Marshal(map[string]string{"id": hist.Edits[0].ID, "path": "v0/jump-souls_v0.md"})
 	if r = x.do(http.MethodPost, "/p/jump-souls/api/ext/ignition/history/undo", string(undo)); r.code != 200 {
 		t.Fatalf("undo: %d %s", r.code, r.body)
 	}
-	if b, _ := os.ReadFile(filepath.Join(idea, "v0", "idea.md")); string(b) != "# Jump souls\n\nThe trick.\n" {
+	if b, _ := os.ReadFile(filepath.Join(idea, "v0", "jump-souls_v0.md")); string(b) != "# Jump souls\n\nThe trick.\n" {
 		t.Fatalf("after undo: %q", b)
 	}
 }
