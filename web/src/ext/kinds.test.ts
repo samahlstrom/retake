@@ -15,17 +15,17 @@ import {
 import type { ExtInfo } from './loader';
 import type { Card } from '../lib/home';
 
-const ignition: ExtInfo = {
-  id: 'ignition',
-  name: 'Ignition',
+const scripts: ExtInfo = {
+  id: 'scripts',
+  name: 'Scripts',
   version: '1.0.0',
-  base: 'ext/ignition/',
-  module: 'ui/ignition.js',
-  style: 'ui/ignition.css',
-  nav: { title: 'Ignition', icon: 'ui/spark.svg', list: 'kind-only', action: { title: 'New idea', route: 'new' } },
+  base: 'ext/scripts/',
+  module: 'ui/scripts.js',
+  style: 'ui/scripts.css',
+  nav: { title: 'Scripts', icon: 'ui/script.svg', list: 'kind-only', action: { title: 'New script', route: 'new' } },
   kinds: [
     {
-      id: 'ignition.doc',
+      id: 'scripts.doc',
       kind: 'doc',
       folder: 'v0',
       marker: ['*_v0.md'],
@@ -36,7 +36,7 @@ const ignition: ExtInfo = {
   ],
   slots: [
     { slot: 'page', kind: '', title: '', when: 'always' },
-    { slot: 'version', kind: 'ignition.doc', title: '', when: 'always' },
+    { slot: 'version', kind: 'scripts.doc', title: '', when: 'always' },
     { slot: 'sidebar-tab', kind: '', title: 'Script', when: 'has-kind' },
   ],
   machine: true,
@@ -56,7 +56,7 @@ const hello: ExtInfo = {
   ],
   machine: true,
 };
-const exts = [ignition, hello];
+const exts = [scripts, hello];
 
 const card = (name: string, extra: Partial<Card> = {}): Card => ({
   name,
@@ -80,21 +80,21 @@ const card = (name: string, extra: Partial<Card> = {}): Card => ({
 
 describe('kinds of versions', () => {
   it('name a version `v0 · <label>`, and find its extension, slot and Record', () => {
-    expect(kindOf(exts, 'ignition.doc')?.ext.id).toBe('ignition');
+    expect(kindOf(exts, 'scripts.doc')?.ext.id).toBe('scripts');
     expect(kindOf(exts, 'other.doc')).toBeNull();
-    expect(versionName(exts, { label: 'v0', kind: 'ignition.doc' })).toBe('v0 · Script');
+    expect(versionName(exts, { label: 'v0', kind: 'scripts.doc' })).toBe('v0 · Script');
     expect(versionName(exts, { label: 'v0', kind: 'gone.doc' })).toBe('v0'); // its extension isn't on
     expect(versionName(exts, { label: 'v3' })).toBe('v3');
-    expect(versionSlot(exts, 'ignition.doc')?.id).toBe('ignition');
+    expect(versionSlot(exts, 'scripts.doc')?.id).toBe('scripts');
     expect(versionSlot(exts, null)).toBeNull();
-    expect(versionSlot([hello], 'ignition.doc')).toBeNull();
-    expect(kindRecords(exts, 'ignition.doc')).toBe(true);
-    const quiet = { ...ignition, kinds: [{ ...ignition.kinds[0]!, record: false }] };
-    expect(kindRecords([quiet], 'ignition.doc')).toBe(false);
+    expect(versionSlot([hello], 'scripts.doc')).toBeNull();
+    expect(kindRecords(exts, 'scripts.doc')).toBe(true);
+    const quiet = { ...scripts, kinds: [{ ...scripts.kinds[0]!, record: false }] };
+    expect(kindRecords([quiet], 'scripts.doc')).toBe(false);
   });
 
   it('open the newest cut as always; a v0-only video on v0; a deep link where it says', () => {
-    const v0 = { label: 'v0', kind: 'ignition.doc' };
+    const v0 = { label: 'v0', kind: 'scripts.doc' };
     expect(openingVersion([v0, { label: 'v1' }, { label: 'v2' }], 'v2', null)).toBe('v2');
     expect(openingVersion([v0], 'v0', null)).toBe('v0');
     expect(openingVersion([v0], null, null)).toBe('v0');
@@ -108,9 +108,9 @@ describe('kinds of versions', () => {
 
 describe("the comments column's extension tabs", () => {
   it('come after To do · Done on a video version; has-kind only with a version of its kind', () => {
-    const withV0 = [{ label: 'v0', kind: 'ignition.doc' }, { label: 'v1' }];
+    const withV0 = [{ label: 'v0', kind: 'scripts.doc' }, { label: 'v1' }];
     expect(sidebarTabs(exts, withV0, { kind: null, phone: false }).map((t) => [t.key, t.title])).toEqual([
-      ['ignition/sidebar-tab', 'Script'],
+      ['scripts/sidebar-tab', 'Script'],
       ['hello/sidebar-tab', 'Hello'],
       ['hello/review-panel', 'Board'],
     ]);
@@ -124,7 +124,7 @@ describe("the comments column's extension tabs", () => {
     expect(sidebarTabs(exts, [{ label: 'v1' }], { kind: null, phone: true }).map((t) => t.key)).toEqual([
       'hello/sidebar-tab',
     ]);
-    expect(sidebarTabs(exts, [{ label: 'v0', kind: 'ignition.doc' }], { kind: 'ignition.doc', phone: false })).toEqual(
+    expect(sidebarTabs(exts, [{ label: 'v0', kind: 'scripts.doc' }], { kind: 'scripts.doc', phone: false })).toEqual(
       [],
     );
   });
@@ -133,31 +133,31 @@ describe("the comments column's extension tabs", () => {
 describe('the home', () => {
   it("nav sections: kind-only rows are its kind's ideas, the most recently changed first", () => {
     const cards = [
-      card('cut', { kinds: ['ignition.doc'], changed: 900 }), // has a cut: not an idea
-      card('old-idea', { status: 'no_cut', kind: 'ignition.doc', version: 'v0', changed: 100 }),
+      card('cut', { kinds: ['scripts.doc'], changed: 900 }), // has a cut: not an idea
+      card('old-idea', { status: 'no_cut', kind: 'scripts.doc', version: 'v0', changed: 100 }),
       card('other-kind', { status: 'no_cut', kind: 'board.card', changed: 999 }),
-      card('new-idea', { status: 'no_cut', kind: 'ignition.doc', version: 'v0', changed: 500 }),
-      card('undated', { status: 'no_cut', kind: 'ignition.doc' }),
+      card('new-idea', { status: 'no_cut', kind: 'scripts.doc', version: 'v0', changed: 500 }),
+      card('undated', { status: 'no_cut', kind: 'scripts.doc' }),
     ];
     const [ign, hel] = navSections(exts, cards);
-    expect(ign!.title).toBe('Ignition');
-    expect(ign!.icon).toBe('ext/ignition/ui/spark.svg');
-    expect(ign!.action).toEqual({ title: 'New idea', route: 'new' });
+    expect(ign!.title).toBe('Scripts');
+    expect(ign!.icon).toBe('ext/scripts/ui/script.svg');
+    expect(ign!.action).toEqual({ title: 'New script', route: 'new' });
     expect(ign!.rows.map((c) => c.name)).toEqual(['new-idea', 'old-idea', 'undated']);
     expect(hel).toMatchObject({ title: 'Hello', icon: '', action: null, rows: [] }); // no list
     expect(navSections([{ ...hello, nav: null }], cards)).toEqual([]);
   });
 
   it("an idea's card says its kind's word, and the tree shows its extension's icon", () => {
-    const idea = card('idea', { status: 'no_cut', kind: 'ignition.doc' });
+    const idea = card('idea', { status: 'no_cut', kind: 'scripts.doc' });
     expect(kindStatus(exts, idea)).toBe('Idea');
     expect(kindStatus([], idea)).toBe('No cut yet');
     expect(kindStatus(exts, card('cut'))).toBeNull();
-    expect(cardExt(exts, idea)?.id).toBe('ignition');
-    expect(cardExt(exts, card('cut', { kinds: ['ignition.doc'] }))).toBeNull();
-    expect(iconUrl(ignition)).toBe('ext/ignition/ui/spark.svg');
+    expect(cardExt(exts, idea)?.id).toBe('scripts');
+    expect(cardExt(exts, card('cut', { kinds: ['scripts.doc'] }))).toBeNull();
+    expect(iconUrl(scripts)).toBe('ext/scripts/ui/script.svg');
     expect(iconUrl(hello)).toBe('');
-    expect(extHash('ignition')).toBe('#ext/ignition/');
-    expect(extHash('ignition', '/new')).toBe('#ext/ignition/new');
+    expect(extHash('scripts')).toBe('#ext/scripts/');
+    expect(extHash('scripts', '/new')).toBe('#ext/scripts/new');
   });
 });

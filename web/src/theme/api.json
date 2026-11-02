@@ -72,7 +72,7 @@
     "ext-slot": "Where an extension's UI mounts (data-ext is its id, data-slot the slot: page, version, sidebar-tab or review-panel)",
     "nav-ext": "An extension's section under the folder tree",
     "nav-ext-title": "Its header row's title, which opens the extension's page",
-    "nav-ext-action": "Its + (the extension's action, such as New idea)",
+    "nav-ext-action": "Its + (the extension's action, such as New script)",
     "nav-ext-video": "A video in that section (an idea: only an extension's version)"
   },
   "deprecated": {

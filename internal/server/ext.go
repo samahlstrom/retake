@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/samahlstrom/retake/internal/config"
 	"github.com/samahlstrom/retake/internal/ext"
 	"github.com/samahlstrom/retake/internal/extwork"
 	"github.com/samahlstrom/retake/internal/family"
@@ -637,7 +638,8 @@ func (s *Server) machineHas(id string) bool {
 	if w == nil {
 		w = a.Worker(a.Config.Worker)
 	}
-	return w != nil && slices.ContainsFunc(w.Extensions, func(x project.ExtRef) bool { return x.ID == id })
+	// An older computer reports a renamed extension under its old id (spec/extensions.md, "Renamed ids").
+	return w != nil && slices.ContainsFunc(w.Extensions, func(x project.ExtRef) bool { return config.ExtensionID(x.ID) == id })
 }
 
 // --- typed comments: POST api/notes (spec/extensions.md, "Comments and questions on an extension's version", and

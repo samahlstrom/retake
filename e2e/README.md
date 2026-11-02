@@ -227,7 +227,7 @@ CLI.
 - An update: a freshly built binary at another path serves the same theme from the same folder, and the theme's files
   are byte for byte what they were.
 
-**`19-phone-webkit`** (new only; WebKit only, `RETAKE_E2E_WEBKIT`): `retake open` with Ignition on, a v0 document
+**`19-phone-webkit`** (new only; WebKit only, `RETAKE_E2E_WEBKIT`): `retake open` with Scripts on, a v0 document
 written as the owner writes one (a long paragraph, an unbroken 60-letter word, a long URL, headings, a list, a task)
 and a plain video, on the iPhone 13 and iPhone 15:
 - Nothing is wider than the screen: no sideways scroll, and no element past either edge (the document, the comments
@@ -235,7 +235,7 @@ and a plain video, on the iPhone 13 and iPhone 15:
 - Record and Send are wholly on screen, inside `innerHeight` and the visual viewport.
 - The top bar fits: back on the left, the document's ⋯ at the right edge and the comments toggle (an icon, and the
   to-do count once there is one) just left of it, none overlapping, each at least 40 px.
-- Screenshots: `.retake-work/ignition-shots/webkit-<doc|drawer|doc-todo|video|home>-<device>.png`.
+- Screenshots: `.retake-work/scripts-shots/webkit-<doc|drawer|doc-todo|video|home>-<device>.png`.
 
 **`21-comment`** (new only; `spec/notes.md`, "Typed comments on a video", and `spec/automation.md`, "HTTP and UI"):
 `retake open <folder>` with a scratch config of two fake agents (their program is `true`), desktop Chromium.

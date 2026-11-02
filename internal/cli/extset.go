@@ -44,7 +44,7 @@ func hostedExts(env Env, data string, flagDirs, allowed []string) *ext.Set {
 	return set
 }
 
-// bundled is the extensions built into retake: extensions/ (Ignition).
+// bundled is the extensions built into retake: extensions/ (Scripts).
 func bundled() fs.FS { return extensions.FS }
 
 func absDirs(env Env, dirs []string) []string {

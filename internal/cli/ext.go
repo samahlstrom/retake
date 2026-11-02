@@ -79,6 +79,7 @@ func loadExtWorld(env Env, folder string) (extWorld, error) {
 }
 
 func (w extWorld) get(id string) *ext.Ext {
+	id = config.ExtensionID(id) // a renamed extension's old id is its new one
 	i := slices.IndexFunc(w.found, func(e *ext.Ext) bool { return e.ID == id })
 	if i < 0 {
 		return nil
@@ -200,7 +201,7 @@ func extEnableCmd(args []string, env Env, on bool) int {
 	if err != nil {
 		return usageError(env, cmd, err)
 	}
-	id := pos[0]
+	id := config.ExtensionID(pos[0]) // retake ext enable ignition: scripts (spec/extensions.md, "Renamed ids")
 	w, err := loadExtWorld(env, folder)
 	if err != nil {
 		_, _ = fmt.Fprintf(env.Stderr, "retake %s: %v\n", cmd, err)

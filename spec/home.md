@@ -278,7 +278,7 @@ At the home's root (`retake open <folder>`; the team server's `/api/settings`), 
 ```json
 { "hosted": false, "agents": [{"id": "claude", "name": "Claude Code"}], "agent": "claude", "fallback": "",
   "open_in": "background", "open_in_editable": true,
-  "extensions": [{"id": "ignition", "name": "Ignition", "description": "…", "on": true, "loaded": true}],
+  "extensions": [{"id": "scripts", "name": "Scripts", "description": "…", "on": true, "loaded": true}],
   "extensions_editable": true, "theme": {"folder": "~/.config/retake/theme", "used": false},
   "config": "~/.config/retake/config.toml", "machines": [ … as in api/home … ] }
 ```

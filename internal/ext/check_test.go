@@ -76,23 +76,23 @@ func TestCheckManifestProblems(t *testing.T) {
 	}
 }
 
-// Ignition, as bundled: its manifest and agent text are right; ui/ is the web build's output and may not be there.
-func TestCheckIgnition(t *testing.T) {
-	sub, err := fs.Sub(extensions.FS, "ignition")
+// Scripts, as bundled: its manifest and agent text are right; ui/ is the web build's output and may not be there.
+func TestCheckScripts(t *testing.T) {
+	sub, err := fs.Sub(extensions.FS, "scripts")
 	if err != nil {
 		t.Fatal(err)
 	}
-	e := Load(sub, "", WhereBundled, "ignition")
+	e := Load(sub, "", WhereBundled, "scripts")
 	r := Check(e)
 	for _, p := range r.Problems {
-		if p.Kind == "file" && (p.Name == "ui/ignition.js" || p.Name == "ui/ignition.css") {
+		if p.Kind == "file" && (p.Name == "ui/scripts.js" || p.Name == "ui/scripts.css") {
 			continue // not built yet
 		}
-		t.Errorf("ignition: %+v", p)
+		t.Errorf("scripts: %+v", p)
 	}
-	if e.ID != "ignition" || e.Version != "1.0.0" || len(e.Kinds) != 1 ||
+	if e.ID != "scripts" || e.Version != "1.0.0" || len(e.Kinds) != 1 ||
 		!slices.Equal([]string(e.Kinds[0].Marker), []string{"*_v0.md", "idea.md"}) ||
-		!slices.Equal(e.Files.Owns, []string{"v0/**"}) || e.Nav.Icon != "ui/spark.svg" {
+		!slices.Equal(e.Files.Owns, []string{"v0/**"}) || e.Nav.Icon != "ui/script.svg" {
 		t.Errorf("manifest %+v", e.Manifest)
 	}
 	for _, which := range []string{"instructions", "context"} {
@@ -104,9 +104,9 @@ func TestCheckIgnition(t *testing.T) {
 			t.Errorf("%s doesn't say to write the cuts file", which)
 		}
 	}
-	if svg, err := fs.ReadFile(sub, "ui/spark.svg"); err != nil || !strings.Contains(string(svg), "currentColor") ||
+	if svg, err := fs.ReadFile(sub, "ui/script.svg"); err != nil || !strings.Contains(string(svg), "currentColor") ||
 		strings.Contains(string(svg), "href") {
-		t.Errorf("spark.svg: %v", err)
+		t.Errorf("script.svg: %v", err)
 	}
 }
 

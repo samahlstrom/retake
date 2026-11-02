@@ -4,7 +4,7 @@
 import type { Card } from '../lib/home';
 import type { ExtInfo, ExtKind } from './loader';
 
-/** The extension and kind of a full kind id (`ignition.doc`), or null when no extension on here has it. */
+/** The extension and kind of a full kind id (`scripts.doc`), or null when no extension on here has it. */
 export function kindOf(
   exts: readonly ExtInfo[],
   kind: string | null | undefined,

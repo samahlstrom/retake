@@ -22,13 +22,13 @@ web:
 	cd web && npm ci && npm run build
 
 test: test-go
-	cd web && npm test && npx vitest run -c vite.ignition.config.ts
+	cd web && npm test && npx vitest run -c vite.scripts.config.ts
 
 test-go:
 	go test -race ./...
 
 lint: lint-go
-	cd web && npm run check && npm run lint && npm run check:ignition
+	cd web && npm run check && npm run lint && npm run check:scripts
 
 lint-go:
 	golangci-lint run

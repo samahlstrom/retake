@@ -31,19 +31,19 @@ func TestDiscoverOrderAndShadowing(t *testing.T) {
 	})
 	user := filepath.Join(root, "config", "retake", "extensions")
 	writeTree(t, user, map[string]string{
-		"ignition/" + ManifestFile: manifestOf("ignition"), "proj/" + ManifestFile: manifestOf("proj"),
+		"scripts/" + ManifestFile: manifestOf("scripts"), "proj/" + ManifestFile: manifestOf("proj"),
 	})
 	bundled := fstest.MapFS{
-		"ignition/" + ManifestFile: {Data: []byte(manifestOf("ignition"))},
-		"bundled/" + ManifestFile:  {Data: []byte(manifestOf("bundled"))},
-		"src/main.ts":              {Data: []byte("not an extension")},
+		"scripts/" + ManifestFile: {Data: []byte(manifestOf("scripts"))},
+		"bundled/" + ManifestFile: {Data: []byte(manifestOf("bundled"))},
+		"src/main.ts":             {Data: []byte("not an extension")},
 	}
 	found := Discover(Sources{Flags: []string{flagOne, flagMany}, Project: opened, User: user, Bundled: bundled})
 	var got []string
 	for _, e := range found {
 		got = append(got, e.ID+"@"+e.Where)
 	}
-	want := []string{"hello@flag", "ant@flag", "bee@flag", "proj@project", "ignition@user", "bundled@bundled"}
+	want := []string{"hello@flag", "ant@flag", "bee@flag", "proj@project", "scripts@user", "bundled@bundled"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("found %v, want %v", got, want)
 	}
@@ -57,8 +57,8 @@ func TestDiscoverOrderAndShadowing(t *testing.T) {
 	if s := byID["proj"].Shadowed; !slices.Equal(s, []string{filepath.Join(user, "proj")}) {
 		t.Errorf("proj shadows %v", s)
 	}
-	if s := byID["ignition"].Shadowed; !slices.Equal(s, []string{"built in"}) {
-		t.Errorf("ignition shadows %v", s)
+	if s := byID["scripts"].Shadowed; !slices.Equal(s, []string{"built in"}) {
+		t.Errorf("scripts shadows %v", s)
 	}
 	if e := byID["hello"]; e.Dir != flagOne || e.Name != "Hello" || !e.OK() {
 		t.Errorf("hello: %+v", e)

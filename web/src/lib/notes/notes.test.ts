@@ -186,14 +186,14 @@ describe('Notes', () => {
     es.emit('notes', { version: 'v8' }, '1');
     es.emit('automation', undefined, '2');
     es.emit('version', { why: 'push', label: 'v9' }, '3');
-    es.emit('ext.files', { ext: 'ignition', files: [{ path: 'v0/script.md', sha256: 'x' }] }, '4');
+    es.emit('ext.files', { ext: 'scripts', files: [{ path: 'v0/script.md', sha256: 'x' }] }, '4');
     es.emit('ext.files', { bad: true }, '5');
     es.emit('job', { id: 'j1', kind: 'transcribe-file', state: 'running' }, '6');
     expect(got).toEqual([
       ['notes', { version: 'v8' }],
       ['automation', {}],
       ['version', { why: 'push', label: 'v9' }],
-      ['ext.files', { ext: 'ignition', files: [{ path: 'v0/script.md', sha256: 'x' }] }],
+      ['ext.files', { ext: 'scripts', files: [{ path: 'v0/script.md', sha256: 'x' }] }],
       ['job', { id: 'j1', kind: 'transcribe-file', state: 'running' }],
     ]);
     expect(notes.job).toBeNull(); // a talk-out's transcription isn't "Transcribing your take…"

@@ -7,7 +7,7 @@ home's left column, a new kind of version, UI in named places of the page, files
 instructions and tools for the agent. It may run a small server of its own. Extensions live outside the install, so a
 new `retake` keeps them, and they build against a versioned API with the same promise as themes (spec/theme.md).
 
-Ignition (spec/ignition.md) is the first one. Transcript editing, voice-over and a project board are the kind of
+Scripts (spec/scripts.md) is the first one. Transcript editing, voice-over and a project board are the kind of
 tool that comes next.
 
 ## An extension
@@ -15,7 +15,7 @@ tool that comes next.
 A folder:
 
 ```
-ignition/
+scripts/
   extension.toml        the manifest (below)
   ui/                   what the page loads: one ES module, optional CSS, icons, fonts, wasm
   agent/                Markdown for the agent's prompt
@@ -26,24 +26,24 @@ ignition/
 
 ```toml
 api = 1                          # the extension API major version it is written for
-id = "ignition"                  # ^[a-z][a-z0-9-]{0,31}$, unique
-name = "Ignition"
+id = "scripts"                   # ^[a-z][a-z0-9-]{0,31}$, unique
+name = "Scripts"
 version = "1.0.0"                # the extension's own version (semver)
 description = "Talk out an idea, shape it into a script, and start the video."
 min_retake = "0.9.0"             # optional
 
 [ui]
-module = "ui/ignition.js"        # an ES module that exports one function per slot it fills
-style = "ui/ignition.css"        # optional
+module = "ui/scripts.js"         # an ES module that exports one function per slot it fills
+style = "ui/scripts.css"         # optional
 
 [nav]                            # optional: a section in the home's left column
-title = "Ignition"
-icon = "ui/spark.svg"            # optional
+title = "Scripts"
+icon = "ui/script.svg"           # optional
 list = "kind-only"               # optional: list the videos whose only versions are this extension's kind
-action = { title = "New idea", route = "new" }   # optional: a + button on the section's row
+action = { title = "New script", route = "new" }   # optional: a + button on the section's row
 
 [[kinds]]                        # optional: a kind of version
-id = "doc"                       # its full id is <ext>.<kind>: ignition.doc
+id = "doc"                       # its full id is <ext>.<kind>: scripts.doc
 folder = "v0"                    # the version folder it claims; API 1 allows only v0
 marker = "*_v0.md"               # the folder is this kind only when a file matching it is in it (a glob, or a list)
 label = "Script"                 # how the version strip and picker name it: "v0 · Script"
@@ -95,7 +95,7 @@ The first folder that has an id wins; `retake ext list` shows the others as shad
 2. The project's: `<opened folder>/.retake/extensions/<id>/`.
 3. The user's: `$XDG_CONFIG_HOME/retake/extensions/<id>/` (`~/.config/retake/extensions/`, next to the theme).
    `retake serve` uses `<data dir>/extensions/<id>/` (`/data/extensions/` in the Docker image).
-4. Bundled: `extensions/<id>/` in this repo, built into the binary. Ignition is one.
+4. Bundled: `extensions/<id>/` in this repo, built into the binary. Scripts is one.
 
 Being found never turns one on.
 
@@ -105,25 +105,25 @@ Being found never turns one on.
 
   ```toml
   [extensions]
-  enabled = ["ignition"]
+  enabled = ["scripts"]
 
-  [extensions.ignition]     # optional settings: given to its server and tools, never to the page
+  [extensions.scripts]      # optional settings: given to its server and tools, never to the page
   ```
 
   `retake ext enable <id>` and `disable <id>` edit that one key. `--ext DIR` turns on what it names for that run.
 - **A project's extension** is code that came with a folder, so enabling it also pins its content hash in the
   config (`[extensions.pins] <id> = "b3:…"`). When its files change it is off, with the warning
   `<id> changed since you enabled it: run retake ext enable <id> again`. A host never loads a project's extension.
-- **Hosted** (`retake serve`): only what the admin allows, `--extensions ignition,…`, `RETAKE_EXTENSIONS` or
+- **Hosted** (`retake serve`): only what the admin allows, `--extensions scripts,…`, `RETAKE_EXTENSIONS` or
   `[server] extensions = [...]`, from the server's own install (bundled or `<data dir>/extensions/`). The page is
   never given code a connected computer sent. An allowed extension is on for every user, and each user can turn it off
-  for themselves in the account menu (`PUT /api/me/extensions` `{"ignition": false}`, kept in their account;
-  `GET /api/me/extensions` gives `{"off": {"ignition": true}}`).
+  for themselves in the account menu (`PUT /api/me/extensions` `{"scripts": false}`, kept in their account;
+  `GET /api/me/extensions` gives `{"off": {"scripts": true}}`).
 - **The editing computer** in hosted mode uses its own enabled list for the parts that run there: its kind detection,
   agent instructions and tools, and a `runs_on = "machine"` server. Its worker reports them in each poll
   (`extensions: [{id, version, api}]`). An extension that the host allows but the computer doesn't have still shows
-  its UI, and what needs the computer says so in one line: "The editing computer doesn't have Ignition. Run
-  `retake ext enable ignition` there." A host and a computer must agree on the extension's major version.
+  its UI, and what needs the computer says so in one line: "The editing computer doesn't have Scripts. Run
+  `retake ext enable scripts` there." A host and a computer must agree on the extension's major version.
 
 ## Contribution points
 
@@ -131,7 +131,7 @@ Being found never turns one on.
 
 `[nav]` adds one section to the home's left column, under the folder tree: a header row with the icon and title that
 opens the extension's `page` slot, and the optional `action` as a + button on that row. With `list = "kind-only"`, the
-section's rows are the videos whose only versions are of the extension's kind (Ignition's ideas), newest change
+section's rows are the videos whose only versions are of the extension's kind (Scripts' ideas), newest change
 first; a row opens that video's page. Rows have the tree's height, and the icon sits where the tree's status dot is,
 so nothing moves. The section shows on a phone in the same drawer.
 
@@ -144,15 +144,15 @@ A kind is a version that isn't a video: a folder named `folder` inside a video's
 name or a glob (`*_v0.md`), or a list of them (any one is enough).
 
 - **Found by the scan** (spec/home.md): a video's folder is also any folder whose `v0/` holds an enabled kind's
-  marker, with or without a video version. A folder with only `v0/` is a video with one version (spec/ignition.md's
+  marker, with or without a video version. A folder with only `v0/` is a video with one version (spec/scripts.md's
   ideas). A `v0/` that holds a versioned video file (`clip_v0.mp4`) is a video version, as today; the kind never claims
   it. Two enabled kinds claiming `v0` is a load error for the second (by id).
-- **In the API**: `api/info` lists it like any version, `{"label": "v0", "kind": "ignition.doc", "path": "v0",
+- **In the API**: `api/info` lists it like any version, `{"label": "v0", "kind": "scripts.doc", "path": "v0",
   "name": "v0", "duration": null, "modified": <newest file change, Unix ms>}`; `GET /api/home` gives a video whose
-  only versions are of a kind `"status": "no_cut"` and `"kind": "ignition.doc"`, and the page shows the kind's
+  only versions are of a kind `"status": "no_cut"` and `"kind": "scripts.doc"`, and the page shows the kind's
   `status` on its chip. Every card also has `"kinds"` (the kinds of its versions) and `"changed"` (its newest change
   in Unix ms: an edit of its kind's files, or its newest push), for the nav's "newest change first". A connected
-  computer sends it in `POST /api/worker/files` as `{"label": "v0", "kind": "ignition.doc", "name": "v0"}`.
+  computer sends it in `POST /api/worker/files` as `{"label": "v0", "kind": "scripts.doc", "name": "v0"}`.
 - **Numbering** is unchanged: `v0` comes before every cut, the next cut of a video that has only `v0` is `v1`, and
   following latest, comparing (C) and the push rule never pick `v0`.
 - **The page**: the version strip and the version picker list it first, named `v0 · <label>`. Choosing it shows the
@@ -184,7 +184,7 @@ name or a glob (`*_v0.md`), or a list of them (any one is enough).
 - `GET api/ext` (at the home and under a video, needs watch) lists the enabled extensions for this person: `{"api": 1,
   "extensions": [{id, name, version, base, module, style, nav, kinds, slots, files, server, machine}]}` (`base` is
   `ext/<id>/`; `machine` is false when the video's editing computer lacks it). A kind is `{id, kind, folder, marker,
-  label, status, record}` with `id` the full id (`ignition.doc`) and `kind` the manifest's (`doc`); a slot's `kind` is
+  label, status, record}` with `id` the full id (`scripts.doc`) and `kind` the manifest's (`doc`); a slot's `kind` is
   the full id too.
 - The page imports `ext/<id>/<module>?v=<version>` the first time one of its slots is shown, and never before. The
   module exports one function per slot it fills: `page`, `version`, `sidebarTab`, `reviewPanel`. Each is
@@ -197,7 +197,7 @@ name or a glob (`*_v0.md`), or a list of them (any one is enough).
   `[data-ext='<id>']`, and its colours and fonts are Theme API tokens (`var(--surface-raised)`, `var(--font-ui)`);
   `retake ext check` reports both. Its own parts are `data-part="<id>-<name>"`, so a theme can style them.
 - **A failure stays in its slot.** A module that doesn't load or a mount that throws shows one quiet line in the slot
-  (`Ignition didn't load: <message>`) and is logged once to the console; everything else works.
+  (`Scripts didn't load: <message>`) and is logged once to the console; everything else works.
 - **Its files.** `GET ext/<id>/<path>` serves files under its `ui/` folder only: `.js .mjs` (`text/javascript`),
   `.css`, `.json`, `.wasm`, `.svg`, the fonts and images of the theme's table, never `.html`. Up to 10 MB a file,
   `X-Content-Type-Options: nosniff`, `Cache-Control: no-cache`, no hidden segments, no `..`, no symlinks out of the
@@ -440,6 +440,25 @@ The promise is the Theme API's:
 - An update never touches an installed extension: it's outside the install. A bundled extension updates with
   Retake. To keep an older one, install a copy in the user's folder, which wins.
 
+### Renamed ids
+
+A bundled extension's id can change in a release. Core keeps one table of old ids and the ids they became
+(`internal/config/renamed.go`; `ignition` is `scripts`), and an old id is read as the new one wherever an id comes
+in from outside:
+
+- the config: `[extensions] enabled`, `[extensions.pins]` and `[extensions.<id>]` (a key under the new id wins);
+- the commands: `retake ext enable|disable|check <id>`; `retake serve --extensions`, `RETAKE_EXTENSIONS` and
+  `[server] extensions`;
+- a person's choice: `PUT /api/me/extensions` and what an account kept from before;
+- a computer's worker: the ids in its poll's `extensions`, the `kind` of its version files (`ignition.doc` is
+  `scripts.doc`) and relay requests;
+- the routes: `ext/<old id>/…` and `api/ext/<old id>/…` answer as the new id's.
+
+What core writes and sends uses the new id; `retake ext enable` leaves an old id already in `enabled` as it is,
+since it works. A manifest's own `id` is never renamed: a copy installed with the old id is another extension, and
+can't be turned on by that id. A video's owned files and `.retake/history/` aren't keyed by the id, and `ignition` had
+no server (so no `ext-data/ignition/`), so nothing on disk moves.
+
 ## Commands
 
 ```
@@ -452,7 +471,7 @@ retake ext init <id> [DIR]                    a starter: extension.toml, ui/<id>
 retake ext tool <id> <tool> [--args JSON]     run one of its agent tools (agents use this)
 ```
 
-**`retake ext check`** reports, one line per finding, then `ext ok: ignition 1.0.0 (api 1)` or `N problems`:
+**`retake ext check`** reports, one line per finding, then `ext ok: scripts 1.0.0 (api 1)` or `N problems`:
 
 - the manifest: parse errors, unknown or deprecated keys, bad values, an `api` this retake doesn't load, a bad `id`;
 - files it names that are missing: module, style, icons, agent Markdown, tool and server `exec`;
@@ -478,5 +497,5 @@ Exit 0 when nothing was found, 1 when something was, 2 for bad arguments. `--jso
 - Web unit: the loader, a module that fails to load or throws in mount, unmount on slot change, `ctx` routes, R and
   the review keys still reaching core with an extension's sidebar tab focused.
 - e2e `e2e/tests/17-ext.spec.ts`: the hello extension of docs/extensions.md (nav section, page, sidebar tab, theme
-  token, a broken copy that shows its error line while review keeps working). Ignition has its own
-  (spec/ignition.md).
+  token, a broken copy that shows its error line while review keeps working). Scripts has its own
+  (spec/scripts.md).

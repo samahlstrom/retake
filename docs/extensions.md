@@ -1,7 +1,7 @@
 # Extensions: your own tools in Retake
 
 Retake does review, versions and the agent loop. An extension adds a tool around them: a section in the home's left
-column, a page, a tab next to the comments, a new kind of version (Ignition's v0 script), files it keeps in a
+column, a page, a tab next to the comments, a new kind of version (Scripts' v0 script), files it keeps in a
 video's folder, and instructions for the agent. Extensions live outside the install, so updating `retake` keeps them.
 
 The contract is [spec/extensions.md](../spec/extensions.md); this page is the how-to.
@@ -12,22 +12,24 @@ allows run.
 
 ## Turn one on
 
-Ignition ([spec/ignition.md](../spec/ignition.md)) comes with Retake, off:
+Scripts ([spec/scripts.md](../spec/scripts.md)) comes with Retake, off:
 
 ```bash
 retake ext list                 # what's found, where, and whether it's on
-retake ext enable ignition      # adds it to [extensions] enabled in ~/.config/retake/config.toml
-retake open ~/Videos            # the Ignition section is under the folder tree
+retake ext enable scripts       # adds it to [extensions] enabled in ~/.config/retake/config.toml
+retake open ~/Videos            # the Scripts section is under the folder tree
 ```
 
 On a server, allow it for everyone (each person can still turn it off for themselves in the account menu):
 
 ```bash
-retake serve --extensions ignition        # or RETAKE_EXTENSIONS=ignition, or [server] extensions = ["ignition"]
+retake serve --extensions scripts         # or RETAKE_EXTENSIONS=scripts, or [server] extensions = ["scripts"]
 ```
 
-and turn it on on the editing computer too (`retake ext enable ignition`), since its instructions for the agent run
+and turn it on on the editing computer too (`retake ext enable scripts`), since its instructions for the agent run
 there.
+
+Scripts was called Ignition. A config, server flag or command that still says `ignition` keeps working.
 
 ## Where they live
 
@@ -36,7 +38,7 @@ there.
 | Yours | `~/.config/retake/extensions/<id>/` (copy the folder there) |
 | A server's | `<data dir>/extensions/<id>/` (`/data/extensions/` in Docker) |
 | A projects folder's | `<folder>/.retake/extensions/<id>/`: enabling one pins its files; a change turns it off until you enable it again |
-| Built in | Ignition |
+| Built in | Scripts |
 | While you write one | `--ext DIR` on `retake open`, or `RETAKE_EXT_PATH` |
 
 ## Write one: hello

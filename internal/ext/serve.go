@@ -122,7 +122,7 @@ type APIExt struct {
 
 // APIKind is a kind in GET api/ext.
 type APIKind struct {
-	ID     string   `json:"id"`   // the full id: ignition.doc
+	ID     string   `json:"id"`   // the full id: scripts.doc
 	Kind   string   `json:"kind"` // its own id: doc
 	Folder string   `json:"folder"`
 	Marker []string `json:"marker"`

@@ -24,17 +24,17 @@ import (
 	"github.com/samahlstrom/retake/internal/testmedia"
 )
 
-// testIgnition is spec/ignition.md's extension with stand-in UI files, turned on.
-func testIgnition(t *testing.T) *ext.Set {
+// testScripts is spec/scripts.md's extension with stand-in UI files, turned on.
+func testScripts(t *testing.T) *ext.Set {
 	t.Helper()
-	dir := filepath.Join(t.TempDir(), "ignition")
+	dir := filepath.Join(t.TempDir(), "scripts")
 	files := map[string]string{
 		"extension.toml": `api = 1
-id = "ignition"
-name = "Ignition"
+id = "scripts"
+name = "Scripts"
 version = "1.0.0"
 [ui]
-module = "ui/ignition.js"
+module = "ui/scripts.js"
 [[kinds]]
 id = "doc"
 folder = "v0"
@@ -54,9 +54,9 @@ create = "owner"
 instructions = "agent/task.md"
 context = "agent/context.md"
 `,
-		"ui/ignition.js":   "export function version(el) {}\n",
-		"agent/task.md":    "IGNITION-TASK: shape the talk-outs into v0/outline.md and v0/script.md.\n",
-		"agent/context.md": "IGNITION-CONTEXT: follow v0/script.md.\n",
+		"ui/scripts.js":    "export function version(el) {}\n",
+		"agent/task.md":    "SCRIPTS-TASK: shape the talk-outs into v0/outline.md and v0/script.md.\n",
+		"agent/context.md": "SCRIPTS-CONTEXT: follow v0/script.md.\n",
 	}
 	for p, body := range files {
 		if err := os.MkdirAll(filepath.Join(dir, filepath.Dir(p)), 0o755); err != nil {
@@ -66,8 +66,8 @@ context = "agent/context.md"
 			t.Fatal(err)
 		}
 	}
-	set, warnings := ext.Resolve([]*ext.Ext{ext.LoadDir(dir)}, []string{"ignition"}, nil)
-	if len(warnings) > 0 || set.Get("ignition") == nil {
+	set, warnings := ext.Resolve([]*ext.Ext{ext.LoadDir(dir)}, []string{"scripts"}, nil)
+	if len(warnings) > 0 || set.Get("scripts") == nil {
 		t.Fatalf("not on: %v", warnings)
 	}
 	return set
@@ -97,7 +97,7 @@ func TestIdeaThroughAConnectedComputer(t *testing.T) {
 	if e = os.WriteFile(filepath.Join(local, "v0", "jump-souls_v0.md"), []byte("# Jump souls\n\nThe jump works if you time it.\n"), 0o600); e != nil {
 		t.Fatal(e)
 	}
-	set := testIgnition(t)
+	set := testScripts(t)
 	st, e := project.Open(hosted)
 	if e != nil {
 		t.Fatal(e)
@@ -177,22 +177,22 @@ func TestIdeaThroughAConnectedComputer(t *testing.T) {
 	// v0 reaches the server as the family's only version, with its kind.
 	wait("v0", func() bool {
 		f := srv.Rescan()
-		return len(f) == 1 && f[0].Label == "v0" && f[0].Kind == "ignition.doc"
+		return len(f) == 1 && f[0].Label == "v0" && f[0].Kind == "scripts.doc"
 	})
 	// Its files through the relay: list, read with the sha, write with If-Match, a stale write.
-	code, _, body := do(http.MethodGet, "/api/ext/ignition/files", "")
+	code, _, body := do(http.MethodGet, "/api/ext/scripts/files", "")
 	if code != 200 || !strings.Contains(body, `"v0/jump-souls_v0.md"`) {
 		t.Fatalf("list: %d %s", code, body)
 	}
-	code, hdr, body := do(http.MethodGet, "/api/ext/ignition/files/v0/jump-souls_v0.md", "")
+	code, hdr, body := do(http.MethodGet, "/api/ext/scripts/files/v0/jump-souls_v0.md", "")
 	if code != 200 || !strings.HasPrefix(body, "# Jump souls") || hdr.Get("ETag") == "" {
 		t.Fatalf("read: %d %q %v", code, body, hdr)
 	}
-	code, _, body = do(http.MethodPut, "/api/ext/ignition/files/v0/outline.md", "## Cold open\n", "If-Match", "*")
+	code, _, body = do(http.MethodPut, "/api/ext/scripts/files/v0/outline.md", "## Cold open\n", "If-Match", "*")
 	if code != 200 || !strings.Contains(body, `"v0/outline.md"`) {
 		t.Fatalf("write: %d %s", code, body)
 	}
-	if code, _, _ = do(http.MethodPut, "/api/ext/ignition/files/v0/outline.md", "again", "If-Match", "*"); code != 409 {
+	if code, _, _ = do(http.MethodPut, "/api/ext/scripts/files/v0/outline.md", "again", "If-Match", "*"); code != 409 {
 		t.Fatalf("a write over a file that exists with If-Match *: %d", code)
 	}
 	if b, _ := os.ReadFile(filepath.Join(local, "v0", "outline.md")); string(b) != "## Cold open\n" {
@@ -240,13 +240,13 @@ func TestIdeaThroughAConnectedComputer(t *testing.T) {
 	}
 	prompt, _ := os.ReadFile(filepath.Join(local, ".retake", "worker", "tasks", j.ID, "prompt-1.md"))
 	p := string(prompt)
-	if !strings.Contains(p, "## From the Ignition extension") || !strings.Contains(p, "IGNITION-TASK") ||
-		!strings.Contains(p, "IGNITION-CONTEXT") || strings.Index(p, "IGNITION-TASK") > strings.Index(p, "Retake's rules") ||
+	if !strings.Contains(p, "## From the Scripts extension") || !strings.Contains(p, "SCRIPTS-TASK") ||
+		!strings.Contains(p, "SCRIPTS-CONTEXT") || strings.Index(p, "SCRIPTS-TASK") > strings.Index(p, "Retake's rules") ||
 		strings.Index(p, "Retake's rules") > strings.Index(p, "Nobody is watching") {
 		t.Fatalf("prompt order: %s", p)
 	}
 	// The agent's edit can be undone, through the relay.
-	code, _, body = do(http.MethodGet, "/api/ext/ignition/history?path=v0/script.md", "")
+	code, _, body = do(http.MethodGet, "/api/ext/scripts/history?path=v0/script.md", "")
 	var hist struct {
 		Edits []ext.Edit `json:"edits"`
 	}
@@ -254,7 +254,7 @@ func TestIdeaThroughAConnectedComputer(t *testing.T) {
 		t.Fatalf("history: %d %s", code, body)
 	}
 	undo, _ := json.Marshal(map[string]string{"id": hist.Edits[0].ID, "path": "v0/script.md"})
-	if code, _, body = do(http.MethodPost, "/api/ext/ignition/history/undo", string(undo)); code != 200 {
+	if code, _, body = do(http.MethodPost, "/api/ext/scripts/history/undo", string(undo)); code != 200 {
 		t.Fatalf("undo: %d %s", code, body)
 	}
 	if _, e = os.Stat(filepath.Join(local, "v0", "script.md")); !os.IsNotExist(e) {

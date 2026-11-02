@@ -106,14 +106,14 @@ test('the owner changes the agent, where it runs and an extension, and config.to
     if (process.env.RETAKE_E2E_SHOTS) await page.screenshot({ path: join(process.env.RETAKE_E2E_SHOTS, 'settings-desktop.png') });
 
     // An extension: on in config.toml, and on for real after a restart.
-    const ignition = page.locator('[data-part~="settings-row"][data-ext="ignition"]');
-    await expect(ignition).toBeVisible();
-    const sw = ignition.getByRole('switch');
+    const scripts = page.locator('[data-part~="settings-row"][data-ext="scripts"]');
+    await expect(scripts).toBeVisible();
+    const sw = scripts.getByRole('switch');
     await expect(sw).toHaveAttribute('aria-checked', 'false');
     await sw.click();
     await expect(sw).toHaveAttribute('aria-checked', 'true');
-    await expect(ignition).toContainText('Restart retake to turn it on.');
-    await expect.poll(config).toContain('enabled = ["ignition"]');
+    await expect(scripts).toContainText('Restart retake to turn it on.');
+    await expect.poll(config).toContain('enabled = ["scripts"]');
     await sw.click();
     await expect(sw).toHaveAttribute('aria-checked', 'false');
     await expect.poll(config).toContain('enabled = []');

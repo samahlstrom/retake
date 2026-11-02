@@ -218,7 +218,7 @@ func TestHubSettings(t *testing.T) {
 	if v = settingsOf(t, x.do(http.MethodGet, "/api/settings", "", cookie(SessionCookie, admin)).body); v.Agent != "codex" {
 		t.Errorf("not kept: %+v", v)
 	}
-	for _, body := range []string{`{"open_in": "tmux"}`, `{"extensions": {"ignition": false}}`, `{"agent": "x"}`} {
+	for _, body := range []string{`{"open_in": "tmux"}`, `{"extensions": {"scripts": false}}`, `{"agent": "x"}`} {
 		if r := x.post("/api/settings", body, cookie(SessionCookie, admin)); r.code != 400 {
 			t.Errorf("%s: %d %s", body, r.code, r.body)
 		}

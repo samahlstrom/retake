@@ -14,7 +14,7 @@ import (
 // The team server's extensions: on for everyone the admin allows, each person can turn one off, and a new video's
 // folder goes to the editing computer that holds its project (the machine channel).
 func TestHostedExtensions(t *testing.T) {
-	set := ignitionExts(t)
+	set := scriptsExts(t)
 	x := newTH(t, Config{}, func(o *Options) { o.Exts = set })
 	x.h.createWait = 50 * time.Millisecond
 	admin, member := x.user("admin@example.com", true), x.user("member@example.com", false)
@@ -24,40 +24,63 @@ func TestHostedExtensions(t *testing.T) {
 		t.Fatalf("signed out: %d", r.code)
 	}
 	if r := x.do(http.MethodGet, "/api/ext", "", cookie(SessionCookie, ms)); r.code != 200 ||
-		!strings.Contains(r.body, `"id":"ignition"`) {
+		!strings.Contains(r.body, `"id":"scripts"`) {
 		t.Fatalf("member: %d %s", r.code, r.body)
 	}
-	if r := x.do(http.MethodGet, "/ext/ignition/ui/ignition.js", "", cookie(SessionCookie, ms)); r.code != 200 {
+	if r := x.do(http.MethodGet, "/ext/scripts/ui/scripts.js", "", cookie(SessionCookie, ms)); r.code != 200 {
 		t.Fatalf("module: %d", r.code)
 	}
 	// The member turns it off for themselves; the admin still has it.
-	if r := x.do(http.MethodPut, "/api/me/extensions", `{"ignition": false}`, cookie(SessionCookie, ms), origin(x.url)); r.code != 200 ||
-		!strings.Contains(r.body, `"ignition":true`) {
+	if r := x.do(http.MethodPut, "/api/me/extensions", `{"scripts": false}`, cookie(SessionCookie, ms), origin(x.url)); r.code != 200 ||
+		!strings.Contains(r.body, `"scripts":true`) {
 		t.Fatalf("turn off: %d %s", r.code, r.body)
 	}
-	if r := x.do(http.MethodGet, "/api/ext", "", cookie(SessionCookie, ms)); strings.Contains(r.body, "ignition") {
+	if r := x.do(http.MethodGet, "/api/ext", "", cookie(SessionCookie, ms)); strings.Contains(r.body, "scripts") {
 		t.Fatalf("off for the member: %s", r.body)
 	}
-	if r := x.do(http.MethodGet, "/ext/styles.css", "", cookie(SessionCookie, ms)); strings.Contains(r.body, "ignition") {
+	if r := x.do(http.MethodGet, "/ext/styles.css", "", cookie(SessionCookie, ms)); strings.Contains(r.body, "scripts") {
 		t.Fatalf("styles still layer it: %s", r.body)
 	}
-	if r := x.do(http.MethodGet, "/api/ext", "", cookie(SessionCookie, as)); !strings.Contains(r.body, "ignition") {
+	if r := x.do(http.MethodGet, "/api/ext", "", cookie(SessionCookie, as)); !strings.Contains(r.body, "scripts") {
 		t.Fatalf("on for the admin: %s", r.body)
 	}
 	if r := x.do(http.MethodPut, "/api/me/extensions", `{"nope": false}`, cookie(SessionCookie, ms), origin(x.url)); r.code != 400 {
 		t.Fatalf("an extension the server doesn't allow: %d", r.code)
 	}
-	if r := x.do(http.MethodPut, "/api/me/extensions", `{"ignition": true}`, cookie(SessionCookie, ms), origin(x.url)); r.code != 200 {
+	if r := x.do(http.MethodPut, "/api/me/extensions", `{"scripts": true}`, cookie(SessionCookie, ms), origin(x.url)); r.code != 200 {
 		t.Fatalf("turn back on: %d", r.code)
+	}
+
+	// Ignition is Scripts now (spec/extensions.md, "Renamed ids"): the old id turns it off, a choice kept under the old
+	// id still holds, and its files answer under the old id too.
+	if r := x.do(http.MethodPut, "/api/me/extensions", `{"ignition": false}`, cookie(SessionCookie, ms), origin(x.url)); r.code != 200 ||
+		r.body != `{"off":{"scripts":true}}` {
+		t.Fatalf("turn off by the old id: %d %q", r.code, r.body)
+	}
+	if err := x.st.Accounts.SetSetting(extOffKey(member.ID), `{"ignition": true}`); err != nil {
+		t.Fatal(err)
+	}
+	if r := x.do(http.MethodGet, "/api/me/extensions", "", cookie(SessionCookie, ms)); !strings.Contains(r.body, `{"scripts":true}`) {
+		t.Fatalf("kept under the old id: %s", r.body)
+	}
+	if r := x.do(http.MethodGet, "/api/ext", "", cookie(SessionCookie, ms)); strings.Contains(r.body, "scripts") {
+		t.Fatalf("off under the old id: %s", r.body)
+	}
+	if r := x.do(http.MethodPut, "/api/me/extensions", `{"scripts": true}`, cookie(SessionCookie, ms), origin(x.url)); r.code != 200 ||
+		strings.Contains(r.body, "ignition") || strings.Contains(r.body, "scripts") {
+		t.Fatalf("turn back on again: %d %s", r.code, r.body)
+	}
+	if r := x.do(http.MethodGet, "/ext/ignition/ui/scripts.js", "", cookie(SessionCookie, ms)); r.code != 200 {
+		t.Fatalf("module under the old id: %d", r.code)
 	}
 
 	// New idea with no computer connected: offline.
 	body := `{"project": "deadlock", "name": "jump-souls", "files": {"v0/jump-souls_v0.md": "# Jump souls\n\n"}}`
-	if r := x.do(http.MethodPost, "/api/ext/ignition/videos", body, cookie(SessionCookie, as), origin(x.url)); r.code != 503 ||
+	if r := x.do(http.MethodPost, "/api/ext/scripts/videos", body, cookie(SessionCookie, as), origin(x.url)); r.code != 503 ||
 		!strings.Contains(r.body, "offline") {
 		t.Fatalf("offline: %d %s", r.code, r.body)
 	}
-	if r := x.do(http.MethodPost, "/api/ext/ignition/videos", body, cookie(SessionCookie, ms), origin(x.url)); r.code != 403 {
+	if r := x.do(http.MethodPost, "/api/ext/scripts/videos", body, cookie(SessionCookie, ms), origin(x.url)); r.code != 403 {
 		t.Fatalf("a member makes ideas: %d %s", r.code, r.body)
 	}
 	// A computer polls the machine channel; it registered a video in deadlock/.
@@ -105,7 +128,7 @@ func TestHostedExtensions(t *testing.T) {
 	}()
 	time.Sleep(100 * time.Millisecond) // the computer is polling
 	start := time.Now()
-	r := x.do(http.MethodPost, "/api/ext/ignition/videos", body, cookie(SessionCookie, as), origin(x.url))
+	r := x.do(http.MethodPost, "/api/ext/scripts/videos", body, cookie(SessionCookie, as), origin(x.url))
 	if r.code != 201 || !strings.Contains(r.body, `"name":"jump-souls"`) {
 		t.Fatalf("create: %d %s", r.code, r.body)
 	}

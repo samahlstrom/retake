@@ -24,7 +24,7 @@ export interface Version {
   /** It plays from the editing computer through the server's relay (spec/automation.md), so only while that computer
    * is online. */
   relay?: boolean;
-  /** An extension's kind of version (`ignition.doc`, spec/extensions.md "Version kinds"): not a video. Its
+  /** An extension's kind of version (`scripts.doc`, spec/extensions.md "Version kinds"): not a video. Its
    * extension's `version` slot shows it, and following latest and comparing never land on it. */
   kind?: string;
 }

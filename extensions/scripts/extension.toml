@@ -1,0 +1,45 @@
+api = 1
+id = "scripts"
+name = "Scripts"
+version = "1.0.0"
+description = "Talk out an idea, shape it into a script, and start the video."
+
+[ui]
+module = "ui/scripts.js"
+style = "ui/scripts.css"
+
+[nav]
+title = "Scripts"
+icon = "ui/script.svg"
+list = "kind-only"
+action = { title = "New script", route = "new" }
+
+[[kinds]]
+id = "doc"
+folder = "v0"
+marker = ["*_v0.md", "idea.md"]   # the one document; idea.md: a v0 from before (migrated)
+label = "Doc"
+status = "Idea"
+record = true
+
+[[slots]]
+slot = "page"
+
+[[slots]]
+slot = "version"
+kind = "doc"
+
+[[slots]]
+slot = "sidebar-tab"
+title = "Script"
+when = "has-kind"
+
+[files]
+owns = ["v0/**"]
+read = "watch"
+write = "record"
+create = "owner"
+
+[agent]
+instructions = "agent/task.md"
+context = "agent/context.md"

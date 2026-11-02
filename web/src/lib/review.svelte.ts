@@ -426,7 +426,7 @@ export class Review {
   get cuts(): Version[] {
     return this.versions.filter((v) => !v.kind);
   }
-  /** The extension kind of the version on screen (`ignition.doc`): no video, its extension's slot shows it. */
+  /** The extension kind of the version on screen (`scripts.doc`): no video, its extension's slot shows it. */
   get kindShown(): string | null {
     return this.shownVersion()?.kind ?? null;
   }

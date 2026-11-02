@@ -57,30 +57,30 @@ func TestExtListEnableDisable(t *testing.T) {
 	w := newWorld(t)
 	cfgPath := filepath.Join(w.env["XDG_CONFIG_HOME"], "retake", "config.toml")
 
-	// Ignition is built in and off.
+	// Scripts is built in and off.
 	l := w.extList(t)
-	ig := l.item("ignition")
+	ig := l.item("scripts")
 	if ig == nil || ig.Where != ext.WhereBundled || ig.On || ig.Enabled || ig.Version != "1.0.0" {
-		t.Fatalf("ignition: %+v", ig)
+		t.Fatalf("scripts: %+v", ig)
 	}
 	w.stdout.Reset()
 	if code := w.run("ext", "list", "--folder", w.root); code != ExitOK ||
-		!strings.Contains(w.stdout.String(), "ignition  1.0.0    off    built in") {
+		!strings.Contains(w.stdout.String(), "scripts  1.0.0    off    built in") {
 		t.Errorf("list: %d\n%s", code, w.stdout)
 	}
 
 	// Enable it: config.toml gets it, and it's on (when its ui/ is built).
 	w.stdout.Reset()
-	if code := w.run("ext", "enable", "ignition", "--folder", w.root); code != ExitOK ||
-		!strings.Contains(w.stdout.String(), "ignition 1.0.0 is on") {
+	if code := w.run("ext", "enable", "scripts", "--folder", w.root); code != ExitOK ||
+		!strings.Contains(w.stdout.String(), "scripts 1.0.0 is on") {
 		t.Fatalf("enable: %d %s %s", code, w.stdout, w.stderr)
 	}
 	c, _, err := config.Load(cfgPath)
-	if err != nil || !slices.Equal(c.Extensions.Enabled, []string{"ignition"}) || len(c.Extensions.Pins) != 0 {
+	if err != nil || !slices.Equal(c.Extensions.Enabled, []string{"scripts"}) || len(c.Extensions.Pins) != 0 {
 		t.Fatalf("config: %+v %v", c.Extensions, err)
 	}
-	if ig := w.extList(t).item("ignition"); !ig.Enabled || ig.On != (len(ig.Problems) == 0) {
-		t.Errorf("enabled ignition: %+v", ig)
+	if ig := w.extList(t).item("scripts"); !ig.Enabled || ig.On != (len(ig.Problems) == 0) {
+		t.Errorf("enabled scripts: %+v", ig)
 	}
 
 	// A user's copy shadows the built-in one.
@@ -95,11 +95,11 @@ func TestExtListEnableDisable(t *testing.T) {
 
 	// Disable: out of the list; again: already off.
 	w.stdout.Reset()
-	if code := w.run("ext", "disable", "ignition"); code != ExitOK || !strings.Contains(w.stdout.String(), "ignition is off") {
+	if code := w.run("ext", "disable", "scripts"); code != ExitOK || !strings.Contains(w.stdout.String(), "scripts is off") {
 		t.Errorf("disable: %d %s", code, w.stdout)
 	}
 	w.stdout.Reset()
-	if code := w.run("ext", "disable", "ignition"); code != ExitOK || !strings.Contains(w.stdout.String(), "already off") {
+	if code := w.run("ext", "disable", "scripts"); code != ExitOK || !strings.Contains(w.stdout.String(), "already off") {
 		t.Errorf("disable again: %d %s", code, w.stdout)
 	}
 	if c, _, _ := config.Load(cfgPath); !slices.Equal(c.Extensions.Enabled, []string{"hello"}) {
@@ -118,6 +118,34 @@ func TestExtListEnableDisable(t *testing.T) {
 		if code := w.run(args...); code != ExitUsage {
 			t.Errorf("%v: %d", args, code)
 		}
+	}
+}
+
+// Ignition is Scripts now (spec/extensions.md, "Renamed ids"): a config that says ignition has Scripts on, and the
+// commands take the old id.
+func TestExtRenamedID(t *testing.T) {
+	w := newWorld(t)
+	cfgPath := filepath.Join(w.env["XDG_CONFIG_HOME"], "retake", "config.toml")
+	w.config(t, "[extensions]\nenabled = [\"ignition\"]\n")
+	if sc := w.extList(t).item("scripts"); sc == nil || !sc.Enabled {
+		t.Fatalf("scripts with ignition enabled: %+v", sc)
+	}
+	w.stdout.Reset()
+	if code := w.run("ext", "enable", "ignition"); code != ExitOK || !strings.Contains(w.stdout.String(), "scripts 1.0.0 is on") {
+		t.Errorf("enable ignition: %d %s %s", code, w.stdout, w.stderr)
+	}
+	if b, _ := os.ReadFile(cfgPath); string(b) != "[extensions]\nenabled = [\"ignition\"]\n" {
+		t.Errorf("enable rewrote a working config: %q", b)
+	}
+	if code := w.run("ext", "check", "ignition"); code == ExitUsage {
+		t.Errorf("check ignition: %d %s", code, w.stderr)
+	}
+	w.stdout.Reset()
+	if code := w.run("ext", "disable", "ignition"); code != ExitOK || !strings.Contains(w.stdout.String(), "scripts is off") {
+		t.Errorf("disable ignition: %d %s", code, w.stdout)
+	}
+	if c, _, _ := config.Load(cfgPath); len(c.Extensions.Enabled) != 0 {
+		t.Errorf("after disable: %v", c.Extensions.Enabled)
 	}
 }
 

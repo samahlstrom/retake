@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/samahlstrom/retake/internal/config"
 )
 
 // Set is the extensions in effect, by id. A nil *Set has none, and all its methods work on it.
@@ -18,6 +20,7 @@ type Set struct {
 // an api other than API) stays off, and so does the second extension (by id) whose kind claims a folder another's
 // already does. warnings are the startup lines for what's off and why; they never stop a server.
 func Resolve(found []*Ext, enabled []string, pins map[string]string) (*Set, []string) {
+	enabled = config.ExtensionIDs(enabled) // a renamed extension's old id is its new one
 	var warnings []string
 	var on []*Ext
 	seen := map[string]bool{}
@@ -99,14 +102,17 @@ func (s *Set) List() []*Ext {
 	return slices.Clone(s.exts)
 }
 
-// Get is the extension id, or nil when it isn't in effect.
+// Get is the extension id, or nil when it isn't in effect. A renamed extension's old id finds it under its new one
+// (spec/extensions.md, "Renamed ids").
 func (s *Set) Get(id string) *Ext {
 	if s == nil {
 		return nil
 	}
-	for _, e := range s.exts {
-		if e.ID == id {
-			return e
+	for _, want := range []string{id, config.ExtensionID(id)} {
+		for _, e := range s.exts {
+			if e.ID == want {
+				return e
+			}
 		}
 	}
 	return nil
@@ -117,16 +123,20 @@ func (s *Set) Without(off map[string]bool) *Set {
 	if s == nil {
 		return nil
 	}
+	off2 := map[string]bool{}
+	for id, v := range off {
+		off2[config.ExtensionID(id)] = off2[config.ExtensionID(id)] || v
+	}
 	out := &Set{}
 	for _, e := range s.exts {
-		if !off[e.ID] {
+		if !off2[e.ID] {
 			out.exts = append(out.exts, e)
 		}
 	}
 	return out
 }
 
-// KindAt is the full kind of the version folder in videoDir that an extension's kind claims ("ignition.doc"): the
+// KindAt is the full kind of the version folder in videoDir that an extension's kind claims ("scripts.doc"): the
 // kind's folder holds its marker as a regular file and no versioned video file (a v0/ with clip_v0.mp4 is a video
 // version). "" when none does.
 func (s *Set) KindAt(videoDir string) string {
@@ -168,7 +178,8 @@ func holdsVideo(dir string) bool {
 	return slices.ContainsFunc(entries, func(en os.DirEntry) bool { return !en.IsDir() && isFamilyVideo(en.Name()) })
 }
 
-// Kind finds a full kind id ("ignition.doc"): its extension and the kind.
+// Kind finds a full kind id ("scripts.doc"): its extension and the kind. A renamed extension's old id works
+// ("ignition.doc").
 func (s *Set) Kind(full string) (*Ext, Kind, bool) {
 	id, kid, ok := strings.Cut(full, ".")
 	if !ok {
@@ -184,4 +195,14 @@ func (s *Set) Kind(full string) (*Ext, Kind, bool) {
 		}
 	}
 	return nil, Kind{}, false
+}
+
+// CanonicalKind is a full kind id under its extension's name now: "ignition.doc" is "scripts.doc" (spec/extensions.md,
+// "Renamed ids"). Anything else is returned as it is.
+func CanonicalKind(full string) string {
+	id, kid, ok := strings.Cut(full, ".")
+	if !ok {
+		return full
+	}
+	return config.ExtensionID(id) + "." + kid
 }

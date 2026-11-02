@@ -31,7 +31,7 @@ type Found struct {
 	Kind string
 }
 
-// KindAt says which enabled extension kind a folder's v0/ is ("ignition.doc"), or "" (ext.Set.KindAt).
+// KindAt says which enabled extension kind a folder's v0/ is ("scripts.doc"), or "" (ext.Set.KindAt).
 type KindAt func(dir string) string
 
 // The scan's limits (spec/home.md).

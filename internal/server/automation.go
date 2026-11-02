@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/samahlstrom/retake/internal/bridge"
+	"github.com/samahlstrom/retake/internal/ext"
 	"github.com/samahlstrom/retake/internal/family"
 	"github.com/samahlstrom/retake/internal/jsonx"
 	"github.com/samahlstrom/retake/internal/project"
@@ -638,7 +639,8 @@ func (s *Server) remoteVersion(v project.LiveRender) family.Version {
 func (s *Server) fileVersion(fv project.FileVersion) family.Version {
 	if fv.Kind != "" {
 		// An extension's version (v0): a folder on that computer, nothing to play.
-		return family.Version{Label: fv.Label, N: fv.N, Name: fv.Name, Kind: fv.Kind, Relay: true,
+		// An older computer sends a renamed extension's kind under its old id: "ignition.doc" is "scripts.doc".
+		return family.Version{Label: fv.Label, N: fv.N, Name: fv.Name, Kind: ext.CanonicalKind(fv.Kind), Relay: true,
 			Modified: fv.Modified, Path: filepath.Join(s.root, ".retake", "remote", fv.Label)}
 	}
 	v := family.Version{Label: fv.Label, N: fv.N, Name: fv.Name, FPS: jsonx.Float(fv.FPS), Relay: true,
