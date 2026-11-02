@@ -56,13 +56,18 @@ A **turn** is one run of the agent for the person's messages.
   and the page says "The editing computer is offline"; locally, the worker's `blocked` reason.
 - **Stop** (`POST api/chat/stop`) stops the running turn's process (its process group) and nothing else: no task, no
   other video. Its text so far stays, with an `info` "Stopped". Waiting messages go in the next turn.
-- **A lost worker** (its lease runs out, spec/automation.md) ends the turn with "The editing computer went offline";
-  waiting messages go in the next turn when it's back.
+- **Retake quitting or restarting** stops nothing: the turn's agent runs detached and writes its output to files, and
+  the restarted worker takes the turn back and streams on from where the server has its words (spec/automation.md,
+  "Agents outlive Retake").
+- **A lost worker** (its lease runs out and the 10-minute grace after it, spec/automation.md) ends the turn with "The
+  editing computer went offline"; waiting messages go in the next turn when it's back.
 
 ### The agent's command
 
 The worker runs the profile's headless `command` (spec/automation.md, "Permissions") in the video's folder, with
-the turn's prompt on stdin. The environment is the worker's, plus the profile's `env`, plus `RETAKE_ASK_URL` and
+the turn's prompt on stdin (`chat/<turn>-<i>.md`), detached: its stdout goes to `chat/<turn>-<i>.out`, which the worker
+reads as it grows, and its stderr to `chat/<turn>-<i>.log`. The turn's record is `chat/turn.json` (spec/automation.md,
+"Agents outlive Retake"). The environment is the worker's, plus the profile's `env`, plus `RETAKE_ASK_URL` and
 `RETAKE_ASK_TOKEN` (a fresh secret per turn) so `retake ask` lands in the chat. No `RETAKE_CONTEXT`,
 `RETAKE_REPORT` or `RETAKE_OUTPUT`: a turn has no report. herdr and tmux (`open_in`) don't apply: a turn is always a
 background process.
@@ -206,12 +211,12 @@ use the editing computer that way.
 
 ## Tests
 
-- Go: the store (messages, waiting, the turn's claim, one agent per video both ways, lease loss, stop, the session
-  per agent, `sent` and Send's 409); the routes and roles; the worker with a fake agent (a script that prints Claude's
-  stream-json, edits the document and runs `retake ask`): streamed text, one line per tool, `--resume` with the
-  session on the next turn, a turn queued behind a task, stop killing only that process, the snapshot that undoes a
-  turn, the hosted path through HTTP; the stream parsers on the captured Claude Code and Codex formats
-  (`internal/worker/testdata/`).
+- Go: the store (messages, waiting, the turn's claim, one agent per video both ways, lease loss and its grace, stop,
+  the session per agent, `sent` and Send's 409); the routes and roles; the worker with a fake agent (a script that
+  prints Claude's stream-json, edits the document and runs `retake ask`): streamed text, one line per tool, `--resume`
+  with the session on the next turn, a turn queued behind a task, stop killing only that process, a turn that
+  outlives its worker and streams on from the next one, the snapshot that undoes a turn, the hosted path through HTTP;
+  the stream parsers on the captured Claude Code and Codex formats (`internal/worker/testdata/`).
 - Web unit: the thread's events (text at the right offset, a gap reads again), the tool and info lines, choices.
 - e2e (`e2e/tests/24-chat.spec.ts`), desktop and phone (Chromium, and WebKit iPhone in Docker): chat with a fake
   agent, the document reloads as it edits, a choice is tapped, Stop, Send builds v1 and is then disabled with its

@@ -48,6 +48,20 @@ to the others). The comment turns Done once that video plays.
 - Each task's prompt, context, log and report are in `.retake/worker/tasks/<task>/` (no log in herdr or tmux: the
   session is the log).
 
+## Restarting or updating Retake never stops your agents
+
+An agent's work is just files: its prompt and report in the task's folder, and the project it edits. So you can quit,
+restart or update Retake (Ctrl+C, a crash, `--idle-exit`, a new build) whenever you like, and the agents keep working:
+herdr and tmux sessions stay open, and background agents and chat replies keep running on their own.
+
+When Retake starts again it picks each one back up: the same task, no new prompt. A comment that was Working stays
+Working, and if the agent finished while Retake was down, its report is read then (the new version is made, the
+comments turn Done). If its agent is gone with no report, the comment shows Paused, with Retry. On a hosted review the
+progress line says "Reconnecting to the agent" while your computer is away; after 10 minutes it shows Paused, and the
+agent is still picked back up when your computer reconnects.
+
+Only you stop an agent: Pause or switching agents on a comment, Stop in the chat, or taking all of its comments back.
+
 ## Chat with the agent about a script
 
 On a script (Scripts, v0 of a video), the column beside the document is a chat with the same agent: ask it to shape
@@ -142,7 +156,8 @@ What's different from the background:
   `retake ask` (above), never in the terminal. If it asks there anyway, or hits a usage limit, the comment stays
   Working until it reports; answer it there, or pause the comment from the page.
 - Closing the session (or quitting the agent) before it reports pauses the comment. Pausing or switching agents from
-  the page closes the agent's pane. After the report, the pane is left alone.
+  the page closes the agent's pane. After the report, the pane is left alone. Quitting or restarting Retake never
+  closes it.
 - No usage or cost is recorded: an interactive session has no JSON stream to read it from.
 - The agent's environment is herdr's or tmux's, plus the agent's `env` from your config. `RETAKE_CONTEXT` and
   `RETAKE_REPORT` aren't set; the prompt names both files.
@@ -168,7 +183,7 @@ herdr agent prompt <name> "New Retake task for <video> (...): follow the instruc
 herdr agent get <name>        # every 2 s until the report: is the session still there?
 herdr agent prompt <name> "Answer to your question on note 12 at 1:23: ..."   # an answer while it works
 herdr agent prompt <name> "More comments for Retake task ... : follow the instructions in <prompt file>"   # sent while it works
-herdr pane close <pane>       # only on pause, switch or a lost connection, before the report
+herdr pane close <pane>       # only on pause or switch, before the report
 ```
 
 The next task checks `herdr pane get <pane>` and `herdr agent get <name>`, then sends `herdr agent prompt` again. If the
@@ -187,12 +202,13 @@ tmux set-option -w -t <pane> remain-on-exit on
 tmux list-panes -a -F '#{pane_id} #{pane_dead}'    # every 2 s until the report
 tmux send-keys -t <pane> -l "<line>"; tmux send-keys -t <pane> Enter    # the next task, or an answer, into the running agent
 tmux respawn-pane -k -t <pane> -c <project> ... -- <agent> "<line>"     # the next task when the agent had quit, or another agent
-tmux kill-pane -t <pane>                                               # pause, switch or a lost connection
+tmux kill-pane -t <pane>                                               # pause or switch
 ```
 
 ## How the worker runs an agent
 
-In the background, the worker runs the agent's command in the project folder, with the task prompt on stdin. `RETAKE_CONTEXT` names a
+In the background, the worker runs the agent's command in the project folder, on its own (so it outlives Retake), with
+the task prompt on stdin and its output in the task's `agent-<n>.log`. `RETAKE_CONTEXT` names a
 JSON file with the task and its notes (text, times, strokes, snapshots and images; a note's `missing` says which of
 its files couldn't be given and what the agent has instead, such as a still the worker made itself), and the agent
 writes its answer to `RETAKE_REPORT`: `{"state": "completed", "message": "what changed"}` or `{"state": "question", "message": "..."}`.
