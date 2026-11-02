@@ -69,6 +69,14 @@ const (
 	WhyFailed    = "failed"
 )
 
+// Emit appends an event of any kind on its own (an extension's "ext.files", say).
+func (s *Store) Emit(kind string, data any) error {
+	return s.write(func(t *tx) error {
+		t.emit(kind, data)
+		return nil
+	})
+}
+
 // EmitVersion appends a "version" event on its own (a push records its own with RecordPush).
 func (s *Store) EmitVersion(ev VersionEvent) error {
 	return s.write(func(t *tx) error {

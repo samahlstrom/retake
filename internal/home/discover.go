@@ -26,7 +26,13 @@ type Found struct {
 	// Project is the folder of the project it belongs to, relative like Path: the folder above it when its folder
 	// holds just this video (deadlock for deadlock/item-shop), else its own folder.
 	Project string
+	// Kind is the extension kind of its v0/ folder (spec/extensions.md, "Version kinds"), "" without one. A video's
+	// folder may hold only that: an idea, with Anchor "".
+	Kind string
 }
+
+// KindAt says which enabled extension kind a folder's v0/ is ("ignition.doc"), or "" (ext.Set.KindAt).
+type KindAt func(dir string) string
 
 // The scan's limits (spec/home.md).
 const (
@@ -96,6 +102,20 @@ type scanner struct {
 	linked map[string]bool // the real folders reached through links, so each is entered once
 	videos []Found
 	empty  []Found
+	kindAt KindAt // nil: no kinds
+}
+
+// kind is the kind of dir's v0/ folder, asked only when dir lists one.
+func (s *scanner) kind(dir string) string {
+	if s.kindAt == nil {
+		return ""
+	}
+	for _, e := range s.list(dir) {
+		if e.Name() == "v0" && e.IsDir() {
+			return s.kindAt(dir)
+		}
+	}
+	return ""
 }
 
 func newScanner(top string) *scanner {
@@ -247,9 +267,9 @@ func joinRel(rel, name string) string {
 	return rel + "/" + name
 }
 
-func (s *scanner) add(dir, rel, anchor string) {
-	f := Found{Root: dir, Anchor: anchor, Path: rel}
-	if anchor == "" {
+func (s *scanner) add(dir, rel, anchor, kind string) {
+	f := Found{Root: dir, Anchor: anchor, Path: rel, Kind: kind}
+	if anchor == "" && kind == "" {
 		s.empty = append(s.empty, f)
 	} else {
 		s.videos = append(s.videos, f)
@@ -259,8 +279,8 @@ func (s *scanner) add(dir, rel, anchor string) {
 // walk looks for videos in dir, depth folders below the scanned one. In a video's folder it only looks
 // ProjectDepth folders further (inner): the rest of it is the video's own (assets, work, renders).
 func (s *scanner) walk(dir, rel string, depth int) {
-	if anchor := s.anchor(dir); anchor != "" || s.timeline(dir) {
-		s.add(dir, rel, anchor)
+	if anchor, kind := s.anchor(dir), s.kind(dir); anchor != "" || kind != "" || s.timeline(dir) {
+		s.add(dir, rel, anchor, kind)
 		if depth > 0 {
 			s.inner(dir, rel, 1, depth+1)
 			return
@@ -286,8 +306,8 @@ func (s *scanner) inner(dir, rel string, in, at int) {
 			continue
 		}
 		r := joinRel(rel, d.name)
-		if a := s.anchor(d.path); a != "" {
-			s.add(d.path, r, a)
+		if a, k := s.anchor(d.path), s.kind(d.path); a != "" || k != "" {
+			s.add(d.path, r, a, k)
 		}
 		if in < ProjectDepth {
 			s.inner(d.path, r, in+1, at+1)
@@ -326,9 +346,14 @@ func parentOf(rel string) string {
 
 // ScanDir scans a folder's tree for its folders, projects and videos (spec/home.md). dir must be absolute with
 // symlinks resolved. It reads folders and stats the files named like versioned videos; it never opens a video.
-func ScanDir(dir string) Scan {
+func ScanDir(dir string, kinds ...KindAt) Scan {
 	start := time.Now()
 	s := newScanner(dir)
+	for _, k := range kinds {
+		if k != nil {
+			s.kindAt = k
+		}
+	}
 	if st, err := os.Stat(s.top); err == nil && st.IsDir() { //nolint:gosec // the folder being opened
 		s.walk(s.top, "", 0)
 	}

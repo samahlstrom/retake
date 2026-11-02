@@ -185,6 +185,14 @@ func NextVersionFile(fam []family.Version, ext string) (label, path string, err 
 	return fmt.Sprintf("v%d", top+1), versionPath(parent.Path, m, top+1, ext), nil
 }
 
+// FirstVersionFile is where the first cut of a video that has only an extension's version (v0) goes: v1, in a v1/
+// folder named after the video's folder (spec/ignition.md, "Start v1"), since v0/ already makes it use version
+// folders.
+func FirstVersionFile(root, ext string) (label, path string) {
+	name := filepath.Base(root)
+	return "v1", filepath.Join(root, "v1", name+"_v1"+strings.ToLower(ext))
+}
+
 func nonNil(ids []int64) []int64 {
 	if ids == nil {
 		return []int64{}

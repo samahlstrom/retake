@@ -71,6 +71,8 @@ type Visuals struct {
 	Images  []AgentImage  `json:"images,omitempty"`
 	Options []AgentOption `json:"options,omitempty"`
 	Frame   string        `json:"frame,omitempty"`
+	// Anchor is a question about a place in an extension's document (retake ask --file): no frame, no times.
+	Anchor *Anchor `json:"anchor,omitempty"`
 }
 
 // Limits of a question's visuals.
@@ -108,6 +110,7 @@ type WorkAsk struct {
 	Images  []AgentImage  `json:"images"`
 	Options []AgentOption `json:"options"`
 	Frame   []byte        `json:"frame"`
+	Anchor  *Anchor       `json:"anchor,omitempty"`
 
 	Known func(string) bool                `json:"-"`
 	Size  func(string) (w, h int, ok bool) `json:"-"`
@@ -125,6 +128,7 @@ type TaskQuestion struct {
 	Text    string      `json:"text"`
 	Visuals *Visuals    `json:"visuals,omitempty"`
 	Answer  *TaskAnswer `json:"answer,omitempty"`
+	Anchor  *Anchor     `json:"anchor,omitempty"` // a question about a place in a document
 }
 
 // TaskAnswer is the person's answer to a task's question.
@@ -291,7 +295,8 @@ func (r WorkAsk) visuals(w, h int) (Visuals, error) {
 
 // empty reports whether v has nothing to show.
 func (v Visuals) empty() bool {
-	return len(v.Boxes)+len(v.Arrows)+len(v.Strokes)+len(v.Images)+len(v.Options) == 0 && v.Frame == ""
+	return len(v.Boxes)+len(v.Arrows)+len(v.Strokes)+len(v.Images)+len(v.Options) == 0 && v.Frame == "" &&
+		v.Anchor == nil
 }
 
 // storedQuestion is a question's visuals.json: its range and its visuals, the images by file name.
@@ -424,6 +429,17 @@ func (s *Store) AskInTask(r WorkAsk) (TaskQuestion, error) {
 	case len(r.Frame) > MaxFrame || len(r.Frame) > 0 && http.DetectContentType(r.Frame) != "image/jpeg":
 		return TaskQuestion{}, errors.New("the frame still is a JPEG of 2 MiB at most")
 	}
+	if r.Anchor != nil {
+		if err := r.Anchor.Check(); err != nil {
+			return TaskQuestion{}, err
+		}
+		placed := slices.ContainsFunc(r.Images, func(im AgentImage) bool { return im.Box != nil })
+		if r.At != nil || r.From != nil || r.To != nil || len(r.Boxes)+len(r.Arrows)+len(r.Strokes) > 0 || r.Px ||
+			placed || len(r.Frame) > 0 {
+			return TaskQuestion{}, errors.New("a question about a place in a document (--file) has no moment or " +
+				"visuals on the frame: --at, --from, --to, --box, --arrow, --draw, --px and placed images are refused")
+		}
+	}
 	var out TaskQuestion
 	err := s.write(func(t *tx) error {
 		a, err := readAutomation(t)
@@ -481,6 +497,7 @@ func (s *Store) AskInTask(r WorkAsk) (TaskQuestion, error) {
 		if err != nil {
 			return err
 		}
+		v.Anchor = r.Anchor
 		var id int64
 		if err = t.QueryRow(`INSERT INTO threads (note, version, t, kind, by, text, options, created)
 			VALUES (?, ?, ?, ?, ?, ?, '[]', ?) RETURNING id`, note, version, at, KindQuestion, string(ByAgent), text,
@@ -498,13 +515,18 @@ func (s *Store) AskInTask(r WorkAsk) (TaskQuestion, error) {
 			}
 		}
 		j.Asked = append(j.Asked, TaskAsk{ID: id, Note: note})
-		j.AddEvent(now, fmt.Sprintf("Asked about #%d at %s: %s", note, Clock(at), text))
+		where := "at " + Clock(at)
+		if r.Anchor != nil {
+			where = "in " + r.Anchor.File
+		}
+		j.AddEvent(now, fmt.Sprintf("Asked about #%d %s: %s", note, where, text))
 		if err = saveAutomation(t, a); err != nil {
 			return err
 		}
 		t.emit("automation", map[string]bool{"changed": true})
 		t.emit(EventNotes, NotesEvent{Why: "ask", Version: n.Version, Notes: []int64{note}, Questions: []int64{id}})
-		out = TaskQuestion{ID: id, Note: note, Version: version, At: at, From: r.From, To: r.To, Text: text}
+		out = TaskQuestion{ID: id, Note: note, Version: version, At: at, From: r.From, To: r.To, Text: text,
+			Anchor: r.Anchor}
 		return nil
 	})
 	return out, err
@@ -555,6 +577,9 @@ func (s *Store) TaskQuestions(j EditingTask, url func(id int64, file string) str
 	for i := range qs {
 		id := qs[i].ID
 		qs[i].From, qs[i].To, qs[i].Visuals = s.QuestionVisuals(id, func(file string) string { return url(id, file) })
+		if qs[i].Visuals != nil {
+			qs[i].Anchor = qs[i].Visuals.Anchor
+		}
 	}
 	return qs, nil
 }

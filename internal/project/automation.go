@@ -30,6 +30,16 @@ type EditingWorker struct {
 	Session string         `json:"session,omitempty"`
 	Agents  []AgentProfile `json:"agents"`
 	Seen    int64          `json:"seen"`
+	// Extensions are the ones turned on on that computer (spec/extensions.md, "Turning them on"): their kinds,
+	// agent instructions and tools run there.
+	Extensions []ExtRef `json:"extensions,omitempty"`
+}
+
+// ExtRef is an extension a worker has: its id, version and extension API.
+type ExtRef struct {
+	ID      string `json:"id"`
+	Version string `json:"version"`
+	API     int    `json:"api"`
 }
 
 // AutomationConfig selects the one machine allowed to edit this project.
@@ -119,6 +129,8 @@ type FileVersion struct {
 	FPS      float64 `json:"fps"`
 	Width    int     `json:"width"`
 	Height   int     `json:"height"`
+	// Kind is an extension's version (v0): a folder, not a video file (spec/extensions.md, "Version kinds").
+	Kind string `json:"kind,omitempty"`
 }
 
 // ReviewSubmission waits for final transcription before scheduling its notes. Send means the reviewer asked for
@@ -846,6 +858,41 @@ func (s *Store) ReportWork(r WorkReport, floor int) (LiveRender, error) {
 					free = append(free, id)
 				}
 			}
+			if r.Result == "" && r.Version == "" {
+				// Typed comments on an extension's version are done by the report alone; a note made from a take, or
+				// one that wants a version, needs a render or a new version (spec/extensions.md).
+				docs, cuts, derr := splitDocs(t, free)
+				if derr != nil {
+					return derr
+				}
+				if len(cuts) == 0 && strings.TrimSpace(r.Message) != "" {
+					for _, id := range docs {
+						n, e := noteByID(t, id)
+						if e != nil {
+							return e
+						}
+						if n.Status == StatusRetracted {
+							return errors.New("feedback was retracted")
+						}
+						if _, e = t.Exec(`UPDATE notes SET status='answered', answered_in=?, change=?, updated=? WHERE id=?`, n.Version, r.Message, s.stamp(), id); e != nil {
+							return e
+						}
+					}
+					if len(hold) > 0 {
+						j.Done = append(j.Done, docs...)
+						j.wait(waiting, now, r.Message)
+						break
+					}
+					if len(docs) > 0 {
+						j.State = "completed"
+						j.Lease = ""
+						j.Until = 0
+						j.Error = ""
+						j.AddEvent(now, r.Message)
+						break
+					}
+				}
+			}
 			if r.Result == "" && r.Version == "" && len(j.Asked) > 0 {
 				if len(free) > 0 {
 					// The agent was told an answer just before it reported: it goes again rather than failing.
@@ -917,4 +964,28 @@ func (s *Store) ReportWork(r WorkReport, floor int) (LiveRender, error) {
 		return LiveRender{}, err
 	}
 	return result, nil
+}
+
+// splitDocs sorts notes into typed comments that a report alone finishes (docs) and the rest, which need a render or
+// a new version (cuts).
+func splitDocs(q querier, ids []int64) (docs, cuts []int64, err error) {
+	for _, id := range ids {
+		n, e := noteByID(q, id)
+		if e != nil {
+			return nil, nil, e
+		}
+		if n.WantsVersion() {
+			cuts = append(cuts, id)
+		} else {
+			docs = append(docs, id)
+		}
+	}
+	return docs, cuts, nil
+}
+
+// DocOnly reports whether every note of a task's that is still to do is a typed comment a report alone finishes: the
+// worker then waits for no render and pushes no version.
+func (s *Store) DocOnly(j EditingTask) (bool, error) {
+	_, cuts, err := splitDocs(s.db, j.Pending())
+	return len(cuts) == 0 && len(j.Pending()) > 0, err
 }

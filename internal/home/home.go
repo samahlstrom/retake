@@ -25,6 +25,8 @@ const (
 	ToReview    Status = "to_review"    // no one has closed a take on it yet
 	Reviewed    Status = "reviewed"     // closed takes, nothing open: the notes are being written up, or there are none
 	BeingEdited Status = "being_edited" // closed takes and open notes: the agent's turn
+	// NoCut is a video whose only versions are an extension's kind (spec/extensions.md, "Version kinds"): an idea.
+	NoCut Status = "no_cut"
 )
 
 // StatusOf applies the rules: closed is the number of closed takes on the newest version, open the number of its
@@ -68,6 +70,11 @@ type Card struct {
 	Questions int     `json:"questions"`
 	Stream    *Stream `json:"stream"`
 	Thumb     string  `json:"thumb"` // relative to the home
+	// Kind is the extension kind of a video whose only version is of that kind (status no_cut); Kinds the kinds of
+	// the versions it has. Changed is its newest change in Unix ms: its documents' edits or its newest push.
+	Kind    string   `json:"kind,omitempty"`
+	Kinds   []string `json:"kinds,omitempty"`
+	Changed int64    `json:"changed"`
 }
 
 // User is the signed-in person on the team server's home.
@@ -108,6 +115,8 @@ type infoVersion struct {
 	Duration *float64        `json:"duration"`
 	Stream   json.RawMessage `json:"stream"`
 	Poster   *string         `json:"poster"`
+	Kind     string          `json:"kind"`
+	Modified int64           `json:"modified"`
 }
 
 type infoBody struct {
@@ -140,6 +149,23 @@ func Make(src Source) Card {
 			cur.Poster = v.Poster
 		}
 	}
+	for _, v := range info.Versions {
+		if v.Kind != "" && !slices.Contains(c.Kinds, v.Kind) {
+			c.Kinds = append(c.Kinds, v.Kind)
+			c.Changed = max(c.Changed, v.Modified)
+		}
+	}
+	if cur.Kind != "" {
+		// Only a kind's version (an idea): no video, no thumbnail and no review status.
+		c.Version, c.Versions, c.Status, c.Kind = cur.Label, len(info.Versions), NoCut, cur.Kind
+		if src.Store != nil {
+			c.Open, c.Questions = openNotes(src.Store, cur.Label, "")
+		}
+		if c.Changed > 0 {
+			c.Pushed = time.UnixMilli(c.Changed).UTC().Format(time.RFC3339)
+		}
+		return c
+	}
 	c.Version, c.Versions, c.Duration = cur.Label, len(info.Versions), cur.Duration
 	c.Video = VideoName(cur.Name)
 	c.Stream = ParseStream(cur.Stream)
@@ -162,6 +188,9 @@ func Make(src Source) Card {
 		}
 	}
 	c.Status = StatusOf(c.Takes, c.Open)
+	if t, err := time.Parse(time.RFC3339, c.Pushed); err == nil {
+		c.Changed = max(c.Changed, t.UnixMilli())
+	}
 	return c
 }
 
@@ -262,7 +291,7 @@ func closedTake(dir string) bool {
 // asked about, and of those the asked-about ones.
 func openNotes(st *project.Store, label, video string) (open, questions int) {
 	sc := project.Scope{Version: label}
-	for _, x := range store.InheritedTakes(video) {
+	for _, x := range inherited(video) {
 		sc.Carried = append(sc.Carried, project.Carried{Take: filepath.Base(x.Dir), Ranges: x.Ranges})
 	}
 	notes, err := st.Notes(project.NoteFilter{Statuses: []project.Status{project.StatusOpen, project.StatusQuestion},
@@ -310,4 +339,12 @@ func pushedAt(c Card) int64 {
 		return 0
 	}
 	return t.UnixNano()
+}
+
+// inherited is the takes a version's file carries over (none for a kind's folder, which has no file).
+func inherited(video string) []store.Inherited {
+	if video == "" {
+		return nil
+	}
+	return store.InheritedTakes(video)
 }

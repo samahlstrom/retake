@@ -30,6 +30,9 @@ type Item struct {
 	Targets    []Target     `json:"targets,omitempty"`  // notes: the timeline elements under it (spec/bridge.md)
 	Carried    *CarriedFrom `json:"carried,omitempty"`  // a note of the parent version, shown here at its mapped time
 	Ask        *ItemAsk     `json:"ask,omitempty"`      // notes: the open question its task's agent asked about it
+	Key        string       `json:"key,omitempty"`      // notes: a typed comment's doc/<n>
+	Anchor     *Anchor      `json:"anchor,omitempty"`   // typed comments: where in a document it points
+	Wants      string       `json:"wants,omitempty"`    // typed comments: "version" when it asks for a cut
 
 	imagesOf *Note // the note whose images this item shows
 }
@@ -46,6 +49,8 @@ type ItemAsk struct {
 	Version string   `json:"version"`
 	Text    string   `json:"text"`
 	Visuals *Visuals `json:"visuals,omitempty"`
+	// Anchor is a question about a place in a document (retake ask --file), in place of a moment of the video.
+	Anchor *Anchor `json:"anchor,omitempty"`
 }
 
 // CarriedFrom says where a carried-over item comes from and what became of its moment (spec/bridge.md, "Carrying
@@ -70,6 +75,9 @@ func ItemOf(n Note) Item {
 	}
 	if n.Status == StatusAnswered || n.Status == StatusAccepted {
 		it.Change, it.AnsweredIn = n.Change, n.AnsweredIn
+	}
+	if n.IsDoc() {
+		it.Key, it.Anchor, it.Wants = n.Key, n.Detail.Anchor, n.Detail.Wants
 	}
 	return it
 }

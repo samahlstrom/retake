@@ -8,6 +8,7 @@ import (
 	"math"
 	"slices"
 	"strings"
+	"unicode/utf8"
 )
 
 // Stroke is one pen stroke of a note, as the notes engine describes it.
@@ -54,6 +55,113 @@ type Detail struct {
 	Targets []Target `json:"targets,omitempty"`
 	Unit    string   `json:"unit,omitempty"`
 	Word    *Word    `json:"word,omitempty"`
+	// Anchor is where a typed comment on an extension's version points (spec/extensions.md, "Comments and questions
+	// on an extension's version"), and Wants "version" when it asks for a cut.
+	Anchor *Anchor `json:"anchor,omitempty"`
+	Wants  string  `json:"wants,omitempty"`
+}
+
+// Anchor is a place in an extension's owned text file: the line (from 1), the nearest heading above it and up to
+// MaxQuote characters of its paragraph. Readers find it by heading, then quote, then line, so it survives edits.
+type Anchor struct {
+	File    string `json:"file"`
+	Line    int    `json:"line"`
+	Heading string `json:"heading,omitempty"`
+	Quote   string `json:"quote,omitempty"`
+}
+
+// Limits of an anchor.
+const (
+	MaxQuote   = 200
+	MaxHeading = 200
+)
+
+// Check reports what's wrong with an anchor: a relative slash path without "..", hidden or empty segments, a line
+// from 1, and a heading and quote within their limits.
+func (a Anchor) Check() error {
+	bad := a.File == "" || len(a.File) > 1024 || strings.ContainsAny(a.File, "\\\x00") || strings.HasPrefix(a.File, "/")
+	for _, seg := range strings.Split(a.File, "/") {
+		if seg == "" || seg == "." || seg == ".." || strings.HasPrefix(seg, ".") {
+			bad = true
+		}
+	}
+	switch {
+	case bad:
+		return errors.New("an anchor's file is a path in the video's folder, like v0/script.md")
+	case a.Line < 1 || a.Line > 1_000_000:
+		return errors.New("an anchor's line is a line number, from 1")
+	case utf8.RuneCountInString(a.Heading) > MaxHeading:
+		return fmt.Errorf("an anchor's heading is at most %d characters", MaxHeading)
+	case utf8.RuneCountInString(a.Quote) > MaxQuote:
+		return fmt.Errorf("an anchor's quote is at most %d characters", MaxQuote)
+	}
+	return nil
+}
+
+// DocKey is the key prefix of typed comments: they aren't made from takes, so a notes sync never retracts them.
+const DocKey = "doc/"
+
+// IsDoc reports whether a note is a typed comment on an extension's version.
+func (n Note) IsDoc() bool { return strings.HasPrefix(n.Key, DocKey) }
+
+// WantsVersion reports whether a note asks for a new video version (a typed comment with "wants": "version", or any
+// note made from a take): only a version finishes it.
+func (n Note) WantsVersion() bool { return !n.IsDoc() || n.Detail.Wants == WantsVersion }
+
+// WantsVersion is the one value of a typed comment's "wants".
+const WantsVersion = "version"
+
+// MaxDocNote is the longest typed comment.
+const MaxDocNote = 4000
+
+// AddDocNote adds a typed comment on version (spec/extensions.md): an open note with the key doc/<n>, no take and no
+// times, and its anchor and wants in its detail.
+func (s *Store) AddDocNote(version, text, author string, anchor *Anchor, wants string) (Note, error) {
+	text = strings.TrimSpace(text)
+	switch {
+	case text == "" || utf8.RuneCountInString(text) > MaxDocNote:
+		return Note{}, fmt.Errorf("a comment is 1 to %d characters", MaxDocNote)
+	case wants != "" && wants != WantsVersion:
+		return Note{}, fmt.Errorf("wants is %q or nothing", WantsVersion)
+	}
+	if anchor != nil {
+		if err := anchor.Check(); err != nil {
+			return Note{}, err
+		}
+	}
+	detail, err := json.Marshal(Detail{Anchor: anchor, Wants: wants})
+	if err != nil {
+		return Note{}, err
+	}
+	var out Note
+	err = s.write(func(t *tx) error {
+		var n int64
+		if err := t.QueryRow(`SELECT COUNT(*) FROM notes WHERE key LIKE 'doc/%'`).Scan(&n); err != nil {
+			return err
+		}
+		now := s.stamp()
+		var id int64
+		for k := n + 1; ; k++ {
+			key := fmt.Sprintf("%s%d", DocKey, k)
+			var used int
+			if err := t.QueryRow(`SELECT COUNT(*) FROM notes WHERE key = ?`, key).Scan(&used); err != nil {
+				return err
+			}
+			if used > 0 {
+				continue
+			}
+			if err := t.QueryRow(`INSERT INTO notes (key, version, take, seg, t0, t1, text, author, status, detail, created,
+				updated) VALUES (?, ?, '', '', 0, 0, ?, ?, ?, ?, ?, ?) RETURNING id`, key, version, text, author,
+				string(StatusOpen), string(detail), now, now).Scan(&id); err != nil {
+				return err
+			}
+			break
+		}
+		t.emit(EventNotes, NotesEvent{Why: "add", Version: version, Notes: []int64{id}, Opened: []int64{id}})
+		out, err = noteByID(t, id)
+		return err
+	})
+	return out, err
 }
 
 // Target is a timeline element under a note (spec/bridge.md, "Notes resolve to elements").
@@ -332,8 +440,8 @@ func (s *Store) Sync(run Run) (SyncResult, error) {
 			return err
 		}
 		for _, n := range open {
-			if seen[n.Key] || slices.Contains(res.Reopened, n.ID) {
-				continue // still produced, or its question was just answered
+			if seen[n.Key] || slices.Contains(res.Reopened, n.ID) || n.IsDoc() {
+				continue // still produced, its question was just answered, or typed (no take makes it)
 			}
 			if err := t.setStatus(n.ID, StatusRetracted); err != nil {
 				return err

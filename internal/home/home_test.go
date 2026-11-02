@@ -168,7 +168,7 @@ func TestMakeCards(t *testing.T) {
 	takeIn(t, video, "2026-10-02_10-00-00", false)
 	c := Make(Source{Name: "clip", Title: "Clip", Info: infoOf(t, "v2", video, nil)})
 	want := Card{Name: "clip", Title: "Clip", Video: "clip", URL: "p/clip/", Version: "v2", Versions: 2, Duration: c.Duration,
-		Pushed: "2026-10-01T12:00:00Z", Status: ToReview, Thumb: "p/clip/api/poster"}
+		Pushed: "2026-10-01T12:00:00Z", Status: ToReview, Thumb: "p/clip/api/poster", Changed: pushed.UnixMilli()}
 	if c.Duration == nil || *c.Duration != 12.5 || !reflect.DeepEqual(c, want) {
 		t.Errorf("card %+v", c)
 	}

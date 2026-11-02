@@ -93,6 +93,64 @@ type Version struct {
 	// Relay says the version plays from a connected computer through the server's relay (spec/automation.md):
 	// a worker's render or one of its version files. It can't play while that computer is offline.
 	Relay bool `json:"relay,omitempty"`
+	// Kind is an extension's kind of version (spec/extensions.md, "Version kinds"), "<ext>.<kind>": a folder such as
+	// v0/ that isn't a video. It has no duration, size or poster, and no file plays.
+	Kind string `json:"kind,omitempty"`
+	// Modified is a kind version's newest file change (Unix ms): when its documents were last edited.
+	Modified int64 `json:"modified,omitempty"`
+}
+
+// KindVersion is the version a kind's folder is: label and name are the folder ("v0"), number 0, no duration, and
+// the newest change of the files in it (two folders deep).
+func KindVersion(dir, folder, kind string) Version {
+	p := filepath.Join(dir, folder)
+	return Version{Label: folder, N: 0, Path: p, Name: folder, Kind: kind, Modified: newest(p, 2)}
+}
+
+// newest is the newest modification time (Unix ms) of the files in dir and its folders, depth levels down; hidden
+// ones are left out.
+func newest(dir string, depth int) int64 {
+	var out int64
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return 0
+	}
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".") {
+			continue
+		}
+		if e.IsDir() {
+			if depth > 0 {
+				out = max(out, newest(filepath.Join(dir, e.Name()), depth-1))
+			}
+			continue
+		}
+		if info, err := e.Info(); err == nil && info.Mode().IsRegular() {
+			out = max(out, info.ModTime().UnixMilli())
+		}
+	}
+	return out
+}
+
+// WithKind puts a kind version first in a family, unless the family already has a version with its label.
+func WithKind(f []Version, v Version) []Version {
+	for _, x := range f {
+		if x.Label == v.Label {
+			return f
+		}
+	}
+	return append([]Version{v}, f...)
+}
+
+// Cuts is the family without its kind versions: the ones that play.
+func Cuts(f []Version) []Version {
+	out := make([]Version, 0, len(f))
+	for _, v := range f {
+		if v.Kind == "" {
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 // Prober is what Detect needs from probe.Prober.

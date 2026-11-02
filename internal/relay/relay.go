@@ -55,7 +55,25 @@ type Request struct {
 	File    string `json:"file"`
 	Range   string `json:"range,omitempty"`
 	Head    bool   `json:"head,omitempty"`
+	// Op is an extension's request about its owned files of the project's folder (spec/extensions.md, "Files it
+	// owns"): ext.list, ext.read, ext.write, ext.delete, ext.stat, ext.history, ext.undo, ext.transcribe or ext.job.
+	// "" is a media read. Ext is the extension, Path the owned file (or Glob for ext.list), IfMatch its If-Match,
+	// Job a transcription's id and Edit an agent edit's. With HasBody the worker fetches the body from
+	// GET /api/worker/media/<id>/body.
+	Op      string `json:"op,omitempty"`
+	Ext     string `json:"ext,omitempty"`
+	Path    string `json:"path,omitempty"`
+	Glob    string `json:"glob,omitempty"`
+	IfMatch string `json:"if_match,omitempty"`
+	Job     string `json:"job,omitempty"`
+	Edit    string `json:"edit,omitempty"`
+	HasBody bool   `json:"has_body,omitempty"`
+	// Body is what HasBody's fetch gets; it never goes in the request's JSON.
+	Body []byte `json:"-"`
 }
+
+// MaxBody is the largest body an ext.write request carries (an owned file's limit).
+const MaxBody = 25 << 20
 
 // Response is a worker's answer. Body streams the worker's upload as it arrives: whoever got it from Fetch reads it
 // and then calls Close, which lets the worker's request end.
@@ -64,6 +82,7 @@ type Response struct {
 	Type, Range string
 	Length      int64 // the Content-Length the browser is told
 	Modified    int64 // a version file's mtime (Unix ms); 0 for a render's media
+	ETag        string
 	Body        io.Reader
 
 	done chan struct{}
@@ -156,6 +175,17 @@ func (h *Hub) Fetch(ctx context.Context, worker string, r Request) (Response, er
 			}
 		}
 	}
+}
+
+// Body is the body of a request this worker has taken (an ext.write's file). ok is false for any other request.
+func (h *Hub) Body(worker, id string) (body []byte, ok bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	p := h.pending[id]
+	if p == nil || p.worker != worker || !p.delivered || !p.request.HasBody {
+		return nil, false
+	}
+	return p.request.Body, true
 }
 
 // Next waits for one media read belonging to this worker. Empty responses are keepalives.
