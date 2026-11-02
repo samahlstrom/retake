@@ -2,6 +2,8 @@ This video's plan is one Markdown document, `v0/<video>_v0.md` (the one `*_v0.md
 both edit it.
 
 - The person's own words under its `#` title are theirs: don't rewrite or remove them.
+- Write each paragraph, list item and `[shown]` direction as one line: no hard line breaks inside them. The page wraps
+  text to the screen, and a phone shows broken lines as ragged short lines.
 - Shape it in that same file: a `## Outline` section with the beats, then a `## Script` section with the same beats as
   `###` headings, what's said as paragraphs and what's shown in `[brackets]`. Keep the person's phrasing where it
   works. Don't make other files in `v0/`.

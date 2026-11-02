@@ -475,13 +475,15 @@ export function build(state: EditorState, tree: Tree = syntaxTree(state)): Decor
     return act.some(([x, y]) => x <= b && y >= a);
   };
   const out: Range<Decoration>[] = [];
-  /** Per line: how far from its start is hidden already (so two hidden ranges never overlap). */
+  /** Per line: where the text hidden at its start ends (a quote's `> `), so a list's mark or indent never overlaps it.
+   * Hidden text further on, such as the `**` of a bold word after a list's `1. `, doesn't count. */
   const hiddenTo = new Map<number, number>();
   const hide = (from: number, to: number): void => {
     if (to <= from) return;
     out.push(HIDE.range(from, to));
-    const n = doc.lineAt(from).number;
-    hiddenTo.set(n, Math.max(hiddenTo.get(n) ?? 0, to));
+    const l = doc.lineAt(from);
+    const start = hiddenTo.get(l.number) ?? l.from;
+    if (from <= start || !doc.sliceString(start, from).trim()) hiddenTo.set(l.number, Math.max(start, to));
   };
   const mark = (cls: string, from: number, to: number, attrs?: Record<string, string>): void => {
     if (to > from) out.push((attrs ? Decoration.mark({ class: cls, attributes: attrs }) : markOf(cls)).range(from, to));
@@ -689,13 +691,14 @@ export function build(state: EditorState, tree: Tree = syntaxTree(state)): Decor
         while (start > l.from && space(l.text[start - 1 - l.from])) start--;
         start = Math.max(start, hiddenTo.get(num) ?? l.from);
         const end = after(task ? task.to : it.mark.to);
-        out.push(
-          Decoration.replace({
-            widget: task
-              ? new TaskBox(checked, !!cfg.readonly)
-              : new ListMark(it.ordered ? doc.sliceString(it.mark.from, it.mark.to) : '•', it.ordered),
-          }).range(start, end),
-        );
+        if (end > start)
+          out.push(
+            Decoration.replace({
+              widget: task
+                ? new TaskBox(checked, !!cfg.readonly)
+                : new ListMark(it.ordered ? doc.sliceString(it.mark.from, it.mark.to) : '•', it.ordered),
+            }).range(start, end),
+          );
       } else {
         markup(it.mark.from, it.mark.to);
         if (task) markup(task.from, task.to);
@@ -747,10 +750,21 @@ interface Built {
 
 const keyOf = (s: EditorState): string => activeLines(s).join(';');
 
+/** The preview's decorations, or none when building them fails: a bug in the preview shows the plain Markdown, never
+ * an empty page. */
+function safeBuild(s: EditorState, tree: Tree): DecorationSet {
+  try {
+    return build(s, tree);
+  } catch (e) {
+    console.error('scripts: the live preview failed; showing plain text', e);
+    return Decoration.none;
+  }
+}
+
 const preview = StateField.define<Built>({
   create(s) {
     const tree = syntaxTree(s);
-    return { deco: build(s, tree), tree, key: keyOf(s) };
+    return { deco: safeBuild(s, tree), tree, key: keyOf(s) };
   },
   update(v, tr) {
     const tree = syntaxTree(tr.state);
@@ -761,7 +775,7 @@ const preview = StateField.define<Built>({
       key !== v.key ||
       tr.effects.some((e) => e.is(setFlash) || e.is(setQuestions)) ||
       tr.startState.facet(liveConfig) !== tr.state.facet(liveConfig);
-    return redraw ? { deco: build(tr.state, tree), tree, key } : v;
+    return redraw ? { deco: safeBuild(tr.state, tree), tree, key } : v;
   },
   provide: (f) => EditorView.decorations.from(f, (v) => v.deco),
 });

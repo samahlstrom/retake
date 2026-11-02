@@ -126,6 +126,17 @@ describe('lists and tasks', () => {
     expect(v.lines.get(2)).toBe('ig-li ig-d1 ig-li-first');
     expect(v.lines.get(5)).toBe('ig-li ig-d0 ig-li-first ig-done');
   });
+  it('start with a bold word and still get their mark (an outline: "1. **Cold open** (0:00–0:08): …")', () => {
+    const d = '1. **Cold open** (0:00–0:08): the list\n2. **Retake** lands\n- **Flip** fast\n\nEnd';
+    const s = state(d, d.length);
+    const v = seen(s);
+    expect(v.widgets.map((w) => [s.sliceDoc(w.from, w.to), w.name])).toEqual([
+      ['1. ', 'ListMark'],
+      ['2. ', 'ListMark'],
+      ['- ', 'ListMark'],
+    ]);
+    expect(text(s, v.hidden)).toEqual(['**', '**', '**', '**', '**', '**']);
+  });
   it('show the raw marks on the caret line', () => {
     const s = state(doc, doc.indexOf('todo'));
     const v = seen(s);
