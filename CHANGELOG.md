@@ -11,6 +11,20 @@ All notable changes are listed here. Versions follow semver once the first relea
 - The old id keeps working: `[extensions] enabled = ["ignition"]`, `[extensions.ignition]`, `retake ext enable
   ignition`, `--extensions ignition`, a person's `{"ignition": false}`, and a computer still on an older retake that
   reports `ignition` and `ignition.doc` (spec/extensions.md, "Renamed ids"). Nothing on disk moves.
+- Settings at the bottom of the folder column has a gear for its icon (it was a sun).
+
+### Embeds in a script
+- A web address alone on its own line in a script's document shows what it points to (spec/scripts.md, "Embeds"):
+  YouTube (watch, youtu.be, Shorts, a start time), Vimeo, Loom, Twitch clips and videos, X posts, Instagram posts and
+  reels, TikTok, Spotify, SoundCloud, Figma and Google Docs, Slides and Sheets play in a sandboxed frame on the site's
+  own embed address; a raw `<iframe src="https://…">` line is rebuilt with only its address and size; any other page
+  is a quiet card with its title, site and picture. The box is reserved before anything loads, nothing is wider than
+  a phone, and on the caret's line the address shows as typed. A link inside a sentence stays a link. The agent is
+  told to put a link alone on its line to embed it.
+- `GET api/link-preview?url=` (spec/api.md, "Link preview"): the server reads a public page's `og:` tags and title
+  for the cards, never a loopback, private, link-local or metadata address (checked at the connection, after DNS and
+  on every redirect), in 5 s and 1 MiB at most, cached on disk. `ctx.linkPreview(url)` in the page API.
+- A long script opens at its top again on a desktop (the opening focus no longer scrolls to the caret at the end).
 
 ### Phones, paused tasks and recordings
 - Phone (portrait): the comments always fill the space between the controls and Record and Send, with To do · Done,

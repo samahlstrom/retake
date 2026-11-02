@@ -69,6 +69,18 @@ export interface Ctx {
   toast(text: string): void;
   /** Its server: ext/<id>/api/<path>. */
   fetch(path: string, init?: RequestInit): Promise<Response>;
+  /** Under a video: what a public web page says about itself (GET api/link-preview), for a link card. Rejects with
+   * status 400 for an address that isn't a public web page, 502 for a page that can't be read. */
+  linkPreview(url: string): Promise<LinkPreview>;
+}
+
+/** A web page's title, site and picture (an https address), as `ctx.linkPreview` reads them; '' when it doesn't say. */
+export interface LinkPreview {
+  url: string;
+  title: string;
+  site: string;
+  image: string;
+  description: string;
 }
 
 export interface VideoRef {

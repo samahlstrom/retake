@@ -213,3 +213,75 @@ describe('questions', () => {
     ]);
   });
 });
+
+describe('embeds', () => {
+  const doc = [
+    '# Refs', // 1
+    '', // 2
+    'https://youtu.be/dQw4w9WgXcQ', // 3: a player
+    '', // 4
+    'See https://example.com/inline for more.', // 5: a link in a sentence
+    '', // 6
+    '<https://example.com/a-page>', // 7: a card
+    '', // 8
+    '```', // 9
+    'https://youtu.be/dQw4w9WgXcQ', // 10: code
+    '```', // 11
+    '', // 12
+    '<iframe src="https://player.example/x" width="4" height="3"></iframe>', // 13: a raw frame
+    '', // 14
+    '    https://example.com/indented-code', // 15: code
+    '',
+  ].join('\n');
+  type EmbedSpec = { kind: string; src?: string; url?: string; ratio?: number };
+  function embeds(s: EditorState): { line: number; e: EmbedSpec }[] {
+    const out: { line: number; e: EmbedSpec }[] = [];
+    decorationsOf(s).between(0, s.doc.length, (from, _to, d) => {
+      const w = (d.spec as { widget?: { constructor: { name: string }; e?: EmbedSpec } }).widget;
+      if (w?.constructor.name === 'EmbedView') out.push({ line: s.doc.lineAt(from).number, e: w.e! });
+    });
+    return out;
+  }
+
+  it('an address alone on its line, or one raw frame, embeds under it; a link in a sentence and code don’t', () => {
+    const s = state(doc, 0, true, { page: 'retake.example' });
+    expect(embeds(s)).toEqual([
+      {
+        line: 3,
+        e: expect.objectContaining({ kind: 'frame', src: 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ' }),
+      },
+      { line: 7, e: { kind: 'card', url: 'https://example.com/a-page' } },
+      { line: 13, e: expect.objectContaining({ kind: 'frame', src: 'https://player.example/x', ratio: 4 / 3 }) },
+    ]);
+    const v = seen(s);
+    const blocks = v.widgets.filter((w) => w.name === 'EmbedView');
+    expect(blocks.every((w) => w.block && w.from === s.doc.line(s.doc.lineAt(w.from).number).to)).toBe(true);
+    // Off the caret's line, the line folds away: only its embed shows.
+    expect([3, 7, 13].map((n) => v.lines.get(n))).toEqual(['ig-embed-src', 'ig-embed-src', 'ig-embed-src']);
+    expect(v.lines.get(5)).toBeUndefined();
+  });
+
+  it('on the caret’s line the address shows as typed, with the same embed under it', () => {
+    const at = doc.indexOf('https://youtu.be');
+    const s = state(doc, at + 3);
+    const v = seen(s);
+    expect(v.lines.get(3)).toBeUndefined();
+    expect(v.lines.get(7)).toBe('ig-embed-src');
+    expect(embeds(s).map((x) => x.line)).toEqual([3, 7, 13]);
+    // The widget is equal across the caret coming and going, so its element (a playing video) stays.
+    const widget = (st: EditorState) => {
+      let w: { eq(o: unknown): boolean } | undefined;
+      decorationsOf(st).between(at, at + 40, (_f, _t, d) => {
+        const x = (d.spec as { widget?: { constructor: { name: string }; eq(o: unknown): boolean } }).widget;
+        if (x?.constructor.name === 'EmbedView') w = x;
+      });
+      return w!;
+    };
+    expect(widget(s).eq(widget(state(doc, 0)))).toBe(true);
+  });
+
+  it('a frame of this page’s own host stays text', () => {
+    const own = '<iframe src="https://retake.example/p/x/"></iframe>\n';
+    expect(embeds(state(own, own.length, true, { page: 'retake.example' }))).toEqual([]);
+  });
+});

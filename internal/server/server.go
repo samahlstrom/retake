@@ -27,6 +27,7 @@ import (
 	"github.com/samahlstrom/retake/internal/family"
 	"github.com/samahlstrom/retake/internal/jobs"
 	"github.com/samahlstrom/retake/internal/jsonx"
+	"github.com/samahlstrom/retake/internal/linkcard"
 	"github.com/samahlstrom/retake/internal/project"
 	"github.com/samahlstrom/retake/internal/relay"
 	"github.com/samahlstrom/retake/internal/store"
@@ -146,6 +147,10 @@ type Options struct {
 	FileTranscriber func() (transcribe.Transcriber, error)
 	RemoteFiles     bool
 	ExtWatchEvery   time.Duration
+
+	// Links reads the pages of a script's link cards (GET /api/link-preview, spec/api.md "Link preview"); nil is
+	// linkcard.Default(), which never connects to an address that isn't public.
+	Links *linkcard.Reader
 }
 
 // Server serves one version family.
@@ -606,6 +611,8 @@ func (s *Server) get(w http.ResponseWriter, r *http.Request, parts []string) {
 		s.questionFile(w, r, parts[2], parts[3])
 	case is(parts, "api", "poster"):
 		s.poster(w, r)
+	case is(parts, "api", "link-preview"):
+		s.linkPreview(w, r)
 	case parts[0] == "api" || parts[0] == "video":
 		s.fail(w, r, http.StatusNotFound, "not found")
 	default:

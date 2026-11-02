@@ -259,3 +259,18 @@ to To do), screenshots `comments-0`, `comments-8` and
 `comments-8-scrolled`; every control at least 40 px and inside the screen and the visual viewport, nothing sideways;
 the pen's popover; a typed comment with a drawing, saved with its Save; the version menu; recording (a Web Audio stand-in for
 the microphone, and a stand-in recorder where WebKit has none), with Send not moving; and the home's Settings.
+
+**`22-embeds`** and **`22-embeds-webkit`** (new only; `spec/scripts.md`, "Embeds"): `retake open` with Scripts on and
+a document holding a YouTube address, an unknown page, a picture, a link in a sentence, a raw `<iframe>` and a Twitch
+clip. Chromium on a desktop and an iPhone 15; WebKit (`RETAKE_E2E_WEBKIT`) on the iPhone 13 and iPhone 15. No site is
+loaded: the test answers every request that leaves the test server (a stub page or a generated picture) and the link
+preview itself (`lib/embeds.ts`).
+- The YouTube frame's `src` is `youtube-nocookie.com/embed/<id>?start=42`, its attributes exactly `sandbox`, `allow`,
+  `referrerpolicy`, `loading`, `title` and `src`, its box 16:9; the raw frame keeps only its address, size (4:3) and
+  title; the Twitch clip names this page's host as `parent`; the link in a sentence stays a link.
+- The card shows the address's host and path, then the preview's title, site and picture, without its box or what
+  follows moving; a click or a tap opens the address in a new tab.
+- On the desktop the address line is folded away off the caret; ArrowDown onto it shows it as typed, with the same
+  frame element under it.
+- Nothing is wider than the screen. Screenshots: `.retake-work/embeds-shots/` (`chromium-desktop`,
+  `chromium-iphone15`, `webkit-<device>` and `webkit-<device>-embeds`).

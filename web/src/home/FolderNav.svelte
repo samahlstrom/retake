@@ -299,13 +299,14 @@
         href="#settings"
         aria-current={home.settings ? 'page' : undefined}
         ><span class="chev" aria-hidden="true"
-          ><svg viewBox="0 0 20 20"
-            ><circle cx="10" cy="10" r="2.6" fill="none" stroke="currentColor" stroke-width="1.5" /><path
-              d="M10 2.75v2M10 15.25v2M17.25 10h-2M4.75 10h-2M15.13 4.87l-1.42 1.42M6.29 13.71l-1.42 1.42M15.13 15.13l-1.42-1.42M6.29 6.29 4.87 4.87"
+          ><svg viewBox="0 0 20 20" data-icon="gear"
+            ><path
+              d="M8.63 4.06L8.94 1.97A8.1 8.1 0 0 1 11.06 1.97L11.37 4.06A6.1 6.1 0 0 1 13.23 4.83L14.93 3.57A8.1 8.1 0 0 1 16.43 5.07L15.17 6.77A6.1 6.1 0 0 1 15.94 8.63L18.03 8.94A8.1 8.1 0 0 1 18.03 11.06L15.94 11.37A6.1 6.1 0 0 1 15.17 13.23L16.43 14.93A8.1 8.1 0 0 1 14.93 16.43L13.23 15.17A6.1 6.1 0 0 1 11.37 15.94L11.06 18.03A8.1 8.1 0 0 1 8.94 18.03L8.63 15.94A6.1 6.1 0 0 1 6.77 15.17L5.07 16.43A8.1 8.1 0 0 1 3.57 14.93L4.83 13.23A6.1 6.1 0 0 1 4.06 11.37L1.97 11.06A8.1 8.1 0 0 1 1.97 8.94L4.06 8.63A6.1 6.1 0 0 1 4.83 6.77L3.57 5.07A8.1 8.1 0 0 1 5.07 3.57L6.77 4.83A6.1 6.1 0 0 1 8.63 4.06Z"
+              fill="none"
               stroke="currentColor"
               stroke-width="1.5"
-              stroke-linecap="round"
-            /></svg
+              stroke-linejoin="round"
+            /><circle cx="10" cy="10" r="2.4" fill="none" stroke="currentColor" stroke-width="1.5" /></svg
           ></span
         ><span class="label">Settings</span></a
       >

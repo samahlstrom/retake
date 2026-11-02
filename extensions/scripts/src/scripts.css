@@ -785,6 +785,82 @@
   font-size: 14px;
 }
 
+/* Embeds (spec/scripts.md, "Embeds"): a frame in a box of its size from the start, or a quiet link card of a fixed
+   height. Never wider than the text. */
+[data-ext='scripts'] .ig-embed {
+  max-width: 100%;
+  padding: 0.35em 0 0.5em;
+  text-indent: 0;
+}
+[data-ext='scripts'] .ig-embed-box {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+}
+[data-ext='scripts'] .ig-embed-box iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+[data-ext='scripts'] .ig-card {
+  display: flex;
+  align-items: stretch;
+  height: 76px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  color: inherit;
+  font-family: var(--font-ui);
+  text-decoration: none;
+  cursor: pointer;
+}
+[data-ext='scripts'] .ig-card:hover {
+  border-color: var(--border);
+}
+[data-ext='scripts'] .ig-card-text {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 0 14px;
+}
+[data-ext='scripts'] .ig-card-title {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text-strong);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+[data-ext='scripts'] .ig-card-site {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+[data-ext='scripts'] .ig-card-pic {
+  flex: 0 0 auto;
+  width: 120px;
+  background: var(--surface-sunken);
+}
+[data-ext='scripts'] .ig-card-pic img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 /* ---------------------------------------------------------------- phones (the page's own test, lib/layout.ts) */
 @media (max-width: 799.98px),
   (max-height: 419.98px),
@@ -801,6 +877,9 @@
   /* A phone shows a picture the width of the text. */
   [data-ext='scripts'] .ig-fig img {
     width: 100%;
+  }
+  [data-ext='scripts'] .ig-card-pic {
+    width: 88px;
   }
   [data-ext='scripts'] .ig-more {
     top: 8px;

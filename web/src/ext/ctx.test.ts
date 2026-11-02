@@ -486,6 +486,38 @@ describe('ctx: the rest', () => {
     expect(home.calls[0]!.url).toBe('api/ext/scripts/videos');
   });
 
+  it('linkPreview reads api/link-preview under the video; an http picture is dropped; the home has none', async () => {
+    const page = 'https://example.com/a b';
+    const srv = server({
+      [`GET api/link-preview?url=${encodeURIComponent(page)}`]: () =>
+        json({ url: page, title: 'A page', site: 'Example', image: 'http://example.com/x.png', description: 7 }),
+      [`GET api/link-preview?url=${encodeURIComponent('http://127.0.0.1/')}`]: () =>
+        json({ error: 'not a public web address' }, 400),
+    });
+    const ctx = makeCtx(scripts, 'version', videoHost(srv.fetch)).ctx;
+    expect(await ctx.linkPreview(page)).toEqual({
+      url: page,
+      title: 'A page',
+      site: 'Example',
+      image: '',
+      description: '',
+    });
+    expect(await ctx.linkPreview('http://127.0.0.1/').catch((e: unknown) => e)).toMatchObject({
+      status: 400,
+      message: 'not a public web address',
+    });
+    const home = makeCtx(scripts, 'page', {
+      where: 'home',
+      homeRoot: '',
+      role: 'owner',
+      viewer: 'v',
+      toast: () => {},
+      fetch: srv.fetch,
+    }).ctx;
+    expect(await home.linkPreview(page).catch((e: unknown) => e)).toBeInstanceOf(ExtError);
+    expect(srv.calls).toHaveLength(2);
+  });
+
   it('navigate: another video by URL, this one in place, a route on the home', () => {
     const go = vi.fn(),
       show = vi.fn(),

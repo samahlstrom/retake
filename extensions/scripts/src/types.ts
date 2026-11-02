@@ -12,6 +12,7 @@ export type {
   HomeFolder as TreeNode,
   HomeVideo as Card,
   Item,
+  LinkPreview,
   Player,
   Recorded,
   Role,

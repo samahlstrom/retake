@@ -132,6 +132,8 @@ tokens. No tabs and no toolbar.
   v0/<video>_v0.md --heading "Cold open" --option "Ink@images/ink.png" --option "Neon@images/neon.png" "Which look?"`)
   also shows inline, right after its heading or line: the question and its images side by side (stacked on a phone).
   Tapping one answers it, as tapping the choice in the comments column does; once answered it goes away.
+- **Embeds.** A web address alone on its own line shows what it points to: a player or a post for the sites below,
+  a quiet card for any other page ("Embeds", below).
 
 - **Saving.** 600 ms after the last keystroke and when the text loses focus, with `If-Match` on the version read. The
   only word it shows is a quiet "Not saved · Retry" when a save fails, or "Changed outside Retake · Reload · Keep
@@ -158,6 +160,54 @@ tokens. No tabs and no toolbar.
 
 `ctx.onAnchor(fn)` (an addition to the page API): the version slot tells core where a typed comment points (the
 heading above the caret), so the comments column's line can anchor it.
+
+## Embeds
+
+The agent pulls in links as it shapes the script (references, clips, a tweet, a mood board), and they should read as
+what they are, not as addresses. So in a script's document, and only there:
+
+- **A web address alone on its own line** (`https://…`, or `<https://…>`, nothing else on the line, outside code)
+  shows as an embed under that line, in the document's column, in the live preview and in a viewer's read-only one.
+  Off the caret's line only the embed shows; on it the address shows as typed, with the embed still under it (the
+  same element, so a playing video doesn't restart). ArrowDown and ArrowUp step onto an embed's line, since off the
+  caret it has no height of its own. A link inside a sentence stays an ordinary link.
+- **Known sites** become a frame (`<iframe>`) on the site's own embed address. They are one table in
+  `extensions/scripts/src/lib/embed.ts`; adding a site is one entry:
+
+  | Site | Addresses | Frame |
+  |---|---|---|
+  | YouTube | `youtube.com/watch?v=ID`, `youtu.be/ID`, `/shorts/ID`, `/live/ID`, `/embed/ID`, with `t=` or `start=` (`90`, `1m30s`) | `https://www.youtube-nocookie.com/embed/ID?start=S`; 16:9, Shorts 9:16 |
+  | Vimeo | `vimeo.com/ID`, `vimeo.com/ID/HASH`, `player.vimeo.com/video/ID` | `https://player.vimeo.com/video/ID?h=HASH`; 16:9 |
+  | Loom | `loom.com/share/ID` | `https://www.loom.com/embed/ID`; 16:9 |
+  | Twitch | clips (`clips.twitch.tv/SLUG`, `twitch.tv/<channel>/clip/SLUG`), VODs (`twitch.tv/videos/ID`, with `t=`) | `https://clips.twitch.tv/embed?clip=SLUG&parent=<host>`, `https://player.twitch.tv/?video=ID&parent=<host>&autoplay=false&time=…`; `<host>` is the page's own (`location.hostname`); 16:9 |
+  | X / Twitter | `x.com/<user>/status/ID`, `twitter.com/…` | `https://platform.twitter.com/embed/Tweet.html?id=ID`; 550 px wide at most, 560 px tall |
+  | Instagram | `instagram.com/p/CODE`, `/reel/CODE`, `/tv/CODE` | `https://www.instagram.com/p/CODE/embed` (`reel/`, `tv/`); 400 px wide at most, 600 px tall |
+  | TikTok | `tiktok.com/@<user>/video/ID` | `https://www.tiktok.com/embed/v2/ID`; 340 px wide at most, 700 px tall |
+  | Spotify | `open.spotify.com/[intl-xx/]<track\|album\|playlist\|episode\|show\|artist>/ID` | `https://open.spotify.com/embed/<type>/ID`; 152 px tall for a track or an episode, else 352 px |
+  | SoundCloud | `soundcloud.com/<user>/<track>`, `/<user>/sets/<set>` | `https://w.soundcloud.com/player/?url=<address>&visual=false`; 166 px tall, a set 450 px |
+  | Figma | `figma.com/<file\|design\|proto\|board>/KEY/…` | `https://www.figma.com/embed?embed_host=retake&url=<address>`; 16:9 |
+  | Google Docs, Slides, Sheets | `docs.google.com/<document\|presentation\|spreadsheets>/d/ID/…` | `https://docs.google.com/<…>/d/ID/preview`; Slides 16:9, the others 560 px tall |
+
+  An address of these sites that isn't in the table (a channel, a profile) is a card.
+- **A raw frame**: a line that is only `<iframe src="https://…" …></iframe>` (the way sites hand out embed code) shows
+  as that frame, rebuilt rather than passed through. Only its `src` (https, and never this page's own host), `width`,
+  `height` and `title` are read; every other attribute is dropped. Anything that doesn't read as one frame stays as
+  text, a little quieter, as HTML does now.
+- **Every frame** the page makes, known or raw, has exactly `sandbox="allow-scripts allow-same-origin allow-popups
+  allow-presentation"`, `allow="fullscreen; picture-in-picture; encrypted-media"`,
+  `referrerpolicy="strict-origin-when-cross-origin"`, `loading="lazy"`, a `title`, and its `src`. Retake's own pages
+  are never framed.
+- **Its box is reserved** before anything loads, so nothing moves: the column's full width (less for the narrow posts
+  above), at the site's ratio or height. A raw frame takes its ratio from `width` and `height` when both are numbers
+  (clamped between 1:3 and 4:1), its height alone when only that is a number (`width="100%" height="352"`), else 16:9.
+- **Any other address** is a quiet link card: the page's title, its site and its picture, in a box of fixed height
+  (the picture at the right, cropped). Until the preview comes, and when there is none, it shows the address's host
+  and path in the same box. Tapping it opens the address in a new tab (`noopener`). The preview comes from
+  `GET api/link-preview` (spec/api.md), read by the server that serves the page, so it works the same hosted.
+- **On a phone** frames and cards are never wider than the screen and nothing scrolls sideways.
+- **Content-Security-Policy.** The review page sends none today. A page that adds one must allow these frames
+  (`frame-src https:`) and the cards' pictures (`img-src https:`).
+- The Script tab next to a video stays text: an address line there reads as its address.
 
 ## Talking it out
 
@@ -265,6 +315,13 @@ with the section under the playhead highlighted; clicking a section seeks to its
   project pushing `v1/<folder>_v1.mp4`.
 - Web unit: the document's name, the migration's text, the heading above the caret, the talk-out paragraph and its
   sidecar, the playhead section.
+- Web unit: embeds: each site's addresses to its frame (and what stays a card), the raw frame's sanitizer, the
+  address-alone-on-a-line rule; Go: the link preview route against a local test server (title, `og:` tags, the size
+  and time limits, the cache) and the address guard. Nothing in a test reaches the internet.
+- e2e `e2e/tests/22-embeds.spec.ts` and `22-embeds-webkit.spec.ts` (desktop, and an iPhone in WebKit): a YouTube
+  address, a raw frame and an unknown page in a document: the frames' `src` and attributes, the card with a stubbed
+  preview, no sideways scroll, nothing moving while the card loads. Every request off the test server is answered
+  by the test, so no site is loaded.
 - e2e `e2e/tests/18-scripts.spec.ts`, with a fake transcriber (a command engine that prints fixed words) and a fake
   agent, on a phone and on a desktop:
   - New script opens the one document, typing saves, and an outside edit shows.

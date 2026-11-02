@@ -3,13 +3,25 @@
 // rules and images. The Markdown's own characters (#, **, `, list marks, >, a link's brackets and address) are hidden,
 // except on the lines the caret or the selection is on while the text has the focus, where they show to be edited.
 // Nothing here changes the text: decorations only draw it (a task box's tap is the one edit, `[ ]` to `[x]` and back).
-// The agent's open questions about the document show under their place, with their choices to tap.
-import { Facet, StateEffect, StateField, type EditorState, type Extension, type Range } from '@codemirror/state';
-import { Decoration, EditorView, WidgetType, type DecorationSet } from '@codemirror/view';
+// The agent's open questions about the document show under their place, with their choices to tap. A web address alone
+// on its line, or one raw <iframe>, shows as an embed under it (spec/scripts.md, "Embeds"; lib/embed.ts).
+import {
+  Facet,
+  Prec,
+  StateEffect,
+  StateField,
+  type EditorState,
+  type Extension,
+  type Line,
+  type Range,
+} from '@codemirror/state';
+import { Decoration, EditorView, keymap, WidgetType, type DecorationSet } from '@codemirror/view';
 import { syntaxTree } from '@codemirror/language';
 import type { SyntaxNode, Tree } from '@lezer/common';
 import { findAnchor, paragraph } from '../lib/doc';
+import { cardFallback, embedOfLine, FRAME_ATTRS, type Embed } from '../lib/embed';
 import { safeHref } from '../lib/links';
+import type { LinkPreview } from '../types';
 
 /** An open question of the agent's about a place in this document, as the preview shows it. */
 export interface Question {
@@ -31,6 +43,10 @@ export interface LiveConfig {
   answer?(q: Question, text: string): void;
   /** "Answer in the comments": a question without choices. */
   openQuestion?(q: Question): void;
+  /** This page's host name: Twitch's `parent`, and the one host a raw frame may not show. */
+  page?: string;
+  /** A link card's preview (ctx.linkPreview); without it a card shows its address. */
+  preview?(url: string): Promise<LinkPreview>;
 }
 
 export const liveConfig = Facet.define<LiveConfig, LiveConfig>({ combine: (v) => v[0] ?? {} });
@@ -302,6 +318,126 @@ class Ask extends WidgetType {
   }
 }
 
+/** Link cards' previews asked for already, by address: one request each while the page is open. */
+const previews = new Map<string, Promise<LinkPreview | null>>();
+function previewOf(cfg: LiveConfig, url: string): Promise<LinkPreview | null> {
+  let p = previews.get(url);
+  if (!p) {
+    p = cfg.preview ? cfg.preview(url).catch(() => null) : Promise.resolve(null);
+    previews.set(url, p);
+  }
+  return p;
+}
+
+/** An embed under its line: a frame in a box kept at its size from the start, or a link card of a fixed height. The
+ * same element stays while the caret comes and goes (`eq`), so a playing video keeps playing. */
+class EmbedView extends WidgetType {
+  constructor(
+    readonly e: Embed,
+    readonly cfg: LiveConfig,
+  ) {
+    super();
+  }
+  eq(o: EmbedView): boolean {
+    return JSON.stringify(o.e) === JSON.stringify(this.e);
+  }
+  toDOM(): HTMLElement {
+    const outer = document.createElement('div');
+    outer.className = 'ig-embed';
+    const e = this.e;
+    if (e.kind === 'frame') {
+      outer.dataset.part = 'scripts-embed';
+      outer.dataset.site = e.site;
+      if (e.maxWidth) outer.style.maxWidth = `${e.maxWidth}px`;
+      const box = document.createElement('div');
+      box.className = 'ig-embed-box';
+      if (e.ratio) box.style.aspectRatio = String(e.ratio);
+      else box.style.height = `${e.height ?? 360}px`;
+      const frame = document.createElement('iframe');
+      for (const [k, v] of Object.entries(FRAME_ATTRS)) frame.setAttribute(k, v); // the sandbox before the address
+      frame.title = e.title;
+      frame.src = e.src;
+      box.append(frame);
+      outer.append(box);
+      return outer;
+    }
+    outer.classList.add('ig-embed-card');
+    outer.dataset.part = 'scripts-card';
+    const a = document.createElement('a');
+    a.className = 'ig-card';
+    a.href = e.url;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    const text = document.createElement('span');
+    text.className = 'ig-card-text';
+    const title = document.createElement('span');
+    title.className = 'ig-card-title';
+    const site = document.createElement('span');
+    site.className = 'ig-card-site';
+    const fb = cardFallback(e.url);
+    title.textContent = fb.title;
+    site.textContent = fb.site;
+    text.append(title, site);
+    a.append(text);
+    onTap(a, () => openLink(e.url));
+    outer.append(a);
+    void previewOf(this.cfg, e.url).then((p) => {
+      if (!p) return;
+      if (p.title) title.textContent = p.title;
+      if (p.site) site.textContent = p.site;
+      outer.dataset.loaded = 'true';
+      if (!p.image) return;
+      const pic = document.createElement('span');
+      pic.className = 'ig-card-pic';
+      const img = document.createElement('img');
+      img.alt = '';
+      img.decoding = 'async';
+      img.referrerPolicy = 'no-referrer';
+      img.draggable = false;
+      img.addEventListener('error', () => pic.remove());
+      img.src = p.image;
+      pic.append(img);
+      a.append(pic);
+    });
+    return outer;
+  }
+  get estimatedHeight(): number {
+    return this.e.kind === 'frame' ? (this.e.height ?? 380) : 92;
+  }
+  ignoreEvent(): boolean {
+    return true;
+  }
+}
+
+/** What a line embeds (an address alone on it, or one raw frame, outside code), or null. */
+function embedAt(l: Line, tree: Tree, cfg: LiveConfig): Embed | null {
+  if (l.length > MAX_EMBED_LINE || !/^\s*(<?https?:\/\/|<iframe\b)/i.test(l.text)) return null;
+  const e = embedOfLine(l.text, cfg.page ?? '');
+  return e && !inCode(tree, l.from + (l.text.length - l.text.trimStart().length)) ? e : null;
+}
+
+/** ArrowDown and ArrowUp onto an embed's folded line put the caret on it, where the address shows to be edited (the
+ * line has no height of its own to land on). */
+function stepOnto(dir: 1 | -1) {
+  return (view: EditorView): boolean => {
+    const s = view.state;
+    if (s.selection.ranges.length !== 1 || !s.selection.main.empty) return false;
+    const n = s.doc.lineAt(s.selection.main.head).number + dir;
+    if (n < 1 || n > s.doc.lines) return false;
+    const l = s.doc.line(n);
+    if (!embedAt(l, syntaxTree(s), s.facet(liveConfig))) return false;
+    view.dispatch({ selection: { anchor: dir > 0 ? l.from : l.to }, scrollIntoView: true, userEvent: 'select' });
+    return true;
+  };
+}
+
+/** Whether the position is in code or a comment, where an address is only text. */
+function inCode(tree: Tree, pos: number): boolean {
+  for (let n: SyntaxNode | null = tree.resolveInner(pos, 1); n; n = n.parent)
+    if (/^(FencedCode|CodeBlock|CodeText|CommentBlock|Comment)$/.test(n.name)) return true;
+  return false;
+}
+
 // ---------------------------------------------------------------- the decorations
 
 const HIDE = Decoration.replace({});
@@ -318,6 +454,8 @@ const lineOf = (cls: string): Decoration => {
   return d;
 };
 const space = (c: string | undefined): boolean => c === ' ' || c === '\t';
+/** A line longer than this is never an embed (an address is at most 2048 characters; a frame's code a little more). */
+const MAX_EMBED_LINE = 4096;
 
 interface ListLine {
   depth: number;
@@ -572,6 +710,15 @@ export function build(state: EditorState, tree: Tree = syntaxTree(state)): Decor
     out.push(lineOf(cls).range(l.from));
   }
 
+  // Embeds (spec/scripts.md, "Embeds"): off the caret's line the line folds away and only its embed shows.
+  for (let i = 1; i <= doc.lines; i++) {
+    const l = doc.line(i);
+    const e = embedAt(l, tree, cfg);
+    if (!e) continue;
+    if (!lineOn(i)) out.push(lineOf('ig-embed-src').range(l.from));
+    out.push(Decoration.widget({ widget: new EmbedView(e, cfg), block: true, side: 1 }).range(l.to));
+  }
+
   const lit = state.field(flash, false);
   if (lit !== null && lit !== undefined && lit <= doc.length) out.push(lineOf('ig-flash').range(doc.lineAt(lit).from));
 
@@ -650,6 +797,12 @@ export function livePreview(cfg: LiveConfig): Extension {
     flash,
     questions,
     preview,
+    Prec.high(
+      keymap.of([
+        { key: 'ArrowDown', run: stepOnto(1) },
+        { key: 'ArrowUp', run: stepOnto(-1) },
+      ]),
+    ),
     EditorView.focusChangeEffect.of((_, on) => setFocus.of(on)),
     EditorView.domEventHandlers({
       mousedown(e, view) {

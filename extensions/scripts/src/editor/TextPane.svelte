@@ -21,6 +21,7 @@
   import { editorState, isCRLF, offsetOf, outside, posOf } from './setup';
   import { setFlash, setQuestions, type Question } from './live';
   import type { Doc } from './doc.svelte';
+  import type { LinkPreview } from '../types';
 
   let {
     doc,
@@ -30,6 +31,7 @@
     scroller,
     questions = [],
     image,
+    preview,
     answer,
     openQuestion,
     saveImage,
@@ -47,6 +49,8 @@
     questions?: Question[];
     /** An image's address from its source in the document, or null. */
     image(src: string): string | null;
+    /** A link card's preview (spec/scripts.md, "Embeds"). */
+    preview?(url: string): Promise<LinkPreview>;
     answer(q: Question, text: string): void;
     openQuestion(q: Question): void;
     /** Keeps a pasted or dropped image in v0/images/ and gives its name there. */
@@ -82,6 +86,8 @@
     else if (r.top < top) scroller.scrollTop -= top - r.top;
   }
   let keepQueued = false;
+  /** The focus given when the document opens is on its way. */
+  let openingFocus = false;
   function keepSoon(): void {
     if (keepQueued) return;
     keepQueued = true;
@@ -102,7 +108,10 @@
       if (u.view.hasFocus) placed = true;
       else void doc.flush();
     }
-    if (u.view.hasFocus && (u.selectionSet || u.docChanged || u.focusChanged)) keepSoon();
+    // The focus the document opens with doesn't scroll to the caret (at the end): it opens at its top.
+    const opening = openingFocus && u.focusChanged;
+    if (u.focusChanged) openingFocus = false;
+    if (!opening && u.view.hasFocus && (u.selectionSet || u.docChanged || u.focusChanged)) keepSoon();
   }
 
   // ---------------------------------------------------------------- images: paste and drop
@@ -189,6 +198,8 @@
       save: () => void doc.flush(),
       update,
       image,
+      preview,
+      page: location.hostname,
       answer,
       openQuestion,
       extra: imageEvents,
@@ -207,7 +218,10 @@
     create(doc.text, at);
     const v = view!;
     // The document opens at its top: the focus doesn't scroll to the caret.
-    if (focus && !readonly) v.contentDOM.focus({ preventScroll: true });
+    if (focus && !readonly) {
+      openingFocus = true;
+      v.contentDOM.focus({ preventScroll: true });
+    }
     if (caret !== null) v.dispatch({ effects: EditorView.scrollIntoView(toPos(at), { y: 'nearest' }) });
     const vv = window.visualViewport;
     vv?.addEventListener('resize', keepSoon);
