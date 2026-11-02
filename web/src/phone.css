@@ -169,7 +169,8 @@
   html[data-phone] .pen-pop {
     padding: 6px;
   }
-  /* Where Send can't reach an agent: the line floats over Record and Send (nothing moves), wrapping when long. */
+  /* Where Send can't reach an agent: in portrait one line over Record and Send, in the bar (it would cover the comment
+     box if it floated); in landscape it floats over the bottom bar. Wrapping when long. */
   html[data-phone] .send-notice {
     right: 14px;
     left: 14px;
@@ -179,6 +180,14 @@
     white-space: normal;
     border-radius: var(--radius-md);
     font-size: 13px;
+  }
+  html[data-layout='portrait'] .send-notice {
+    position: static;
+    margin: 0 0 10px;
+    padding: 0;
+    background: none;
+    backdrop-filter: none;
+    color: var(--muted);
   }
   #undo {
     flex: none;

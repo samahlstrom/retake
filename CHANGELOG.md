@@ -4,6 +4,24 @@ All notable changes are listed here. Versions follow semver once the first relea
 
 ## Unreleased
 
+### Comment at any moment: draw, type or record
+- The pen no longer needs recording. Draw on the video or type in the box at the bottom of the comments ("Comment at
+  0:18 · goes into v8…"): the video pauses, the lines go with that comment, Enter saves it as a note with its time,
+  its lines and a still of the frame (`POST api/notes` with `t`, `strokes` and `snapshot`; spec/notes.md, "Typed
+  comments on a video"), Esc cancels it. Recording still adds your voice and pins what you draw to it; R still
+  toggles it.
+- The bar: play, time, timeline, version, one pen button (its colour; it opens the colours and the eraser, keys 1–4
+  and E still work), Record as a microphone with the red dot (REC and the time while recording; nothing moves), Send
+  and ?. Send says Send: its count is in its title, and it never names the agent. Hold it (or right-click it) to pick
+  another of the computer's agents for that send (`agent` on `/done` and `POST /api/automation/tasks`). The agent
+  pill and its menu are gone (Settings has them); where Send can't reach an agent, one quiet line says so.
+- The comments header: a speech bubble, the version as a menu ("v7 → v8 · 3 to do", in place of the version strip
+  and the "Open on earlier versions" line), search and hide; To do · Done as a toggle. A card says where its edit
+  goes (→ v8), and Send's toast where the comments went. The hidden column's toggle is the speech bubble and the
+  count, as on a phone.
+- Theme parts `pen-button`, `agent-picker`, `send-notice`, `version-menu`, `version-menu-list` and `into`;
+  `agent-status`, `agent-menu`, `version-strip` and `earlier-versions` stay on the new elements, deprecated.
+
 ### Settings on the home
 - **Settings** at the bottom of the home's folder column (the owner's): the default agent and what happens when its
   usage runs out (moved here from the review page's agent menu, and applied to every project), where agents run,
