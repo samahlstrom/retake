@@ -21,6 +21,7 @@ marker = ["*_v0.md", "idea.md"]   # the one document; idea.md: a v0 from before 
 label = "Doc"
 status = "Idea"
 record = true
+chat = true                       # the agent chat in place of the comments (spec/chat.md)
 
 [[slots]]
 slot = "page"

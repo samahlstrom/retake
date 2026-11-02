@@ -1,0 +1,12 @@
+{"type":"thread.started","thread_id":"01a19b3e-0000-7000-8000-000000000001"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"reasoning","text":"**Thinking**"}}
+{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"Looking it up."}}
+{"type":"item.started","item":{"id":"item_2","type":"web_search","query":""}}
+{"type":"item.completed","item":{"id":"item_2","type":"web_search","query":"neon sign photo cc0"}}
+{"type":"item.started","item":{"id":"item_3","type":"command_execution","command":"bash -lc 'wget -q https://cdn.example.net/a/neon.jpg -O v0/images/neon.jpg'","aggregated_output":"","exit_code":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_3","type":"command_execution","command":"bash -lc 'wget -q https://cdn.example.net/a/neon.jpg -O v0/images/neon.jpg'","aggregated_output":"","exit_code":0,"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_4","type":"file_change","changes":[{"path":"/work/video/v0/jump_v0.md","kind":"update"}],"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_5","type":"agent_message","text":"Put the neon sign under Cold open."}}
+{"type":"item.completed","item":{"id":"item_6","type":"agent_message","text":"Anything else?"}}
+{"type":"turn.completed","usage":{"input_tokens":100,"cached_input_tokens":0,"output_tokens":20}}

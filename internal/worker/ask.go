@@ -138,10 +138,14 @@ func (r *runner) serveAsk(w http.ResponseWriter, req *http.Request) {
 		fail(http.StatusNotFound, "not found")
 		return
 	}
+	given := strings.TrimPrefix(req.Header.Get("Authorization"), "Bearer ")
+	if run := r.chatAsk(given); run != nil {
+		r.serveChatAsk(w, req, run, fail) // asked from a chat turn: it lands in the chat (spec/chat.md)
+		return
+	}
 	r.mu.Lock()
 	secret, active := r.ask.secret, r.active
 	r.mu.Unlock()
-	given := strings.TrimPrefix(req.Header.Get("Authorization"), "Bearer ")
 	if secret == "" || active == nil || subtle.ConstantTimeCompare([]byte(given), []byte(secret)) != 1 {
 		fail(http.StatusForbidden, "no Retake task is running with this secret")
 		return
@@ -158,7 +162,7 @@ func (r *runner) serveAsk(w http.ResponseWriter, req *http.Request) {
 		body.Frame = r.frameOf(ctx, active, body) // a question about a document has no frame
 	}
 	var q project.TaskQuestion
-	if err := r.askServer(ctx, body, &q); err != nil {
+	if err := r.askServer(ctx, "/api/worker/ask", body, &q); err != nil {
 		var he *httpError
 		if errors.As(err, &he) {
 			msg := he.message
@@ -178,6 +182,40 @@ func (r *runner) serveAsk(w http.ResponseWriter, req *http.Request) {
 	}
 	r.mu.Unlock()
 	r.log("%s: the agent asked about #%d %s: %s", filepath.Base(r.opts.Root), q.Note, where(q), q.Text)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(q)
+}
+
+// serveChatAsk passes a chat turn's question on to the server: the chat shows it, and the answer comes as the
+// person's next message.
+func (r *runner) serveChatAsk(w http.ResponseWriter, req *http.Request, run *chatRun, fail func(int, string)) {
+	var body project.WorkAsk
+	if json.NewDecoder(http.MaxBytesReader(w, req.Body, MaxAskBody)).Decode(&body) != nil {
+		fail(http.StatusBadRequest, "invalid question (or over 48 MiB)")
+		return
+	}
+	body.Task, body.Lease, body.Frame, body.Note = run.id, run.lease, nil, 0
+	ctx, cancel := context.WithTimeout(req.Context(), 2*time.Minute)
+	defer cancel()
+	// What the agent wrote before it asked goes first: its output lines may still be on their way to the stream.
+	time.Sleep(chatSettle)
+	run.flush(ctx)
+	var q project.TaskQuestion
+	if err := r.askServer(ctx, "/api/worker/chat/ask", body, &q); err != nil {
+		var he *httpError
+		if errors.As(err, &he) {
+			msg := he.message
+			var reply struct{ Error string }
+			if json.Unmarshal([]byte(msg), &reply) == nil && reply.Error != "" {
+				msg = reply.Error
+			}
+			fail(he.status, msg)
+			return
+		}
+		fail(http.StatusBadGateway, "can't reach the review: "+err.Error())
+		return
+	}
+	r.log("%s: the agent asked in the chat: %s", filepath.Base(r.opts.Root), q.Text)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(q)
 }
@@ -316,12 +354,12 @@ When you have done everything you can, write a JSON object to %[2]q: {"state":"c
 
 // askServer sends a question to the server: like call, but without the client's short timeout, since a question
 // may carry images.
-func (r *runner) askServer(ctx context.Context, body project.WorkAsk, out *project.TaskQuestion) error {
+func (r *runner) askServer(ctx context.Context, path string, body project.WorkAsk, out *project.TaskQuestion) error {
 	b, err := json.Marshal(body)
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(r.opts.URL, "/")+"/api/worker/ask", bytes.NewReader(b))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(r.opts.URL, "/")+path, bytes.NewReader(b))
 	if err != nil {
 		return err
 	}

@@ -339,6 +339,11 @@ func askInTask(ctx context.Context, a taskAsk, text string, env Env) int {
 		_ = printJSON(env.Stdout, out)
 		return ExitOK
 	}
+	if out.Note == 0 {
+		// Asked from a chat turn (spec/chat.md): it shows in the chat.
+		_, _ = fmt.Fprintf(env.Stdout, "asked in the chat (question %d): %s\n", out.ID, out.Text)
+		return ExitOK
+	}
 	where := "at " + project.Clock(out.At)
 	if out.Anchor != nil {
 		where = "in " + out.Anchor.File

@@ -81,6 +81,7 @@ type runner struct {
 	warned                map[string]bool // profiles already logged as having no interactive command
 	ask                   askState        // questions from inside a task (ask.go)
 	batch                 batchState      // the video's next batch, for a live session (batch.go)
+	chat                  *chatRun        // the chat turn it runs (chat.go)
 	life                  context.Context // the worker's whole run: its question endpoint lives this long
 	extJobs               *extwork.Jobs   // transcriptions of owned audio files, for the relay's ext.transcribe
 
@@ -282,6 +283,7 @@ func (r *runner) controlLoop(ctx context.Context) error {
 		if done != nil {
 			<-done
 		}
+		r.stopChat()
 	}()
 	for {
 		select {
@@ -299,7 +301,9 @@ func (r *runner) controlLoop(ctx context.Context) error {
 			pollCtx, pollCancel := context.WithTimeout(ctx, 5*time.Second)
 			started := time.Now()
 			told, join := r.unsentTold(), r.unsentJoin()
-			e := r.call(pollCtx, "/api/worker/poll", project.WorkPoll{Worker: r.identity, Task: task, Lease: lease, Told: told, Join: join}, &assignment)
+			chat, chatLease := r.chatTurn()
+			e := r.call(pollCtx, "/api/worker/poll", project.WorkPoll{Worker: r.identity, Task: task, Lease: lease, Told: told,
+				Join: join, Chat: chat, ChatLease: chatLease}, &assignment)
 			pollCancel()
 			if e != nil {
 				if lastError != e.Error() {
@@ -311,6 +315,9 @@ func (r *runner) controlLoop(ctx context.Context) error {
 				r.mu.Unlock()
 				var he *httpError
 				stale := errors.As(e, &he) && he.status == 409
+				if chat != "" && (stale || time.Since(last) > 10*time.Second) {
+					r.takeChat(ctx, nil) // the server can't see the turn: stop it before its lease runs out
+				}
 				if current != nil && (stale || time.Since(last) > 10*time.Second) {
 					cancel()
 					stopping = true
@@ -340,6 +347,7 @@ func (r *runner) controlLoop(ctx context.Context) error {
 				r.acked(told) // the server keeps them on the task now
 				r.joined(join)
 			}
+			r.takeChat(ctx, assignment.Chat)
 			if current == nil && assignment.Task != nil {
 				if !project.ValidWorkID(assignment.Task.ID) || !project.ValidWorkID(assignment.Task.Lease) || assignment.Task.Worker != r.identity.ID {
 					return errors.New("host returned an invalid task assignment")

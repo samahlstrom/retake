@@ -536,7 +536,7 @@ func (s *Store) StopChat() error {
 	})
 }
 
-// ChatWorkOf is the work of turn c for its worker: its messages, and for a new session the recent thread before them.
+// ChatWorkOf is the work of turn c for its worker: its messages, and the recent thread before them (for a new session).
 func (s *Store) ChatWorkOf(c ChatTurn) (ChatWork, error) {
 	a, err := s.Automation()
 	if err != nil {
@@ -549,11 +549,13 @@ func (s *Store) ChatWorkOf(c ChatTurn) (ChatWork, error) {
 	if w.Messages, err = queryChat(s.db, `WHERE turn = ? AND role = 'person' ORDER BY id`, c.ID); err != nil {
 		return w, err
 	}
-	if w.Session != "" || len(w.Messages) == 0 {
+	if len(w.Messages) == 0 {
 		return w, nil
 	}
-	before, err := queryChat(s.db, `WHERE id < ? AND role IN ('person', 'agent', 'question') ORDER BY id DESC LIMIT ?`,
-		w.Messages[0].ID, chatHistory)
+	// The recent thread, for a new session (a resumed one that fails starts a new one too).
+	// The thread before this turn: every other turn's words, but not what waits for the next one.
+	before, err := queryChat(s.db, `WHERE turn <> ? AND turn <> '' AND role IN ('person', 'agent', 'question')
+		ORDER BY id DESC LIMIT ?`, c.ID, chatHistory)
 	if err != nil {
 		return w, err
 	}
