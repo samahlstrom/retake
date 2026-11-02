@@ -31,10 +31,15 @@ A folder of finished videos with no timeline (`clip_v1.mp4`, `clip_v2.mp4`) work
 however it can (ffmpeg, say) and writes one video file, and Retake adds it as the next version (`clip_v3.mp4`, next
 to the others). The comment turns Done once that video plays.
 
-- Each video (project) has its own agent: one task runs at a time per video, and each Send queues one. Different
-  videos edit at the same time, so ten videos with work means ten agents working at once. The agent works in the
-  project folder with its own sign-in and settings.
-- While it works, the page follows its drafts (`v4-draft1`, `v4-draft2`, ...). Only a finished task makes a version
+- A Send is one batch: every comment you sent goes to one agent run, which makes one new version. Never a version
+  per comment. The comments show Working together, and each one still turns Done (or Question, when the agent asks
+  about it) on its own.
+- Each video (project) has its own agent: one batch runs at a time per video. Comments you send while it works go to
+  the same agent: in herdr or tmux as a new message in its session, part of the same batch; in the background into
+  the video's next batch, which starts when this one ends (one next batch, however many times you press Send).
+  Different videos edit at the same time, so ten videos with work means ten agents working at once. The agent works
+  in the project folder with its own sign-in and settings.
+- While it works, the page follows its drafts (`v4-draft1`, `v4-draft2`, ...). Only a finished batch makes a version
   (`v4`), and restarting `retake open` makes none.
 - Anyone you share the review with (`retake share`) has the same Send button, and their comments go to this agent.
 - Each task's prompt, context, log and report are in `.retake/worker/tasks/<task>/` (no log in herdr or tmux: the
@@ -102,7 +107,9 @@ Retake writes the task prompt to `.retake/worker/tasks/<task>/prompt-<n>.md` and
 task for item-shop (task …, attempt 1): follow the instructions in …/prompt-1.md". From there it's a normal session:
 watch it, answer it, interrupt it, ask it something. When the agent writes its report, the comment moves on exactly as
 in the background (a completed report still waits for a checked render), and the session stays open so you can scroll
-back and keep talking. The video's next task goes to the same session if it's still there.
+back and keep talking. The video's next task goes to the same session if it's still there. Comments sent while the
+agent works arrive there too, as one more message for the same batch ("More comments for Retake task …"), with a new
+report file that covers them all.
 
 What's different from the background:
 
@@ -135,6 +142,7 @@ herdr agent start <name> --kind claude --pane <pane> --timeout 60000 -- --danger
 herdr agent prompt <name> "New Retake task for <video> (...): follow the instructions in <prompt file>"
 herdr agent get <name>        # every 2 s until the report: is the session still there?
 herdr agent prompt <name> "Answer to your question on note 12 at 1:23: ..."   # an answer while it works
+herdr agent prompt <name> "More comments for Retake task ... : follow the instructions in <prompt file>"   # sent while it works
 herdr pane close <pane>       # only on pause, switch or a lost connection, before the report
 ```
 
@@ -162,6 +170,8 @@ In the background, the worker runs the agent's command in the project folder, wi
 JSON file with the task and its notes (text, times, strokes, snapshots and images; a note's `missing` says which of
 its files couldn't be given and what the agent has instead, such as a still the worker made itself), and the agent
 writes its answer to `RETAKE_REPORT`: `{"state": "completed", "message": "what changed"}` or `{"state": "question", "message": "..."}`.
+A completed report may add what changed for each comment, `"notes": {"12": "Cut the intro to 3 s"}`; a comment
+without an entry gets the message.
 `RETAKE_ASK_URL` and `RETAKE_ASK_TOKEN` are what `retake ask` uses to reach the worker (above).
 A completed task still waits for a checked, playable render of the agent's final source before the comment is Done.
 In a project without a timeline, `RETAKE_OUTPUT` names the file the agent writes its video to

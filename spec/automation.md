@@ -35,7 +35,8 @@ upload or an inbound connection to the worker. This is an addition to the existi
   first video without an upload. Sending feedback (below) always reaches the selected worker, and anyone who can
   record a review sends. `config.enabled` is kept for older pages: it sends finished reviews that weren't sent, it
   is off until set, and turning it off doesn't stop a running task. The page no longer shows it.
-- There is at most one editing task running in a project. Task state, assignments, attempts, questions, answers
+- There is at most one editing task running in a project, and a task is a batch: every comment sent together, done
+  by one agent run that ends in one version ("Batches" below). Task state, assignments, attempts, questions, answers
   and results survive server restart. A lease identifies each attempt; late reports from a replaced attempt are
   rejected. A local process lock prevents duplicate workers for one project.
 - Switching an active task first requests cancellation. The worker stops the process tree, preserves files and
@@ -70,6 +71,8 @@ Where a worker runs its agent is a user setting: `open_agents_in` in the user co
   `New Retake task for <project> (task <id>, attempt <n>): follow the instructions in <prompt file>`. In herdr the
   agent is started with `herdr agent start` and gets the line with `herdr agent prompt`; in tmux the line is the
   command's last argument, or typed into a session that's still running (`send-keys -l`, then Enter).
+- Comments sent while the agent works join its batch here, as a new message in the same session ("Batches" below):
+  `More comments for Retake task <id> (attempt <n>): follow the instructions in <prompt file>`.
 - The session stays open after the report, so the person can scroll back and keep talking. The project's next task
   reuses it while it's there and runs the same agent: the line goes into the running agent, or the agent starts again
   in the same pane when it had exited. A different agent replaces it (herdr: its pane is closed and a new tab opens in
@@ -227,8 +230,9 @@ the person), or has one that wasn't told to an agent yet.
 - Answering the last unanswered question of a task waiting in `question` queues it again ("Reviewer answered").
 - A completed report without a render or version while a note isn't held (the agent was told an answer just before
   it reported) queues the task again rather than failing it.
-- Withdrawn feedback: a note of a task that is Question doesn't stop or cancel it; only a note that was answered
-  outside the task (not in its `done`) or retracted does.
+- Withdrawn feedback: a note of a task that is Question stays in it. A note that was answered outside the task (not
+  in its `done`) or retracted drops out of the batch ("Batches" below); only a batch with none of its notes left is
+  cancelled, or stopped while it runs.
 - The report's `question` state stays as the fallback: the task waits in `question` with the report's message,
   answered with a typed `…/answer` without `question`.
 
@@ -348,11 +352,52 @@ its version files and runs the agent, and the agent makes the next version howev
 - The agent doesn't run `retake push`: the worker's push puts the file into the project folder, and the server only
   gets its metadata.
 
+## Batches: one Send, one agent, one version
+
+Sending is asking the agent for a batch of edits on one video, never a task per comment.
+
+- **One Send is one task.** `POST /api/automation/tasks` with N notes queues one task (a batch) holding all of them,
+  and a sent take's notes, once processed, join the same batch. One agent run gets the whole batch in its context
+  (`task.notes`) and writes one report, so a completed run makes exactly one new version: its final draft is promoted
+  (drafts in between, as before). A batch whose agent asked about some notes (`retake ask`) makes its version for the
+  notes it finished; the answered ones go in its next run, with any comments sent meanwhile, and that run makes the
+  next version.
+- **Per comment.** Each note still ends on its own: Done from the completed report, Question from `retake ask`. The
+  report may say what changed for each note: `{"state": "completed", "message": "summary", "notes": {"12": "Cut the
+  intro to 3 s"}}` (keys are note ids; at most 1000, each at most 4000 characters). A note's `change` is its entry,
+  else the message.
+- **One agent per video.** At most one task runs in a project (one video), and at most one waits in `queued`: notes
+  sent while one is queued join it, whatever version they're on. Different projects still run at the same time
+  ("Watching the agents"). Whenever a second task would wait in `queued` (a send, a retry, an answer that queues a task
+  again, a switch, a fallback), the queued tasks become one: the oldest keeps its id, agent and history and takes the
+  others' notes, questions (`asked`), told answers and done notes, with an event `Joined task <id>: #4, #5`; the others
+  are removed. A retry or switch that names an agent sets the batch's agent.
+- **Sent while a batch runs.** The new notes wait in the project's next batch, which starts when the running one ends
+  (background agents can't be given anything while they run). In herdr or tmux, while the attempt is running and not
+  stopping, the poll answer also has `next`: that queued batch (`{"id", "notes"}`), when it has never run
+  (`attempt` 0). The worker gives its notes to the live session as one message for the same task: it saves their
+  stills and images as for an attempt, writes `context-<n>-<k>.json` (the attempt's context with the new notes in
+  `task.notes`) and `prompt-<n>-<k>.md` (`k` counts the additions, from 2), and sends `More comments for Retake task
+  <id> (attempt <n>): follow the instructions in <prompt file>`. That prompt names the new notes and a new report file,
+  `report-<n>-<k>.json`, which replaces the earlier one: the worker waits for that file only, so a report written
+  before the agent read the message never finishes the batch without them. The worker then says `join: [ids]` in its
+  next poll (and in its report, which counts them before it decides); the server moves those notes from the queued
+  batch to the running task, with an event `Added #4, #5 in the agent's session`, and drops the queued batch once it is
+  empty. A note that is no longer in a queued batch is skipped. A task of only typed comments (spec/extensions.md)
+  takes only typed comments that way.
+- **A Send's take goes in the same batch.** A queued batch doesn't start while a take sent with `send: true` is still
+  being processed (one of its jobs queued or running): the take's notes join it once processed, then it starts. A
+  failed job ends the wait.
+- **Older stores.** Opening a project's store merges the tasks waiting in `queued` (not running) into one batch, as
+  above, so the one task per note an older version queued becomes one task.
+- **Withdrawn notes.** A note of a batch that is retracted or answered outside it is dropped from the batch (`dropped`,
+  with an event); the rest carry on. A batch with no notes left is cancelled, or stopped while it runs.
+
 ## Submission and comment state
 
 - Recording and incremental transcription do not launch editing. Send closes the take (`/done` with
-  `"send": true`) and queues its processing. Once the final notes job succeeds, the take's open notes enter the
-  editing queue: right away, in the process that ran the job, whether or not a worker is connected. A `/done`
+  `"send": true`) and queues its processing. Once the final notes job succeeds, the take's open notes join the
+  project's queued batch ("Batches"): right away, in the process that ran the job, whether or not a worker is connected. A `/done`
   without `send` (an older page) queues them only when `config.enabled` is on. Each finished take is considered
   once: if neither applies, its notes stay Open until someone sends them, and turning `enabled` on later doesn't
   sweep up old reviews. Finishing again with `"send": true` sends a take that was already processed. Send also
@@ -426,7 +471,9 @@ its version files and runs the agent, and the agent makes the next version howev
   relay response endpoints. An attempt's `completed` report names a render (`result`) or, in a plain project, a version file
   (`version`). The poll answer has
   `config`, `task`, `notes` (the task's notes, plus every open note of every version as context), `questions` (the
-  task's, with their answers) and `versions` (how many versions the family has, drafts not counted). A poll may carry `told` (answers that reached the agent). In Local mode
+  task's, with their answers), `versions` (how many versions the family has, drafts not counted) and, for a running
+  attempt, `next` (the queued batch it may give a live session, "Batches"). A poll may carry `told` (answers that
+  reached the agent) and `join` (notes of `next` given to the agent's session); a report may carry both. In Local mode
   the in-process worker reaches these handlers without HTTP or a token.
 - Existing video URLs serve remote versions through the relay. Existing viewing permissions apply to all media.
 - The bar has one action for everyone who can record: Send (`Send N to agent`, N the shown version's open comments
@@ -437,8 +484,10 @@ its version files and runs the agent, and the agent makes the next version howev
   without `send`, and the popover says what's missing (it doesn't open by itself). There is no other action.
   Next to it, the agent's name with a dot (green: online) opens that popover. The owner chooses the agent, its
   fallback ("Pause and ask me" by default) and the computer there; everyone else sees the agent, or the one line
-  "Waiting for the editing computer". Per-comment actions are in the card's ⋯ menu: send one, retry, history and
-  delete as the role allows; switch agent and pause for the owner; reopen for approvers. A question an agent asked
+  "Waiting for the editing computer". A batch shows as one group: its comments are Working together, the comments
+  column's progress line says `Agent working on 3 comments` while it runs (`· 2 more next` when a batch waits behind
+  it), and the agent popover's head says `editing 3 comments`. Per-comment actions are in the card's ⋯ menu: send
+  one, retry, history and delete as the role allows (send one and retry add to the video's batch, as any send); switch agent and pause for the owner; reopen for approvers. A question an agent asked
   from inside its task (`retake ask`) shows under its comment, with a reply box that takes typed words or a tapped
   choice (`…/answer` with `question`) or a recorded answer (`answer_to`), and as a marker on the timeline at its
   moment, in the Question color; clicking the marker (or the question's time) seeks there and shows its visuals
@@ -456,7 +505,12 @@ submissions, Send by every recording role (a share link too) with no worker onli
 `/done` with and without `send`, a sent take queuing without a worker poll, drafts versus versions, a worker restart
 with unchanged source, profile `env` expansion, Local mode's in-process worker and `blocked` reasons, the exact herdr
 and tmux commands (fake binaries on `PATH` that log their argv), completion by report with no agent output, stop
-closing the pane, and two projects' tasks running at the same time. For `retake ask`: the built-in profiles' argv, the
+closing the pane, and two projects' tasks running at the same time. For batches: a send of 3 notes is one task, one agent process (a
+fake agent counting its launches) and one new version; 2 more sent mid-run make one follow-up batch in the background
+and reach the same session in herdr and tmux (fake binaries), within one report and one version; 5 queued single-note
+tasks of an older store become one batch when it opens; a retry and a send while a batch is queued join it; a
+withdrawn note drops out of its batch; a queued batch waits for a sent take still being processed; and an e2e test
+where Send with several comments yields one version. For `retake ask`: the built-in profiles' argv, the
 CLI's parsing and validation of visuals, their persistence and the hosted relay of their images, a fake agent that
 asks mid-task and then completes (Local mode and hosted), a wrong or stale secret refused, an answer reaching a herdr
 and a tmux session (fake binaries) and a background attempt's context, a task ending with some notes Done and some
