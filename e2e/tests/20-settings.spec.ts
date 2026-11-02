@@ -84,6 +84,8 @@ test('the owner changes the agent, where it runs and an extension, and config.to
     for (const p of ['alpha', 'bravo']) await expect.poll(() => automation(p), { timeout: 20_000 }).toMatchObject({ agent: 'one' });
     const link = page.locator('[data-part~="nav-settings"]');
     await expect(link).toBeVisible();
+    // Its icon is a gear (teeth and a hole), not a sun.
+    await expect(link.locator('svg[data-icon="gear"] circle')).toHaveCount(1);
     await link.click();
     await expect(page).toHaveURL(/#settings$/);
     await expect(page.locator('[data-part~="settings"] h1')).toHaveText('Settings');

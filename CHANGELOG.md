@@ -11,6 +11,7 @@ All notable changes are listed here. Versions follow semver once the first relea
 - The old id keeps working: `[extensions] enabled = ["ignition"]`, `[extensions.ignition]`, `retake ext enable
   ignition`, `--extensions ignition`, a person's `{"ignition": false}`, and a computer still on an older retake that
   reports `ignition` and `ignition.doc` (spec/extensions.md, "Renamed ids"). Nothing on disk moves.
+- Settings at the bottom of the folder column has a gear for its icon (it was a sun).
 
 ### Phones, paused tasks and recordings
 - Phone (portrait): the comments always fill the space between the controls and Record and Send, with To do · Done,
