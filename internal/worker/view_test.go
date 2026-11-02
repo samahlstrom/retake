@@ -159,6 +159,7 @@ func TestHerdrRunsEachVideosAgentInItsOwnWorkspace(t *testing.T) {
 		{"workspace", "create", "--cwd", r.opts.Root, "--label", "retake · item-shop", "--no-focus", "--env", "SHOT_COLOUR=blue"},
 		{"agent", "start", name, "--kind", "claude", "--pane", "w1:p2", "--timeout", "60000", "--", "--permission-mode", "acceptEdits"},
 		{"agent", "prompt", name, lineFor(r, "t1")},
+		{"agent", "wait", name, "--until", "working", "--until", "blocked", "--until", "done", "--timeout", "15000"},
 	})
 	if _, e := os.Stat(filepath.Join(r.dir, "tasks", "t1", "agent-1.log")); !os.IsNotExist(e) {
 		t.Fatal("an interactive agent's output was captured", e)
@@ -183,6 +184,7 @@ func TestHerdrRunsEachVideosAgentInItsOwnWorkspace(t *testing.T) {
 		{"pane", "get", "w1:p2"},
 		{"agent", "get", name},
 		{"agent", "prompt", name, lineFor(r, "t2")},
+		{"agent", "wait", name, "--until", "working", "--until", "blocked", "--until", "done", "--timeout", "15000"},
 	})
 }
 
@@ -235,6 +237,7 @@ func TestStoppingAHerdrTaskClosesItsPane(t *testing.T) {
 		{"tab", "create", "--workspace", "w1", "--cwd", r.opts.Root, "--label", "retake · item-shop", "--no-focus", "--env", "SHOT_COLOUR=blue"},
 		{"agent", "start", name, "--kind", "claude", "--pane", "w1:p3", "--timeout", "60000", "--", "--permission-mode", "acceptEdits"},
 		{"agent", "prompt", name, lineFor(r, "t2")},
+		{"agent", "wait", name, "--until", "working", "--until", "blocked", "--until", "done", "--timeout", "15000"},
 	})
 }
 
@@ -264,8 +267,37 @@ func TestHerdrWaitsForTheAgentsStartupQuestion(t *testing.T) {
 	sameCalls(t, "startup question", got[1:], [][]string{
 		{"agent", "wait", name, "--until", "idle", "--until", "done"},
 		{"agent", "prompt", name, lineFor(r, "t1")},
+		{"agent", "wait", name, "--until", "working", "--until", "blocked", "--until", "done", "--timeout", "15000"},
 	})
 	if !strings.Contains(log.String(), "item-shop: the agent is waiting for you in herdr (retake · item-shop)") {
+		t.Fatal(log)
+	}
+}
+
+// TestHerdrSendsALostLineAgain: right after its startup question, an agent can lose the line typed into it and sit
+// idle. The line goes again, once, and the task carries on.
+func TestHerdrSendsALostLineAgain(t *testing.T) {
+	dir := fakeViews(t)
+	for _, f := range []string{"not-ready", "drop-prompt"} {
+		if e := os.WriteFile(filepath.Join(dir, "herdr", f), nil, 0o600); e != nil {
+			t.Fatal(e)
+		}
+	}
+	r, log := viewRunner(t, "item-shop", claudeInHerdr)
+	if got := r.execute(context.Background(), task("t1")); got.state != "question" {
+		t.Fatalf("%+v", got)
+	}
+	name := herdrName(r.opts.Root)
+	wait := []string{"agent", "wait", name, "--until", "working", "--until", "blocked", "--until", "done", "--timeout", "15000"}
+	got := since(calls(t, filepath.Join(dir, "herdr", "argv.log")), 1)
+	sameCalls(t, "lost line", got[1:], [][]string{
+		{"agent", "wait", name, "--until", "idle", "--until", "done"},
+		{"agent", "prompt", name, lineFor(r, "t1")},
+		wait,
+		{"agent", "prompt", name, lineFor(r, "t1")},
+		wait,
+	})
+	if !strings.Contains(log.String(), "item-shop: the agent in herdr (retake · item-shop) didn't start on its line; sending it again") {
 		t.Fatal(log)
 	}
 }
@@ -294,6 +326,7 @@ func TestSwitchingAgentsReplacesTheVideosSession(t *testing.T) {
 		{"tab", "create", "--workspace", "w1", "--cwd", r.opts.Root, "--label", "retake · item-shop", "--no-focus"},
 		{"agent", "start", name, "--kind", "codex", "--pane", "w1:p3", "--timeout", "60000", "--", "--sandbox", "workspace-write", "-c", `approval_policy="never"`},
 		{"agent", "prompt", name, lineFor(r, "t2")},
+		{"agent", "wait", name, "--until", "working", "--until", "blocked", "--until", "done", "--timeout", "15000"},
 	})
 }
 

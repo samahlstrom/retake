@@ -174,7 +174,8 @@ herdr pane close <pane>       # only on pause, switch or a lost connection, befo
 The next task checks `herdr pane get <pane>` and `herdr agent get <name>`, then sends `herdr agent prompt` again. If the
 agent had quit, it runs `herdr agent start` in the same pane first; if the pane is gone, `herdr tab create --workspace
 <workspace> ...` (or a new workspace when that's gone too). A startup question makes `agent start` answer
-`agent_not_ready`, and Retake runs `herdr agent wait <name> --until idle --until done` before the prompt.
+`agent_not_ready`, and Retake runs `herdr agent wait <name> --until idle --until done` before the prompt. After every
+prompt Retake waits up to 15 s for the agent to start working, and sends the line once more if it's still idle.
 
 In tmux:
 

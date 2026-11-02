@@ -25,11 +25,12 @@ const (
 	tmuxSession    = "retake"
 )
 
-// Intervals of an interactive task: how often the report file is read, how often the session is checked, and how
-// long a herdr agent may take to start.
+// Intervals of an interactive task: how often the report file is read, how often the session is checked, how long a
+// herdr agent may take to start, and how long it may take to start working on a line it was given.
 var (
 	viewPoll  = 500 * time.Millisecond
 	viewCheck = 2 * time.Second
+	herdrTake = 15 * time.Second
 )
 
 const herdrStartTimeout = 60 * time.Second
@@ -272,12 +273,30 @@ func (v *view) herdrStart(ctx context.Context, p Profile) error {
 	return e
 }
 
+// herdrPrompt gives the agent its line and checks that it took it. An agent that has just come past a startup question
+// (Claude Code's "trust this folder?") can still be drawing its prompt box, and a line typed then is lost: the agent
+// sits idle with an empty box. So a line the agent doesn't start working on is sent once more.
 func (v *view) herdrPrompt(ctx context.Context, line string) error {
-	_, e := v.cli(ctx, 30*time.Second, "agent", "prompt", v.state.Agent, line)
-	if errCode(e) == "agent_blocked" {
-		return fmt.Errorf("the agent is waiting for an answer in herdr (%s); answer it there, then retry", v.label())
+	for try := 1; ; try++ {
+		_, e := v.cli(ctx, 30*time.Second, "agent", "prompt", v.state.Agent, line)
+		if errCode(e) == "agent_blocked" {
+			return fmt.Errorf("the agent is waiting for an answer in herdr (%s); answer it there, then retry", v.label())
+		}
+		if e != nil {
+			return e
+		}
+		_, e = v.cli(ctx, herdrTake+10*time.Second, "agent", "wait", v.state.Agent, "--until", "working", "--until",
+			"blocked", "--until", "done", "--timeout", fmt.Sprint(herdrTake.Milliseconds()))
+		switch {
+		case e == nil:
+			return nil
+		case ctx.Err() != nil:
+			return ctx.Err()
+		case try == 2:
+			return fmt.Errorf("the agent in herdr (%s) didn't start on its line: %w", v.label(), e)
+		}
+		v.log("%s: the agent in herdr (%s) didn't start on its line; sending it again", v.name, v.label())
 	}
-	return e
 }
 
 // herdrName is the agent's name in herdr: unique per project folder, and within herdr's [a-z][a-z0-9_-]{0,31}.

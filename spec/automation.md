@@ -88,7 +88,10 @@ Where a worker runs its agent is a user setting: `open_agents_in` in the user co
 - No usage is recorded in these modes: there's no JSON stream to read it from. Usage limits show in the session.
 - An agent that stops at a startup question in herdr (such as "trust this folder?", or Claude Code's one-time "accept
   bypass permissions mode?") makes `herdr agent start` answer `agent_not_ready`: the worker logs that the agent is
-  waiting for the person and waits (`herdr agent wait`) before sending the line. In tmux the line is the command's
+  waiting for the person and waits (`herdr agent wait`) before sending the line. Every line sent in herdr is checked:
+  the worker waits up to 15 s for the agent to be working, blocked or done (`herdr agent wait --until working --until
+  blocked --until done --timeout 15000`), and sends the line once more if it isn't, since an agent just past a startup
+  question can drop what's typed while it draws its prompt box. In tmux the line is the command's
   argument, so the agent reads it once the person has answered; the worker logs, once per session, that a new agent
   may stop at such a question. A missing `herdr` or `tmux` binary, or a herdr or tmux error, pauses the task with that
   error.

@@ -2,7 +2,9 @@
 # A stand-in for herdr in tests. It logs its argv (fields end with \037, one call per line) to $FAKE_HERDR_DIR/argv.log
 # and keeps workspaces, panes and agents as files there. "agent prompt" runs $FAKE_AGENT with the line, in the pane's
 # folder and environment, the way an interactive agent gets a message. It never talks to a herdr server and never
-# starts claude or codex. $FAKE_HERDR_DIR/not-ready makes the next "agent start" stop at a startup question.
+# starts claude or codex. $FAKE_HERDR_DIR/not-ready makes the next "agent start" stop at a startup question, and
+# $FAKE_HERDR_DIR/drop-prompt makes the next "agent prompt" lose its line (the agent stays idle, so waiting for it to
+# work times out).
 set -u
 D=$FAKE_HERDR_DIR
 until mkdir "$D/lock" 2>/dev/null; do
@@ -74,6 +76,11 @@ case "$1 ${2:-}" in
 	printf '{"id":"cli","result":{"type":"agent_started","agent":{"pane_id":"%s"},"argv":[]}}\n' "$pane"
 	;;
 "agent wait")
+	case " $* " in
+	*" --until working "*)
+		[ -f "$D/idle-$3" ] && fail timeout "agent $3 didn't reach working, blocked or done"
+		;;
+	esac
 	echo '{"id":"cli","result":{"type":"agent_info"}}'
 	;;
 "agent get")
@@ -83,6 +90,13 @@ case "$1 ${2:-}" in
 "agent prompt")
 	[ -f "$D/agent-$3" ] || fail agent_not_found "agent $3 not found"
 	pane=$(cat "$D/agent-$3")
+	if [ -f "$D/drop-prompt" ]; then
+		rm -f "$D/drop-prompt"
+		: >"$D/idle-$3"
+		echo '{"id":"cli","result":{"type":"agent_prompted"}}'
+		exit 0
+	fi
+	rm -f "$D/idle-$3"
 	(
 		cd "$(head -n 1 "$D/pane-$pane")" || exit 1
 		while IFS= read -r kv; do export "${kv?}"; done <"$D/env-$pane"
