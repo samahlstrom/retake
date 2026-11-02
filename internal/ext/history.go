@@ -18,7 +18,7 @@ import (
 	"time"
 )
 
-// The history of the agent's edits to owned files (spec/ignition.md): before each agent attempt the owned files are
+// The history of the agent's edits to owned files (spec/scripts.md): before each agent attempt the owned files are
 // copied, after it the copies of what changed are kept, and Undo puts one file back while nobody changed it since.
 // Layout: <video>/.retake/history/<stamp>-<rand>/edit.json and files/<owned path>.
 const (

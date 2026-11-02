@@ -183,16 +183,16 @@ func TestResolvePrecedence(t *testing.T) {
 
 func TestParseExtensions(t *testing.T) {
 	in := `[server]
-extensions = ["ignition", "board"]
+extensions = ["scripts", "board"]
 
 [extensions]
-enabled = ["ignition", "hello"]
+enabled = ["scripts", "hello"]
 enable = ["typo"]
 
 [extensions.pins]
 hello = "b3:00"
 
-[extensions.ignition]
+[extensions.scripts]
 model = "small"
 words = 3
 `
@@ -201,17 +201,17 @@ words = 3
 		t.Fatal(err)
 	}
 	e := c.Extensions
-	if !slices.Equal(e.Enabled, []string{"ignition", "hello"}) || e.Pins["hello"] != "b3:00" ||
-		e.Settings["ignition"]["model"] != "small" || e.Settings["ignition"]["words"] != int64(3) {
+	if !slices.Equal(e.Enabled, []string{"scripts", "hello"}) || e.Pins["hello"] != "b3:00" ||
+		e.Settings["scripts"]["model"] != "small" || e.Settings["scripts"]["words"] != int64(3) {
 		t.Errorf("extensions %+v", e)
 	}
-	if !slices.Equal(c.Server.Extensions, []string{"ignition", "board"}) {
+	if !slices.Equal(c.Server.Extensions, []string{"scripts", "board"}) {
 		t.Errorf("server extensions %v", c.Server.Extensions)
 	}
 	if !slices.Equal(warnings, []string{`unknown key "extensions.enable"`}) {
 		t.Errorf("warnings %v", warnings)
 	}
-	for _, bad := range []string{"[extensions]\nenabled = \"ignition\"\n", "[extensions]\nenabled = [1]\n",
+	for _, bad := range []string{"[extensions]\nenabled = \"scripts\"\n", "[extensions]\nenabled = [1]\n",
 		"[extensions]\npins = 3\n", "[extensions.pins]\nx = 1\n", "extensions = 3\n"} {
 		if _, _, err := Parse(bad); err == nil {
 			t.Errorf("no error for %q", bad)
@@ -232,15 +232,15 @@ func TestSetExtension(t *testing.T) {
 		pin          string
 		after        string
 	}{
-		{name: "a new file", id: "ignition", on: true, after: "[extensions]\nenabled = [\"ignition\"]\n"},
-		{name: "keeps the rest", id: "ignition", on: true,
+		{name: "a new file", id: "scripts", on: true, after: "[extensions]\nenabled = [\"scripts\"]\n"},
+		{name: "keeps the rest", id: "scripts", on: true,
 			before: "# my config\nname = \"Ana\" # me\n\n[transcribe]\nmodel = \"small\"\n",
-			after:  "# my config\nname = \"Ana\" # me\n\n[transcribe]\nmodel = \"small\"\n\n[extensions]\nenabled = [\"ignition\"]\n"},
+			after:  "# my config\nname = \"Ana\" # me\n\n[transcribe]\nmodel = \"small\"\n\n[extensions]\nenabled = [\"scripts\"]\n"},
 		{name: "adds to the list", id: "hello", on: true,
-			before: "[extensions] # tools\nenabled = [\"ignition\"] # on\n\n[render]\nencoder = \"x264\"\n",
-			after:  "[extensions] # tools\nenabled = [\"ignition\", \"hello\"]  # on\n\n[render]\nencoder = \"x264\"\n"},
-		{name: "a list over lines", id: "ignition", on: false,
-			before: "[extensions]\nenabled = [\n  \"ignition\", # the first\n  \"hello\",\n]\nother = 1\n",
+			before: "[extensions] # tools\nenabled = [\"scripts\"] # on\n\n[render]\nencoder = \"x264\"\n",
+			after:  "[extensions] # tools\nenabled = [\"scripts\", \"hello\"]  # on\n\n[render]\nencoder = \"x264\"\n"},
+		{name: "a list over lines", id: "scripts", on: false,
+			before: "[extensions]\nenabled = [\n  \"scripts\", # the first\n  \"hello\",\n]\nother = 1\n",
 			after:  "[extensions]\nenabled = [\"hello\"]\nother = 1\n"},
 		{name: "a table without enabled", id: "hello", on: true,
 			before: "[extensions]\n\n[extensions.hello]\ngreeting = \"hi\"\n",
@@ -249,11 +249,11 @@ func TestSetExtension(t *testing.T) {
 			before: "port = 9000\n\n[extensions.hello]\ngreeting = \"hi\"\n",
 			after:  "port = 9000\n\n[extensions]\nenabled = [\"hello\"]\n\n[extensions.hello]\ngreeting = \"hi\"\n"},
 		{name: "a dotted key", id: "hello", on: true,
-			before: "extensions.enabled = [\"ignition\"]\nport = 9000\n",
-			after:  "extensions.enabled = [\"ignition\", \"hello\"]\nport = 9000\n"},
-		{name: "already on", id: "ignition", on: true,
-			before: "[extensions]\nenabled = [\"ignition\", \"hello\"]\n",
-			after:  "[extensions]\nenabled = [\"ignition\", \"hello\"]\n"},
+			before: "extensions.enabled = [\"scripts\"]\nport = 9000\n",
+			after:  "extensions.enabled = [\"scripts\", \"hello\"]\nport = 9000\n"},
+		{name: "already on", id: "scripts", on: true,
+			before: "[extensions]\nenabled = [\"scripts\", \"hello\"]\n",
+			after:  "[extensions]\nenabled = [\"scripts\", \"hello\"]\n"},
 		{name: "a pin", id: "proj", on: true, pin: pin, before: "port = 9000\n",
 			after: "port = 9000\n\n[extensions]\nenabled = [\"proj\"]\n\n[extensions.pins]\nproj = \"" + pin + "\"\n"},
 		{name: "a new pin", id: "proj", on: true, pin: pin2,
@@ -263,9 +263,17 @@ func TestSetExtension(t *testing.T) {
 			before: "[extensions]\nenabled = []\n\n[extensions.pins]\nother = \"" + pin + "\"\n",
 			after:  "[extensions]\nenabled = [\"proj\"]\n\n[extensions.pins]\nproj = \"" + pin2 + "\"\nother = \"" + pin + "\"\n"},
 		{name: "off drops the pin", id: "proj", on: false,
-			before: "[extensions]\nenabled = [\"proj\", \"ignition\"]\n\n[extensions.pins]\nproj = \"" + pin + "\"\n",
-			after:  "[extensions]\nenabled = [\"ignition\"]\n\n[extensions.pins]\n"},
+			before: "[extensions]\nenabled = [\"proj\", \"scripts\"]\n\n[extensions.pins]\nproj = \"" + pin + "\"\n",
+			after:  "[extensions]\nenabled = [\"scripts\"]\n\n[extensions.pins]\n"},
 		{name: "off when it isn't there", id: "hello", on: false, before: "port = 9000\n", after: "port = 9000\n"},
+		// Ignition is Scripts now (spec/extensions.md, "Renamed ids"): the old id in the file or the command is the new one.
+		{name: "the old id on is the new one", id: "ignition", on: true, after: "[extensions]\nenabled = [\"scripts\"]\n"},
+		{name: "the old id in the file is already on", id: "scripts", on: true,
+			before: "[extensions]\nenabled = [\"ignition\"]\n", after: "[extensions]\nenabled = [\"ignition\"]\n"},
+		{name: "off by the new id takes the old one out", id: "scripts", on: false,
+			before: "[extensions]\nenabled = [\"ignition\", \"hello\"]\n", after: "[extensions]\nenabled = [\"hello\"]\n"},
+		{name: "off by the old id", id: "ignition", on: false,
+			before: "[extensions]\nenabled = [\"scripts\"]\n", after: "[extensions]\nenabled = []\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			p := filepath.Join(t.TempDir(), "retake", "config.toml")
@@ -400,5 +408,48 @@ func TestSetTopRefuses(t *testing.T) {
 	}
 	if _, _, err := Parse("default_agent = \"a b\"\n"); err == nil {
 		t.Error("a bad default_agent parsed")
+	}
+}
+
+// Ignition is Scripts now (spec/extensions.md, "Renamed ids"): a config written before reads as the new id.
+func TestRenamedExtensions(t *testing.T) {
+	c, warnings, err := Parse(`[server]
+extensions = ["ignition", "scripts", "hello"]
+
+[extensions]
+enabled = ["ignition", "hello", "scripts"]
+
+[extensions.pins]
+ignition = "b3:` + strings.Repeat("ab", 32) + `"
+
+[extensions.ignition]
+voice = "mine"
+
+[extensions.hello]
+greeting = "hi"
+`)
+	if err != nil || len(warnings) != 0 {
+		t.Fatal(err, warnings)
+	}
+	if want := []string{"scripts", "hello"}; !slices.Equal(c.Extensions.Enabled, want) {
+		t.Errorf("enabled %v, want %v", c.Extensions.Enabled, want)
+	}
+	if want := []string{"scripts", "hello"}; !slices.Equal(c.Server.Extensions, want) {
+		t.Errorf("server extensions %v, want %v", c.Server.Extensions, want)
+	}
+	if _, old := c.Extensions.Pins["ignition"]; old || c.Extensions.Pins["scripts"] == "" {
+		t.Errorf("pins %v", c.Extensions.Pins)
+	}
+	if _, old := c.Extensions.Settings["ignition"]; old || c.Extensions.Settings["scripts"]["voice"] != "mine" ||
+		c.Extensions.Settings["hello"]["greeting"] != "hi" {
+		t.Errorf("settings %v", c.Extensions.Settings)
+	}
+	// A table under the new id wins over the old one's.
+	c, _, err = Parse("[extensions.ignition]\nvoice = \"old\"\n\n[extensions.scripts]\nvoice = \"new\"\n")
+	if err != nil || c.Extensions.Settings["scripts"]["voice"] != "new" || len(c.Extensions.Settings) != 1 {
+		t.Errorf("both tables: %v %v", c.Extensions.Settings, err)
+	}
+	if ExtensionID("ignition") != "scripts" || ExtensionID("hello") != "hello" || ExtensionIDs(nil) != nil {
+		t.Error("ExtensionID")
 	}
 }

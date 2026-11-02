@@ -440,14 +440,14 @@ describe('comments belong to the version they were made on', () => {
 
   it("an extension's kind of version comes first, as `v0 · Script`, and is never an earlier cut", () => {
     const name = (v: { label: string; kind?: string }) => (v.kind ? `${v.label} · Script` : v.label);
-    const fam = [{ label: 'v1' }, { label: 'v0', kind: 'ignition.doc' }, { label: 'v2' }];
+    const fam = [{ label: 'v1' }, { label: 'v0', kind: 'scripts.doc' }, { label: 'v2' }];
     const counts = new Map([
       ['v0', 2],
       ['v1', 1],
     ]);
     const strip = versionStrip(fam, 'v2', counts, name);
     expect(strip.map((e) => [e.version, e.name, e.todo, e.on, e.kind])).toEqual([
-      ['v0', 'v0 · Script', 2, false, 'ignition.doc'],
+      ['v0', 'v0 · Script', 2, false, 'scripts.doc'],
       ['v1', 'v1', 1, false, undefined],
       ['v2', 'v2', 0, true, undefined],
     ]);
@@ -456,7 +456,7 @@ describe('comments belong to the version they were made on', () => {
     expect(onV0.find((e) => e.on)?.version).toBe('v0');
     expect(earlierOpen(onV0)).toEqual([]);
     // v0 alone: a single version, no strip; without a namer it reads its label.
-    expect(versionStrip([{ label: 'v0', kind: 'ignition.doc' }], 'v0', counts, name)).toEqual([]);
+    expect(versionStrip([{ label: 'v0', kind: 'scripts.doc' }], 'v0', counts, name)).toEqual([]);
     expect(versionStrip(fam, 'v2', counts)[0]!.name).toBe('v0');
   });
 

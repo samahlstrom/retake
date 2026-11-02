@@ -303,7 +303,7 @@ Versioning). Classes and ids are not part of the API and can change in any relea
 | `nav-toggle` | ☰, which shows and hides the tree | home |
 | `nav-ext` | An extension's section under the folder tree (spec/extensions.md) | home |
 | `nav-ext-title` | Its header row's title, which opens the extension's page | home |
-| `nav-ext-action` | Its + (the extension's action, such as New idea) | home |
+| `nav-ext-action` | Its + (the extension's action, such as New script) | home |
 | `nav-ext-video` | A video in that section (an idea: only an extension's version) | home |
 | `ext-slot` | Where an extension's UI mounts; `data-ext` is its id, `data-slot` the slot | home, review |
 | `comment-line` | The comment box at the bottom of the comments ("Comment at 0:18 · goes into v8…", or "Comment for the agent…" on an extension's version) | review |

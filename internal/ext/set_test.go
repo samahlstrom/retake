@@ -78,7 +78,7 @@ func TestNilSet(t *testing.T) {
 	if s.List() != nil || s.Get("x") != nil || s.Without(nil) != nil || s.KindAt(t.TempDir()) != "" {
 		t.Error("nil set has something")
 	}
-	if _, _, ok := s.Kind("ignition.doc"); ok {
+	if _, _, ok := s.Kind("scripts.doc"); ok {
 		t.Error("nil set has a kind")
 	}
 	if string(s.StylesCSS()) != "@layer retake, ext;\n" {
@@ -90,19 +90,19 @@ func TestNilSet(t *testing.T) {
 }
 
 func TestSetLookups(t *testing.T) {
-	s, _ := Resolve([]*Ext{kindExt("ignition", WhereBundled), plainExt("hello", WhereFlag)}, []string{"ignition"}, nil)
-	if !slices.Equal(ids(s), []string{"hello", "ignition"}) || s.Get("ignition") == nil || s.Get("nope") != nil {
+	s, _ := Resolve([]*Ext{kindExt("scripts", WhereBundled), plainExt("hello", WhereFlag)}, []string{"scripts"}, nil)
+	if !slices.Equal(ids(s), []string{"hello", "scripts"}) || s.Get("scripts") == nil || s.Get("nope") != nil {
 		t.Fatalf("set %v", ids(s))
 	}
-	if e, k, ok := s.Kind("ignition.doc"); !ok || e.ID != "ignition" || !slices.Equal([]string(k.Marker), []string{"idea.md"}) {
+	if e, k, ok := s.Kind("scripts.doc"); !ok || e.ID != "scripts" || !slices.Equal([]string(k.Marker), []string{"idea.md"}) {
 		t.Errorf("Kind: %v %+v %v", e, k, ok)
 	}
-	for _, full := range []string{"ignition.talk", "hello.doc", "ignition", ""} {
+	for _, full := range []string{"scripts.talk", "hello.doc", "scripts", ""} {
 		if _, _, ok := s.Kind(full); ok {
 			t.Errorf("Kind(%q) found", full)
 		}
 	}
-	if got := ids(s.Without(map[string]bool{"ignition": true})); !slices.Equal(got, []string{"hello"}) {
+	if got := ids(s.Without(map[string]bool{"scripts": true})); !slices.Equal(got, []string{"hello"}) {
 		t.Errorf("Without = %v", got)
 	}
 	if got := ids(s); len(got) != 2 {
@@ -111,7 +111,7 @@ func TestSetLookups(t *testing.T) {
 }
 
 func TestKindAt(t *testing.T) {
-	s, _ := Resolve([]*Ext{kindExt("ignition", WhereBundled)}, []string{"ignition"}, nil)
+	s, _ := Resolve([]*Ext{kindExt("scripts", WhereBundled)}, []string{"scripts"}, nil)
 	root := t.TempDir()
 	writeTree(t, root, map[string]string{
 		"idea/v0/idea.md":            "# Idea\n",
@@ -128,7 +128,7 @@ func TestKindAt(t *testing.T) {
 		t.Fatal(err)
 	}
 	for dir, want := range map[string]string{
-		"idea": "ignition.doc", "cut": "ignition.doc", "video": "", "plain": "", "dirmarker": "", "refsvideo": "ignition.doc",
+		"idea": "scripts.doc", "cut": "scripts.doc", "video": "", "plain": "", "dirmarker": "", "refsvideo": "scripts.doc",
 		"nowhere": "",
 	} {
 		if got := s.KindAt(filepath.Join(root, dir)); got != want {
@@ -137,7 +137,7 @@ func TestKindAt(t *testing.T) {
 	}
 }
 
-// A marker given as a glob or a list (spec/extensions.md, "Version kinds"): Ignition's one document, *_v0.md, or the
+// A marker given as a glob or a list (spec/extensions.md, "Version kinds"): Scripts' one document, *_v0.md, or the
 // idea.md of a v0 from before it was one file.
 func TestKindAtGlobMarkers(t *testing.T) {
 	dir := t.TempDir()
@@ -151,20 +151,20 @@ func TestKindAtGlobMarkers(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	ext := filepath.Join(dir, "ext", "ignition")
-	write("ext/ignition/extension.toml", manifestOf("ignition")+"\n[[kinds]]\nid = \"doc\"\nfolder = \"v0\"\nmarker = [\"*_v0.md\", \"idea.md\"]\n")
+	ext := filepath.Join(dir, "ext", "scripts")
+	write("ext/scripts/extension.toml", manifestOf("scripts")+"\n[[kinds]]\nid = \"doc\"\nfolder = \"v0\"\nmarker = [\"*_v0.md\", \"idea.md\"]\n")
 	e := LoadDir(ext)
 	if !e.OK() {
 		t.Fatalf("%v", e.Problems)
 	}
-	s, _ := Resolve([]*Ext{e}, []string{"ignition"}, nil)
+	s, _ := Resolve([]*Ext{e}, []string{"scripts"}, nil)
 	write("promo/v0/promo_v0.md", "# Promo\n")
 	write("old/v0/idea.md", "# Old\n")
 	write("other/v0/notes.md", "x")
 	write("hidden/v0/._v0.md", "x")
 	write("clip/v0/clip_v0.mp4", "video")
 	write("clip/v0/clip_v0.md", "# Clip\n")
-	for video, want := range map[string]string{"promo": "ignition.doc", "old": "ignition.doc", "other": "",
+	for video, want := range map[string]string{"promo": "scripts.doc", "old": "scripts.doc", "other": "",
 		"hidden": "", "clip": ""} {
 		if got := s.KindAt(filepath.Join(dir, video)); got != want {
 			t.Errorf("%s: %q, want %q", video, got, want)
@@ -174,5 +174,35 @@ func TestKindAtGlobMarkers(t *testing.T) {
 	bad := LoadDir(filepath.Join(dir, "ext", "bad"))
 	if bad.OK() {
 		t.Error("a bad glob loads")
+	}
+}
+
+// Ignition is Scripts now (spec/extensions.md, "Renamed ids"): the old id turns it on, finds it, finds its kind and
+// turns it off for a person.
+func TestRenamedID(t *testing.T) {
+	found := []*Ext{kindExt("scripts", WhereBundled), plainExt("hello", WhereUser)}
+	s, warnings := Resolve(found, []string{"ignition", "hello"}, nil)
+	if got := ids(s); !slices.Equal(got, []string{"hello", "scripts"}) || len(warnings) != 0 {
+		t.Fatalf("on = %v, warnings %q", got, warnings)
+	}
+	if e := s.Get("ignition"); e == nil || e.ID != "scripts" {
+		t.Errorf("Get(ignition) = %v", e)
+	}
+	if e, k, ok := s.Kind("ignition.doc"); !ok || e.ID != "scripts" || e.FullKind(k) != "scripts.doc" {
+		t.Errorf("Kind(ignition.doc) = %v %v %v", e, k, ok)
+	}
+	if got := ids(s.Without(map[string]bool{"ignition": true})); !slices.Equal(got, []string{"hello"}) {
+		t.Errorf("without ignition: %v", got)
+	}
+	if CanonicalKind("ignition.doc") != "scripts.doc" || CanonicalKind("hello.doc") != "hello.doc" ||
+		CanonicalKind("odd") != "odd" {
+		t.Error("CanonicalKind")
+	}
+	// An extension whose own id is the old one isn't renamed: it can't be turned on by that id, and Get finds it
+	// first when something else (--ext) turned it on.
+	old := plainExt("ignition", WhereFlag)
+	s, _ = Resolve([]*Ext{old, kindExt("scripts", WhereBundled)}, []string{"ignition"}, nil)
+	if got := ids(s); !slices.Equal(got, []string{"ignition", "scripts"}) || s.Get("ignition") != old {
+		t.Errorf("an extension named ignition: %v", got)
 	}
 }

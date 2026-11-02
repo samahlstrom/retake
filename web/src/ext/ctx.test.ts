@@ -4,17 +4,17 @@ import { ExtError, JOB_POLL_MS, makeCtx, WATCH_RENEW_MS, wordsPath, wordsText, t
 import type { ExtInfo } from './loader';
 import type { Player } from './retake-ext';
 
-const ignition: ExtInfo = {
-  id: 'ignition',
-  name: 'Ignition',
+const scripts: ExtInfo = {
+  id: 'scripts',
+  name: 'Scripts',
   version: '1.0.0',
-  base: 'ext/ignition/',
-  module: 'ui/ignition.js',
+  base: 'ext/scripts/',
+  module: 'ui/scripts.js',
   style: '',
   nav: null,
   kinds: [
     {
-      id: 'ignition.doc',
+      id: 'scripts.doc',
       kind: 'doc',
       folder: 'v0',
       marker: ['*_v0.md'],
@@ -89,7 +89,7 @@ function videoHost(f: typeof fetch, over: Partial<Host> = {}): Host {
     where: 'video',
     homeRoot: '/',
     video: { name: 'jump-souls', title: 'jump-souls', path: 'deadlock/jump-souls', project: 'deadlock' },
-    version: { label: 'v0', kind: 'ignition.doc' },
+    version: { label: 'v0', kind: 'scripts.doc' },
     role: 'reviewer',
     viewer: 'view1',
     toast: () => {},
@@ -102,7 +102,7 @@ function videoHost(f: typeof fetch, over: Partial<Host> = {}): Host {
 describe('ctx', () => {
   it('has the members api.json lists, and its files, comments and player have theirs', () => {
     const player: Player = { time: () => 1, duration: () => 2, seek: () => {}, onTime: () => () => {} };
-    const { ctx } = makeCtx(ignition, 'sidebar-tab', videoHost(server({}).fetch, { player: () => player }));
+    const { ctx } = makeCtx(scripts, 'sidebar-tab', videoHost(server({}).fetch, { player: () => player }));
     expect(Object.keys(ctx).sort()).toEqual([...api.ctx].sort());
     expect(Object.keys(ctx.files()).sort()).toEqual([...api.files].sort());
     expect(Object.keys(ctx.comments()).sort()).toEqual([...api.comments].sort());
@@ -115,7 +115,7 @@ describe('ctx', () => {
   it('gives a slot what is its own: the page its route, a sidebar tab the player, no video at the home', () => {
     const player: Player = { time: () => 1, duration: () => 2, seek: () => {}, onTime: () => () => {} };
     const f = server({}).fetch;
-    const version = makeCtx(ignition, 'version', videoHost(f, { player: () => player, route: () => 'x' })).ctx;
+    const version = makeCtx(scripts, 'version', videoHost(f, { player: () => player, route: () => 'x' })).ctx;
     expect(version.player).toBeUndefined();
     expect(version.route).toBe('');
     expect(version.video).toEqual({
@@ -124,10 +124,10 @@ describe('ctx', () => {
       path: 'deadlock/jump-souls',
       project: 'deadlock',
     });
-    expect(version.version).toEqual({ label: 'v0', kind: 'ignition.doc' });
+    expect(version.version).toEqual({ label: 'v0', kind: 'scripts.doc' });
     expect(version.role).toBe('reviewer');
     let route = 'new';
-    const page = makeCtx(ignition, 'page', {
+    const page = makeCtx(scripts, 'page', {
       where: 'home',
       homeRoot: '',
       role: 'owner',
@@ -149,16 +149,16 @@ describe('ctx.files()', () => {
   it('lists, reads, writes and removes owned files under this video, with If-Match', async () => {
     const info = { path: 'v0/idea.md', size: 9, modified: 1, sha256: 'bbb' };
     const srv = server({
-      'GET api/ext/ignition/files': () => json({ files: [info] }),
-      'GET api/ext/ignition/files?glob=v0%2F*.md': () => json({ files: [] }),
-      'GET api/ext/ignition/files/v0/idea.md': () =>
+      'GET api/ext/scripts/files': () => json({ files: [info] }),
+      'GET api/ext/scripts/files?glob=v0%2F*.md': () => json({ files: [] }),
+      'GET api/ext/scripts/files/v0/idea.md': () =>
         new Response('# Jump souls\n', { headers: { ETag: '"aaa"', 'Content-Type': 'text/markdown' } }),
-      'PUT api/ext/ignition/files/v0/idea.md': (c) =>
+      'PUT api/ext/scripts/files/v0/idea.md': (c) =>
         c.headers['if-match'] === '"aaa"' ? json(info) : json({ error: 'changed', sha256: 'zzz' }, 409),
-      'PUT api/ext/ignition/files/v0/voice/a%20b.webm': () => json({ ...info, path: 'v0/voice/a b.webm' }),
-      'DELETE api/ext/ignition/files/v0/outline.md': () => new Response(null, { status: 204 }),
+      'PUT api/ext/scripts/files/v0/voice/a%20b.webm': () => json({ ...info, path: 'v0/voice/a b.webm' }),
+      'DELETE api/ext/scripts/files/v0/outline.md': () => new Response(null, { status: 204 }),
     });
-    const files = makeCtx(ignition, 'version', videoHost(srv.fetch)).ctx.files();
+    const files = makeCtx(scripts, 'version', videoHost(srv.fetch)).ctx.files();
     expect(await files.list()).toEqual([info]);
     expect(await files.list('v0/*.md')).toEqual([]);
     const read = await files.read('v0/idea.md');
@@ -180,35 +180,35 @@ describe('ctx.files()', () => {
     expect(srv.calls.at(-1)!.method).toBe('DELETE');
     const missing = await files.read('v0/nope.md').catch((e: unknown) => e);
     expect(missing).toMatchObject({ status: 404, message: 'not found' });
-    expect(files.url('v0/refs/a #1.png')).toBe('api/ext/ignition/files/v0/refs/a%20%231.png');
+    expect(files.url('v0/refs/a #1.png')).toBe('api/ext/scripts/files/v0/refs/a%20%231.png');
   });
 
   it("reaches another video's files through the home's root", async () => {
-    const srv = server({ 'GET /p/other%20one/api/ext/ignition/files': () => json({ files: [] }) });
-    const ctx = makeCtx(ignition, 'version', videoHost(srv.fetch)).ctx;
+    const srv = server({ 'GET /p/other%20one/api/ext/scripts/files': () => json({ files: [] }) });
+    const ctx = makeCtx(scripts, 'version', videoHost(srv.fetch)).ctx;
     expect(await ctx.files('other one').list()).toEqual([]);
-    expect(ctx.files('jump-souls').url('v0/idea.md')).toBe('api/ext/ignition/files/v0/idea.md'); // this one: relative
-    const home = makeCtx(ignition, 'page', {
+    expect(ctx.files('jump-souls').url('v0/idea.md')).toBe('api/ext/scripts/files/v0/idea.md'); // this one: relative
+    const home = makeCtx(scripts, 'page', {
       where: 'home',
       homeRoot: '',
       role: 'owner',
       viewer: 'v',
       toast: () => {},
     });
-    expect(home.ctx.files('a').url('v0/idea.md')).toBe('p/a/api/ext/ignition/files/v0/idea.md');
+    expect(home.ctx.files('a').url('v0/idea.md')).toBe('p/a/api/ext/scripts/files/v0/idea.md');
   });
 
   it('history and undo: the agent edits, newest first; undo answers the file, or that it changed', async () => {
     const edit = { id: 'e1', path: 'v0/script.md', at: 5, before: 'a', after: 'b' };
     const srv = server({
-      'GET api/ext/ignition/history': () => json({ edits: [edit] }),
-      'GET api/ext/ignition/history?path=v0%2Fscript.md': () => json({ edits: [edit] }),
-      'POST api/ext/ignition/history/undo': (c) =>
+      'GET api/ext/scripts/history': () => json({ edits: [edit] }),
+      'GET api/ext/scripts/history?path=v0%2Fscript.md': () => json({ edits: [edit] }),
+      'POST api/ext/scripts/history/undo': (c) =>
         (c.body as { id: string }).id === 'e1'
           ? json({ path: 'v0/script.md', size: 1, modified: 2, sha256: 'a' })
           : json({ error: 'changed', sha256: 'c' }, 409),
     });
-    const files = makeCtx(ignition, 'version', videoHost(srv.fetch)).ctx.files();
+    const files = makeCtx(scripts, 'version', videoHost(srv.fetch)).ctx.files();
     expect(await files.history()).toEqual([edit]);
     expect(await files.history('v0/script.md')).toEqual([edit]);
     expect(await files.undo('e1', 'v0/script.md')).toMatchObject({ sha256: 'a' });
@@ -220,23 +220,23 @@ describe('ctx.files()', () => {
   });
 
   it('watch: a lease at once and every 10 s while watched, its own ext.files only, none after the last unwatch', () => {
-    const srv = server({ 'POST api/ext/ignition/watch?viewer=view1': () => json({ ok: true }) });
+    const srv = server({ 'POST api/ext/scripts/watch?viewer=view1': () => json({ ok: true }) });
     const t = clock(),
       ev = events();
-    const made = makeCtx(ignition, 'version', videoHost(srv.fetch, { ...t, events: ev.on }));
+    const made = makeCtx(scripts, 'version', videoHost(srv.fetch, { ...t, events: ev.on }));
     const files = made.ctx.files();
     const a = vi.fn(),
       b = vi.fn();
     const offA = files.watch(a);
     const offB = files.watch(b);
-    expect(srv.calls.map((c) => c.url)).toEqual(['api/ext/ignition/watch?viewer=view1']); // one lease for both
+    expect(srv.calls.map((c) => c.url)).toEqual(['api/ext/scripts/watch?viewer=view1']); // one lease for both
     expect([...t.intervals.values()].map((x) => x.ms)).toEqual([WATCH_RENEW_MS]);
     t.tick();
     t.tick();
     expect(srv.calls).toHaveLength(3);
     const changed = [{ path: 'v0/script.md', size: 3, modified: 9, sha256: 'x' }];
     ev.emit('ext.files', { ext: 'hello', files: [{ path: 'x' }] });
-    ev.emit('ext.files', { ext: 'ignition', files: changed });
+    ev.emit('ext.files', { ext: 'scripts', files: changed });
     expect(a).toHaveBeenCalledTimes(1);
     expect(a).toHaveBeenCalledWith(changed);
     expect(b).toHaveBeenCalledWith(changed);
@@ -258,9 +258,9 @@ describe('ctx.files()', () => {
     const opened: string[] = [];
     const listeners = new Map<string, (e: MessageEvent) => void>();
     let closed = false;
-    const srv = server({ 'POST p/idea/api/ext/ignition/watch?viewer=home1': () => json({ ok: true }) });
+    const srv = server({ 'POST p/idea/api/ext/scripts/watch?viewer=home1': () => json({ ok: true }) });
     const t = clock();
-    const made = makeCtx(ignition, 'page', {
+    const made = makeCtx(scripts, 'page', {
       where: 'home',
       homeRoot: '',
       role: 'owner',
@@ -279,9 +279,9 @@ describe('ctx.files()', () => {
     const cb = vi.fn();
     const off = made.ctx.files('idea').watch(cb);
     expect(opened).toEqual(['p/idea/api/events']);
-    expect(srv.calls[0]!.url).toBe('p/idea/api/ext/ignition/watch?viewer=home1');
+    expect(srv.calls[0]!.url).toBe('p/idea/api/ext/scripts/watch?viewer=home1');
     listeners.get('ext.files')!({
-      data: JSON.stringify({ ext: 'ignition', files: [{ path: 'v0/idea.md' }] }),
+      data: JSON.stringify({ ext: 'scripts', files: [{ path: 'v0/idea.md' }] }),
     } as MessageEvent);
     expect(cb).toHaveBeenCalledWith([{ path: 'v0/idea.md' }]);
     off();
@@ -294,10 +294,10 @@ describe('ctx.transcribe()', () => {
     let polls = 0;
     const slept: number[] = [];
     const srv = server({
-      'POST api/ext/ignition/transcribe': () => json({ job: 'j7' }, 202),
-      'GET api/ext/ignition/jobs/j7': () =>
+      'POST api/ext/scripts/transcribe': () => json({ job: 'j7' }, 202),
+      'GET api/ext/scripts/jobs/j7': () =>
         json({ id: 'j7', kind: 'transcribe-file', state: ++polls < 3 ? 'running' : 'done' }),
-      'GET api/ext/ignition/files/v0/voice/20261101-190211.words.json': () =>
+      'GET api/ext/scripts/files/v0/voice/20261101-190211.words.json': () =>
         json(
           {
             model: 'small',
@@ -314,7 +314,7 @@ describe('ctx.transcribe()', () => {
         ),
     });
     const ctx = makeCtx(
-      ignition,
+      scripts,
       'version',
       videoHost(srv.fetch, {
         sleep: async (ms) => {
@@ -332,21 +332,21 @@ describe('ctx.transcribe()', () => {
 
   it("reads the job's words_path when it names one", async () => {
     const srv = server({
-      'POST api/ext/ignition/transcribe': () => json({ job: 'j1' }, 202),
-      'GET api/ext/ignition/jobs/j1': () => json({ state: 'done', words_path: 'v0/voice/x.words.json' }),
-      'GET api/ext/ignition/files/v0/voice/x.words.json': () => json({ words: [{ w: 'hi', s: 0, e: 1 }] }),
+      'POST api/ext/scripts/transcribe': () => json({ job: 'j1' }, 202),
+      'GET api/ext/scripts/jobs/j1': () => json({ state: 'done', words_path: 'v0/voice/x.words.json' }),
+      'GET api/ext/scripts/files/v0/voice/x.words.json': () => json({ words: [{ w: 'hi', s: 0, e: 1 }] }),
     });
-    const r = await makeCtx(ignition, 'version', videoHost(srv.fetch)).ctx.transcribe('v0/voice/x.ogg');
+    const r = await makeCtx(scripts, 'version', videoHost(srv.fetch)).ctx.transcribe('v0/voice/x.ogg');
     expect(r).toEqual({ text: 'hi', words: [{ w: 'hi', s: 0, e: 1 }] });
   });
 
   it("rejects with the job's hint when it fails", async () => {
     const srv = server({
-      'POST api/ext/ignition/transcribe': () => json({ job: 'j2' }, 202),
-      'GET api/ext/ignition/jobs/j2': () =>
+      'POST api/ext/scripts/transcribe': () => json({ job: 'j2' }, 202),
+      'GET api/ext/scripts/jobs/j2': () =>
         json({ state: 'failed', error: 'no transcriber', hint: 'Set up [transcribe] in config.toml' }),
     });
-    const err = await makeCtx(ignition, 'version', videoHost(srv.fetch))
+    const err = await makeCtx(scripts, 'version', videoHost(srv.fetch))
       .ctx.transcribe('v0/voice/x.webm')
       .catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ExtError);
@@ -355,10 +355,10 @@ describe('ctx.transcribe()', () => {
       hint: 'Set up [transcribe] in config.toml',
     });
     const offline = server({
-      'POST api/ext/ignition/transcribe': () => json({ error: 'editing machine is offline' }, 503),
+      'POST api/ext/scripts/transcribe': () => json({ error: 'editing machine is offline' }, 503),
     });
     expect(
-      await makeCtx(ignition, 'version', videoHost(offline.fetch))
+      await makeCtx(scripts, 'version', videoHost(offline.fetch))
         .ctx.transcribe('v0/voice/x.webm')
         .catch((e: unknown) => e),
     ).toMatchObject({ status: 503, message: 'editing machine is offline' });
@@ -408,14 +408,14 @@ describe('ctx.comments()', () => {
 
   it('list: api/notes items, of one version when asked', async () => {
     const srv = server(routes);
-    const c = makeCtx(ignition, 'version', videoHost(srv.fetch)).ctx.comments();
+    const c = makeCtx(scripts, 'version', videoHost(srv.fetch)).ctx.comments();
     expect((await c.list()).map((i) => i.id)).toEqual([1, 2, 3, 4, 5]);
     expect((await c.list('v0')).map((i) => i.id)).toEqual([1, 2, 3]);
   });
 
   it("add: a typed comment on this extension's version, with its anchor and wants", async () => {
     const srv = server(routes);
-    const c = makeCtx(ignition, 'version', videoHost(srv.fetch)).ctx.comments();
+    const c = makeCtx(scripts, 'version', videoHost(srv.fetch)).ctx.comments();
     const anchor = { file: 'v0/script.md', line: 12, heading: 'Cold open', quote: 'So the idea' };
     const item = await c.add({ text: 'Tighten this', anchor });
     expect(srv.calls.at(-1)!.body).toEqual({ version: 'v0', text: 'Tighten this', anchor });
@@ -427,14 +427,14 @@ describe('ctx.comments()', () => {
       wants: 'version',
     });
     // From a video version (a sidebar tab on v3), a comment still goes on the extension's own version.
-    const fromCut = makeCtx(ignition, 'sidebar-tab', videoHost(srv.fetch, { version: { label: 'v3' } })).ctx;
+    const fromCut = makeCtx(scripts, 'sidebar-tab', videoHost(srv.fetch, { version: { label: 'v3' } })).ctx;
     await fromCut.comments().add({ text: 'x' });
     expect((srv.calls.at(-1)!.body as { version: string }).version).toBe('v0');
   });
 
   it('send: the ids given, or the open ones of its version nobody sent yet', async () => {
     const srv = server(routes);
-    const c = makeCtx(ignition, 'version', videoHost(srv.fetch)).ctx.comments();
+    const c = makeCtx(scripts, 'version', videoHost(srv.fetch)).ctx.comments();
     await c.send([1, 3]);
     expect(srv.calls.at(-1)).toMatchObject({ url: 'api/automation/tasks', body: { notes: [1, 3] } });
     await c.send();
@@ -443,7 +443,7 @@ describe('ctx.comments()', () => {
 
   it("answer: a question's thread, to its task", async () => {
     const srv = server(routes);
-    const c = makeCtx(ignition, 'version', videoHost(srv.fetch)).ctx.comments();
+    const c = makeCtx(scripts, 'version', videoHost(srv.fetch)).ctx.comments();
     await c.answer(40, 'Start on the jump');
     expect(srv.calls.at(-1)).toMatchObject({
       url: 'api/automation/tasks/t2/answer',
@@ -456,12 +456,12 @@ describe('ctx.comments()', () => {
 describe('ctx: the rest', () => {
   it('createVideo goes to the home; 409 when the folder is there', async () => {
     const srv = server({
-      'POST /api/ext/ignition/videos': (c) =>
+      'POST /api/ext/scripts/videos': (c) =>
         (c.body as { name: string }).name === 'taken'
           ? json({ error: 'exists' }, 409)
           : json({ name: 'deadlock-jump-souls', url: 'p/deadlock-jump-souls/' }, 201),
     });
-    const ctx = makeCtx(ignition, 'version', videoHost(srv.fetch)).ctx;
+    const ctx = makeCtx(scripts, 'version', videoHost(srv.fetch)).ctx;
     const files = { 'v0/idea.md': '# Jump souls\n\n' };
     expect(await ctx.createVideo({ project: 'deadlock', name: 'jump-souls', files })).toEqual({
       name: 'deadlock-jump-souls',
@@ -473,8 +473,8 @@ describe('ctx: the rest', () => {
         status: 409,
       },
     );
-    const home = server({ 'POST api/ext/ignition/videos': () => json({ name: 'a', url: 'p/a/' }, 201) });
-    await makeCtx(ignition, 'page', {
+    const home = server({ 'POST api/ext/scripts/videos': () => json({ name: 'a', url: 'p/a/' }, 201) });
+    await makeCtx(scripts, 'page', {
       where: 'home',
       homeRoot: '',
       role: 'owner',
@@ -482,14 +482,14 @@ describe('ctx: the rest', () => {
       toast: () => {},
       fetch: home.fetch,
     }).ctx.createVideo({ project: '', name: 'a', files });
-    expect(home.calls[0]!.url).toBe('api/ext/ignition/videos');
+    expect(home.calls[0]!.url).toBe('api/ext/scripts/videos');
   });
 
   it('navigate: another video by URL, this one in place, a route on the home', () => {
     const go = vi.fn(),
       show = vi.fn(),
       setHash = vi.fn();
-    const ctx = makeCtx(ignition, 'version', videoHost(server({}).fetch, { go, show })).ctx;
+    const ctx = makeCtx(scripts, 'version', videoHost(server({}).fetch, { go, show })).ctx;
     ctx.navigate({ video: 'other one', version: 'v3', t: 12.4 });
     expect(go).toHaveBeenLastCalledWith('/p/other%20one/?v=v3&t=12.4');
     ctx.navigate({ video: 'idea' });
@@ -499,8 +499,8 @@ describe('ctx: the rest', () => {
     ctx.navigate({ video: 'jump-souls', version: 'v1' }); // this video: in place
     expect(show).toHaveBeenLastCalledWith('v1', undefined);
     ctx.navigate({ route: 'new' });
-    expect(go).toHaveBeenLastCalledWith('/#ext/ignition/new');
-    const page = makeCtx(ignition, 'page', {
+    expect(go).toHaveBeenLastCalledWith('/#ext/scripts/new');
+    const page = makeCtx(scripts, 'page', {
       where: 'home',
       homeRoot: '',
       role: 'owner',
@@ -510,19 +510,19 @@ describe('ctx: the rest', () => {
       setHash,
     }).ctx;
     page.navigate({ route: '/new' });
-    expect(setHash).toHaveBeenLastCalledWith('#ext/ignition/new');
+    expect(setHash).toHaveBeenLastCalledWith('#ext/scripts/new');
     page.navigate({ video: 'idea', version: 'v0' });
     expect(go).toHaveBeenLastCalledWith('p/idea/?v=v0');
   });
 
   it('fetch reaches its server; home() reads the home; toast is the page’s', async () => {
     const srv = server({
-      'GET ext/ignition/api/beats?x=1': () => json({ ok: 1 }),
+      'GET ext/scripts/api/beats?x=1': () => json({ ok: 1 }),
       'GET /api/home': () => json({ title: 'Videos', role: 'owner', projects: [], tree: {} }),
-      'GET ext/ignition/api/a': () => json({}),
+      'GET ext/scripts/api/a': () => json({}),
     });
     const toast = vi.fn();
-    const ctx = makeCtx(ignition, 'version', videoHost(srv.fetch, { toast })).ctx;
+    const ctx = makeCtx(scripts, 'version', videoHost(srv.fetch, { toast })).ctx;
     expect(await (await ctx.fetch('beats?x=1')).json()).toEqual({ ok: 1 });
     await ctx.fetch('/a');
     expect((await ctx.home()).title).toBe('Videos');
@@ -536,7 +536,7 @@ describe('ctx: the rest', () => {
     const recSubs = new Set<(on: boolean) => void>();
     const select = vi.fn();
     const made = makeCtx(
-      ignition,
+      scripts,
       'version',
       videoHost(server({}).fetch, {
         events: ev.on,
@@ -554,7 +554,7 @@ describe('ctx: the rest', () => {
     ctx.on('files', files);
     const offNotes = ctx.on('notes', notes);
     ev.emit('ext.files', { ext: 'hello', files: [] });
-    ev.emit('ext.files', { ext: 'ignition', files: [] });
+    ev.emit('ext.files', { ext: 'scripts', files: [] });
     ev.emit('notes', { version: 'v0' });
     expect(files).toHaveBeenCalledTimes(1);
     expect(notes).toHaveBeenCalledWith({ version: 'v0' });
@@ -596,7 +596,7 @@ describe('ctx: the rest', () => {
         return () => void reveals.delete(cb);
       },
     });
-    const made = makeCtx(ignition, 'version', host);
+    const made = makeCtx(scripts, 'version', host);
     const { ctx } = made;
     let anchor: unknown = { file: 'v0/jump-souls_v0.md', line: 12.7, heading: ' Cold open ', quote: 'q'.repeat(300) };
     const off = ctx.onAnchor(() => anchor as never);
@@ -614,7 +614,7 @@ describe('ctx: the rest', () => {
     err.mockRestore();
     off();
     // Only the version slot points comments.
-    const tab = makeCtx(ignition, 'sidebar-tab', host);
+    const tab = makeCtx(scripts, 'sidebar-tab', host);
     const before = given;
     tab.ctx.onAnchor(() => ({ file: 'x', line: 1 }));
     expect(given).toBe(before);
@@ -640,7 +640,7 @@ describe('ctx: the rest', () => {
         return () => void subs.delete(cb);
       },
     };
-    const made = makeCtx(ignition, 'review-panel', videoHost(server({}).fetch, { player: () => player }));
+    const made = makeCtx(scripts, 'review-panel', videoHost(server({}).fetch, { player: () => player }));
     const p = made.ctx.player!;
     expect([p.time(), p.duration()]).toEqual([4, 60]);
     p.seek(10);

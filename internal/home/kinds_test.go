@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// kindAt stands in for an enabled Ignition: v0/ with idea.md, and no versioned video in it.
+// kindAt stands in for an enabled Scripts: v0/ with idea.md, and no versioned video in it.
 func kindAt(dir string) string {
 	if st, err := os.Stat(filepath.Join(dir, "v0", "idea.md")); err != nil || !st.Mode().IsRegular() {
 		return ""
@@ -19,7 +19,7 @@ func kindAt(dir string) string {
 			return ""
 		}
 	}
-	return "ignition.doc"
+	return "scripts.doc"
 }
 
 // Kinds in the scan (spec/extensions.md, "Version kinds"): an idea folder (only v0/) is a video, so is a video with
@@ -40,10 +40,10 @@ func TestScanFindsKinds(t *testing.T) {
 	for _, v := range scan.Videos {
 		got[v.Name] = v
 	}
-	if v, ok := got["jump-souls"]; !ok || v.Kind != "ignition.doc" || v.Anchor != "" || v.Project != "" {
+	if v, ok := got["jump-souls"]; !ok || v.Kind != "scripts.doc" || v.Anchor != "" || v.Project != "" {
 		t.Fatalf("idea: %+v (%v)", v, places(scan.Videos))
 	}
-	if v, ok := got["item-shop"]; !ok || v.Kind != "ignition.doc" || filepath.Base(v.Anchor) != "item-shop_v1.mp4" {
+	if v, ok := got["item-shop"]; !ok || v.Kind != "scripts.doc" || filepath.Base(v.Anchor) != "item-shop_v1.mp4" {
 		t.Fatalf("a video with v0 and a cut: %+v", v)
 	}
 	if _, ok := got["notes-only"]; ok {
@@ -62,15 +62,15 @@ func TestScanFindsKinds(t *testing.T) {
 
 // An idea's card: no cut, its kind, no thumbnail; a video with v0 lists the kind.
 func TestCardsOfKinds(t *testing.T) {
-	idea := Make(Source{Name: "jump-souls", Title: "jump-souls", Info: []byte(`{"label": "v0", "kind": "ignition.doc",
-		"path": "/x/jump-souls/v0", "name": "v0", "duration": null, "versions": [{"label": "v0", "kind": "ignition.doc",
+	idea := Make(Source{Name: "jump-souls", Title: "jump-souls", Info: []byte(`{"label": "v0", "kind": "scripts.doc",
+		"path": "/x/jump-souls/v0", "name": "v0", "duration": null, "versions": [{"label": "v0", "kind": "scripts.doc",
 		"name": "v0", "duration": null, "modified": 1790000000000}]}`)})
-	if idea.Status != NoCut || idea.Kind != "ignition.doc" || idea.Version != "v0" || idea.Thumb != "" ||
+	if idea.Status != NoCut || idea.Kind != "scripts.doc" || idea.Version != "v0" || idea.Thumb != "" ||
 		idea.Changed != 1790000000000 || idea.Video != "" || len(idea.Kinds) != 1 {
 		t.Fatalf("%+v", idea)
 	}
 	cut := Make(Source{Name: "item-shop", Title: "item-shop", Info: []byte(`{"label": "v1", "path": "/x/v1/item-shop_v1.mp4",
-		"name": "item-shop_v1.mp4", "duration": 3, "versions": [{"label": "v0", "kind": "ignition.doc", "name": "v0",
+		"name": "item-shop_v1.mp4", "duration": 3, "versions": [{"label": "v0", "kind": "scripts.doc", "name": "v0",
 		"modified": 5}, {"label": "v1", "name": "item-shop_v1.mp4", "duration": 3}]}`)})
 	if cut.Status == NoCut || cut.Kind != "" || len(cut.Kinds) != 1 || cut.Version != "v1" {
 		t.Fatalf("%+v", cut)

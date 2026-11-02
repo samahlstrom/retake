@@ -20,7 +20,7 @@ const v = (label: string, extra: Partial<Version> = {}): Version => ({
   height: 1080,
   ...extra,
 });
-const V0 = v('v0', { kind: 'ignition.doc', duration: null });
+const V0 = v('v0', { kind: 'scripts.doc', duration: null });
 
 /** An element with focus: `closest` answers as the DOM would for the page's selectors. */
 function focused(tag: 'button' | 'textarea' | 'div', o: { editable?: string; inSlot?: boolean } = {}) {
@@ -118,7 +118,7 @@ describe('the review keys with an extension on the page', () => {
 
   it("on an extension's version: R talks (outside text), Esc leaves the text, the video's keys are the page's", () => {
     const { review, ran } = page([V0, v('v1')], 'v0');
-    expect(review.kindShown).toBe('ignition.doc');
+    expect(review.kindShown).toBe('scripts.doc');
     const button = focused('button', { inSlot: true });
     press(review, 'r', button);
     expect(ran).toEqual(['toggleRec']);
@@ -185,16 +185,16 @@ describe("an extension's version is never landed on by following or comparing", 
     expect(review.recordHere).toBe(false);
     review.exts = [
       {
-        id: 'ignition',
-        name: 'Ignition',
+        id: 'scripts',
+        name: 'Scripts',
         version: '1.0.0',
-        base: 'ext/ignition/',
-        module: 'ui/ignition.js',
+        base: 'ext/scripts/',
+        module: 'ui/scripts.js',
         style: '',
         nav: null,
         kinds: [
           {
-            id: 'ignition.doc',
+            id: 'scripts.doc',
             kind: 'doc',
             folder: 'v0',
             marker: ['*_v0.md'],
@@ -203,13 +203,13 @@ describe("an extension's version is never landed on by following or comparing", 
             record: true,
           },
         ],
-        slots: [{ slot: 'version', kind: 'ignition.doc', title: '', when: 'always' }],
+        slots: [{ slot: 'version', kind: 'scripts.doc', title: '', when: 'always' }],
         machine: true,
       },
     ];
     expect(review.nameOf('v0')).toBe('v0 · Script');
     expect(review.recordHere).toBe(true);
-    expect(review.versionExt?.id).toBe('ignition');
+    expect(review.versionExt?.id).toBe('scripts');
     review.shown = 'v1';
     expect(review.recordHere).toBe(true);
     expect(review.versionExt).toBeNull();

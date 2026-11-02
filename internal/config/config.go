@@ -158,6 +158,7 @@ func Parse(s string) (Config, []string, error) {
 	if err != nil {
 		return Config{}, nil, err
 	}
+	c.Server.Extensions = ExtensionIDs(c.Server.Extensions)
 	var warnings []string
 	seen := map[string]bool{}
 	for _, k := range md.Undecoded() {
@@ -329,6 +330,10 @@ func (e *Extensions) UnmarshalTOML(data any) error {
 			e.Settings[k] = t
 		}
 	}
+	// A renamed extension's old id is its new one (spec/extensions.md, "Renamed ids").
+	e.Enabled = ExtensionIDs(e.Enabled)
+	renameKeys(e.Pins)
+	renameKeys(e.Settings)
 	return nil
 }
 
@@ -346,6 +351,7 @@ func SetExtension(path, id string, on bool, pin string) error {
 	if !extIDRE.MatchString(id) {
 		return fmt.Errorf("%q isn't an extension id", id)
 	}
+	id = ExtensionID(id)
 	if pin != "" && !pinRE.MatchString(pin) {
 		return fmt.Errorf("pin %q isn't b3:<64 hex digits>", pin)
 	}
@@ -379,6 +385,14 @@ func SetExtension(path, id string, on bool, pin string) error {
 	lines := strings.Split(text, "\n")
 	if lines, err = setEnabled(lines, enabled); err != nil {
 		return fmt.Errorf("%s: %w", path, err)
+	}
+	for old, to := range RenamedExtensions {
+		if to != id {
+			continue
+		}
+		if lines, err = setPin(lines, old, ""); err != nil { // the pin is kept under the new id
+			return fmt.Errorf("%s: %w", path, err)
+		}
 	}
 	if lines, err = setPin(lines, id, pins[id]); err != nil {
 		return fmt.Errorf("%s: %w", path, err)

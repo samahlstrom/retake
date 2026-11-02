@@ -273,7 +273,7 @@ export interface VersionEntry {
   version: string;
   /** What it reads: `v5`, or for an extension's kind of version `v0 · Script`. */
   name: string;
-  /** An extension's kind of version (`ignition.doc`): it isn't a video. */
+  /** An extension's kind of version (`scripts.doc`): it isn't a video. */
   kind?: string;
   /** What a click shows: the version itself, or the newest listed draft heading for it. */
   label: string;

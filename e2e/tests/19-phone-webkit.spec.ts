@@ -1,16 +1,16 @@
 // The phone layout in WebKit, iPhone Safari's engine (the `webkit` project: RETAKE_E2E_WEBKIT, lib/webkit.ts), on the
 // iPhone 13 and iPhone 15 viewports (Safari's toolbars already taken off their height):
-// - an Ignition document (v0) with a long paragraph, long words, headings, a list and a task, and a plain video;
+// - an Scripts document (v0) with a long paragraph, long words, headings, a list and a task, and a plain video;
 // - nothing is wider than the screen (no sideways scroll, no element past the right edge);
 // - Record and Send are fully on screen (inside innerHeight and the visual viewport);
 // - the top bar fits: back on the left, the comments toggle and the document's ⋯ on the right, none overlapping;
 // - the home fits too.
-// Screenshots go to .retake-work/ignition-shots/webkit-<what>-<device>.png. Under Chromium the file skips.
+// Screenshots go to .retake-work/scripts-shots/webkit-<what>-<device>.png. Under Chromium the file skips.
 import { devices, expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { copyFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { mediaLayout } from '../lib/fixtures.ts';
-import { ignitionConfig } from '../lib/ignition.ts';
+import { scriptsConfig } from '../lib/scripts.ts';
 import { LEGACY, PORTS, REPO, WORK } from '../lib/env.ts';
 import { startServer, type Server } from '../lib/server.ts';
 
@@ -18,7 +18,7 @@ test.describe.configure({ mode: 'serial' });
 test.skip(LEGACY, 'new: the legacy player has no extensions');
 test.skip(({ browserName }) => browserName !== 'webkit', 'WebKit only: set RETAKE_E2E_WEBKIT (e2e/README.md)');
 
-const SHOTS = join(REPO, '.retake-work', 'ignition-shots');
+const SHOTS = join(REPO, '.retake-work', 'scripts-shots');
 const PHONES = ['iPhone 13', 'iPhone 15'] as const;
 const slug = (d: string) => d.toLowerCase().replace(/\s+/g, '');
 
@@ -137,7 +137,7 @@ test.describe('phones in WebKit', () => {
   let server: Server;
 
   test.beforeAll(async () => {
-    const cfg = ignitionConfig('webkit-phone');
+    const cfg = scriptsConfig('webkit-phone');
     const dir = join(WORK, 'webkit-phone', 'videos');
     const video = join(dir, 'deadlock', 'item-shop', 'item-shop_v1.mp4');
     mkdirSync(dirname(video), { recursive: true });
@@ -145,7 +145,7 @@ test.describe('phones in WebKit', () => {
     const doc = join(dir, 'deadlock', 'promo', 'v0', 'promo_v0.md');
     mkdirSync(dirname(doc), { recursive: true });
     writeFileSync(doc, DOC);
-    server = await startServer('webkit-phone', dir, PORTS.ignition, [], { env: { XDG_CONFIG_HOME: cfg.home } });
+    server = await startServer('webkit-phone', dir, PORTS.scripts, [], { env: { XDG_CONFIG_HOME: cfg.home } });
   });
   test.afterAll(async () => {
     await server?.stop();
@@ -156,32 +156,32 @@ test.describe('phones in WebKit', () => {
     test(`${device}: the document, a video and the home fit the screen`, async ({ browser }) => {
       const { context, page } = await phonePage(browser, device);
       try {
-        // The Ignition document (v0): the editor from the top down to Record and Send.
+        // The Scripts document (v0): the editor from the top down to Record and Send.
         await page.goto(`${server.url}p/deadlock-promo/`);
-        const text = page.locator('[data-ext="ignition"] [data-part~="ignition-text"]');
+        const text = page.locator('[data-ext="scripts"] [data-part~="scripts-text"]');
         await expect(text).toBeVisible({ timeout: 20_000 });
-        await expect(page.locator('[data-part~="ignition-more"]')).toBeVisible({ timeout: 10_000 });
+        await expect(page.locator('[data-part~="scripts-more"]')).toBeVisible({ timeout: 10_000 });
         await expect(page.locator('#sideToggle')).toBeVisible();
         await fitsWidth(page, `${device}: the document`);
         await barOnScreen(page, `${device}: the document`);
         await topBarFits(page, `${device}: the document`, [
           '[data-part~="review-back"]',
           '#sideToggle',
-          '[data-part~="ignition-more"]',
+          '[data-part~="scripts-more"]',
         ]);
         // The ⋯ is at the right edge, the comments toggle just left of it.
-        const more = (await page.locator('[data-part~="ignition-more"]').boundingBox())!;
+        const more = (await page.locator('[data-part~="scripts-more"]').boundingBox())!;
         const toggle = (await page.locator('#sideToggle').boundingBox())!;
         const width = page.viewportSize()!.width;
         expect(width - (more.x + more.width)).toBeLessThanOrEqual(16);
         expect(toggle.x + toggle.width).toBeLessThanOrEqual(more.x);
         await shot(page, 'doc', device);
         // Further down: the list with its bullets in the hanging indent, the task's box, the headings.
-        await page.locator('[data-ext="ignition"] .cm-line.ig-h2', { hasText: 'Outline' }).scrollIntoViewIfNeeded();
-        await expect(page.locator('[data-ext="ignition"] [data-part="ignition-task"]')).toBeVisible();
+        await page.locator('[data-ext="scripts"] .cm-line.ig-h2', { hasText: 'Outline' }).scrollIntoViewIfNeeded();
+        await expect(page.locator('[data-ext="scripts"] [data-part="scripts-task"]')).toBeVisible();
         await fitsWidth(page, `${device}: the document's list`);
         await shot(page, 'doc-list', device);
-        await page.locator('[data-ext="ignition"] .ig-scroll').evaluate((el) => (el.scrollTop = 0));
+        await page.locator('[data-ext="scripts"] .ig-scroll').evaluate((el) => (el.scrollTop = 0));
 
         // The comments drawer over it.
         await page.locator('#sideToggle').click();
@@ -200,7 +200,7 @@ test.describe('phones in WebKit', () => {
         await topBarFits(page, `${device}: the document with a to do`, [
           '[data-part~="review-back"]',
           '#sideToggle',
-          '[data-part~="ignition-more"]',
+          '[data-part~="scripts-more"]',
         ]);
         await shot(page, 'doc-todo', device);
 

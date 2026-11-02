@@ -14,7 +14,7 @@ export const EXPORTS: Record<SlotName, keyof Module> = {
   'review-panel': 'reviewPanel',
 };
 
-/** A kind of version an extension adds: `id` is the full id (`ignition.doc`), `kind` its own (`doc`). */
+/** A kind of version an extension adds: `id` is the full id (`scripts.doc`), `kind` its own (`doc`). */
 export interface ExtKind {
   id: string;
   kind: string;
@@ -36,7 +36,7 @@ export interface ExtSlotDef {
 
 export interface ExtNav {
   title: string;
-  /** A path in the extension's folder (`ui/spark.svg`), or ''. */
+  /** A path in the extension's folder (`ui/script.svg`), or ''. */
   icon: string;
   list: string;
   action: { title: string; route: string } | null;

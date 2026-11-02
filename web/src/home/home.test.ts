@@ -202,12 +202,12 @@ describe("an extension's page on the home", () => {
   it('opens from #ext/<id>/<route>, tells the page of a new route, and a folder goes back to the cards', async () => {
     const home = new Home({ storage: null, fetch: (async () => answer(200, body)) as unknown as typeof fetch });
     await home.refresh();
-    home.exts = [ext('ignition'), ext('hello')];
+    home.exts = [ext('scripts'), ext('hello')];
     home.phone = true;
     home.drawer = true;
-    home.route('#ext/ignition/');
-    expect(home.ext).toEqual({ id: 'ignition', route: '' });
-    expect(home.extOpen?.id).toBe('ignition');
+    home.route('#ext/scripts/');
+    expect(home.ext).toEqual({ id: 'scripts', route: '' });
+    expect(home.extOpen?.id).toBe('scripts');
     expect(home.drawer).toBe(false); // the phone's drawer closes, as for a folder
     const host = home.extHost;
     expect(host.where).toBe('home');
@@ -215,7 +215,7 @@ describe("an extension's page on the home", () => {
     expect(host.role).toBe('owner');
     const routes: string[] = [];
     const off = host.onRoute!((r) => routes.push(r));
-    home.route('#ext/ignition/new');
+    home.route('#ext/scripts/new');
     expect(host.route!()).toBe('new');
     expect(routes).toEqual(['new']);
     home.route('#ext/hello/'); // another extension: its own slot, not a route of this one
@@ -226,7 +226,7 @@ describe("an extension's page on the home", () => {
     expect(home.extOpen).toBeNull(); // not on here: the page says so
     home.select('item-shop');
     expect(home.ext).toBeNull();
-    home.route('#ext/ignition/');
+    home.route('#ext/scripts/');
     home.route('#/2026-10-19');
     expect(home.ext).toBeNull();
     expect(home.selected).toBe('2026-10-19');
@@ -248,9 +248,9 @@ describe('the settings page on the home', () => {
     home.select('item-shop');
     expect(home.settings).toBe(false);
     home.route('#settings');
-    home.route('#ext/ignition/');
+    home.route('#ext/scripts/');
     expect(home.settings).toBe(false);
-    expect(home.ext?.id).toBe('ignition');
+    expect(home.ext?.id).toBe('scripts');
     home.route('#settings');
     home.route('#/2026-10-19');
     expect(home.settings).toBe(false);

@@ -59,8 +59,8 @@ export const PORTS = {
   nav: PORT_BASE + 2, // 16, after 12-home
   theme: PORT_BASE + 3, // 17, after 03-crash-safety's proxy
   ext: PORT_BASE + 4, // 17-ext, after 05-sidebar and 09-server
-  ignition: PORT_BASE + 5, // 18, after 06-mobile and 10-eraser
-  ignitionHosted: PORT_BASE + 7, // 18, after 07-share's proxy
+  scripts: PORT_BASE + 5, // 18, after 06-mobile and 10-eraser
+  scriptsHosted: PORT_BASE + 7, // 18, after 07-share's proxy
   batch: PORT_BASE + 1, // 20, after 03-crash-safety
 } as const;
 

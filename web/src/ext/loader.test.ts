@@ -45,15 +45,20 @@ const apiExt = {
       machine: true,
     },
     {
-      id: 'ignition',
-      name: 'Ignition',
+      id: 'scripts',
+      name: 'Scripts',
       version: '1.0.0',
-      base: 'ext/ignition/',
-      module: 'ui/ignition.js',
-      nav: { title: 'Ignition', icon: 'ui/spark.svg', list: 'kind-only', action: { title: 'New idea', route: 'new' } },
+      base: 'ext/scripts/',
+      module: 'ui/scripts.js',
+      nav: {
+        title: 'Scripts',
+        icon: 'ui/script.svg',
+        list: 'kind-only',
+        action: { title: 'New script', route: 'new' },
+      },
       kinds: [
         {
-          id: 'ignition.doc',
+          id: 'scripts.doc',
           kind: 'doc',
           folder: 'v0',
           marker: ['*_v0.md', 'idea.md'],
@@ -62,7 +67,7 @@ const apiExt = {
           record: true,
         },
       ],
-      slots: [{ slot: 'version', kind: 'ignition.doc' }],
+      slots: [{ slot: 'version', kind: 'scripts.doc' }],
       machine: false,
     },
     { id: 'Bad Id', module: 'x.js' },
@@ -104,12 +109,12 @@ describe('GET api/ext', () => {
     expect(a).toBe(b);
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(fetch).toHaveBeenCalledWith('api/ext');
-    expect(a.map((e) => e.id)).toEqual(['hello', 'ignition']);
+    expect(a.map((e) => e.id)).toEqual(['hello', 'scripts']);
     expect(a[0]).toMatchObject({ nav: { title: 'Hello', icon: '', list: '', action: null }, machine: true });
     expect(a[0]!.slots.map((s) => s.slot)).toEqual(['page', 'sidebar-tab']); // an unknown slot is left out
     expect(a[0]!.slots[0]!.when).toBe('always');
     expect(a[1]!.kinds[0]).toEqual({
-      id: 'ignition.doc',
+      id: 'scripts.doc',
       kind: 'doc',
       folder: 'v0',
       marker: ['*_v0.md', 'idea.md'],
@@ -174,15 +179,15 @@ describe('a slot', () => {
 
   it('a module that fails to load: one quiet line in the slot, logged once', async () => {
     const { loader, logs } = setup();
-    const [, ignition] = await loader.list();
+    const [, scripts] = await loader.list();
     const a = el(),
       b = el();
-    await mountSlot(a, loader, ignition!, 'version', host()).ready;
-    await mountSlot(b, loader, ignition!, 'version', host()).ready;
-    expect(a.line).toMatch(/^Ignition didn't load: Failed to fetch dynamically imported module: /);
+    await mountSlot(a, loader, scripts!, 'version', host()).ready;
+    await mountSlot(b, loader, scripts!, 'version', host()).ready;
+    expect(a.line).toMatch(/^Scripts didn't load: Failed to fetch dynamically imported module: /);
     expect(b.line).toBe(a.line);
     expect(logs).toHaveLength(1);
-    expect(String(logs[0]![0])).toContain('Ignition');
+    expect(String(logs[0]![0])).toContain('Scripts');
   });
 
   it('a mount that throws, or no export for the slot: its line, and nothing it left behind', async () => {
@@ -210,7 +215,7 @@ describe('a slot', () => {
     const recorded = new Set<unknown>();
     let seen: Ctx | null = null;
     const { loader } = setup({
-      ignition: async () => ({
+      scripts: async () => ({
         version: (e: HTMLElement, ctx: Ctx) => {
           seen = ctx;
           (e as unknown as FakeEl).append('editor');
@@ -219,7 +224,7 @@ describe('a slot', () => {
         },
       }),
     });
-    const [, ignition] = await loader.list();
+    const [, scripts] = await loader.list();
     const h = host({
       onRecorded: (cb) => {
         recorded.add(cb);
@@ -227,15 +232,15 @@ describe('a slot', () => {
       },
     });
     const a = el();
-    const m = mountSlot(a, loader, ignition!, 'version', h);
+    const m = mountSlot(a, loader, scripts!, 'version', h);
     await m.ready;
     expect(a.children).toEqual(['editor']);
     expect(recorded.size).toBe(1);
     expect(seen!.ext).toEqual({
-      id: 'ignition',
-      name: 'Ignition',
+      id: 'scripts',
+      name: 'Scripts',
       version: '1.0.0',
-      base: 'ext/ignition/',
+      base: 'ext/scripts/',
       machine: false,
     });
     m.unmount();

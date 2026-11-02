@@ -66,7 +66,7 @@ test('retake ext check passes the hello extension and flags a broken one', () =>
   expect(bad.status).toBe(1);
   expect(bad.stdout.toString() + bad.stderr.toString()).toMatch(/problem/);
   const list = execFileSync(RETAKE_BIN, ['ext', 'list'], { env: { ...process.env, XDG_CONFIG_HOME: CONFIG_HOME } }).toString();
-  expect(list).toContain('ignition'); // bundled, off until enabled
+  expect(list).toContain('scripts'); // bundled, off until enabled
 });
 
 test('the nav section opens the page, which lists the videos in the theme\'s colours', async ({ page }) => {

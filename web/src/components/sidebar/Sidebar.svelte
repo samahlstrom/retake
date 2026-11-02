@@ -97,7 +97,7 @@
           <Tooltip.Root>
             <Tooltip.Trigger id="sideToggle">
               {#snippet child({ props })}
-                <!-- A speech bubble and the to-do count (only the bubble at 0), as on Ignition's phone top bar; a status
+                <!-- A speech bubble and the to-do count (only the bubble at 0), as on Scripts' phone top bar; a status
                      shows as a dot on it. -->
                 <Collapsible.Trigger
                   {...props}

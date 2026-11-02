@@ -3,7 +3,7 @@
   // shows every video): folders and projects with a chevron, a project's videos under it, one status dot each. A name selects (the main area shows its
   // videos), a chevron opens or closes, a video opens its review. Desktop: a column with a resize handle. Phone: a
   // drawer that ☰ opens. Arrow keys move through the rows. Under the tree, one section per extension with a nav
-  // (spec/extensions.md, "Nav section"): its row opens its page, its + its action, and its rows (Ignition's ideas)
+  // (spec/extensions.md, "Nav section"): its row opens its page, its + its action, and its rows (Scripts' ideas)
   // open their videos. Rows have the tree's height; an extension's icon sits where a status dot would.
   import { tick } from 'svelte';
   import { DOT_TEXT, rows, topDot, videosUnder, type Row } from '../lib/tree';

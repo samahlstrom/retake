@@ -206,7 +206,7 @@ func VersionFile(fam []family.Version, n int, ext string) (label, path string, e
 }
 
 // FirstVersionFile is where the first cut of a video that has only an extension's version (v0) goes: v1, in a v1/
-// folder named after the video's folder (spec/ignition.md, "Start v1"), since v0/ already makes it use version
+// folder named after the video's folder (spec/scripts.md, "Start v1"), since v0/ already makes it use version
 // folders.
 func FirstVersionFile(root, ext string) (label, path string) {
 	name := filepath.Base(root)

@@ -206,7 +206,7 @@ func (e *Ext) OK() bool {
 	return e != nil && !slices.ContainsFunc(e.Problems, Problem.Fatal)
 }
 
-// FullKind is a kind's full id, "<ext id>.<kind id>" (ignition.doc).
+// FullKind is a kind's full id, "<ext id>.<kind id>" (scripts.doc).
 func (e *Ext) FullKind(k Kind) string { return e.ID + "." + k.ID }
 
 // Owns reports whether path (slash-separated, relative to a video's folder) is one of its files: a valid path that

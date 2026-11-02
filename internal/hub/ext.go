@@ -17,6 +17,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/samahlstrom/retake/internal/accounts"
+	"github.com/samahlstrom/retake/internal/config"
 	"github.com/samahlstrom/retake/internal/ext"
 	"github.com/samahlstrom/retake/internal/home"
 	"github.com/samahlstrom/retake/internal/project"
@@ -203,14 +204,21 @@ func (h *Hub) extOff(user int64) (map[string]bool, error) {
 	if err != nil || v == "" {
 		return map[string]bool{}, nil //nolint:nilerr // no setting: nothing turned off
 	}
-	off := map[string]bool{}
-	if json.Unmarshal([]byte(v), &off) != nil {
+	stored := map[string]bool{}
+	if json.Unmarshal([]byte(v), &stored) != nil {
 		return map[string]bool{}, nil
+	}
+	off := map[string]bool{}
+	for id, v := range stored { // kept under an old id ("ignition"): it's the renamed one's (spec/extensions.md, "Renamed ids")
+		if v {
+			off[config.ExtensionID(id)] = true
+		}
 	}
 	return off, nil
 }
 
-// meExtensions is GET and PUT /api/me/extensions: {"ignition": false} turns one off for this person.
+// meExtensions is GET and PUT /api/me/extensions: {"scripts": false} turns one off for this person (an old id,
+// "ignition", too).
 func (h *Hub) meExtensions(w http.ResponseWriter, r *http.Request, s *session) {
 	off, err := h.extOff(s.user.ID)
 	if err != nil {
@@ -224,14 +232,15 @@ func (h *Hub) meExtensions(w http.ResponseWriter, r *http.Request, s *session) {
 			return
 		}
 		for id, on := range b {
-			if h.opts.Exts.Get(id) == nil {
+			e := h.opts.Exts.Get(id) // an old id finds the renamed extension
+			if e == nil {
 				h.fail(w, r, http.StatusBadRequest, "this server doesn't allow "+id)
 				return
 			}
 			if on {
-				delete(off, id)
+				delete(off, e.ID)
 			} else {
-				off[id] = true
+				off[e.ID] = true
 			}
 		}
 		raw, _ := json.Marshal(off)

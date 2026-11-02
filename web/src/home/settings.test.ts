@@ -21,7 +21,7 @@ const base = {
   fallback: '',
   open_in: 'background',
   open_in_editable: true,
-  extensions: [{ id: 'ignition', name: 'Ignition', on: true, loaded: false }],
+  extensions: [{ id: 'scripts', name: 'Scripts', on: true, loaded: false }],
   extensions_editable: true,
   theme: { folder: '~/.config/retake/theme', used: false },
   config: '~/.config/retake/config.toml',
@@ -58,7 +58,7 @@ describe('settings', () => {
 
   it('says what waits for a restart, and which computers are online', () => {
     const s = normalizeSettings(base);
-    expect(pendingRestart(s).map((e) => e.id)).toEqual(['ignition']);
+    expect(pendingRestart(s).map((e) => e.id)).toEqual(['scripts']);
     expect(computersText(s)).toBe('sam-pc');
     expect(computersText(normalizeSettings({ ...base, machines: [] }))).toBe('None connected yet');
   });

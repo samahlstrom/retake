@@ -174,18 +174,18 @@ describe("an extension's kind on the home", () => {
         {
           name: 'idea',
           status: 'no_cut',
-          kind: 'ignition.doc',
+          kind: 'scripts.doc',
           version: 'v0',
-          kinds: ['ignition.doc', 3],
+          kinds: ['scripts.doc', 3],
           changed: 17,
         },
-        { name: 'cut', status: 'to_review', kinds: ['ignition.doc'], changed: 'soon' },
+        { name: 'cut', status: 'to_review', kinds: ['scripts.doc'], changed: 'soon' },
         { name: 'old' },
       ],
     });
     expect(h.projects.map((c) => [c.status, c.kind, c.kinds, c.changed])).toEqual([
-      ['no_cut', 'ignition.doc', ['ignition.doc'], 17],
-      ['to_review', undefined, ['ignition.doc'], undefined],
+      ['no_cut', 'scripts.doc', ['scripts.doc'], 17],
+      ['to_review', undefined, ['scripts.doc'], undefined],
       ['to_review', undefined, undefined, undefined],
     ]);
     expect(cardStatus(h.projects[0]!)).toEqual({ text: 'No cut yet', tone: 'no_cut' });

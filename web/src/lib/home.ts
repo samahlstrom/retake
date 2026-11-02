@@ -34,7 +34,7 @@ export interface Card {
   questions: number;
   stream: Stream | null;
   thumb: string;
-  /** With `status: "no_cut"`: the extension kind of its only version (`ignition.doc`). */
+  /** With `status: "no_cut"`: the extension kind of its only version (`scripts.doc`). */
   kind?: string;
   /** The extension kinds among its versions. */
   kinds?: string[];

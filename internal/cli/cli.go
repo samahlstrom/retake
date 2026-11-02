@@ -167,7 +167,7 @@ the look (spec/theme.md; a theme is a folder outside the install, so an update n
       say what in the theme this version of retake doesn't use (exit 1 when something); run it after an update
       DIR is --theme's folder: by default ~/.config/retake/theme for open and share, <data dir>/theme for serve
 
-extensions (spec/extensions.md; tools on top of retake, such as Ignition: found in --ext folders, the folder's
+extensions (spec/extensions.md; tools on top of retake, such as Scripts: found in --ext folders, the folder's
 .retake/extensions/, ~/.config/retake/extensions/ and built in; being found never turns one on):
   retake ext list [--folder DIR] [--json]
       the extensions found: id, version, on or off, where, what they shadow and what's wrong with them

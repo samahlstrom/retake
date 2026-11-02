@@ -4,6 +4,14 @@ All notable changes are listed here. Versions follow semver once the first relea
 
 ## Unreleased
 
+### Ignition is now Scripts
+- The extension that turns an idea into a script and a first cut is called **Scripts** (id `scripts`,
+  `extensions/scripts/`, spec/scripts.md), with a page icon in the nav and "New script" on its +. "Draft" stays the
+  agent's unfinished version (`v5-draft2`). The name the page shows is the manifest's `name` and `[nav] title` only.
+- The old id keeps working: `[extensions] enabled = ["ignition"]`, `[extensions.ignition]`, `retake ext enable
+  ignition`, `--extensions ignition`, a person's `{"ignition": false}`, and a computer still on an older retake that
+  reports `ignition` and `ignition.doc` (spec/extensions.md, "Renamed ids"). Nothing on disk moves.
+
 ### Phones, paused tasks and recordings
 - Phone (portrait): the comments always fill the space between the controls and Record and Send, with To do · Done,
   the list (it scrolls inside) and the comment box, so nothing is left empty; the speech bubble goes to To do instead
@@ -52,18 +60,18 @@ All notable changes are listed here. Versions follow semver once the first relea
   `GET /api/home`, its table (store schema step 6 drops it, SQLite and Postgres) and the `project:`/`group:` share
   scopes. A link with such a scope answers 410 with a page that says why. Folders on disk organize videos.
 
-### Extensions, and Ignition (extension API v1)
+### Extensions, and Scripts (extension API v1)
 - An extension adds a tool around review without changing it (spec/extensions.md, docs/extensions.md): a section in
   the home's left column, a page, a tab next to the comments, its own kind of version (`v0`), files it owns in a
   video's folder, and instructions for the agent. Its page code is one ES module that mounts into named slots, styled
   with the Theme API's tokens in `@layer ext.<id>` (the user's theme still wins). A broken one shows one line in its
   own place; review keeps working.
 - `retake ext list`, `enable <id>`, `disable <id>` and `check [DIR|ID]`; `--ext DIR` on `retake open`, `share` and
-  `connect` turns one on for a run. `retake serve --extensions ignition` (or `RETAKE_EXTENSIONS`, `[server]
+  `connect` turns one on for a run. `retake serve --extensions scripts` (or `RETAKE_EXTENSIONS`, `[server]
   extensions`) allows one for everyone on a server; each person can turn it off for themselves
   (`PUT /api/me/extensions`).
-- **Ignition** (spec/ignition.md) comes with Retake, off until `retake ext enable ignition`. An idea is one Markdown
-  document, `v0/<video>_v0.md` (named like `v1/<video>_v1.mp4`): New idea makes it, you type or talk into it (R
+- **Scripts** (spec/scripts.md) comes with Retake, off until `retake ext enable scripts`. An idea is one Markdown
+  document, `v0/<video>_v0.md` (named like `v1/<video>_v1.mp4`): New script makes it, you type or talk into it (R
   records; the words land as a plain paragraph and a comment asks the agent to work them in), Send has the agent
   shape it into an outline and a script in the same file and ask about a heading when unsure, and ⋯ → Start v1 has it
   build the first cut. On a phone the document fills the screen, with Record and Send below and the comments in a
