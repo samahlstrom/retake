@@ -212,6 +212,15 @@ heads for (`v5`), so they are still there once the draft becomes that version.
   earlier version still has something to do, the menu's button has a small dot, and its title says what (`Open on
   earlier versions: v6 · 2, v3 · 91`). A single version shows its label without a menu. This replaced the version
   strip and the "Open on earlier versions" line; the bar's version picker stays.
+- **The column's width.** On a computer (the desktop layout) the column, comments or a script's chat alike, has a
+  thin handle on its left edge, as the home's folder tree has on its right (spec/home.md): drag it to make the column
+  wider or narrower, or focus it and press ← (wider) or → (narrower), 16 px a press, 48 px with Shift; a double-click
+  goes back to the default (`--sidebar-width`, spec/theme.md). It is a focusable WAI-ARIA window splitter
+  (`role="separator"`, its value the width) and part `sidebar-grip`. The width is 300–760 px, and the video or the
+  document always keeps at least 420 px of the window (a smaller window narrows the column for as long as it is
+  small; the remembered width stays). The stage and the bar reflow beside it; nothing overlaps. The width is
+  remembered per viewer in `localStorage` (`retake.sidebar-width`, only once dragged; a blocked storage just doesn't
+  remember). Phones have no handle: their comments and the chat sheet keep their own sizes.
 - **On a phone.** In portrait the comments always fill the space between the controls (under the video) and Record
   and Send: the header (with To do · Done in its row), the shown version's list, which scrolls inside that space, and
   the comment box at the bottom. Nothing between them is ever left empty, with no comments ("No comments yet" and how

@@ -3029,6 +3029,8 @@ export class Review {
       return;
     }
     if (target?.closest?.('.comment-marker, .drawing-marker') && e.key === ' ') return;
+    // ←/→ on the comments column's handle resize it (Sidebar.svelte), they don't seek.
+    if (target?.closest?.('[data-part~="sidebar-grip"]') && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) return;
     // Enter with a pending comment (lines drawn, say): its box takes the words; Enter there saves it.
     if (
       e.key === 'Enter' &&

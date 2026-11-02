@@ -186,12 +186,21 @@ the toast, the comments toggle, "← Projects") use `--scrim` and `--on-scrim`, 
 | `--status-done` | `#3cd38a` | Done; the agent's dot when ready |
 | `--status-off` | `#5c5c66` | The agent's dot when its computer is away |
 | `--agent` | `#a693fa` | The agent's visuals on the video (boxes, arrows, lines), its question card |
-| `--agent-ink` | `#16121f` | Text on `--agent` (the "Agent" chip, "?" on the timeline) |
+| `--agent-ink` | `#16121f` | Text on `--agent` (the "Agent" chip on the video, "?" on the timeline) |
 | `--agent-text` | `#ddd7ff` | The agent's words in the comments |
 | `--agent-text-2` | `#c9bfff` | "Question", check marks |
 | `--danger` | `#ff8f86` | Delete, errors |
 | `--warn` | `#e2bd73` | A paused comment, offline warnings |
 | `--change` | `#9ccfb3` | What a done comment changed |
+| `--scrollbar-thumb` | `--overlay` at 14% | Every scrollbar's thumb: the document, the chat, the comments, the folder tree, the home, Settings |
+| `--scrollbar-thumb-hover` | `--overlay` at 28% | The thumb under the pointer, where a page can style that (Safari on a computer, the comments' list); Chrome and Firefox shade `--scrollbar-thumb` themselves |
+| `--scrollbar-track` | `transparent` | Behind the thumb |
+
+**Scrollbars** match the page everywhere: thin, no arrow buttons, the thumb a low-contrast tone of `--overlay` on a
+transparent track. Chrome and Firefox get `scrollbar-width: thin` and `scrollbar-color: var(--scrollbar-thumb)
+var(--scrollbar-track)`; Safari on a computer (no `scrollbar-color`) gets the same tokens through `::-webkit-scrollbar`
+(8 px, a round thumb inset 2 px, no buttons). Phones keep their own overlay scrollbars. A light theme that sets
+`--overlay: #000` gets a dark thumb with no more work. The comments' list draws its own thumb from the same tokens.
 
 The timeline and the live waveform are drawn on a canvas, from these (read when the page loads):
 
@@ -226,7 +235,7 @@ as words) and stay the same under every theme.
 | `--record-width` | `112px` (`124px` wide) | Record's fixed width: a mic and Record, or REC and the time (it never changes while recording) |
 | `--send-min-width` | `84px` | Send's least width (Send, Sending…) |
 | `--agent-status-width` | `140px` | Unused since the agent's name left the bar; kept for themes that set it |
-| `--sidebar-width` | `360px` (`400px` wide) | The comments column |
+| `--sidebar-width` | `360px` (`400px` wide) | The comments column (and a script's chat) until the viewer drags its edge |
 | `--home-max-width` | `1480px` (`2000px` wide) | The home's content width |
 | `--card-min-width` | `260px` (`340px` wide) | The least width of a video card on the home |
 | `--grid-gap` | `28px 20px` | Space between the home's cards (rows, columns) |
@@ -278,6 +287,7 @@ Versioning). Classes and ids are not part of the API and can change in any relea
 | `flip` | Compare two versions (phone) | review |
 | `sidebar` | The comments column | review |
 | `sidebar-toggle` | The pill over the video that shows and hides it | review |
+| `sidebar-grip` | The handle on the column's left edge that resizes it (desktop; spec/notes.md, "The column's width") | review |
 | `version-menu` | The version in the comments' header (`v8 ⌄`), a menu when there are more | review |
 | `version-menu-list` | The versions it lists, each with where its comments go and what's still to do (`v7 → v8 · 3 to do`) | review |
 | `tabs` | To do · Done (and an extension's tabs) | review |
@@ -310,12 +320,12 @@ Versioning). Classes and ids are not part of the API and can change in any relea
 | `chat` | The chat with the agent, in place of the comments on a script (spec/chat.md) | review |
 | `chat-thread` | Its messages | review |
 | `chat-person` | A message you sent (your words, images, a voice message) | review |
-| `chat-agent` | The agent's words | review |
-| `chat-tool` | One quiet line for what the agent is doing (Editing the script) | review |
+| `chat-agent` | The agent's words: plain text, no label | review |
+| `chat-tool` | A turn's one activity line at the top of its reply: what the agent does now (`data-state="live"`: Running a command…), then what it did (`data-state="done"`: Edited the script · ran 3 commands) | review |
 | `chat-question` | The agent's question in the chat, with its choices | review |
 | `chat-info` | A quiet line from Retake in the chat (Stopped) | review |
 | `chat-voice` | A voice message on its way (Transcribing…) | review |
-| `chat-status` | The one quiet line under the chat (Working…, Building v1…) | review |
+| `chat-status` | The one quiet line under the chat: what a Send started (Building v1…) | review |
 | `chat-composer` | Ask the agent…: attach, the words, the mic and the send arrow | review |
 | `chat-send` | The chat's send arrow | review |
 | `chat-stop` | The chat's stop square while the agent replies | review |
@@ -335,7 +345,8 @@ Versioning). Classes and ids are not part of the API and can change in any relea
 | `settings-switch` | An on/off switch (an extension) | home |
 
 `data-state` and `data-status` values are part of the API too: a comment's and a marker's `data-state` is `open`,
-`working`, `question` or `done`; a video card's `data-status` is the home's status word (spec/home.md).
+`working`, `question` or `done`; a video card's `data-status` is the home's status word (spec/home.md); the chat's
+activity line's `data-state` is `live` or `done`.
 
 Renamed before the first release, the old name still on the new element (listed as deprecated in `api.json`, so
 `retake theme check` says what to use): `agent-status` is now `send-notice`, `agent-menu` is `agent-picker`,

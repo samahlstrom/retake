@@ -5,9 +5,11 @@
   // ("Comment at 0:18 · goes into v8…"). Progress (recording, transcribing, an undo after a delete) floats over the
   // bottom of the list, so nothing in it moves. N or the › hides the column (remembered); the speech bubble over the
   // video, with the to-do count, brings it back. Extensions add tabs after To do · Done (spec/extensions.md, "UI
-  // slots"): a sidebar tab shows its slot in place of the list; a review panel widens the column to half the page.
+  // slots"): a sidebar tab shows its slot in place of the list; a review panel widens the column to half the page. On
+  // a computer the column's left edge is a handle that drags it wider or narrower (spec/notes.md, "The column's
+  // width"), remembered per viewer.
   import { Collapsible, ScrollArea, Tooltip } from 'bits-ui';
-  import { tick } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import type { Review } from '../../lib/review.svelte';
   import SidebarItem from './SidebarItem.svelte';
   import VersionMenu from './VersionMenu.svelte';
@@ -15,6 +17,17 @@
   import ExtSlot from '../../ext/ExtSlot.svelte';
   import Chat from '../chat/Chat.svelte';
   import { batchLine } from '../../lib/status';
+  import {
+    browserStorage,
+    clampSide,
+    loadSideWidth,
+    saveSideWidth,
+    sideWidthCss,
+    SIDE_MAX,
+    SIDE_MIN,
+    SIDE_STEP,
+    SIDE_STEP_BIG,
+  } from '../../lib/side-width';
   import './sidebar.css';
 
   let { review }: { review: Review } = $props();
@@ -63,6 +76,65 @@
   };
   /** A phone in portrait: the comments are always there, and the bubble goes to them (To do, from the top). */
   const pinned = $derived(review.commentsPinned);
+
+  // The column's width (desktop): null until dragged (the default, --sidebar-width), read once the page is up. It
+  // reaches #side's CSS as --side-w on the root (so the grid's column and the stage beside it reflow).
+  let width = $state<number | null>(null);
+  /** What the column measures now: the handle's value. */
+  let measured = $state(0);
+  let dragging = $state(false);
+  let grip = $state<HTMLDivElement | null>(null);
+  onMount(() => {
+    width = loadSideWidth(browserStorage());
+  });
+  $effect(() => {
+    const root = document.documentElement;
+    if (!view.phone && width != null) root.style.setProperty('--side-w', sideWidthCss(width));
+    else root.style.removeProperty('--side-w');
+    return () => root.style.removeProperty('--side-w');
+  });
+  $effect(() => {
+    const side = grip?.parentElement;
+    if (!side || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => (measured = Math.round(side.getBoundingClientRect().width)));
+    ro.observe(side);
+    return () => ro.disconnect();
+  });
+  const resize = (w: number) => (width = clampSide(w, innerWidth));
+  // The handle: drag, ←/→ (← widens: the edge moves left), double-click back to the default.
+  function grab(e: PointerEvent) {
+    if (e.button !== 0) return;
+    const el = e.currentTarget as HTMLElement;
+    const start = e.clientX,
+      from = el.parentElement?.getBoundingClientRect().width ?? measured;
+    el.setPointerCapture(e.pointerId);
+    dragging = true;
+    const move = (m: PointerEvent) => resize(from - (m.clientX - start));
+    const up = () => {
+      dragging = false;
+      el.removeEventListener('pointermove', move);
+      el.removeEventListener('pointerup', up);
+      el.removeEventListener('pointercancel', up);
+      if (width != null) saveSideWidth(browserStorage(), width);
+    };
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', up);
+    e.preventDefault();
+  }
+  function gripKey(e: KeyboardEvent) {
+    const step = e.shiftKey ? SIDE_STEP_BIG : SIDE_STEP;
+    const now = clampSide(width ?? measured, innerWidth); // as wide as it is now, a smaller window included
+    if (e.key === 'ArrowLeft') resize(now + step);
+    else if (e.key === 'ArrowRight') resize(now - step);
+    else return;
+    e.preventDefault();
+    saveSideWidth(browserStorage(), width);
+  }
+  function resetWidth() {
+    width = null;
+    saveSideWidth(browserStorage(), null);
+  }
 
   let searching = $state(false);
   let input = $state<HTMLInputElement | null>(null);
@@ -165,6 +237,26 @@
             .filter(Boolean)
             .join(' ') || undefined}
         >
+          {#if !view.phone}
+            <!-- A focusable separator with a value is a widget (WAI-ARIA window splitter); svelte counts it as static. -->
+            <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+            <div
+              bind:this={grip}
+              class="grip"
+              class:dragging
+              role="separator"
+              aria-orientation="vertical"
+              aria-label={chatting ? 'Resize the chat' : 'Resize the comments'}
+              aria-valuenow={measured || width || undefined}
+              aria-valuemin={SIDE_MIN}
+              aria-valuemax={SIDE_MAX}
+              tabindex="0"
+              data-part="sidebar-grip"
+              onpointerdown={grab}
+              onkeydown={gripKey}
+              ondblclick={resetWidth}
+            ></div>
+          {/if}
           <header>
             {#if searching}
               <input
