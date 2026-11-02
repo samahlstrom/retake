@@ -18,6 +18,7 @@ import { mediaLayout } from '../lib/fixtures.ts';
 import { LEGACY, PORTS, WORK } from '../lib/env.ts';
 import { READY } from '../lib/review.ts';
 import { startServer, type Server } from '../lib/server.ts';
+import '../lib/home-window.ts';
 
 test.describe.configure({ mode: 'serial' });
 test.skip(LEGACY, 'new: the legacy player has no home screen');
@@ -26,9 +27,6 @@ const DIR = join(WORK, 'nav-folder', 'shows');
 let server: Server;
 const pageErrors: string[] = [];
 
-declare global {
-  interface Window { __home: { loaded: boolean; projects: { name: string }[]; selected: string } }
-}
 
 function put(src: string, rel: string, minutes: number): string {
   const dst = join(DIR, rel);

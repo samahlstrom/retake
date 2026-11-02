@@ -18,6 +18,7 @@ import { line, loop, READY, Review, sleep } from '../lib/review.ts';
 import { validateTakeDir } from '../lib/schema.ts';
 import { startServer, type Server } from '../lib/server.ts';
 import { takeDirs } from '../lib/work.ts';
+import type { HomeCard } from '../lib/home-window.ts';
 
 test.describe.configure({ mode: 'serial' });
 test.skip(LEGACY, 'new: the legacy player has no home screen');
@@ -26,10 +27,6 @@ const DIR = join(WORK, 'home-folder');
 let server: Server;
 const pageErrors: string[] = [];
 
-interface HomeCard { name: string; version: string; status: string; thumb: string }
-declare global {
-  interface Window { __home: { loaded: boolean; projects: HomeCard[]; error: string } }
-}
 
 /** Copies a generated clip into the folder (a copy, so its own modification time is the push time). */
 function put(src: string, rel: string, minutes: number): string {
