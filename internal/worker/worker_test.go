@@ -318,11 +318,9 @@ func TestAgentProcess(t *testing.T) {
 		if e != nil {
 			t.Fatal(e)
 		}
-		ids := make([]string, len(c.Task.Notes))
-		for i, id := range c.Task.Notes {
-			ids[i] = strconv.FormatInt(id, 10)
-		}
-		report := agentResult{State: "completed", Message: "Did the batch: notes " + strings.Join(ids, ", ")}
+		got, _ := os.ReadFile(filepath.Join(dir, "launches"))
+		round := strings.Count(string(got), cwd+" ")
+		report := agentResult{State: "completed", Message: "Round " + strconv.Itoa(round)}
 		if slices.Contains(c.Task.Notes, 1) {
 			report.Notes = map[string]string{"1": "Fixed note 1", "x": "not a note"}
 		}

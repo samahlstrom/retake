@@ -31,15 +31,16 @@ A folder of finished videos with no timeline (`clip_v1.mp4`, `clip_v2.mp4`) work
 however it can (ffmpeg, say) and writes one video file, and Retake adds it as the next version (`clip_v3.mp4`, next
 to the others). The comment turns Done once that video plays.
 
-- A Send is one batch: every comment you sent goes to one agent run, which makes one new version. Never a version
-  per comment. The comments show Working together, and each one still turns Done (or Question, when the agent asks
-  about it) on its own.
-- Each video (project) has its own agent: one batch runs at a time per video. Comments you send while it works go to
-  the same agent: in herdr or tmux as a new message in its session, part of the same batch; in the background into
-  the video's next batch, which starts when this one ends (one next batch, however many times you press Send).
-  Different videos edit at the same time, so ten videos with work means ten agents working at once. The agent works
-  in the project folder with its own sign-in and settings.
-- While it works, the page follows its drafts (`v4-draft1`, `v4-draft2`, ...). Only a finished batch makes a version
+- A send never makes a version. While the agent works on a video there is one working version (say `v8`), and
+  everything you send meanwhile goes into it, even a comment you go back and make on `v7`: in herdr or tmux as a new
+  message in its session, in the background as a follow-up round of the same agent once its run ends. `v8` is made
+  when the agent has nothing left (every comment Done, or a Question waiting for you); your next send after that
+  starts `v9`. Never a version per comment, and never two agents on one video.
+- The comments show Working together, and each one still turns Done (or Question, when the agent asks about it) on
+  its own.
+- Each video (project) has its own agent. Different videos edit at the same time, so ten videos with work means ten
+  agents working at once. The agent works in the project folder with its own sign-in and settings.
+- While it works, the page follows its drafts (`v4-draft1`, `v4-draft2`, ...). Only a finished task makes a version
   (`v4`), and restarting `retake open` makes none.
 - Anyone you share the review with (`retake share`) has the same Send button, and their comments go to this agent.
 - Each task's prompt, context, log and report are in `.retake/worker/tasks/<task>/` (no log in herdr or tmux: the
@@ -108,8 +109,8 @@ task for item-shop (task …, attempt 1): follow the instructions in …/prompt-
 watch it, answer it, interrupt it, ask it something. When the agent writes its report, the comment moves on exactly as
 in the background (a completed report still waits for a checked render), and the session stays open so you can scroll
 back and keep talking. The video's next task goes to the same session if it's still there. Comments sent while the
-agent works arrive there too, as one more message for the same batch ("More comments for Retake task …"), with a new
-report file that covers them all.
+agent works arrive there too, as one more message for the same task ("More comments for Retake task …"), with a new
+report file that covers them all, and they go in the same version.
 
 What's different from the background:
 

@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -290,7 +291,10 @@ func TestIdeaThroughAConnectedComputer(t *testing.T) {
 func docAgent(t *testing.T, mode string, a project.WorkAssignment) bool {
 	switch mode {
 	case "doc-edit":
-		if a.Task.Attempt == 1 {
+		// It asks until its context has the answer: in a later attempt, or a follow-up round of this one when the
+		// answer came while it worked (spec/automation.md, "Batches").
+		answered := slices.ContainsFunc(a.Questions, func(q project.TaskQuestion) bool { return q.Answer != nil })
+		if !answered {
 			if e := os.WriteFile("v0/script.md", []byte("## Cold open\n\n[The jump.] So the idea is...\n"), 0o600); e != nil {
 				t.Fatal(e)
 			}

@@ -60,9 +60,10 @@ func versionsMade(t *testing.T, s *Store) []string {
 	return out
 }
 
-// TestSendIsOneBatchAndOneVersion: a send of three notes is one task; two more sent (one at a time) while it runs are
-// one next batch; each completed batch makes exactly one version, and each note gets its own change when the report
-// says one.
+// TestSendIsOneBatchAndOneVersion: a send of three notes is one task; two more sent (one at a time) while it runs wait
+// in one next batch (the worker gives them to the running agent with join, TestLiveSessionTakesTheNextBatch; one it
+// didn't take runs next); each completed task makes exactly one version, and each note gets its own change when the
+// report says one.
 func TestSendIsOneBatchAndOneVersion(t *testing.T) {
 	s, w := batchFixture(t)
 	sent, err := s.QueueFeedback([]int64{1, 2, 3}, "")

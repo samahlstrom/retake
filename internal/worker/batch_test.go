@@ -20,11 +20,12 @@ import (
 	"github.com/samahlstrom/retake/internal/testmedia"
 )
 
-// Batches (spec/automation.md, "Batches"), end to end through a server and a worker on plain projects: one Send is one
-// task, one agent process and one new version; comments sent while it works make one next batch in the background,
-// and reach the same session in herdr and tmux; two videos run their batches at the same time.
+// Batches (spec/automation.md, "Batches"), end to end through a server and a worker on plain projects: a send never
+// makes a version. One Send is one task, one agent process and one new version; comments sent while it works go in
+// the same version (a follow-up round of the same agent in the background, a message in the same session in herdr
+// and tmux); two videos run their batches at the same time.
 
-// batchVideo is one plain video (<name>_v1.mp4 and five notes on v1) on a server, with a worker running these profiles.
+// batchVideo is one plain video (<name>_v1.mp4 and notes 1..n on v1) on a server, with a worker running these profiles.
 type batchVideo struct {
 	st    *project.Store
 	local string
@@ -48,7 +49,7 @@ func scratchDir(t *testing.T, prefix string) string {
 	return base
 }
 
-func startBatchVideo(t *testing.T, base, name string, profiles ...Profile) *batchVideo {
+func startBatchVideo(t *testing.T, base, name string, n int, profiles ...Profile) *batchVideo {
 	t.Helper()
 	local, hosted := filepath.Join(base, name), filepath.Join(base, name+"-hosted")
 	testmedia.Video(t, filepath.Join(local, name+"_v1.mp4"), 2) // a family per video: never one across sibling folders
@@ -58,8 +59,8 @@ func startBatchVideo(t *testing.T, base, name string, profiles ...Profile) *batc
 	}
 	t.Cleanup(func() { _ = st.Close() })
 	var cs []project.Comment
-	for i := range 5 {
-		cs = append(cs, project.Comment{Key: fmt.Sprintf("n%d", i+1), Text: fmt.Sprintf("Fix number %d", i+1), T0: float64(i) / 4, T1: float64(i)/4 + 0.2})
+	for i := range n {
+		cs = append(cs, project.Comment{Key: fmt.Sprintf("n%d", i+1), Text: fmt.Sprintf("Fix number %d", i+1), T0: float64(i) / 20, T1: float64(i)/20 + 0.05})
 	}
 	if _, e = st.Sync(project.Run{Version: "v1", Comments: cs}); e != nil {
 		t.Fatal(e)
@@ -171,9 +172,10 @@ func batchProfile(t *testing.T, dir string, peers int) Profile {
 		Env:     map[string]string{"BATCH_DIR": dir, "BATCH_PEERS": fmt.Sprint(peers)}}
 }
 
-// TestSendIsOneAgentRunAndOneVersion: three notes sent at once are one task, one agent process and one new version.
-// Two more sent one at a time while it works (a background agent can't be given them) make one next batch, which
-// starts when the first ends and makes the next version: two launches and two versions for five comments.
+// TestSendIsOneAgentRunAndOneVersion: twenty notes sent at once are one task and one agent process. One more sent
+// while it works (made on the same version the agent started from, as when you go back and add what you forgot)
+// joins the same working version: the same agent runs a follow-up round in the same task once its run ends, and
+// one version (v2) holds all 21. Each note's change comes from the round that did it.
 func TestSendIsOneAgentRunAndOneVersion(t *testing.T) {
 	testmedia.Need(t)
 	base := scratchDir(t, "batch-worker-test-")
@@ -181,45 +183,53 @@ func TestSendIsOneAgentRunAndOneVersion(t *testing.T) {
 	if err := os.MkdirAll(gate, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	v := startBatchVideo(t, base, "shop", batchProfile(t, gate, 1))
+	v := startBatchVideo(t, base, "shop", 21, batchProfile(t, gate, 1))
 	launches := filepath.Join(gate, "launches")
-	v.send(t, 1, 2, 3)
-	v.wait(t, "the agent to start", func(project.AutomationState) bool { return len(lines(t, launches)) == 1 })
-	v.send(t, 4)
-	v.send(t, 5)
-	a, _ := v.st.Automation()
-	if len(a.Tasks) != 2 || a.Tasks[0].State != "running" || !slices.Equal(a.Tasks[0].Notes, []int64{1, 2, 3}) ||
-		a.Tasks[1].State != "queued" || !slices.Equal(a.Tasks[1].Notes, []int64{4, 5}) {
-		b, _ := json.Marshal(a.Tasks)
-		t.Fatalf("one running batch and one next batch: %s", b)
+	var twenty []int64
+	for id := int64(1); id <= 20; id++ {
+		twenty = append(twenty, id)
 	}
+	v.send(t, twenty...)
+	v.wait(t, "the agent to start", func(project.AutomationState) bool { return len(lines(t, launches)) == 1 })
+	a, _ := v.st.Automation()
+	if len(a.Tasks) != 1 || len(a.Tasks[0].Notes) != 20 || a.Tasks[0].State != "running" {
+		t.Fatalf("one task: %+v", a.Tasks)
+	}
+	task := a.Tasks[0].ID
+	v.send(t, 21) // "Ope, I forgot something"
 	if err := os.WriteFile(filepath.Join(gate, "go"), nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	first := a.Tasks[0].ID
-	v.wait(t, "the first batch", func(a project.AutomationState) bool {
-		return a.Task(first) != nil && a.Task(first).State == "completed"
+	a = v.wait(t, "the version", func(a project.AutomationState) bool {
+		return len(a.Tasks) == 1 && a.Tasks[0].State == "completed"
 	})
-	if got := v.answeredIn(t, 1, 2, 3); got != "v2" {
-		t.Fatalf("the first batch's version: %s", got)
+	if j := a.Tasks[0]; j.ID != task || j.Attempt != 1 || j.Result != "v2" || len(j.Notes) != 21 {
+		t.Fatalf("the task: %+v", j)
 	}
-	if n, _ := v.st.Note(1); n.Change != "Fixed note 1" {
-		t.Fatalf("note 1's own change: %q", n.Change)
+	all := slices.Concat(twenty, []int64{21})
+	if got := v.answeredIn(t, all...); got != "v2" {
+		t.Fatalf("version: %s", got)
 	}
-	if n, _ := v.st.Note(2); n.Change != "Did the batch: notes 1, 2, 3" {
-		t.Fatalf("note 2's change: %q", n.Change)
+	if got := v.versions(t); !slices.Equal(got, []string{"shop_v1.mp4", "shop_v2.mp4"}) {
+		t.Fatalf("versions: %q", got)
 	}
-	a = v.wait(t, "the next batch", func(a project.AutomationState) bool {
-		return len(a.Tasks) == 2 && a.Tasks[1].State == "completed"
-	})
-	if got := v.answeredIn(t, 4, 5); got != "v3" {
-		t.Fatalf("the next batch's version: %s", got)
-	}
-	if got := lines(t, launches); !slices.Equal(got, []string{"shop [1 2 3]", "shop [4 5]"}) {
+	// One agent: its run, then its follow-up round in the same task, on the same working version.
+	got := lines(t, launches)
+	if len(got) != 2 || got[0] != fmt.Sprintf("shop %v", twenty) || got[1] != fmt.Sprintf("shop %v", all) {
 		t.Fatalf("agent launches: %q", got)
 	}
-	if got := v.versions(t); !slices.Equal(got, []string{"shop_v1.mp4", "shop_v2.mp4", "shop_v3.mp4"}) {
-		t.Fatalf("versions: %q", got)
+	for id, change := range map[int64]string{1: "Fixed note 1", 2: "Round 1", 20: "Round 1", 21: "Round 2"} {
+		if n, _ := v.st.Note(id); n.Change != change {
+			t.Fatalf("note %d's change: %q", id, n.Change)
+		}
+	}
+	follow, err := os.ReadFile(filepath.Join(v.local, ".retake", "worker", "tasks", task, "prompt-1-2.md"))
+	if err != nil || !strings.Contains(string(follow), "follow-up round of Retake task "+task) ||
+		!strings.Contains(string(follow), "note IDs 21") || !strings.Contains(string(follow), "report-1-2.json") {
+		t.Fatalf("follow-up prompt: %s %v", follow, err)
+	}
+	if _, err = os.Stat(filepath.Join(v.local, ".retake", "worker", "tasks", task, "agent-1-2.log")); err != nil {
+		t.Fatal("the follow-up round's log:", err)
 	}
 }
 
@@ -235,8 +245,8 @@ func TestTwoVideosRunTheirBatchesAtTheSameTime(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(gate, "go"), nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	alpha := startBatchVideo(t, base, "alpha", batchProfile(t, gate, 2))
-	beta := startBatchVideo(t, base, "beta", batchProfile(t, gate, 2))
+	alpha := startBatchVideo(t, base, "alpha", 3, batchProfile(t, gate, 2))
+	beta := startBatchVideo(t, base, "beta", 3, batchProfile(t, gate, 2))
 	alpha.send(t, 1, 2, 3)
 	beta.send(t, 1, 2, 3)
 	for _, v := range []*batchVideo{alpha, beta} {
@@ -278,7 +288,7 @@ func TestCommentsSentMidRunReachTheSameSession(t *testing.T) {
 			if mode == OpenHerdr {
 				p.Interactive = []string{"claude"}
 			}
-			v := startBatchVideo(t, scratchDir(t, "batch-session-test-"), "shop", p)
+			v := startBatchVideo(t, scratchDir(t, "batch-session-test-"), "shop", 5, p)
 			v.send(t, 1, 2, 3)
 			v.wait(t, "the agent to start", func(project.AutomationState) bool {
 				return len(lines(t, filepath.Join(gate, "launches"))) == 1
