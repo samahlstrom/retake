@@ -107,7 +107,8 @@ func TestSendIsOneBatchAndOneVersion(t *testing.T) {
 		}
 	}
 
-	// The next batch starts when it ends, and makes the next version.
+	// The next batch starts when it ends. Its comments are on v6 too, so it updates v7 in place: still one version,
+	// the earlier render of v7 one of its drafts now.
 	next, err := s.PollWork(w, "", "")
 	if err != nil || next == nil || next.ID != n4[0].ID || !slices.Equal(next.Notes, []int64{4, 5}) {
 		t.Fatal(next, err)
@@ -117,11 +118,18 @@ func TestSendIsOneBatchAndOneVersion(t *testing.T) {
 		Message: "Did both", Result: "r3"}, 6); err != nil {
 		t.Fatal(err)
 	}
-	if got := versionsMade(t, s); !slices.Equal(got, []string{"v7", "v8"}) {
+	if got := versionsMade(t, s); !slices.Equal(got, []string{"v7"}) {
 		t.Fatal("versions:", got)
 	}
-	if len(versionsMade(t, s)) != 2 {
-		t.Fatal("one version per batch")
+	a, _ = s.Automation()
+	if v := a.Render("r3"); v == nil || v.Label != "v7" || v.Draft {
+		t.Fatalf("the update: %+v", v)
+	}
+	if v := a.Render("r2"); v == nil || v.Label != "v7-draft4" || !v.Draft || v.Alias != "v7-draft2" {
+		t.Fatalf("the earlier v7: %+v", v)
+	}
+	if n, _ := s.Note(4); n.AnsweredIn != "v7" {
+		t.Fatalf("note 4: %+v", n)
 	}
 	if _, err = s.ReportWork(WorkReport{Worker: w.ID, Task: running.ID, Lease: running.Lease, State: "completed",
 		Message: "x", Notes: map[int64]string{}}, 6); err == nil {
@@ -337,5 +345,78 @@ func TestQueuedBatchWaitsForASentTake(t *testing.T) {
 	slices.Sort(got)
 	if !slices.Equal(got, []int64{1, 2, 3, 4, 5}) {
 		t.Fatal("one batch of the take and the others:", j.Notes)
+	}
+}
+
+// TestCommentsOnVNBecomeEditsInVNPlus1: comments on v6 make v7 and comments on v7 make v8, one task per target, the
+// lowest target first. Another comment on v6 after v7 is done updates v7 in place (still two versions, the earlier
+// render one of v7's drafts), and one send with comments on v6 and v7 updates v7, then v8, one after the other.
+func TestCommentsOnVNBecomeEditsInVNPlus1(t *testing.T) {
+	s, w := batchFixture(t) // notes 1..5 on v6
+	if _, err := s.Sync(Run{Version: "v7", Comments: []Comment{{Key: "a7", Take: take1, Text: "on v7"}, {Key: "b7", Take: take1, Text: "also on v7"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := s.Note(6); n.Version != "v7" || n.Target() != "v8" {
+		t.Fatalf("note 6: %+v", n)
+	}
+	if TargetOf("v8-draft2") != "v8" || TargetOf("v6") != "v7" || TargetOf("x") != "" {
+		t.Fatal("TargetOf")
+	}
+	run := func(want string, ids ...int64) {
+		t.Helper()
+		j, err := s.PollWork(w, "", "")
+		if err != nil || j == nil || j.Target != want || !slices.Equal(j.Pending(), ids) {
+			t.Fatalf("want the task for %s with %v: %+v %v", want, ids, j, err)
+		}
+		id := NewWorkID()
+		draft(t, s, w, j, id)
+		a, _ := s.Automation()
+		if v := a.Render(id); v.Label != want+"-draft"+fmt.Sprint(a.nextDraft(LabelNumber(want))-1) {
+			t.Fatalf("the draft heads for %s: %+v", want, v)
+		}
+		if _, err = s.ReportWork(WorkReport{Worker: w.ID, Task: j.ID, Lease: j.Lease, State: "completed", Message: "Done", Result: id}, 6); err != nil {
+			t.Fatal(err)
+		}
+		for _, n := range ids {
+			if note, _ := s.Note(n); note.AnsweredIn != want {
+				t.Fatalf("note %d answered in %q, want %s", n, note.AnsweredIn, want)
+			}
+		}
+	}
+	// One send, two targets: two tasks, v7 first though the v7 comment came second.
+	sent, err := s.QueueFeedback([]int64{6, 1}, "")
+	if err != nil || len(sent) != 2 || sent[0].Target != "v8" || sent[1].Target != "v7" {
+		t.Fatal(sent, err)
+	}
+	run("v7", 1)
+	run("v8", 6)
+	if got := versionsMade(t, s); !slices.Equal(got, []string{"v7", "v8"}) {
+		t.Fatal("versions:", got)
+	}
+	// Another comment on v6, after v7 is done: v7 is updated, still two versions.
+	if _, err = s.QueueFeedback([]int64{2}, ""); err != nil {
+		t.Fatal(err)
+	}
+	run("v7", 2)
+	if got := versionsMade(t, s); !slices.Equal(got, []string{"v8", "v7"}) {
+		t.Fatal("versions after the update:", got)
+	}
+	// Mixed again: v7 updated, then v8 updated, by the same worker one after the other.
+	if _, err = s.QueueFeedback([]int64{7, 3}, ""); err != nil {
+		t.Fatal(err)
+	}
+	run("v7", 3)
+	run("v8", 7)
+	a, _ := s.Automation()
+	versions, drafts := 0, 0
+	for i, v := range a.Renders {
+		if !v.Draft {
+			versions++
+		} else if a.Listed(i, 6) {
+			drafts++
+		}
+	}
+	if versions != 2 || drafts != 0 {
+		t.Fatalf("%d versions, %d listed drafts: %+v", versions, drafts, a.Renders)
 	}
 }

@@ -349,7 +349,7 @@ func TestDraftLabelsAndPromotion(t *testing.T) {
 	if got := strings.Join(listed(), " "); got != "v4-draft2 v4-draft3" {
 		t.Fatalf("listed while working: %s", got)
 	}
-	a.promote(a.Render("r2"), 3)
+	a.promote(a.Render("r2"), 3, "")
 	if v := a.Render("v4-draft2"); v == nil || v.Label != "v4" || v.Alias != "v4-draft2" || v.Draft || v.N != 4 {
 		t.Fatalf("promoted: %+v", v)
 	}

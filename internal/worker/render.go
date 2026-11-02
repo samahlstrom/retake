@@ -295,3 +295,29 @@ func lastRender(dir string) project.LiveRender {
 	}
 	return last
 }
+
+// checkout puts the source of render id (its source.json) in the timeline, for a task that updates an older version
+// than the newest (spec/automation.md, "Comments on vN become edits in vN+1"), and returns what puts the timeline as
+// it was back.
+func (r *runner) checkout(id string) (restore func(), err error) {
+	if !project.ValidWorkID(id) {
+		return nil, fmt.Errorf("invalid render %q", id)
+	}
+	doc, err := os.ReadFile(filepath.Join(r.dir, "renders", id, "source.json")) //nolint:gosec // a render's own snapshot
+	if err != nil {
+		return nil, err
+	}
+	now, err := os.ReadFile(r.timeline)
+	if err != nil {
+		return nil, err
+	}
+	if err = os.WriteFile(r.timeline, doc, 0o600); err != nil { //nolint:gosec // the project's own timeline
+		return nil, err
+	}
+	r.log("%s: started from %s's source; the newest version's comes back after", filepath.Base(r.opts.Root), id)
+	return func() {
+		if e := os.WriteFile(r.timeline, now, 0o600); e != nil { //nolint:gosec // the project's own timeline
+			r.log("%s: couldn't put the newest version's source back: %v", filepath.Base(r.opts.Root), e)
+		}
+	}, nil
+}

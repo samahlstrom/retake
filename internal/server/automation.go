@@ -202,15 +202,22 @@ func (s *Server) workerRoute(w http.ResponseWriter, r *http.Request, p []string,
 			s.storeFailed(w, r, err)
 			return
 		}
-		disk, _ := s.diskVersions(&state)
+		disk, floor := s.diskVersions(&state)
 		versions := disk
 		for _, v := range state.Renders {
 			if !v.Draft {
 				versions++
 			}
 		}
+		from := ""
+		if t != nil && project.LabelNumber(t.Target) > 0 && project.LabelNumber(t.Target) < state.NextVersion(floor)-1 {
+			// An older version than the newest is updated from its own source, not the newest one's.
+			if v := state.Render(t.Target); v != nil && !v.Draft && v.Label == t.Target {
+				from = v.ID
+			}
+		}
 		s.json(w, r, 200, project.WorkAssignment{Task: t, Notes: notes, Config: state.Config, Versions: versions, Questions: questions,
-			Next: next})
+			Next: next, From: from})
 		return
 	}
 	// Every request after registration belongs to the live worker session. A token alone cannot impersonate
@@ -320,9 +327,10 @@ func (s *Server) workerRoute(w http.ResponseWriter, r *http.Request, p []string,
 			}
 			stream := remoteStream(v)
 			err = st.EmitVersion(project.VersionEvent{Label: v.Label, Why: "push", Stream: &stream})
-		} else if err == nil && b.State == "completed" && b.VersionChecked && !s.opts.RemoteFiles {
-			// A plain project's new version file on this computer (no files report tells the pages): say it, so they
-			// follow it (a video with only v0 gets its first cut, say).
+		} else if err == nil && b.State == "completed" && b.VersionChecked {
+			// A plain project's new or updated version file: say it, so the pages follow it (a video with only v0 gets
+			// its first cut, say), and play its new media when it was updated in place (a files report only tells them
+			// about new labels).
 			err = st.EmitVersion(project.VersionEvent{Label: b.Version, Why: "push"})
 		}
 	case is(p, "api", "worker", "render") && r.Method == http.MethodPost:

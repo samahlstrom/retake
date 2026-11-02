@@ -188,7 +188,8 @@ func TestRendersAreDraftsUntilATaskCompletes(t *testing.T) {
 		}
 		return v
 	}
-	if _, err = st.Sync(project.Run{Version: "v6", Comments: []project.Comment{{Key: "note", Text: "make it blue"}}}); err != nil {
+	// A comment on the newest version: its edit makes the next one (comments on vN become edits in vN+1).
+	if _, err = st.Sync(project.Run{Version: fmt.Sprintf("v%d", disk), Comments: []project.Comment{{Key: "note", Text: "make it blue"}}}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = st.QueueFeedback([]int64{1}, ""); err != nil {

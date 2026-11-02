@@ -138,9 +138,14 @@ describe('the agent and its computer', () => {
     expect(s).toMatchObject({ working: true });
   });
   it('a batch is one group: the comments the agent works on, and the ones on their way into the same version', () => {
-    const running = task('running', { notes: [1, 2, 3, 4], done: [1], dropped: [4] });
+    const running = task('running', { notes: [1, 2, 3, 4], done: [1], dropped: [4], target: 'v7' });
     expect(pendingNotes(running)).toEqual([2, 3]);
-    const s = agentStatus(automation({ tasks: [running, task('queued', { id: 't2', notes: [5, 6] })] }), 1001);
+    // Only the comments for the same version are on their way into it; the next version's wait their turn.
+    const later = task('queued', { id: 't3', notes: [7], target: 'v8' });
+    const s = agentStatus(
+      automation({ tasks: [running, task('queued', { id: 't2', notes: [5, 6], target: 'v7' }), later] }),
+      1001,
+    );
     expect(s).toMatchObject({ working: true, batch: 2, next: 2 });
     expect(batchLine(s)).toBe('Agent working on 2 comments · 2 more coming');
     expect(batchLine({ ...s, batch: 1, next: 0 })).toBe('Agent working on 1 comment');

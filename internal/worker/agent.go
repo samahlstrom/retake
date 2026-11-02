@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/samahlstrom/retake/internal/agent"
 	"github.com/samahlstrom/retake/internal/family"
 	"github.com/samahlstrom/retake/internal/project"
 )
@@ -92,7 +91,8 @@ func (r *runner) execute(ctx context.Context, a project.WorkAssignment) outcome 
 	plain, output := r.timeline == "" && !doc, filepath.Join(dir, "output.mp4")
 	var before []string
 	var vs []family.Version
-	nextName := "" // a plain task's next version file
+	var from, into string // a plain task's video to start from, and where its result goes
+	updating := false
 	extra := r.extSection(a)
 	prompt := timelinePrompt(contextPath, r.timeline, reportPath, extra)
 	if doc {
@@ -104,18 +104,46 @@ func (r *runner) execute(ctx context.Context, a project.WorkAssignment) outcome 
 			if _, ok := r.kindVersion(); !ok {
 				return paused("The project has no version that plays")
 			}
-			nextName, _ = agent.FirstVersionFile(r.opts.Root, ".mp4") // a video with only v0 gets its first cut
-		} else {
-			var err error
-			if nextName, _, err = agent.NextVersionFile(vs, ".mp4"); err != nil {
-				return paused("Couldn't name the next version: " + err.Error())
+		}
+		// Comments on vN become edits in vN+1: the target, made or updated in place. The agent starts from the target
+		// when it exists (it has the earlier changes), else from the version the notes were made on.
+		label, dest, exists, err := r.plainTarget(t.Target, ".mp4")
+		if err != nil {
+			return paused("Couldn't name the version: " + err.Error())
+		}
+		updating = exists
+		rel := func(p string) string {
+			if rp, e := filepath.Rel(r.opts.Root, p); e == nil {
+				return rp
+			}
+			return p
+		}
+		into = fmt.Sprintf("%s (%s)", label, rel(dest))
+		switch {
+		case exists:
+			from = dest
+			into = fmt.Sprintf("%s, in place of %s (Retake keeps the earlier file)", label, rel(dest))
+		case len(vs) > 0:
+			from = newestPath(vs)
+			for _, v := range vs {
+				if project.LabelNumber(v.Label) == project.LabelNumber(label)-1 {
+					from = v.Path
+				}
 			}
 		}
 		for _, v := range vs {
 			before = append(before, v.Label)
 		}
 		_ = os.Remove(output) // an earlier attempt's: this attempt writes its own
-		prompt = plainPrompt(contextPath, newestPath(vs), output, nextName, reportPath, extra)
+		prompt = plainPrompt(contextPath, from, updating, output, into, reportPath, extra)
+	}
+	// A target older than the newest version starts from its own source; the newest one's comes back after.
+	if r.timeline != "" && !doc && a.From != "" {
+		restore, err := r.checkout(a.From)
+		if err != nil {
+			return paused("Couldn't start from that version's source: " + err.Error())
+		}
+		defer restore()
 	}
 	// The notes' stills and images: a missing one never stops the task (spec/automation.md, "A note's stills and
 	// images").
@@ -141,9 +169,10 @@ func (r *runner) execute(ctx context.Context, a project.WorkAssignment) outcome 
 	if e := os.WriteFile(promptPath, []byte(prompt), 0o600); e != nil {
 		return paused("Cannot save the task prompt")
 	}
-	// A copy of the extensions' files before the agent touches them, so a person can undo its edit of a document.
+	// A copy of the extensions' files before the agent touches them, so a person can undo its edit of a document: one
+	// edit per round, as each was one attempt before rounds.
 	finish := r.snapshot(t.ID)
-	defer finish()
+	defer func() { finish() }()
 	out := ""
 	if plain {
 		out = output
@@ -157,7 +186,7 @@ func (r *runner) execute(ctx context.Context, a project.WorkAssignment) outcome 
 			case doc:
 				return docPrompt(contextPath, reportPath, extra)
 			case plain:
-				return plainPrompt(contextPath, newestPath(vs), output, nextName, reportPath, extra)
+				return plainPrompt(contextPath, from, updating, output, into, reportPath, extra)
 			}
 			return timelinePrompt(contextPath, r.timeline, reportPath, extra)
 		}}
@@ -185,6 +214,8 @@ func (r *runner) execute(ctx context.Context, a project.WorkAssignment) outcome 
 				return nil
 			}
 			if next {
+				finish()
+				finish = r.snapshot(t.ID)
 				return ids
 			}
 			if !settle {
@@ -237,7 +268,7 @@ rounds:
 		}
 		if plain {
 			// The video, not the agent's exit, completes the task: it must play, as the next version.
-			label, problem := r.pushPlain(output, before)
+			label, problem := r.pushPlain(output, t.Target, before)
 			if problem != "" {
 				return outcome{state: "paused", message: problem, usage: usage}
 			}

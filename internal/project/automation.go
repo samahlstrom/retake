@@ -59,9 +59,12 @@ type TaskEvent struct {
 
 // EditingTask keeps its identity when execution changes providers.
 type EditingTask struct {
-	ID        string      `json:"id"`
-	Notes     []int64     `json:"notes"`
-	Version   string      `json:"version"`
+	ID      string  `json:"id"`
+	Notes   []int64 `json:"notes"`
+	Version string  `json:"version"`
+	// Target is the version the task makes or updates: its notes' version + 1 (spec/automation.md, "Comments on vN
+	// become edits in vN+1"). "" for a task an older store queued before targets.
+	Target    string      `json:"target,omitempty"`
 	State     string      `json:"state"`
 	Agent     string      `json:"agent"`
 	Worker    string      `json:"worker"`
@@ -282,10 +285,10 @@ func (s *Store) reconcileWork(t *tx, a *AutomationState) (bool, error) {
 	return changed, nil
 }
 
-// queued is the project's batch waiting to run, if any: after mergeQueued there is at most one.
-func (a *AutomationState) queued() *EditingTask {
+// queuedFor is the task of target waiting to run, if any: after mergeQueued there is at most one per target.
+func (a *AutomationState) queuedFor(target string) *EditingTask {
 	for i := range a.Tasks {
-		if a.Tasks[i].State == "queued" {
+		if a.Tasks[i].State == "queued" && a.Tasks[i].Target == target {
 			return &a.Tasks[i]
 		}
 	}
@@ -348,22 +351,23 @@ func (t *EditingTask) absorb(o EditingTask, now int64) {
 	t.AddEvent(now, "Joined task "+o.ID+": "+noteList(added))
 }
 
-// mergeQueued makes the tasks waiting in queued one batch (spec/automation.md, "Batches"): the oldest keeps its id,
-// agent and history and absorbs the others, which are removed. It reports whether it merged any.
+// mergeQueued makes the tasks of one target waiting in queued one task (spec/automation.md, "Comments on vN become
+// edits in vN+1"): the oldest keeps its id, agent and history and absorbs the others, which are removed. It reports
+// whether it merged any.
 func (a *AutomationState) mergeQueued(now int64) bool {
-	into := slices.IndexFunc(a.Tasks, func(j EditingTask) bool { return j.State == "queued" })
-	if into < 0 {
-		return false
-	}
 	out := make([]EditingTask, 0, len(a.Tasks))
+	into := map[string]int{} // target -> its oldest queued task in out
 	merged := false
-	for i, j := range a.Tasks {
-		if i <= into || j.State != "queued" {
-			out = append(out, j)
-			continue
+	for _, j := range a.Tasks {
+		if j.State == "queued" {
+			if i, ok := into[j.Target]; ok {
+				out[i].absorb(j, now)
+				merged = true
+				continue
+			}
+			into[j.Target] = len(out)
 		}
-		out[into].absorb(j, now)
-		merged = true
+		out = append(out, j)
 	}
 	if merged {
 		a.Tasks = out
@@ -375,8 +379,12 @@ func (a *AutomationState) mergeQueued(now int64) bool {
 // (spec/automation.md, "Batches"), and drops the queued batch once it has nothing left to do. Pointers into a.Tasks
 // may be stale afterwards. It reports whether it moved any.
 func (a *AutomationState) join(task string, ids []int64, now int64) bool {
-	q, j := a.queued(), a.Task(task)
-	if q == nil || j == nil || q.ID == j.ID || len(ids) == 0 {
+	j := a.Task(task)
+	if j == nil || len(ids) == 0 {
+		return false
+	}
+	q := a.queuedFor(j.Target)
+	if q == nil || q.ID == j.ID {
 		return false
 	}
 	var moved []int64
@@ -401,10 +409,14 @@ func (a *AutomationState) join(task string, ids []int64, now int64) bool {
 	return true
 }
 
-// next is the queued batch the running attempt of task may take into its live session: one that never ran.
+// next is the queued task the running attempt of task may take in: of its target, and one that never ran.
 func (a *AutomationState) next(task string) *EditingTask {
-	j, q := a.Task(task), a.queued()
-	if j == nil || q == nil || j.State != "running" || j.Stop || q.Attempt > 0 || len(q.Asked) > 0 || len(q.Pending()) == 0 {
+	j := a.Task(task)
+	if j == nil {
+		return nil
+	}
+	q := a.queuedFor(j.Target)
+	if q == nil || j.State != "running" || j.Stop || q.Attempt > 0 || len(q.Asked) > 0 || len(q.Pending()) == 0 {
 		return nil
 	}
 	clone := *q
@@ -412,20 +424,43 @@ func (a *AutomationState) next(task string) *EditingTask {
 	return &clone
 }
 
-// batchQueued merges the tasks an older store queued (one per note) into one batch when the store opens
-// (spec/automation.md, "Batches"). It writes nothing when at most one task waits.
+// batchQueued gives the tasks an older store queued their targets and merges the queued ones (one per note, then) per
+// target when the store opens (spec/automation.md, "Comments on vN become edits in vN+1"). It writes nothing when
+// there's nothing to do.
 func (s *Store) batchQueued() error {
 	a, err := s.Automation()
 	if err != nil {
 		return err
 	}
-	if len(slices.DeleteFunc(slices.Clone(a.Tasks), func(j EditingTask) bool { return j.State != "queued" })) < 2 {
+	untargeted := slices.ContainsFunc(a.Tasks, func(j EditingTask) bool {
+		return j.Target == "" && j.State != "completed" && j.State != "cancelled"
+	})
+	if !untargeted && len(slices.DeleteFunc(slices.Clone(a.Tasks), func(j EditingTask) bool { return j.State != "queued" })) < 2 {
 		return nil
 	}
 	return s.write(func(t *tx) error {
 		a, err := readAutomation(t)
-		if err != nil || !a.mergeQueued(s.Now().Unix()) {
+		if err != nil {
 			return err
+		}
+		// A task from before targets gets its first note's (comments on vN become edits in vN+1).
+		targeted := false
+		for i := range a.Tasks {
+			j := &a.Tasks[i]
+			if j.Target != "" || j.State == "completed" || j.State == "cancelled" || len(j.Pending()) == 0 {
+				continue
+			}
+			n, e := noteByID(t, j.Pending()[0])
+			if e != nil && !errors.Is(e, ErrNotFound) {
+				return e
+			}
+			if e == nil {
+				j.Target = n.Target()
+				targeted = true
+			}
+		}
+		if !a.mergeQueued(s.Now().Unix()) && !targeted {
+			return nil
 		}
 		if err = saveAutomation(t, a); err == nil {
 			t.emit("automation", map[string]bool{"changed": true})
@@ -557,20 +592,32 @@ func (a *AutomationState) HasVersion() bool {
 // v<N>, so an empty project gets its first video. Every other render is a draft, v<N>-draft<K>, of the next version.
 func (a *AutomationState) AddRender(v LiveRender, disk, floor int) LiveRender {
 	next := a.NextVersion(floor)
+	if j := a.Task(v.Task); j != nil && LabelNumber(j.Target) > 0 {
+		next = LabelNumber(j.Target) // a draft heads for its task's target
+	}
 	v.N, v.Alias = next, ""
 	if v.Task == "" && disk == 0 && !a.HasVersion() {
 		v.Draft, v.Label = false, fmt.Sprintf("v%d", next)
 	} else {
-		k := 1
-		for _, d := range a.Renders {
-			if d.Draft && d.N == next {
-				k++
-			}
-		}
-		v.Draft, v.Label = true, fmt.Sprintf("v%d-draft%d", next, k)
+		v.Draft, v.Label = true, fmt.Sprintf("v%d-draft%d", next, a.nextDraft(next))
 	}
 	a.Renders = append(a.Renders, v)
 	return v
+}
+
+// nextDraft is K of the next draft label of version n, v<n>-draft<K>: one past every draft label of n there is, as a
+// label or as the alias a promoted draft keeps.
+func (a *AutomationState) nextDraft(n int) int {
+	k := 0
+	for _, d := range a.Renders {
+		for _, label := range []string{d.Label, d.Alias} {
+			var vn, dk int
+			if _, err := fmt.Sscanf(label, "v%d-draft%d", &vn, &dk); err == nil && vn == n && label == fmt.Sprintf("v%d-draft%d", vn, dk) {
+				k = max(k, dk)
+			}
+		}
+	}
+	return k + 1
 }
 
 // Listed reports whether the family lists render i: every version, and the newest draft and newest complete draft
@@ -582,24 +629,38 @@ func (a *AutomationState) Listed(i, floor int) bool {
 		return true
 	}
 	if v.N < a.NextVersion(floor) {
-		return false // a version was made since
+		// A version was made since, unless the draft's task is still updating that version.
+		j := a.Task(v.Task)
+		if j == nil || LabelNumber(j.Target) != v.N || j.State == "completed" || j.State == "cancelled" {
+			return false
+		}
 	}
 	for _, later := range a.Renders[i+1:] {
-		if later.Draft && (!v.Complete || later.Complete) {
+		if later.Draft && later.N == v.N && (!v.Complete || later.Complete) {
 			return false
 		}
 	}
 	return true
 }
 
-// promote turns a task's final draft into the version v<N>, keeping its media and its draft label as an alias.
-// Drafts left behind by it lose their manifests: they aren't listed any more.
-func (a *AutomationState) promote(v *LiveRender, floor int) {
+// promote turns a task's final draft into its target v<N> (else the next version), keeping its media and its draft
+// label as an alias. When v<N> existed, its earlier render becomes one of its drafts (spec/automation.md, "Comments
+// on vN become edits in vN+1"). Drafts left behind by it lose their manifests: they aren't listed any more.
+func (a *AutomationState) promote(v *LiveRender, floor int, target string) {
 	if !v.Draft {
 		return
 	}
 	n := a.NextVersion(floor)
-	v.Alias, v.Label, v.N, v.Draft = v.Label, fmt.Sprintf("v%d", n), n, false
+	if t := LabelNumber(target); t > 0 {
+		n = t
+	}
+	label := fmt.Sprintf("v%d", n)
+	for i := range a.Renders {
+		if old := &a.Renders[i]; !old.Draft && old.Label == label && old.ID != v.ID {
+			old.Draft, old.Label, old.Manifest = true, fmt.Sprintf("v%d-draft%d", n, a.nextDraft(n)), nil
+		}
+	}
+	v.Alias, v.Label, v.N, v.Draft = v.Label, label, n, false
 	for i := range a.Renders {
 		if a.Renders[i].Draft && a.Renders[i].N <= n {
 			a.Renders[i].Manifest = nil
@@ -638,9 +699,10 @@ func (s *Store) QueueFeedback(ids []int64, agent string) ([]EditingTask, error) 
 		if agent == "" {
 			agent = a.Config.Agent
 		}
-		var fresh []int64
-		var owners []string
-		version := ""
+		// The notes, by target: comments on vN become edits in vN+1.
+		fresh := map[string][]int64{}
+		versions := map[string]string{}
+		var targets, owners []string
 		for _, id := range ids {
 			n, err := noteByID(t, id)
 			if err != nil {
@@ -655,25 +717,28 @@ func (s *Store) QueueFeedback(ids []int64, agent string) ([]EditingTask, error) 
 				}
 				continue
 			}
-			if !slices.Contains(fresh, id) {
-				fresh = append(fresh, id)
-				if version == "" {
-					version = n.Version
-				}
+			target := n.Target()
+			if !slices.Contains(targets, target) {
+				targets = append(targets, target)
+				versions[target] = n.Version
+			}
+			if !slices.Contains(fresh[target], id) {
+				fresh[target] = append(fresh[target], id)
 			}
 		}
-		if len(fresh) > 0 {
-			j := a.queued()
+		for _, target := range targets {
+			ids := fresh[target]
+			j := a.queuedFor(target)
 			if j == nil {
-				a.Tasks = append(a.Tasks, EditingTask{ID: NewWorkID(), Notes: fresh, Version: version, State: "queued",
-					Agent: agent, Worker: a.Config.Worker, Events: []TaskEvent{}})
+				a.Tasks = append(a.Tasks, EditingTask{ID: NewWorkID(), Notes: ids, Version: versions[target], Target: target,
+					State: "queued", Agent: agent, Worker: a.Config.Worker, Events: []TaskEvent{}})
 				j = &a.Tasks[len(a.Tasks)-1]
-				j.AddEvent(now, "Feedback submitted: "+noteList(fresh))
+				j.AddEvent(now, "Feedback submitted: "+noteList(ids)+targetWords(target))
 			} else {
-				for _, id := range fresh {
+				for _, id := range ids {
 					j.add(id)
 				}
-				j.AddEvent(now, "Added "+noteList(fresh))
+				j.AddEvent(now, "Added "+noteList(ids))
 			}
 			if !slices.Contains(owners, j.ID) {
 				owners = append(owners, j.ID)
@@ -870,9 +935,17 @@ func (s *Store) PollWorker(p WorkPoll) (task, next *EditingTask, err error) {
 			return changed, nil
 		}
 		if hold {
-			return changed, nil // a sent take's notes join the batch once processed, then it starts
+			return changed, nil // a sent take's notes join their tasks once processed, then they start
 		}
+		// The queued tasks in the order of their targets, lowest first (v8 before v9), then as they came.
+		order := make([]int, 0, len(a.Tasks))
 		for i := range a.Tasks {
+			order = append(order, i)
+		}
+		slices.SortStableFunc(order, func(x, y int) int {
+			return LabelNumber(a.Tasks[x].Target) - LabelNumber(a.Tasks[y].Target)
+		})
+		for _, i := range order {
 			j := &a.Tasks[i]
 			if j.State != "queued" {
 				continue
@@ -980,8 +1053,9 @@ func (s *Store) ControlTask(id, action, agent, message string) error {
 				j.Error = ""
 				j.Lease = ""
 				// It joins the video's queued batch, if one waits; an agent named here is the batch's now.
+				target := j.Target
 				if a.mergeQueued(now) && named {
-					a.queued().Agent = agent
+					a.queuedFor(target).Agent = agent
 				}
 			}
 		case "pause":
@@ -1065,9 +1139,12 @@ type WorkAssignment struct {
 	Versions int              `json:"versions"`
 	// Questions is the task's questions from inside it (retake ask), with their answers.
 	Questions []TaskQuestion `json:"questions,omitempty"`
-	// Next is the queued batch a running attempt may give its live session (herdr, tmux): spec/automation.md,
-	// "Batches".
+	// Next is the queued task of the same target a running attempt may take in (spec/automation.md, "Comments on vN
+	// become edits in vN+1").
 	Next *EditingTask `json:"next,omitempty"`
+	// From is the render whose source a timeline task starts from, when its target is older than the newest version
+	// (a comment on v7 while v9 exists updates v8 from v8's own source).
+	From string `json:"from,omitempty"`
 }
 
 // ReportWork atomically updates task and note completion, preserving reviewer approval. A completed task's final
@@ -1199,13 +1276,16 @@ func (s *Store) ReportWork(r WorkReport, floor int) (LiveRender, error) {
 				if !r.VersionChecked || strings.TrimSpace(r.Message) == "" {
 					return errors.New("completion requires a new version that plays and a change summary")
 				}
+				if j.Target != "" && r.Version != j.Target {
+					return fmt.Errorf("this task's comments go in %s, not %s", j.Target, r.Version)
+				}
 				label = r.Version
 			} else {
 				v := a.Render(r.Result)
 				if v == nil || !v.Complete || v.Error != "" || v.Worker != r.Worker || v.Task != j.ID || strings.TrimSpace(r.Message) == "" {
 					return errors.New("completion requires a checked playable render and a change summary")
 				}
-				a.promote(v, floor)
+				a.promote(v, floor, j.Target)
 				result = *v
 				label = v.Label
 			}
@@ -1275,4 +1355,12 @@ func splitDocs(q querier, ids []int64) (docs, cuts []int64, err error) {
 func (s *Store) DocOnly(j EditingTask) (bool, error) {
 	_, cuts, err := splitDocs(s.db, j.Pending())
 	return len(cuts) == 0 && len(j.Pending()) > 0, err
+}
+
+// targetWords says, in an event, which version the task's comments go in.
+func targetWords(target string) string {
+	if target == "" {
+		return ""
+	}
+	return " (edits in " + target + ")"
 }

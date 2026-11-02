@@ -344,3 +344,98 @@ func TestCommentsSentMidRunReachTheSameSession(t *testing.T) {
 		})
 	}
 }
+
+// TestCommentsOnV1UpdateV2InPlace: comments on vN become edits in vN+1, in a plain project. A comment on v1 makes v2;
+// another on v1 after that updates v2 in place (the earlier file kept in .retake/worker/history/); one send with a
+// comment on v1 and one on v2 updates v2, then makes v3, one after the other; a comment on v1 while v3 exists still
+// updates v2. The same agent every time, one task per target.
+func TestCommentsOnV1UpdateV2InPlace(t *testing.T) {
+	testmedia.Need(t)
+	base := scratchDir(t, "batch-target-test-")
+	gate := filepath.Join(base, "gate")
+	if err := os.MkdirAll(gate, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(gate, "go"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	v := startBatchVideo(t, base, "shop", 4, batchProfile(t, gate, 1))
+	history := func() int {
+		files, _ := filepath.Glob(filepath.Join(v.local, ".retake", "worker", "history", "v2-*.mp4"))
+		return len(files)
+	}
+	done := func(n int) {
+		t.Helper()
+		v.wait(t, fmt.Sprintf("%d tasks done", n), func(a project.AutomationState) bool {
+			return len(a.Tasks) == n && !slices.ContainsFunc(a.Tasks, func(j project.EditingTask) bool { return j.State != "completed" })
+		})
+	}
+	v.send(t, 1)
+	done(1)
+	if got := v.answeredIn(t, 1); got != "v2" || !slices.Equal(v.versions(t), []string{"shop_v1.mp4", "shop_v2.mp4"}) || history() != 0 {
+		t.Fatalf("v2 made: %s %q %d", got, v.versions(t), history())
+	}
+	v.send(t, 2) // on v1 again, after v2 is done
+	done(2)
+	if got := v.answeredIn(t, 2); got != "v2" || !slices.Equal(v.versions(t), []string{"shop_v1.mp4", "shop_v2.mp4"}) || history() != 1 {
+		t.Fatalf("v2 updated: %s %q %d", got, v.versions(t), history())
+	}
+	if _, err := v.st.Sync(project.Run{Version: "v2", Comments: []project.Comment{{Key: "on-v2", Text: "On v2", T0: 0, T1: 0.2}}}); err != nil {
+		t.Fatal(err)
+	}
+	v.send(t, 3, 5) // one send: a comment on v1 and one on v2
+	done(4)
+	a, _ := v.st.Automation()
+	if a.Tasks[2].Target != "v2" || a.Tasks[3].Target != "v3" || v.answeredIn(t, 3) != "v2" || v.answeredIn(t, 5) != "v3" {
+		t.Fatalf("mixed send: %+v", a.Tasks)
+	}
+	if got := v.versions(t); !slices.Equal(got, []string{"shop_v1.mp4", "shop_v2.mp4", "shop_v3.mp4"}) || history() != 2 {
+		t.Fatalf("versions: %q, history %d", got, history())
+	}
+	v.send(t, 4) // on v1 while v3 exists: still v2
+	done(5)
+	if got := v.answeredIn(t, 4); got != "v2" || len(v.versions(t)) != 3 || history() != 3 {
+		t.Fatalf("v2 updated behind v3: %s %q %d", got, v.versions(t), history())
+	}
+	if got := lines(t, filepath.Join(gate, "launches")); !slices.Equal(got, []string{"shop [1]", "shop [2]", "shop [3]", "shop [5]", "shop [4]"}) {
+		t.Fatalf("launches: %q", got)
+	}
+	prompt, err := os.ReadFile(filepath.Join(v.local, ".retake", "worker", "tasks", a.Tasks[2].ID, "prompt-1.md"))
+	if err != nil || !strings.Contains(string(prompt), "the version these notes go in, which exists already") ||
+		!strings.Contains(string(prompt), "v2, in place of shop_v2.mp4") {
+		t.Fatalf("the update's prompt: %s %v", prompt, err)
+	}
+}
+
+// TestAnOlderTargetStartsFromItsOwnSource: in a timeline project, a task for v8 while v9 exists starts from v8's
+// render's source.json, and the newest source comes back after.
+func TestAnOlderTargetStartsFromItsOwnSource(t *testing.T) {
+	r, _ := viewRunner(t, "promo")
+	if err := os.MkdirAll(filepath.Dir(r.timeline), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(r.timeline, []byte(`{"rev":9}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	v8 := project.NewWorkID()
+	if err := os.MkdirAll(filepath.Join(r.dir, "renders", v8), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(r.dir, "renders", v8, "source.json"), []byte(`{"rev":8}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.checkout("../escape"); err == nil {
+		t.Fatal("a render id with a path")
+	}
+	restore, err := r.checkout(v8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(r.timeline); string(b) != `{"rev":8}` {
+		t.Fatalf("checked out: %s", b)
+	}
+	restore()
+	if b, _ := os.ReadFile(r.timeline); string(b) != `{"rev":9}` {
+		t.Fatalf("restored: %s", b)
+	}
+}

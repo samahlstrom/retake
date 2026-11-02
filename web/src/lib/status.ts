@@ -152,7 +152,8 @@ export function agentStatus(a: AutomationState | null, now: number): AgentStatus
   const blocked = (typeof a.blocked === 'string' && a.blocked) || worker?.blocked || '';
   const tasks = a.tasks ?? [];
   const running = tasks.find((t) => t.state === 'running' || t.state === 'stopping');
-  const queued = tasks.filter((t) => t.state === 'queued');
+  // Sent meanwhile for the same version (its target): on their way into the agent's work.
+  const queued = tasks.filter((t) => t.state === 'queued' && t.target === running?.target);
   return {
     available: true,
     local: typeof a.local === 'boolean' ? a.local : null,

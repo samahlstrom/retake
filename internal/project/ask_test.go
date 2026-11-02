@@ -220,13 +220,14 @@ func TestTaskEndsWithSomeNotesDoneAndSomeQuestion(t *testing.T) {
 		t.Fatalf("pending %v", again.Pending())
 	}
 	qs, _ := s.TaskQuestions(*again, func(int64, string) string { return "" })
-	report = WorkReport{Worker: w.ID, Task: j.ID, Lease: again.Lease, State: "completed", Message: "Trimmed the long pause", Version: "v8", VersionChecked: true, Told: []int64{qs[0].Answer.ID}}
+	// Its comments are on v6, so their edits go in v7: the next run updates v7 in place.
+	report = WorkReport{Worker: w.ID, Task: j.ID, Lease: again.Lease, State: "completed", Message: "Trimmed the long pause", Version: "v7", VersionChecked: true, Told: []int64{qs[0].Answer.ID}}
 	if _, e = s.ReportWork(report, 0); e != nil {
 		t.Fatal(e)
 	}
 	one, _ = s.Note(1)
 	two, _ = s.Note(2)
-	if one.AnsweredIn != "v7" || two.Status != StatusAnswered || two.AnsweredIn != "v8" || taskByID(t, s, j.ID).State != "completed" {
+	if one.AnsweredIn != "v7" || two.Status != StatusAnswered || two.AnsweredIn != "v7" || taskByID(t, s, j.ID).State != "completed" {
 		t.Fatalf("finally: %+v %+v", one, two)
 	}
 }

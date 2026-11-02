@@ -17,6 +17,8 @@ export interface EditingTask {
   id: string;
   notes: number[];
   version: string;
+  /** The version the task makes or updates: its comments' version + 1 (spec/automation.md). */
+  target?: string;
   state: string;
   agent: string;
   worker: string;
