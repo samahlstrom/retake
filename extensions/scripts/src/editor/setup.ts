@@ -44,6 +44,8 @@ const look = EditorView.theme(
         'var(--ig-pad-top, 0px) var(--ig-pad-right, 0px) var(--ig-pad-bottom, 0px) ' +
         'calc(var(--ig-indent, 0px) + var(--ig-list-pad, 0px))',
     },
+    // An embed's own line, off the caret: folded away, so only its embed shows (spec/scripts.md, "Embeds").
+    '.cm-line.ig-embed-src': { height: '0', padding: '0', overflow: 'hidden' },
   },
   { dark: true },
 );

@@ -133,6 +133,8 @@ The `ctx` types for your editor are `web/src/ext/retake-ext.d.ts` in Retake's so
   the video's folder, local or on the editing computer when hosted.
 - **Recording and transcription**: `ctx.onRecorded` gets the audio of R on your version, and `ctx.transcribe` turns
   a file into words.
+- **Link previews**: `ctx.linkPreview(url)` gives a public page's title, site and picture, read by the server (it
+  never reaches a local or private address). Scripts uses it for its link cards.
 - **Instructions for the agent** (`[agent]`): Markdown added to the prompt of a task on its version or files, and a
   short context for every task of a video that has its files. Retake's own rules come last and win.
 - **Agent tools** (`[[agent.tools]]`, not built yet): small programs the agent runs with `retake ext tool`, in the

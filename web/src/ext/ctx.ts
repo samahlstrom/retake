@@ -414,6 +414,18 @@ export function makeCtx(ext: ExtInfo, slot: T.SlotName, host: Host): Made {
     return { text: wordsText(list), words: list };
   }
 
+  async function linkPreview(url: string): Promise<T.LinkPreview> {
+    if (host.where !== 'video') throw new ExtError('No video here: link previews are read under a video', 400);
+    const body = (await (await call(`api/link-preview?url=${enc(String(url))}`)).json()) as Record<string, unknown>;
+    return {
+      url: str(body.url) || String(url),
+      title: str(body.title),
+      site: str(body.site),
+      image: /^https:\/\//i.test(str(body.image)) ? str(body.image) : '',
+      description: str(body.description),
+    };
+  }
+
   async function createVideo(v: { project: string; name: string; files: Record<string, string> }) {
     const r = await call(`${host.homeRoot}api/ext/${id}/videos`, json(v));
     const body = (await r.json()) as { name?: unknown; url?: unknown };
@@ -500,6 +512,7 @@ export function makeCtx(ext: ExtInfo, slot: T.SlotName, host: Host): Made {
     toast: (text) => host.toast(String(text)),
     fetch: (path, init) =>
       f(`${host.where === 'video' ? '' : host.homeRoot}ext/${id}/api/${path.replace(/^\/+/, '')}`, init),
+    linkPreview,
   };
 
   return {

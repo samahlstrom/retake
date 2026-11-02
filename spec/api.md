@@ -79,6 +79,7 @@ A streamed version also has `"stream": {"state": "rendering", "done": 12, "total
 | GET | `/s/<token>` | New in milestone 3a: a share link. Sets the share cookie and bounces to `/` (spec/team.md). |
 | GET/HEAD | `/api/poster?v=<label>` | New: a JPEG of the version's first frame (no `v`: the current one), for `<video poster>` and the home's cards (spec/home.md). 404 `{"error":"no poster"}` when there is none. |
 | POST | `/api/versions/<label>/unwatch?viewer=<id>` | New: the page left that version (spec/home.md, "Close means close"). 204. Needs watch, not record. |
+| GET | `/api/link-preview?url=<address>` | New with a script's embeds (spec/scripts.md, "Embeds"): what a public web page says about itself, for a link card: `{"url", "title", "site", "image", "description"}`. See "Link preview" below. |
 | any | `/mcp` | New in milestone 3a: the agent tools over MCP's streamable HTTP transport, for a Bearer `agent` token (spec/team.md). |
 
 Anything else is 404 `{"error": "not found"}`. Any request whose `Host` header isn't `127.0.0.1:<port>` or `localhost:<port>` gets 403 `{"error": "bad host"}` first, on every route. That blocks DNS rebinding, where another site points its own hostname at 127.0.0.1 to read local videos and takes. Refused requests don't count as contact for the idle timer. `--allow-host H` (repeatable) adds `H` to the accepted Host headers and `https://H` to the accepted origins. It's for a tunnel such as a Cloudflare quick tunnel. Since milestone 3a every request through such a host must carry a token, and each route checks the token's role (spec/team.md); local requests without a token keep full access. All JSON responses send `Cache-Control: no-store`.
@@ -143,6 +144,32 @@ The response is `{"ok": true, "dir": "<take folder>"}`.
     `i * bin` is inside them.
   - `inherit.json` sits in the version's `.review/` folder: `{"takes": [{dir, version, ranges, ...}]}`. Entries whose
     `dir` no longer exists are ignored. A relative `dir` is relative to that `.review/` folder; no `ranges` means all.
+
+## Link preview
+
+`GET /api/link-preview?url=<address>` reads one web page and says what it says about itself, for a script's link
+cards (spec/scripts.md, "Embeds"). It needs watch, like every read; under a video it is
+`/p/<name>/api/link-preview`, locally and on a team server alike, and the server that serves the page does the read.
+
+- **The answer**: `{"url", "title", "site", "image", "description"}`. `title` is `og:title`, else `twitter:title`,
+  else `<title>`. `site` is `og:site_name`, else the host without `www.`. `image` is `og:image` (else
+  `twitter:image`), made absolute against the page, kept only when it is https. `description` is `og:description`,
+  else `<meta name="description">`. Entities are decoded, spaces folded, and each is cut (300, 100, 2048 and 500
+  characters); a missing one is `""`.
+- **Only public pages.** The address is `http` or `https`, with a host, no user or password, at most 2048
+  characters. The server never connects to a loopback, private, link-local (169.254.0.0/16, so the cloud metadata
+  address 169.254.169.254), shared (100.64.0.0/10), unspecified, multicast, broadcast, documentation or other
+  reserved address, IPv4 or IPv6 (`::1`, `fc00::/7`, `fe80::/10`, and an IPv4 address inside an IPv6 one is judged
+  as that IPv4 address). It checks the address it is actually connecting to, after DNS, so a name that resolves to
+  one is refused, and so is every redirect (at most 5, to http or https). Proxies from the environment aren't used.
+  A refused address answers 400 `{"error": "not a public web address"}`.
+- **Small and quick.** 5 s for the whole read, redirects included. Only the first 1 MiB of the body is read, and
+  only `text/html` and `application/xhtml+xml` are parsed (another type answers with just the site). It sends
+  `User-Agent: Mozilla/5.0 (compatible; Retake link preview)`. A page that can't be read answers 502
+  `{"error": "can't read that page"}`. At most 4 pages are read at once.
+- **Cached on disk**, one JSON file per address (named by its SHA-256) in `retake/link-preview/` under the user's
+  cache folder (`$XDG_CACHE_HOME`, else `~/.cache`): an answer for 7 days, a page that couldn't be read for
+  10 minutes, so asking again doesn't reach the site.
 
 ## The page's test hook
 

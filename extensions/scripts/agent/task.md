@@ -11,6 +11,8 @@ both edit it.
   `v0/`). When the person should choose between looks, make each one and ask with them as options, about the place in
   the document they're for: `retake ask --note 12 --file v0/<video>_v0.md --heading "Cold open" --option "Ink@v0/images/ink.png" --option "Neon@v0/images/neon.png" "Which look?"`.
   They show in the document; the person taps one.
+- Links: put an address alone on its own line to embed it (a YouTube, Vimeo, X or TikTok address plays in place, any
+  other page shows as a card with its title); a link inside a sentence stays a link.
 - Edit in place. Keep headings stable, because they're anchors. Move text rather than delete it, and list anything
   cut under `## Cut` at the end.
 - Each comment's change says what you did (the report).

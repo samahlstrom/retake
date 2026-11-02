@@ -230,7 +230,9 @@ interface Ctx {
   navigate(to: { video?: string; version?: string; t?: number; route?: string }): void;
   toast(text: string): void;
   fetch(path: string, init?: RequestInit): Promise<Response>;   // its server: ext/<id>/api/<path>
+  linkPreview(url: string): Promise<LinkPreview>;      // under a video: GET api/link-preview (spec/api.md)
 }
+interface LinkPreview { url: string; title: string; site: string; image: string; description: string }
 interface Files {
   list(glob?: string): Promise<FileInfo[]>;            // FileInfo: {path, size, modified, sha256}
   read(path: string): Promise<{ sha256: string; text(): Promise<string>; blob(): Promise<Blob> }>;
@@ -399,7 +401,8 @@ what any script in the page could.
 - the tool would then feel like an embed. Tokens and the user's theme would have to be copied in, layout and focus
   would cross a frame edge, R and the page's keys wouldn't reach it, and every call would be a `postMessage` RPC to
   version and keep in step;
-- the product's rule is no iframes anywhere.
+- the product's rule is that Retake itself is never framed (a script's embeds, spec/scripts.md, frame other sites'
+  players and posts, and nothing else of Retake's makes a frame).
 
 So slots are plain elements and the module runs in the page. A frame stays possible later, as an opt-in per extension
 (`[ui] isolate = true`), without changing the `ctx` API.

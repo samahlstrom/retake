@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -224,6 +225,12 @@ func TestHomeExtensions(t *testing.T) {
 	jsonBody(t, r, &info)
 	if info.Label != "v0" || info.Kind != "scripts.doc" || len(info.Versions) != 1 || info.Versions[0].Duration != nil {
 		t.Fatalf("info: %s", r.body)
+	}
+	// Its link cards (spec/api.md, "Link preview"): the video's server reads them, and never a local address.
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	if r = x.get("/p/jump-souls/api/link-preview?url=" + url.QueryEscape("http://127.0.0.1:1/")); r.code != 400 ||
+		!strings.Contains(r.body, "not a public web address") {
+		t.Fatalf("link preview of a local address: %d %s", r.code, r.body)
 	}
 }
 

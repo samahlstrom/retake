@@ -390,6 +390,7 @@
           focus={canWrite && !talkOnOpen && !touch}
           {questions}
           image={imageSrc}
+          preview={(url) => c.linkPreview(url)}
           answer={(q, t) => void answerQuestion(q, t)}
           openQuestion={(q) => c.selectComment(q.id)}
           {saveImage}

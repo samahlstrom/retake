@@ -30,7 +30,8 @@
     "on",
     "navigate",
     "toast",
-    "fetch"
+    "fetch",
+    "linkPreview"
   ],
   "files": ["list", "read", "write", "remove", "url", "watch", "history", "undo"],
   "comments": ["list", "add", "send", "answer"],
