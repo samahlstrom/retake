@@ -41,6 +41,8 @@ export default defineConfig({
         '--autoplay-policy=no-user-gesture-required',
         '--mute-audio',
         '--hide-scrollbars',
+        // RETAKE_E2E_NO_GPU: software rendering only (the machine's GPU is busy, a game say).
+        ...(process.env.RETAKE_E2E_NO_GPU ? ['--disable-gpu'] : []),
       ],
     },
   },

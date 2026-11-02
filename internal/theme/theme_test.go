@@ -303,16 +303,21 @@ func TestCheck(t *testing.T) {
 func TestCheckDeprecated(t *testing.T) {
 	api := strings.Replace(string(web.ThemeAPI), `"tokens": {}`,
 		`"tokens": {"--bar": {"use": "--surface", "since": "2.0.0"}}`, 1)
-	api = strings.Replace(api, `"parts": {}`, `"parts": {"comment-card": {"use": "comment", "since": "2.0.0"}}`, 1)
+	// A part renamed before the first release (api.json lists agent-status → send-notice), and one more.
+	api = strings.Replace(api, `"agent-status": {`, `"comment-card": {"use": "comment", "since": "2.0.0"}, "agent-status": {`, 1)
 	spec, err := parseSpec(web.ThemeTokens, []byte(api))
 	if err != nil {
 		t.Fatal(err)
 	}
 	r := Report{}
-	dir := write(t, map[string]string{CSSFile: ":root{--bar:#111}\n[data-part~=comment-card]{}"})
+	dir := write(t, map[string]string{CSSFile: ":root{--bar:#111}\n[data-part~=comment-card]{}\n[data-part~=agent-status]{}"})
 	r.checkCSS(spec, dir)
-	if got := kinds(r.Problems); !slices.Equal(got, []string{"deprecated-token:--bar", "deprecated-part:comment-card"}) {
-		t.Errorf("problems = %v", got)
+	want := []string{"deprecated-token:--bar", "deprecated-part:agent-status", "deprecated-part:comment-card"}
+	if got := kinds(r.Problems); !slices.Equal(got, want) {
+		t.Errorf("problems = %v, want %v", got, want)
+	}
+	if !strings.Contains(r.Problems[1].Message, `use "send-notice"`) {
+		t.Errorf("message = %s", r.Problems[1].Message)
 	}
 	if !strings.Contains(r.Problems[0].Message, "use --surface") {
 		t.Errorf("message = %s", r.Problems[0].Message)

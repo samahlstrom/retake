@@ -59,32 +59,32 @@
 </script>
 
 {#snippet tabs()}
-<div class="tabs" data-part="tabs" role="tablist" aria-label="Comments">
-  <div class="seg">
-    <button
-      role="tab"
-      aria-selected={!tab && review.commentFilter === 'todo'}
-      class:on={!tab && review.commentFilter === 'todo'}
-      onclick={() => review.showComments('todo')}>To do <b>{review.todoCount}</b></button
-    >
-    <button
-      role="tab"
-      aria-selected={!tab && review.commentFilter === 'done'}
-      class:on={!tab && review.commentFilter === 'done'}
-      onclick={() => review.showComments('done')}>Done <b>{review.doneCount}</b></button
-    >
+  <div class="tabs" data-part="tabs" role="tablist" aria-label="Comments">
+    <div class="seg">
+      <button
+        role="tab"
+        aria-selected={!tab && review.commentFilter === 'todo'}
+        class:on={!tab && review.commentFilter === 'todo'}
+        onclick={() => review.showComments('todo')}>To do <b>{review.todoCount}</b></button
+      >
+      <button
+        role="tab"
+        aria-selected={!tab && review.commentFilter === 'done'}
+        class:on={!tab && review.commentFilter === 'done'}
+        onclick={() => review.showComments('done')}>Done <b>{review.doneCount}</b></button
+      >
+    </div>
+    {#each review.extTabs as t (t.key)}
+      <button
+        role="tab"
+        class="ext"
+        data-ext-tab={t.key}
+        aria-selected={tab?.key === t.key}
+        class:on={tab?.key === t.key}
+        onclick={() => (review.sideTab = t.key)}>{t.title}</button
+      >
+    {/each}
   </div>
-  {#each review.extTabs as t (t.key)}
-    <button
-      role="tab"
-      class="ext"
-      data-ext-tab={t.key}
-      aria-selected={tab?.key === t.key}
-      class:on={tab?.key === t.key}
-      onclick={() => (review.sideTab = t.key)}>{t.title}</button
-    >
-  {/each}
-</div>
 {/snippet}
 
 {#if notes.available}

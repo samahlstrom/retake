@@ -29,6 +29,7 @@ Run it through mise (`mise exec -- npm test`) to use the pinned node. Needs `ffm
 | `RETAKE_E2E_SHOTS` | unset | A folder: `05-sidebar` writes its screenshots there (1920×1080 and phone size). |
 | `RETAKE_E2E_THEME_SHOTS` | unset | A folder: `17-theme` writes the home and the review page there, desktop and phone, for the built-in look and both example themes. |
 | `RETAKE_E2E_WEBKIT` | unset | `docker`: run the phone specs (`*-webkit.spec.ts`) in WebKit too, its browser in Playwright's Docker image (below). A `ws://…` URL: a WebKit browser server you started. Unset: no `webkit` project, and those specs skip. |
+| `RETAKE_E2E_NO_GPU` | unset | Set: Chromium runs with `--disable-gpu` (software rendering only, for a machine whose GPU is busy). Renders take `RETAKE_ENCODER=x264` for the same. |
 | `RETAKE_E2E_WEBKIT_PORT` | `8950` | The WebKit browser server's port with `RETAKE_E2E_WEBKIT=docker`. |
 
 Ports: the servers use 8831–8840 (scenario 8831, crash safety 8832 behind a proxy on 8834, HLS 8833, sidebar 8835,

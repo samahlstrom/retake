@@ -523,7 +523,10 @@ describe('a comment on vN becomes an edit in vN+1', () => {
   it('each row knows it (the server’s `target` wins, with `later`); a typed comment on a document has none', () => {
     const ctx = { versions, shown: 'v8' };
     expect(toRow(item({ version: 'v7' }), false, ctx).into).toBe('v8');
-    expect(toRow(item({ version: 'v7', target: 'v8', later: 'v9' }), false, ctx)).toMatchObject({ into: 'v8', later: 'v9' });
+    expect(toRow(item({ version: 'v7', target: 'v8', later: 'v9' }), false, ctx)).toMatchObject({
+      into: 'v8',
+      later: 'v9',
+    });
     expect(toRow(item({ version: 'v7', target: 'v9' }), false, ctx)).toMatchObject({ into: 'v9', later: null });
     expect(toRow(item({}), false, ctx).into).toBe('v9'); // an untagged row is the shown version's
     const doc = item({ version: 'v0', key: 'doc/1', anchor: { file: 'v0/a.md', line: 1 } });

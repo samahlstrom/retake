@@ -44,7 +44,7 @@ var PenColors = []string{"red", "yellow", "green", "white"}
 func (in TypedNote) check() error {
 	n := utf8.RuneCountInString(in.Text)
 	switch {
-	case n > MaxDocNote || n == 0 && !(in.Video && len(in.Strokes) > 0):
+	case n > MaxDocNote || n == 0 && (!in.Video || len(in.Strokes) == 0):
 		if in.Video {
 			return fmt.Errorf("a comment is up to %d characters, and needs words or a drawing", MaxDocNote)
 		}
@@ -158,7 +158,7 @@ func (s *Store) keepTypedStill(key string, b []byte, ext string) string {
 	}
 	rel := filepath.Join(".retake", "typed", strings.ReplaceAll(key, "/", "-")+ext)
 	abs := filepath.Join(s.root, rel)
-	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(abs), 0o750); err != nil {
 		return ""
 	}
 	if err := os.WriteFile(abs, b, 0o644); err != nil { //nolint:gosec // a still the page shows, inside the project
