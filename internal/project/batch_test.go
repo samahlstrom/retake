@@ -204,9 +204,13 @@ func TestRetryAndSendJoinTheQueuedBatch(t *testing.T) {
 	if _, err := s.ReportWork(WorkReport{Worker: w.ID, Task: j.ID, Lease: j.Lease, State: "paused", Message: "Usage limit reached"}, 6); err != nil {
 		t.Fatal(err)
 	}
-	second, _ := s.QueueFeedback([]int64{2}, "")
-	if second[0].ID == first[0].ID {
-		t.Fatal("a paused batch took new notes")
+	// Another batch of the same target waits (an older store's, or one made while the first ran).
+	if err := s.UpdateAutomation(func(a *AutomationState) (bool, error) {
+		a.Tasks = append(a.Tasks, EditingTask{ID: "waiting", Notes: []int64{2}, Version: "v6", Target: "v7",
+			State: "queued", Agent: "claude", Events: []TaskEvent{}})
+		return true, nil
+	}); err != nil {
+		t.Fatal(err)
 	}
 	if err := s.ControlTask(first[0].ID, "retry", "codex", ""); err != nil {
 		t.Fatal(err)
@@ -418,5 +422,145 @@ func TestCommentsOnVNBecomeEditsInVNPlus1(t *testing.T) {
 	}
 	if versions != 2 || drafts != 0 {
 		t.Fatalf("%d versions, %d listed drafts: %+v", versions, drafts, a.Renders)
+	}
+}
+
+// TestPausedSingleNoteTasksBecomeOneBatchThatASendResumes: before batches every note was its own task, and the owner
+// paused 75 of them (comments on v7, so for v8). Opening the store makes them one paused batch of 75 notes; a Send of
+// them and one more resumes it as one task for one agent, with nothing beside it.
+func TestPausedSingleNoteTasksBecomeOneBatchThatASendResumes(t *testing.T) {
+	s, _ := newStore(t)
+	var cs []Comment
+	for i := range 76 {
+		cs = append(cs, Comment{Key: fmt.Sprintf("n%d", i+1), Take: take1, Text: fmt.Sprintf("note %d", i+1), T0: float64(i), T1: float64(i) + 0.5})
+	}
+	if _, err := s.Sync(Run{Version: "v7", Comments: cs}); err != nil {
+		t.Fatal(err)
+	}
+	w := EditingWorker{ID: "machine", Session: "session", Agents: []AgentProfile{{ID: "claude"}, {ID: "codex"}}}
+	if _, err := s.PollWork(w, "", ""); err != nil {
+		t.Fatal(err)
+	}
+	all, err := s.Notes(NoteFilter{})
+	if err != nil || len(all) != 76 {
+		t.Fatal(len(all), err)
+	}
+	var ids []int64
+	for _, n := range all {
+		ids = append(ids, n.ID)
+	}
+	slices.Sort(ids)
+	legacy, err := s.Automation()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, id := range ids[:75] {
+		j := EditingTask{ID: fmt.Sprintf("t%d", id), Notes: []int64{id}, Version: "v7", State: "paused", Agent: "claude",
+			Events: []TaskEvent{{At: int64(i), Text: "Feedback submitted"}, {At: int64(i), Text: "Paused by owner"}}}
+		if i%2 == 1 {
+			j.Target = "v8" // some from after targets came in
+		}
+		legacy.Tasks = append(legacy.Tasks, j)
+	}
+	b, _ := json.Marshal(legacy)
+	if err := s.write(func(t *tx) error {
+		_, err := t.Exec(`INSERT INTO automation (id,data) VALUES (1,?) ON CONFLICT (id) DO UPDATE SET data = excluded.data`, string(b))
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := Open(s.root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = reopened.Close() }()
+	reopened.Now = s.Now
+	a, err := reopened.Automation()
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := fmt.Sprintf("t%d", ids[0])
+	if len(a.Tasks) != 1 || a.Tasks[0].ID != first || a.Tasks[0].State != "paused" || a.Tasks[0].Target != "v8" ||
+		!slices.Equal(a.Tasks[0].Pending(), ids[:75]) {
+		t.Fatalf("after opening: %d tasks, the first %+v", len(a.Tasks), a.Tasks[0])
+	}
+
+	// Send: the page sends the paused notes (they show Open) and a new one. One task, queued, the same id.
+	sent, err := reopened.QueueFeedback(ids, "")
+	if err != nil || len(sent) != 1 || sent[0].ID != first {
+		t.Fatal("one send, one task:", len(sent), err)
+	}
+	a, _ = reopened.Automation()
+	j := a.Tasks[0]
+	if len(a.Tasks) != 1 || j.State != "queued" || j.Agent != "claude" || j.Error != "" || !slices.Equal(j.Pending(), ids) {
+		t.Fatalf("after the send: %d tasks, %+v", len(a.Tasks), j)
+	}
+	if last := j.Events[len(j.Events)-1].Text; last != fmt.Sprintf("Resumed by a send, with #%d", ids[75]) {
+		t.Fatalf("events: %+v", j.Events[len(j.Events)-3:])
+	}
+	if again, _ := reopened.QueueFeedback(ids, ""); len(again) != 1 || again[0].ID != first {
+		t.Fatal("a second send made a task:", again)
+	}
+	run, err := reopened.PollWork(w, "", "")
+	if err != nil || run == nil || run.ID != first || run.Agent != "claude" || len(run.Pending()) != 76 {
+		t.Fatal("the run:", run, err)
+	}
+	if other, _ := reopened.PollWork(w, "", ""); other != nil {
+		t.Fatal("a second agent:", other)
+	}
+}
+
+// TestSendResumesAPausedBatch: a send for a target whose batch is paused puts the notes in it and starts it again with
+// the agent picked for the send; a send of only its own notes resumes it too; a new pause of the same target joins
+// the paused batch rather than standing beside it.
+func TestSendResumesAPausedBatch(t *testing.T) {
+	s, w := batchFixture(t)
+	first, _ := s.QueueFeedback([]int64{1, 2}, "")
+	j, _ := s.PollWork(w, "", "")
+	if _, err := s.ReportWork(WorkReport{Worker: w.ID, Task: j.ID, Lease: j.Lease, State: "paused", Message: "Usage limit reached"}, 6); err != nil {
+		t.Fatal(err)
+	}
+	sent, err := s.QueueFeedback([]int64{3}, "codex")
+	if err != nil || len(sent) != 1 || sent[0].ID != first[0].ID {
+		t.Fatal("the send didn't resume the paused batch:", sent, err)
+	}
+	a, _ := s.Automation()
+	if len(a.Tasks) != 1 || a.Tasks[0].State != "queued" || a.Tasks[0].Agent != "codex" || a.Tasks[0].Error != "" ||
+		!slices.Equal(a.Tasks[0].Pending(), []int64{1, 2, 3}) {
+		t.Fatalf("tasks: %+v", a.Tasks)
+	}
+
+	// Paused by the owner, then sent again with nothing new: resumed, its agent kept.
+	if err := s.ControlTask(first[0].ID, "pause", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	if again, _ := s.QueueFeedback([]int64{1, 2, 3}, ""); len(again) != 1 || again[0].ID != first[0].ID {
+		t.Fatal(again)
+	}
+	a, _ = s.Automation()
+	if len(a.Tasks) != 1 || a.Tasks[0].State != "queued" || a.Tasks[0].Agent != "codex" {
+		t.Fatalf("tasks: %+v", a.Tasks)
+	}
+
+	// Two paused tasks of one target (a second batch paused too) are one paused batch.
+	if err := s.UpdateAutomation(func(a *AutomationState) (bool, error) {
+		a.Tasks[0].State = "paused"
+		a.Tasks = append(a.Tasks, EditingTask{ID: "later", Notes: []int64{4}, Version: "v6", Target: "v7", State: "paused",
+			Agent: "claude", Events: []TaskEvent{}})
+		return true, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	a, _ = s.Automation()
+	if len(a.Tasks) != 1 || a.Tasks[0].ID != first[0].ID || !slices.Equal(a.Tasks[0].Pending(), []int64{1, 2, 3, 4}) {
+		t.Fatalf("paused tasks of one target: %+v", a.Tasks)
+	}
+	// A retry resumes all of it, as one task.
+	if err := s.ControlTask(first[0].ID, "retry", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	run, err := s.PollWork(w, "", "")
+	if err != nil || run == nil || run.ID != first[0].ID || len(run.Pending()) != 4 {
+		t.Fatal(run, err)
 	}
 }

@@ -352,21 +352,32 @@ func (t *EditingTask) absorb(o EditingTask, now int64) {
 	t.AddEvent(now, "Joined task "+o.ID+": "+noteList(added))
 }
 
-// mergeQueued makes the tasks of one target waiting in queued one task (spec/automation.md, "Comments on vN become
-// edits in vN+1"): the oldest keeps its id, agent and history and absorbs the others, which are removed. It reports
-// whether it merged any.
+// pausedFor is the paused batch of target, if any: after mergeQueued there is at most one per target.
+func (a *AutomationState) pausedFor(target string) *EditingTask {
+	for i := range a.Tasks {
+		if a.Tasks[i].State == "paused" && a.Tasks[i].Target == target {
+			return &a.Tasks[i]
+		}
+	}
+	return nil
+}
+
+// mergeQueued makes the tasks of one target waiting in queued one task, and its paused tasks one paused batch
+// (spec/automation.md, "Merging queued tasks"): the oldest keeps its id, agent and history and absorbs the others,
+// which are removed. It reports whether it merged any.
 func (a *AutomationState) mergeQueued(now int64) bool {
 	out := make([]EditingTask, 0, len(a.Tasks))
-	into := map[string]int{} // target -> its oldest queued task in out
+	into := map[[2]string]int{} // state and target -> the oldest task waiting so, in out
 	merged := false
 	for _, j := range a.Tasks {
-		if j.State == "queued" {
-			if i, ok := into[j.Target]; ok {
+		if j.State == "queued" || j.State == "paused" {
+			k := [2]string{j.State, j.Target}
+			if i, ok := into[k]; ok {
 				out[i].absorb(j, now)
 				merged = true
 				continue
 			}
-			into[j.Target] = len(out)
+			into[k] = len(out)
 		}
 		out = append(out, j)
 	}
@@ -426,7 +437,7 @@ func (a *AutomationState) next(task string) *EditingTask {
 }
 
 // batchQueued gives the tasks an older store queued their targets and merges the queued ones (one per note, then) per
-// target when the store opens (spec/automation.md, "Comments on vN become edits in vN+1"). It writes nothing when
+// target, and the paused ones per target, when the store opens (spec/automation.md, "Comments on vN become edits in vN+1"). It writes nothing when
 // there's nothing to do.
 func (s *Store) batchQueued() error {
 	a, err := s.Automation()
@@ -436,7 +447,10 @@ func (s *Store) batchQueued() error {
 	untargeted := slices.ContainsFunc(a.Tasks, func(j EditingTask) bool {
 		return j.Target == "" && j.State != "completed" && j.State != "cancelled"
 	})
-	if !untargeted && len(slices.DeleteFunc(slices.Clone(a.Tasks), func(j EditingTask) bool { return j.State != "queued" })) < 2 {
+	waiting := func(state string) int {
+		return len(slices.DeleteFunc(slices.Clone(a.Tasks), func(j EditingTask) bool { return j.State != state }))
+	}
+	if !untargeted && waiting("queued") < 2 && waiting("paused") < 2 {
 		return nil
 	}
 	return s.write(func(t *tx) error {
@@ -686,8 +700,9 @@ func (t *EditingTask) AddEvent(now int64, text string) {
 }
 
 // QueueFeedback submits existing open notes as one batch (spec/automation.md, "Batches"): they join the project's
-// queued task, or make it when none waits. A note an unfinished task still has to do stays with it. It returns the
-// tasks that own the notes now.
+// queued task, or make it when none waits. A note a queued, running or asking task still has to do stays with it. A
+// paused batch is resumed instead (spec/automation.md, "Send resumes a paused batch"): the notes for its target, and
+// its own, go in it and it is queued again, with agent when one is picked. It returns the tasks that own the notes now.
 func (s *Store) QueueFeedback(ids []int64, agent string) ([]EditingTask, error) {
 	var out []EditingTask
 	err := s.write(func(t *tx) error {
@@ -697,24 +712,35 @@ func (s *Store) QueueFeedback(ids []int64, agent string) ([]EditingTask, error) 
 		}
 		now := s.Now().Unix()
 		a.mergeQueued(now) // an older store's
+		picked := agent
 		if agent == "" {
 			agent = a.Config.Agent
 		}
 		// The notes, by target: comments on vN become edits in vN+1.
 		fresh := map[string][]int64{}
 		versions := map[string]string{}
-		var targets, owners []string
+		var sent []int64
+		var targets []string
+		resume := map[string][]int64{} // a paused batch -> the notes this send added to it
+		var resumeOrder []string
+		resumeTask := func(id string) {
+			if _, ok := resume[id]; !ok {
+				resume[id] = nil
+				resumeOrder = append(resumeOrder, id)
+			}
+		}
 		for _, id := range ids {
 			n, err := noteByID(t, id)
 			if err != nil {
 				return err
 			}
-			if n.Status != StatusOpen {
+			if n.Status != StatusOpen || slices.Contains(sent, id) {
 				continue
 			}
+			sent = append(sent, id)
 			if o := a.owner(id); o != nil {
-				if !slices.Contains(owners, o.ID) {
-					owners = append(owners, o.ID)
+				if o.State == "paused" {
+					resumeTask(o.ID) // its own note, sent again: the batch goes on
 				}
 				continue
 			}
@@ -723,30 +749,48 @@ func (s *Store) QueueFeedback(ids []int64, agent string) ([]EditingTask, error) 
 				targets = append(targets, target)
 				versions[target] = n.Version
 			}
-			if !slices.Contains(fresh[target], id) {
-				fresh[target] = append(fresh[target], id)
-			}
+			fresh[target] = append(fresh[target], id)
 		}
 		for _, target := range targets {
 			ids := fresh[target]
-			j := a.queuedFor(target)
-			if j == nil {
-				a.Tasks = append(a.Tasks, EditingTask{ID: NewWorkID(), Notes: ids, Version: versions[target], Target: target,
-					State: "queued", Agent: agent, Worker: a.Config.Worker, Events: []TaskEvent{}})
-				j = &a.Tasks[len(a.Tasks)-1]
-				j.AddEvent(now, "Feedback submitted: "+noteList(ids)+targetWords(target))
-			} else {
+			if j := a.queuedFor(target); j != nil {
 				for _, id := range ids {
 					j.add(id)
 				}
 				j.AddEvent(now, "Added "+noteList(ids))
+				continue
 			}
-			if !slices.Contains(owners, j.ID) {
-				owners = append(owners, j.ID)
+			if j := a.pausedFor(target); j != nil {
+				for _, id := range ids {
+					j.add(id)
+				}
+				resumeTask(j.ID)
+				resume[j.ID] = append(resume[j.ID], ids...)
+				continue
 			}
+			a.Tasks = append(a.Tasks, EditingTask{ID: NewWorkID(), Notes: ids, Version: versions[target], Target: target,
+				State: "queued", Agent: agent, Worker: a.Config.Worker, Events: []TaskEvent{}})
+			a.Tasks[len(a.Tasks)-1].AddEvent(now, "Feedback submitted: "+noteList(ids)+targetWords(target))
 		}
-		for _, id := range owners {
-			out = append(out, *a.Task(id))
+		for _, id := range resumeOrder {
+			j := a.Task(id)
+			j.State, j.Error, j.Lease, j.Until, j.Stop, j.NextAgent = "queued", "", "", 0, false, ""
+			if picked != "" {
+				j.Agent = picked // else it keeps its own (a claim gives one without an agent the configured one)
+			}
+			text := "Resumed by a send"
+			if added := resume[id]; len(added) > 0 {
+				text += ", with " + noteList(added)
+			}
+			j.AddEvent(now, text)
+		}
+		a.mergeQueued(now) // a resumed batch joins the one waiting for its target
+		var owners []string
+		for _, id := range sent {
+			if o := a.owner(id); o != nil && !slices.Contains(owners, o.ID) {
+				owners = append(owners, o.ID)
+				out = append(out, *o)
+			}
 		}
 		if err = saveAutomation(t, a); err == nil {
 			t.emit("automation", map[string]bool{"changed": true})

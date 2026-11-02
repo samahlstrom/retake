@@ -91,10 +91,11 @@ export function waitingLine(s: AgentStatus | undefined): string | null {
   return null;
 }
 
-/** A note nobody has sent yet: open, a note (not an agent's question), no task waiting or running on it, and its
- * take isn't on its way already (`sending`). */
+/** A note Send sends: open, a note (not an agent's question), no task waiting or running on it (a paused one counts:
+ * Send resumes it, spec/automation.md "Send resumes a paused batch"), and its take isn't on its way already
+ * (`sending`). */
 export const unsent = (row: { mark: string; kind: string }, task?: EditingTask | null, sending = false): boolean =>
-  row.kind === 'note' && row.mark === 'open' && !activeTask(task) && !sending;
+  row.kind === 'note' && row.mark === 'open' && (!activeTask(task) || task?.state === 'paused') && !sending;
 
 // ---------------------------------------------------------------- the agent and its machine
 

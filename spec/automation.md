@@ -420,14 +420,23 @@ because a comment on the one before asked for changes.
   queues a task again, a switch, a fallback), they become one: the oldest keeps its id, agent and history and takes the
   others' notes, questions (`asked`), told answers and done notes, with an event `Joined task <id>: #4, #5`; the others
   are removed. A retry or switch that names an agent sets that task's agent. Per-comment actions (send one, retry) add
-  to their target's task the same way. Different projects still run at the same time ("Watching the agents").
+  to their target's task the same way. Different projects still run at the same time ("Watching the agents"). Tasks
+  waiting in `paused` merge the same way, per target, so a target has at most one paused task (its paused batch).
+- **Send resumes a paused batch.** A paused task's comments show Open, and Send sends them (they count in Send). When
+  a send (Send, send one, a take sent with `send: true`) has notes for a target with a paused batch, or notes that
+  batch already holds, the notes go in that batch and it starts again: `queued`, its error cleared, with an event
+  `Resumed by a send: #4, #5`. An agent picked for the send becomes its agent; otherwise it keeps its own. A retry does
+  the same without new notes. A send never makes a second task beside a paused batch, and never skips a note because a
+  paused task holds it. The resumed batch then merges with a task of its target already waiting in `queued`, as
+  above, so it is still one task and one agent.
 - **A Send's take goes with it.** A queued task doesn't start while a take sent with `send: true` is still being
   processed (one of its jobs queued or running): the take's notes join their targets' tasks once processed, then they
   start. A failed job ends the wait, and so does an hour since the job was queued (a stuck job never holds the agent
   back).
 - **Older stores.** Opening a project's store gives each unfinished task without a target the target of its first
-  note, and merges the tasks waiting in `queued` (not running) per target, as above, so the one task per note an older
-  version queued becomes one task per target.
+  note, and merges the tasks waiting in `queued` (not running) per target, and the ones in `paused` per target, as
+  above, so the one task per note an older version queued (or that someone paused) becomes one task per target: 75
+  paused single-note tasks for `v8` are one paused batch of 75 notes, and the next Send resumes it as one task.
 - **Withdrawn notes.** A note of a task that is retracted or answered outside it is dropped from the task (`dropped`,
   with an event); the rest carry on. A task with no notes left is cancelled, or stopped while it runs.
 
@@ -441,7 +450,8 @@ because a comment on the one before asked for changes.
   sweep up old reviews. Finishing again with `"send": true` sends a take that was already processed. Send also
   submits the shown version's other open comments (`POST /api/automation/tasks`); that always queues. An older
   version's open comments are sent from that version (spec/notes.md, "Comments belong to their version"). Submission is idempotent
-  while an unfinished task owns a note. Reopened notes may be submitted again.
+  while a queued, running or question task owns a note; a note of a paused task resumes that task ("Send resumes a
+  paused batch"). Reopened notes may be submitted again.
 - Any role that can record (reviewer, approver, owner; signed in or through a share link, local or hosted) sends
   and retries. A queued task waits for the selected worker, or for the first worker to connect when none was ever
   selected, and starts by itself when it polls: no worker online is not an error. A retry by a reviewer or an
@@ -517,7 +527,8 @@ because a comment on the one before asked for changes.
   the in-process worker reaches these handlers without HTTP or a token.
 - Existing video URLs serve remote versions through the relay. Existing viewing permissions apply to all media.
 - The bar has one action for everyone who can record: **Send**. It says just "Send", never an agent's name; how many
-  comments it sends (the shown version's open comments no task owns and no `sending` take holds) is in its tooltip
+  comments it sends (the shown version's open comments no task owns, or a paused one does, and no `sending` take
+  holds) is in its tooltip
   and its accessible name ("Send 3 comments to the agent"). It finishes the take in progress with `send: true` on its
   `/done`, saves a pending typed comment (spec/notes.md, "Typed comments on a video"), and submits the shown
   version's other open comments. With no computer online it does the same: the comments show Working, "Waiting for
@@ -562,8 +573,9 @@ comment on v8 makes v9; one Send with comments on v7 and v8 updates v8 then make
 other; a comment on v7 while v9 exists updates v8 and says `later`; a send of 3 notes is one task, one agent process
 (a fake agent counting its launches) and one version; 20 sent, then 1 more mid-run for the same target, is one task
 and one version with all 21 (a follow-up round of the same agent in the background; a message in the same session in
-herdr and tmux, fake binaries); 5 queued single-note tasks of an older store become one task when it opens; a retry
-and a send while a task is queued join it; a withdrawn note drops out of its task; a queued task waits for a sent take
+herdr and tmux, fake binaries); 5 queued single-note tasks of an older store become one task when it opens; 75 paused
+single-note tasks for one target become one paused batch, and a Send (with one more note) resumes it as one task; a
+retry and a send while a task is queued join it; a withdrawn note drops out of its task; a queued task waits for a sent take
 still being processed; two videos run at the same time; and an e2e test where Send with several comments yields one
 version. For `retake ask`: the built-in profiles' argv, the
 CLI's parsing and validation of visuals, their persistence and the hosted relay of their images, a fake agent that

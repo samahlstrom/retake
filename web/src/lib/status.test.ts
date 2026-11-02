@@ -85,10 +85,12 @@ describe('paused reasons are short and plain', () => {
 });
 
 describe('unsent notes are what Send N counts', () => {
-  it('open notes without a live task', () => {
+  it('open notes without a live task, and the notes of a paused one (Send resumes it)', () => {
     expect(unsent(note())).toBe(true);
     expect(unsent(note(), task('queued'))).toBe(false);
-    expect(unsent(note(), task('paused'))).toBe(false);
+    expect(unsent(note(), task('running'))).toBe(false);
+    expect(unsent(note(), task('paused'))).toBe(true);
+    expect(unsent(note(), task('paused'), true)).toBe(false);
     expect(unsent(note('answered'))).toBe(false);
     expect(unsent(note('question'))).toBe(false);
     expect(unsent({ mark: 'open', kind: 'question' })).toBe(false);
