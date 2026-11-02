@@ -1,5 +1,6 @@
 <script lang="ts">
-  // One comment: when, its words, what you drew, and one status (Open, Working, Question, Done). A question from the
+  // One comment: when, its words, what you drew, one status (Open, Working, Question, Done) and, until it's done,
+  // the version its edit goes into ("→ v8": a comment on v7 becomes an edit in v8). A question from the
   // agent has the reply box under it; a paused one says why once, with Retry; a Working one waiting for its computer
   // says so. Everything else is in its ⋯.
   import type { Review } from '../../lib/review.svelte';
@@ -73,6 +74,11 @@
     <span class="status {status.state}" data-part="status"
       ><span class="dot" aria-hidden="true"></span>{STATE_TEXT[status.state]}</span
     >
+    {#if row.into && row.kind === 'note' && status.state !== 'done'}<span
+        class="into"
+        data-part="into"
+        title="Its edit goes into {row.into}">→ {row.into}</span
+      >{/if}
     <span class="grow"></span>
     <CommentMenu {review} {row} />
   </div>

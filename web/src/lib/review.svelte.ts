@@ -5,8 +5,6 @@ import { memoryChunkStore, openChunkStore, recoverPending, type ChunkStore } fro
 import { Automation } from './automation.svelte';
 import {
   AUTOSAVE_MS,
-  HINT_DRAW,
-  HINT_DRAW_TOUCH,
   MSG_SAVE_FAILED,
   PING_MS,
   SEEK,
@@ -54,6 +52,7 @@ import {
   earlierOpen,
   forVersion,
   historyLabels,
+  intoVersion,
   PHONE_QUERY,
   presence,
   sidebarRows,
@@ -63,7 +62,7 @@ import {
   type VersionEntry,
 } from './notes/view';
 import { inRange } from './notes/agent';
-import { addPoint, alphaAt, fitFrame, isClick, renderInk } from './pen';
+import { addPoint, alphaAt, drawPen, fitFrame, isClick, renderInk } from './pen';
 import { Saver } from './saver';
 import { VideoSource } from './source';
 import {
@@ -143,6 +142,10 @@ export interface Elements {
   ink: HTMLCanvasElement;
   tl: HTMLCanvasElement;
   wave: HTMLCanvasElement;
+  /** The comment box at the bottom of the comments (spec/notes.md, "Typed comments on a video"). */
+  comment?: HTMLTextAreaElement | null;
+  /** Record, whose ring follows your voice while recording. */
+  rec?: HTMLElement | null;
 }
 
 /** An image card on the video this frame: a take's own image (resizable while recording) or an earlier take's. */
@@ -182,6 +185,9 @@ export interface ReviewHook {
   readonly sidebar: SidebarView;
   /** The page is a project of a home (spec/home.md), and the next project to review. */
   readonly home: { available: boolean; next: string | null };
+  /** The typed comment being written (spec/notes.md, "Typed comments on a video"): its version, time, how many lines
+   * and its words; null when there is none. */
+  readonly draft: { version: string; t: number; lines: number; text: string } | null;
   serialize(t: Take): TakeData;
   save(t?: Take): Promise<void> | undefined;
 }
@@ -245,8 +251,10 @@ export class Review {
   commentFilter = $state<'todo' | 'done'>('todo');
   /** The keys sheet (? or its button). */
   keysOpen = $state(false);
-  /** The agent popover by the Send button (it also opens when Send finds no computer to send to). */
-  agentOpen = $state(false);
+  /** Send's list of agents for one send (held Send, or a right-click), when the computer offers more than one. */
+  pickerOpen = $state(false);
+  /** The pen's colours and eraser. */
+  penOpen = $state(false);
   /** The last finish also sent the take to the agent (the button then says Sent). */
   sent = $state(false);
   /** Send is at work: finishing the take, submitting the other comments, reading back what's on its way. */
@@ -514,6 +522,159 @@ export class Review {
       this.commentBusy = false;
     }
   };
+  // ---------------------------------------------------------------- a typed comment on a video
+  // spec/notes.md, "Typed comments on a video": draw, type or record a comment at any moment. Focusing the box, typing
+  // or drawing while not recording pauses the video and starts a pending comment; Enter saves it, Esc cancels it.
+
+  /** The comment being written on a video, or null: the version it's on and how many lines it has. Its words are
+   * `commentDraft`, its lines `draftStrokes`. */
+  draft = $state.raw<{ version: string; lines: number } | null>(null);
+  /** The pending comment's lines (plain: the frame loop draws them). */
+  draftStrokes: Stroke[] = [];
+  /** The playhead as m:ss, for "Comment at 0:18…". */
+  curShort = $state('0:00');
+
+  /** The pending comment's lines that are still there (not undone or erased). */
+  get draftLines(): Stroke[] {
+    void this.draft;
+    return this.draftStrokes.filter((st) => !st.undone);
+  }
+  /** Its moment: its first line's, else the playhead's. */
+  get draftT(): number {
+    const first = this.draftLines[0];
+    return first ? first.video_t : (this.video?.currentTime ?? 0);
+  }
+  /** "0:18", the time "Comment at …" says. */
+  get draftTime(): string {
+    const first = this.draftLines[0];
+    return first ? fmt(first.video_t, false) : this.curShort;
+  }
+  /** There is something to save: words or a line. */
+  get draftHasContent(): boolean {
+    return !this.kindShown && (!!this.commentDraft.trim() || this.draftLines.length > 0);
+  }
+
+  /** A pending comment starts (the box got the focus, a key was typed in it, or a line was drawn while not
+   * recording): the video pauses. Nothing on an extension's version or for a viewer. */
+  startDraft = (): void => {
+    if (this.kindShown || !this.canRecord) return;
+    if (!this.draft) {
+      this.draft = { version: this.shown ?? '', lines: this.draftLines.length };
+      this.dismissHint();
+      if (!this.sidebar.panel && this.layoutMode !== 'landscape') this.toggleSidebar();
+    }
+    const v = this.video;
+    if (v && !v.paused) v.pause();
+    if (this.#posterOnly) {
+      this.#posterOnly.play = false;
+      this.paused = true;
+    }
+  };
+
+  /** The comment box gets the focus (the comments open first when they're hidden). */
+  focusComment = (): void => {
+    if (!this.sidebar.panel) this.toggleSidebar();
+    requestAnimationFrame(() => this.el.comment?.focus());
+  };
+
+  #draftChanged(): void {
+    if (this.draft) this.draft = { ...this.draft, lines: this.draftLines.length };
+  }
+
+  /** Esc: the pending comment and its lines are gone. */
+  cancelDraft = (): void => {
+    this.draft = null;
+    this.draftStrokes = [];
+    this.commentDraft = '';
+    this.el.comment?.blur();
+  };
+
+  /** Enter (or Ctrl+Enter: `send`) in the box: the pending comment becomes a comment (POST api/notes), with a still
+   * of its moment when the video is there. Resolves to its note id, or null. */
+  saveDraft = async (send: boolean): Promise<number | null> => {
+    const d = this.draft ?? { version: this.shown ?? '', lines: 0 };
+    const text = this.commentDraft.trim(),
+      lines = this.draftLines;
+    if (this.kindShown || !this.canRecord || this.commentBusy) return null;
+    if (!text && !lines.length) {
+      this.cancelDraft();
+      return null;
+    }
+    this.commentBusy = true;
+    try {
+      const t = Math.max(0, lines[0]?.video_t ?? this.video.currentTime);
+      const v = this.video;
+      const item = await addTyped({
+        fetch: (...a) => fetch(...a),
+        version: d.version || this.shown || '',
+        text,
+        anchor: null,
+        t,
+        strokes: lines.map((st) => ({ color: st.color, points: st.points, t: st.video_t })),
+        frame: v.videoWidth && v.videoHeight ? [v.videoWidth, v.videoHeight] : undefined,
+        snapshot: this.#still(t, lines),
+      });
+      this.draft = null;
+      this.draftStrokes = [];
+      this.commentDraft = '';
+      this.el.comment?.blur(); // back to the player: Space plays, R records
+      if (send) {
+        const w = this.agent.worker;
+        if (this.owner && w && !this.automation.state?.config?.worker)
+          await this.automation.configure({ worker: w.id, agent: w.agents[0]?.id ?? '', fallback: '' });
+        const into = intoVersion(d.version || this.shown);
+        const what = into ? `Sent to ${into}.` : 'Sent.';
+        if (await this.automation.send('/tasks', { notes: [item.id] }))
+          this.toast.say(
+            this.agent.online ? what : `${what} The agent starts when the editing computer is online.`,
+            3000,
+          );
+        else this.toast.say(this.automation.error || 'Saved, but not sent. Press Send to try again.', 5000);
+      }
+      await this.notes.refresh();
+      return item.id;
+    } catch (err) {
+      this.toast.say(err instanceof Error ? err.message : 'Could not save the comment', 5000);
+      return null;
+    } finally {
+      this.commentBusy = false;
+    }
+  };
+
+  /** The comment box's Enter or Ctrl+Enter: a typed comment on this version (a video's, or an extension's). */
+  addComment = (send: boolean): void => {
+    if (this.kindShown) void this.addTypedComment(send);
+    else void this.saveDraft(send);
+  };
+
+  /** A JPEG of the frame at `t` with the lines drawn on it (spec/notes.md: the note's snapshot), at most 1280 px wide;
+   * undefined when the video isn't on that frame (or can't be read): the worker then makes one. */
+  #still(t: number, lines: Stroke[]): string | undefined {
+    const v = this.video;
+    if (!v || v.readyState < 2 || !v.videoWidth || Math.abs(v.currentTime - t) > 0.1 || this.#posterOnly)
+      return undefined;
+    try {
+      const scale = Math.min(1, 1280 / v.videoWidth),
+        w = Math.round(v.videoWidth * scale),
+        h = Math.round(v.videoHeight * scale);
+      const c = document.createElement('canvas');
+      c.width = w;
+      c.height = h;
+      const g = c.getContext('2d');
+      if (!g) return undefined;
+      g.drawImage(v, 0, 0, w, h);
+      for (const st of lines) drawPen(g, st, w, h);
+      const url = c.toDataURL('image/jpeg', 0.85);
+      return url.startsWith('data:image/jpeg;base64,') ? url : undefined;
+    } catch {
+      return undefined; // a frame the page may not read
+    }
+  }
+
+  /** Saved typed comments' lines on the shown version (rows with `strokes`), drawn like an earlier take's around their
+   * time, while their comment is in the list. They aren't erasable: deleting the comment removes them. */
+  readonly typedStrokes: HistoryStroke[] = $derived(this.sidebar.rows.flatMap((row) => row.strokes ?? []));
+
   /** What a sidebar tab or a review panel gets as `ctx.player`. Seeking does nothing while recording. */
   readonly #player: Player = {
     time: () => this.video?.currentTime ?? 0,
@@ -658,6 +819,11 @@ export class Review {
       }
     }
   }
+  /** The home's Settings (spec/home.md), where the agent and the computers are chosen; null without a home. */
+  get settingsHref(): string | null {
+    return this.homeCtx ? `${this.homeCtx.home}#settings` : null;
+  }
+
   get homeHref(): string {
     return this.homeCtx?.home ?? '/';
   }
@@ -826,6 +992,10 @@ export class Review {
       get home() {
         return { available: r.homeAvailable, next: r.homeNext?.name ?? null };
       },
+      get draft() {
+        const d = r.draft;
+        return d ? { version: d.version, t: r.draftT, lines: r.draftLines.length, text: r.commentDraft } : null;
+      },
       serialize: (t: Take) => r.serialize(t),
       save: (t?: Take) => r.save(t),
     };
@@ -879,63 +1049,76 @@ export class Review {
     });
   }
 
-  /** The bar's button pressed. */
-  primary = async (): Promise<void> => {
+  /** The bar's button pressed (or an agent picked from its list: that send goes to it). A pending typed comment is
+   * saved first and goes with it. */
+  primary = async (agent = ''): Promise<void> => {
+    this.pickerOpen = false;
+    const extra: number[] = [];
+    if (this.draftHasContent) {
+      const id = await this.saveDraft(false);
+      if (id == null) return;
+      extra.push(id);
+    }
     const b = this.button;
-    switch (b.action) {
+    switch (extra.length ? 'send' : b.action) {
       case 'send':
-        await this.sendAll();
+        if (b.action === 'save') {
+          if (await this.done()) this.toast.say('Saved. The agent can’t edit this project yet.', 5000);
+          break;
+        }
+        await this.sendAll(agent, extra);
         break;
       case 'save':
-        // Local mode that can't edit: the take is saved, and the agent menu next to the button says what's missing.
-        if (await this.done()) this.toast.say('Saved. The agent can’t edit this project yet: its menu says why.', 5000);
+        // Local mode that can't edit: the take is saved, and the notice over Send says what's missing.
+        if (await this.done()) this.toast.say('Saved. The agent can’t edit this project yet.', 5000);
         break;
       case 'none':
-        if (!this.finishing && !this.sending && !b.opens)
+        if (!this.finishing && !this.sending)
           this.toast.say(
             this.notes.job
               ? 'Your notes are still being transcribed. They go to the agent when ready.'
               : this.touch
-                ? 'Nothing new to send. Tap ● and talk to add a comment.'
-                : 'Nothing new to send. Press R and talk to add a comment.',
+                ? 'Nothing new to send. Draw or type a comment, or tap Record and talk.'
+                : 'Nothing new to send. Draw or type a comment, or press R and talk.',
             4000,
           );
         break;
     }
-    if (b.opens) this.agentOpen = true;
   };
 
   /** Send: the take in progress goes with `send: true` (its notes go once transcribed, contract C3), and every other
    * open note nobody sent yet goes now. Anyone who can record sends; with no computer online it all waits in the
    * queue and starts when one connects. */
-  async sendAll(): Promise<void> {
+  async sendAll(agent = '', extra: number[] = []): Promise<void> {
     if (this.sending) return;
     const t = this.take,
       open = !!t.id && !t.closed;
-    const others = this.unsentRows.filter((row) => !open || row.take !== t.id).map((row) => row.id);
+    const mine = this.unsentRows.filter((row) => !open || row.take !== t.id).map((row) => row.id);
+    const others = [...mine, ...extra.filter((id) => !mine.includes(id))];
     this.sending = true;
     try {
       // Nothing chosen yet (a first send by the owner): the computer that's online and its first agent.
       const w = this.agent.worker;
       if (this.owner && w && !this.automation.state?.config?.worker)
         await this.automation.configure({ worker: w.id, agent: w.agents[0]?.id ?? '', fallback: '' });
-      if (open && !(await this.done(true))) return;
+      if (open && !(await this.done(true, agent))) return;
       if (others.length) {
-        if (!(await this.automation.send('/tasks', { notes: others }))) {
+        if (!(await this.automation.send('/tasks', agent ? { notes: others, agent } : { notes: others }))) {
           this.toast.say(this.automation.error || 'Could not send. Try again.', 5000);
           return;
         }
         void this.notes.refresh();
       } else await this.automation.refresh(); // the take is on its way now (`sending`): its comments show Working
       this.sent = true;
-      const n = others.length;
-      const what = open ? 'Sent.' : n === 1 ? 'Sent 1 comment.' : `Sent ${n} comments.`;
+      // A comment on v7 becomes an edit in v8: the toast says where they went.
+      const into = intoVersion(this.shown);
+      const what = into ? `Sent to ${into}.` : 'Sent.';
       this.toast.say(
         !this.agent.online
           ? `${what} The agent starts when the editing computer is online.`
           : open
-            ? 'Sent. The agent starts as soon as your notes are transcribed.'
-            : `${what.slice(0, -1)} to the agent.`,
+            ? `${what} The agent starts as soon as your notes are transcribed.`
+            : what,
         4000,
       );
     } finally {
@@ -1545,10 +1728,32 @@ export class Review {
         return;
       }
       if (!s || s.talk) {
-        if (!this.drawHintShown) {
-          this.toast.say(!this.canRecord ? VIEW_ONLY : this.touch ? HINT_DRAW_TOUCH : HINT_DRAW, 2600);
+        if (!this.canRecord) {
+          if (!this.drawHintShown) this.toast.say(VIEW_ONLY, 2600);
           this.drawHintShown = true;
+          return;
         }
+        if (s?.talk || this.kindShown) return;
+        // Not recording: the line goes to a typed comment (spec/notes.md, "Typed comments on a video"), and the
+        // video pauses there.
+        e.preventDefault();
+        try {
+          ink.setPointerCapture(e.pointerId);
+        } catch {
+          /* the pointer is already gone */
+        }
+        this.startDraft();
+        this.drawing = {
+          id: 0,
+          seg: '',
+          version: this.shown,
+          flip: this.flipped,
+          color: this.penColor,
+          p0: now(),
+          video_t: video.currentTime,
+          paused: true,
+          points: [this.#norm(e)],
+        };
         return;
       }
       e.preventDefault();
@@ -1587,6 +1792,16 @@ export class Review {
       if (!st) return;
       this.drawing = null;
       if (isClick(st.points, this.inkW, this.inkH)) return; // a click draws nothing
+      if (!st.seg) {
+        // a line of the pending typed comment
+        st.id = this.draftStrokes.length + 1;
+        st.p1 = now();
+        st.video_t_end = this.video.currentTime;
+        this.draftStrokes.push(st);
+        this.startDraft();
+        this.#draftChanged();
+        return;
+      }
       st.id = t.nextId++;
       st.p1 = now();
       st.video_t_end = this.video.currentTime;
@@ -1615,6 +1830,15 @@ export class Review {
    * was an erase, bring that line back.
    */
   undo = (): void => {
+    // Not recording, with a pending typed comment: its last line goes first.
+    if (!this.seg && this.draft) {
+      const last = this.draftStrokes.findLast((st) => !st.undone);
+      if (last) {
+        last.undone = true;
+        this.#draftChanged();
+        return;
+      }
+    }
     const t = this.take;
     const target = undoTarget(t);
     if (t.closed && target?.kind !== 'unerase') return;
@@ -1669,6 +1893,19 @@ export class Review {
       for (const st of hist)
         if (!histHits.has(st) && strokesHit([st as Stroke], q, vt, this.inkW, this.inkH, r).length) histHits.add(st);
     }
+    // The pending typed comment's lines: gone from it.
+    const draft = this.draftStrokes.filter((st) => !st.undone && this.#onShown(st));
+    let draftHit = false;
+    for (const q of draft.length ? sweep(from, p, this.inkW, this.inkH, r / 2) : []) {
+      for (const id of strokesHit(draft, q, vt, this.inkW, this.inkH, r)) {
+        const st = draft.find((x) => x.id === id);
+        if (st && !st.undone) {
+          st.undone = st.erased = true;
+          draftHit = true;
+        }
+      }
+    }
+    if (draftHit) this.#draftChanged();
     for (const id of ownHits) {
       const st = t.strokes.find((x) => x.id === id);
       if (!st) continue;
@@ -1937,6 +2174,7 @@ export class Review {
 
   /** The pen strokes drawn for a comment (its card's sketch), in drawing order. */
   strokesOf(row: Row): HistoryStroke[] {
+    if (row.strokes) return row.strokes; // a typed comment's own lines
     void this.historyTakeIds; // re-read once an earlier take's strokes arrive
     return [...this.hist.strokes, ...this.take.strokes].filter((st) => !st.undone && covers(row, st, this.take.id));
   }
@@ -2132,11 +2370,12 @@ export class Review {
   }
 
   /** Takes finished with Send: their /done says `send: true` (also when it's retried later). */
-  #sendOnDone = new WeakSet<Take>();
+  /** Takes finished by Send, and the agent that send picked ("" = the configured one). */
+  #sendOnDone = new WeakMap<Take, string>();
 
   async #postDone(t: Take): Promise<void> {
     if (!t.id) return;
-    const status = await this.notes.postDone(t.id, t.version, this.#sendOnDone.has(t));
+    const status = await this.notes.postDone(t.id, t.version, this.#sendOnDone.has(t), this.#sendOnDone.get(t));
     if (status < 200 || status >= 300) {
       this.#donePending.add(t);
       this.#unsaved.add(t);
@@ -2513,7 +2752,7 @@ export class Review {
 
   /** Send (or save): stop, save and close the take, then POST /done (with `send`, the notes go to the agent). Resolves
    * to whether the take was finished now. */
-  done = async (send = false): Promise<boolean> => {
+  done = async (send = false, agent = ''): Promise<boolean> => {
     if (this.finishing) return false;
     const t = this.take;
     if (!t.id || t.closed) {
@@ -2529,7 +2768,7 @@ export class Review {
       return false;
     }
     this.finishing = true;
-    if (send) this.#sendOnDone.add(t);
+    if (send) this.#sendOnDone.set(t, agent);
     try {
       this.video.pause();
       if (this.seg || this.starting) await this.stopRec();
@@ -2645,7 +2884,9 @@ export class Review {
         this.drawing = null;
         this.verOpen = false;
         this.keysOpen = false;
-        this.agentOpen = false;
+        this.pickerOpen = false;
+        this.penOpen = false;
+        if (this.draft) this.cancelDraft();
         break;
       case 'help':
         this.keysOpen = !this.keysOpen;
@@ -2686,6 +2927,18 @@ export class Review {
       return;
     }
     if (target?.closest?.('.comment-marker, .drawing-marker') && e.key === ' ') return;
+    // Enter with a pending comment (lines drawn, say): its box takes the words; Enter there saves it.
+    if (
+      e.key === 'Enter' &&
+      this.draft &&
+      !e.repeat &&
+      !(e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) &&
+      !target?.closest?.('button, a, [role=button]')
+    ) {
+      e.preventDefault();
+      this.focusComment();
+      return;
+    }
     const r = keyAction(e);
     if (!r) return;
     if (this.kindShown) {
@@ -2807,7 +3060,12 @@ export class Review {
       this.#lctx,
       ink.width,
       ink.height,
-      [...this.visibleHistoryStrokes, ...this.take.strokes.filter(this.#onShown)],
+      [
+        ...this.visibleHistoryStrokes,
+        ...this.typedStrokes,
+        ...this.take.strokes.filter(this.#onShown),
+        ...this.draftStrokes.filter(this.#onShown),
+      ],
       vt,
       this.seg ? 1 : 0.85,
       this.drawing,
@@ -2827,7 +3085,13 @@ export class Review {
         mapTime(this.maps.peek(this.shown, label), t),
       );
     this.curText = fmt(vt);
-    if (this.seg) this.recElapsed = fmt(t - this.#recordingStart, false);
+    this.curShort = fmt(vt, false);
+    if (this.seg) {
+      this.recElapsed = fmt(t - this.#recordingStart, false);
+      // Record's ring follows your voice: the mic is working.
+      const level = this.bars[this.bars.length - 1]?.[0] ?? 0;
+      this.el.rec?.style.setProperty('--level', Math.min(1, Math.max(0, level)).toFixed(2));
+    }
     requestAnimationFrame(this.loop);
   };
 

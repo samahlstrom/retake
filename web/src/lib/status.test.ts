@@ -7,7 +7,7 @@ import {
   managesAgent,
   pausedReason,
   sendButton,
-  statusText,
+  sendNotice,
   unsent,
   waitingLine,
   workerOnline,
@@ -122,7 +122,7 @@ describe('the agent and its computer', () => {
     const s = agentStatus(automation(), 1001);
     expect(s).toMatchObject({ available: true, local: null, online: true, agent: 'Codex', working: false });
     expect(s.worker?.name).toBe('sam-pc');
-    expect(statusText(s, true)).toBe('Codex');
+    expect(sendNotice(s, true)).toBeNull();
   });
   it('falls back to an online machine and its first agent when nothing is configured', () => {
     const s = agentStatus(automation({ config: { enabled: false, worker: '', agent: '' } }), 1001);
@@ -138,19 +138,24 @@ describe('the agent and its computer', () => {
   it('reads local (C1) and the local blocked reason', () => {
     const s = agentStatus(automation({ local: true, blocked: 'Install Claude Code or Codex to edit' }), 1001);
     expect(s).toMatchObject({ local: true, blocked: 'Install Claude Code or Codex to edit' });
-    expect(statusText(s, true)).toBe('Agent unavailable');
+    expect(sendNotice(s, true)).toEqual({ text: 'Install Claude Code or Codex to edit', settings: false });
   });
   it('no automation route: nothing to show', () => {
     expect(agentStatus(null, 0).available).toBe(false);
   });
-  it('words for no computer, offline, and other people', () => {
+  it('one line over Send for no computer, offline, and other people; none locally or when online', () => {
     const none = agentStatus(automation({ workers: [], local: false }), 1001);
-    expect(statusText(none, true)).toBe('Connect computer');
-    expect(statusText(none, false)).toBe('Agent offline');
+    expect(sendNotice(none, true)).toEqual({ text: 'No editing computer connected', settings: true });
+    expect(sendNotice(none, false)).toEqual({
+      text: 'The editing computer is offline. Send still queues.',
+      settings: false,
+    });
     const off = agentStatus(automation({ local: false }), 5000);
     expect(off.online).toBe(false);
-    expect(statusText(off, true)).toBe('Computer offline');
-    expect(statusText(off, false)).toBe('Agent offline');
+    expect(sendNotice(off, true)).toEqual({ text: 'The editing computer is offline', settings: true });
+    expect(sendNotice(off, false)?.settings).toBe(false);
+    expect(sendNotice(agentStatus(automation({ local: true }), 5000), true)).toBeNull();
+    expect(sendNotice(agentStatus(null, 0), true)).toBeNull();
   });
 });
 
@@ -221,48 +226,50 @@ describe('the bar button', () => {
   };
   const b = (over: Partial<SendInput>) => sendButton({ ...base, ...over });
 
-  // Owner, reviewer and approver (a share link, a signed-in member, local or hosted) get the same button; owner only
-  // decides whether pressing it also opens the agent menu.
+  // Owner, reviewer and approver (a share link, a signed-in member, local or hosted) get the same button: it says
+  // Send (never an agent, never a count); the count is in its title.
   for (const owner of [true, false]) {
     const who = owner ? 'the owner' : 'a reviewer or approver';
     const o = (over: Partial<SendInput>) => b({ owner, ...over });
-    it(`${who}: Send N to agent counts the open comments not yet sent`, () => {
-      expect(o({ unsent: 12 })).toEqual({ label: 'Send 12 to agent', action: 'send', opens: false });
-      expect(o({ unsent: 1 }).label).toBe('Send 1 to agent');
+    it(`${who}: Send, with the open comments not yet sent counted in its title`, () => {
+      expect(o({ unsent: 12 })).toEqual({ label: 'Send', action: 'send', title: 'Send 12 comments to the agent' });
+      expect(o({ unsent: 1 }).title).toBe('Send 1 comment to the agent');
     });
     it(`${who}: a take in progress sends even before its notes are transcribed`, () => {
-      expect(o({ takeOpen: true })).toEqual({ label: 'Send to agent', action: 'send', opens: false });
-      expect(o({ takeOpen: true, unsent: 3 }).label).toBe('Send 3 to agent');
+      expect(o({ takeOpen: true })).toEqual({ label: 'Send', action: 'send', title: 'Send to the agent' });
+      expect(o({ takeOpen: true, unsent: 3 }).title).toBe('Send 3 comments to the agent');
     });
     it(`${who}: nothing new says Sent after a send, and explains on a click instead of failing`, () => {
-      expect(o({ sent: true, saved: true })).toEqual({ label: 'Sent', action: 'none', opens: false });
+      expect(o({ sent: true, saved: true })).toEqual({ label: 'Sent', action: 'none', title: 'Nothing new to send' });
       expect(o({ saved: true })).toMatchObject({ label: 'Saved', action: 'none' });
-      expect(o({})).toEqual({ label: 'Send to agent', action: 'none', opens: false });
+      expect(o({})).toEqual({ label: 'Send', action: 'none', title: 'Nothing new to send' });
     });
     it(`${who}: Sending… while it finishes`, () => {
-      expect(o({ finishing: true, takeOpen: true })).toEqual({ label: 'Sending…', action: 'none', opens: false });
+      expect(o({ finishing: true, takeOpen: true })).toEqual({ label: 'Sending…', action: 'none', title: 'Sending…' });
     });
     it(`${who}: with no computer online it still sends (the queue waits for one)`, () => {
       for (const status of [hostedNone, hostedOff]) {
-        expect(o({ status, unsent: 4 })).toEqual({ label: 'Send 4 to agent', action: 'send', opens: owner });
-        expect(o({ status, takeOpen: true })).toMatchObject({ action: 'send', opens: owner });
+        expect(o({ status, unsent: 4 })).toMatchObject({ label: 'Send', action: 'send' });
+        expect(o({ status, takeOpen: true })).toMatchObject({ action: 'send' });
         expect(o({ status, sent: true, saved: true })).toMatchObject({ label: 'Sent', action: 'none' });
         expect(o({ status, finishing: true, takeOpen: true }).label).toBe('Sending…');
       }
     });
-    it(`${who}: local mode that can't edit saves; the agent menu says why, without popping up`, () => {
-      expect(o({ status: blocked, unsent: 2, takeOpen: true })).toEqual({
-        label: 'Send 2 to agent',
-        action: 'save',
-        opens: false,
-      });
+    it(`${who}: local mode that can't edit saves, and says why in its title`, () => {
+      expect(o({ status: blocked, unsent: 2, takeOpen: true })).toMatchObject({ label: 'Send', action: 'save' });
+      expect(o({ status: blocked, unsent: 2, takeOpen: true }).title).toContain(blocked.blocked);
       expect(o({ status: blocked, saved: true, unsent: 2 })).toMatchObject({ label: 'Saved', action: 'save' });
       expect(o({ status: blocked, finishing: true, takeOpen: true }).label).toBe('Saving…');
     });
     it(`${who}: before the page knows the agent, Send sends`, () => {
-      expect(o({ status: unknown, takeOpen: true })).toEqual({ label: 'Send to agent', action: 'send', opens: false });
+      expect(o({ status: unknown, takeOpen: true })).toMatchObject({ label: 'Send', action: 'send' });
     });
   }
+  it('never names an agent', () => {
+    const states: Partial<SendInput>[] = [{}, { takeOpen: true }, { saved: true }, { finishing: true }, { unsent: 2 }];
+    for (const status of [online, hostedNone, hostedOff, blocked, unknown])
+      for (const st of states) expect(b({ status, ...st }).label).toMatch(/^(Send|Sending…|Saving…|Sent|Saved)$/);
+  });
   it('never says Finish review', () => {
     const states: Partial<SendInput>[] = [{}, { takeOpen: true }, { saved: true }, { finishing: true }, { unsent: 2 }];
     for (const status of [online, hostedNone, hostedOff, blocked, unknown])

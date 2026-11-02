@@ -159,6 +159,7 @@ window.__review = {
   notes,         // getter, new in milestone 2: {available, version, newest, items, jobs, job} from /api/notes and SSE
   sidebar,       // getter, new in milestone 2: {panel, toggle, phone, rows, active}, what the sidebar shows
   home,          // getter, new: {available, next} when the page is a project of a home (spec/home.md)
+  draft,         // getter, new: the typed comment being written, {version, t, lines, text}, or null (spec/notes.md)
 }
 ```
 

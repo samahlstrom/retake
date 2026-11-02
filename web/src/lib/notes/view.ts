@@ -5,7 +5,7 @@
 //  - retracted notes are never shown.
 import { fmt } from '../util';
 import { draftOf } from '../versions';
-import type { Box, Version } from '../types';
+import type { Box, HistoryStroke, Version } from '../types';
 import type { Anchor, NoteItem, NotesResponse, TaskAsk } from './types';
 import type { EditingTask } from '../automation.svelte';
 
@@ -63,6 +63,11 @@ export interface Row {
   /** A typed comment on an extension's version: it has no moment, its chip says where in the document it is. */
   typed?: boolean;
   anchor?: Anchor | null;
+  /** A typed comment on a video: its pen lines, to draw on the video and on its card. */
+  strokes?: HistoryStroke[];
+  /** The version its edit goes into: a comment on v7 becomes an edit in v8 (the server's `into`, else the next
+   * number). Null for a typed comment on an extension's document. */
+  into: string | null;
 }
 
 /** The chip of a comment or question about a document: the heading it's under, else its file. */
@@ -172,9 +177,24 @@ export function toRow(item: NoteItem, newest: boolean, ctx: ViewContext): Row {
       item.kind === 'note' && item.ask && mark === 'question'
         ? { ...item.ask, time: item.ask.anchor ? anchorText(item.ask.anchor) : fmt(item.ask.t, false) }
         : null,
-    typed: !!item.anchor || (item.key ?? '').startsWith('doc/'),
+    // A typed comment on a video has its moment (it wants a version); one on an extension's version has none.
+    typed: !!item.anchor || ((item.key ?? '').startsWith('doc/') && item.wants !== 'version'),
     anchor: item.anchor ?? null,
+    strokes: item.kind === 'note' && item.strokes?.length ? typedStrokes(item) : undefined,
+    into:
+      typeof item.into === 'string' && item.into
+        ? item.into
+        : !!item.anchor || ((item.key ?? '').startsWith('doc/') && item.wants !== 'version')
+          ? null
+          : intoVersion(item.version || ctx.shown),
   };
+}
+
+/** A typed comment's lines as the pen layer draws them, each at its own time (else the comment's). */
+export function typedStrokes(item: Pick<NoteItem, 'strokes' | 't0' | 'version'>): HistoryStroke[] {
+  return (item.strokes ?? [])
+    .filter((st) => Array.isArray(st.points) && st.points.length)
+    .map((st) => ({ video_t: typeof st.t === 'number' ? st.t : item.t0, color: st.color, points: st.points }));
 }
 
 /** The rows of the sidebar, in time order. */
@@ -190,6 +210,13 @@ export function sidebarRows(res: NotesResponse | null, ctx: ViewContext): Row[] 
 
 /** The version a label belongs to: itself, or for a draft the version it heads for (`v5-draft2` is `v5`'s). */
 export const versionOf = (label: string): string => draftOf(label) ?? label;
+
+/** Where a comment on `label` goes (spec/notes.md, "Comments belong to their version"): a comment on v7 becomes an
+ * edit in v8, and one on a draft of v8 (`v8-draft2`) one in v9. Null for a label that isn't `v<N>`. */
+export function intoVersion(label: string | null | undefined): string | null {
+  const m = label ? /^v(\d+)$/.exec(versionOf(label)) : null;
+  return m ? `v${Number(m[1]) + 1}` : null;
+}
 
 /** The version each row belongs to, by key: its own `version`, or for a question about a note, that note's. A row
  * the server didn't tag (an older server) belongs to whatever is shown, so it has none here. */
@@ -253,6 +280,8 @@ export interface VersionEntry {
   todo: number;
   /** It (or a draft of it) is on screen. */
   on: boolean;
+  /** Where its comments go: `v8` for v7 (none for an extension's version). */
+  into: string | null;
 }
 
 /** The version strip: the family's versions oldest first, a version's drafts folded into one entry; an extension's
@@ -278,6 +307,7 @@ export function versionStrip(
         drafting: false,
         todo: todo.get(label) ?? 0,
         on: label === shown,
+        into: null,
       });
       continue;
     }
@@ -285,7 +315,15 @@ export function versionStrip(
       draft = label !== version;
     const e = out.find((x) => x.version === version);
     if (!e)
-      out.push({ version, name: version, label, drafting: draft, todo: todo.get(version) ?? 0, on: version === on });
+      out.push({
+        version,
+        name: version,
+        label,
+        drafting: draft,
+        todo: todo.get(version) ?? 0,
+        on: version === on,
+        into: intoVersion(version),
+      });
     else if (!draft) Object.assign(e, { label, drafting: false });
     else if (e.drafting) e.label = label; // the family lists drafts oldest first: the newest wins
   }

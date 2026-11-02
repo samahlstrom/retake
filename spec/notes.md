@@ -212,6 +212,12 @@ heads for (`v5`), so they are still there once the draft becomes that version.
   button has a small dot, and its title says what (`Open on earlier versions: v6 · 2, v3 · 91`). A single version
   shows its label without a menu. This replaced the version strip and the "Open on earlier versions" line; the bar's
   version picker stays.
+- **Where a comment goes.** A comment on vN becomes an edit in vN+1: a comment on v7 goes into v8 (even once v8
+  exists), and one on v8 makes v9 (spec/automation.md). The page says so in the same few words everywhere: the comment
+  box `Comment at 0:18 · goes into v8…`, the version menu `v7 → v8 · 3 to do`, a card's `→ v8` next to its status
+  until it's done, and after Send `Sent to v8.` An item's `into` names that version when the server gives it;
+  otherwise the page takes the next number (a draft's comments, `v8-draft2`, go into v9). A typed comment on an
+  extension's document has none.
 - **Send** counts and sends the shown version's open comments (spec/automation.md, "HTTP and UI"). An older version's
   open comments are sent from that version. The agent still gets every open comment of every version as context with
   each task (the poll answer's `notes`).
@@ -257,7 +263,8 @@ none.
   line's time. Lines drawn while not recording (or while the box is in use without recording) belong to the pending
   comment, never to a take; Z undoes its last one, the eraser removes them. Under the box, one quiet line says when
   it is and how many drawings it has. Enter saves it (Shift+Enter is a new line), Ctrl+Enter (⌘+Enter) saves and
-  sends it, Esc cancels it with its lines. A comment may be a drawing alone. Send with a pending comment saves it
+  sends it, Esc cancels it with its lines; either way the keys go back to the player (Space plays, R records). With
+  lines but no words, Enter outside the box puts the cursor in it. A comment may be a drawing alone. Send with a pending comment saves it
   first, then sends.
 - **While recording** the pen draws into the take (pinned to the audio, as always); the box still takes words.
 - **`POST api/notes`** `{"version", "t", "text"?, "strokes"?, "frame"?, "snapshot"?}` (needs record, origin-checked)

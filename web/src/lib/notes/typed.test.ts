@@ -52,3 +52,70 @@ describe("the comments column's line on an extension's version", () => {
     await expect(addTyped({ fetch: down, version: 'v0', text: 'x', anchor: null })).rejects.toThrow('isn’t answering');
   });
 });
+
+describe('a typed comment on a video', () => {
+  it('posts its time, its lines (rounded, clamped to the frame), the video size and its still', async () => {
+    const fetch = vi.fn(async () => new Response(JSON.stringify({ id: 4, key: 'doc/1' }), { status: 201 }));
+    await addTyped({
+      fetch: fetch as unknown as typeof globalThis.fetch,
+      version: 'v8',
+      text: 'Hold this longer',
+      anchor: null,
+      t: 18.123456,
+      strokes: [
+        {
+          color: 'red',
+          points: [
+            [0.123456, 1.2],
+            [-0.1, 0.5],
+          ],
+          t: 18.1234,
+        },
+      ],
+      frame: [1920, 1080],
+      snapshot: 'data:image/jpeg;base64,/9j/',
+    });
+    expect(JSON.parse((fetch.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)).toEqual({
+      version: 'v8',
+      text: 'Hold this longer',
+      t: 18.123,
+      strokes: [
+        {
+          color: 'red',
+          points: [
+            [0.1235, 1],
+            [0, 0.5],
+          ],
+          t: 18.123,
+        },
+      ],
+      frame: [1920, 1080],
+      snapshot: 'data:image/jpeg;base64,/9j/',
+    });
+  });
+  it('a drawing alone: no words, no still', async () => {
+    const fetch = vi.fn(async () => new Response(JSON.stringify({ id: 5 }), { status: 201 }));
+    await addTyped({
+      fetch: fetch as unknown as typeof globalThis.fetch,
+      version: 'v8',
+      text: '',
+      anchor: null,
+      t: 2,
+      strokes: [{ color: 'green', points: [[0.5, 0.5]], t: 2 }],
+    });
+    expect(JSON.parse((fetch.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)).toEqual({
+      version: 'v8',
+      text: '',
+      t: 2,
+      strokes: [{ color: 'green', points: [[0.5, 0.5]], t: 2 }],
+    });
+  });
+  it('says what the server refused', async () => {
+    const fetch = vi.fn(
+      async () => new Response(JSON.stringify({ error: 'a comment on a video needs its time (t)' }), { status: 400 }),
+    );
+    await expect(
+      addTyped({ fetch: fetch as unknown as typeof globalThis.fetch, version: 'v8', text: 'x', anchor: null, t: 1 }),
+    ).rejects.toThrow('needs its time');
+  });
+});

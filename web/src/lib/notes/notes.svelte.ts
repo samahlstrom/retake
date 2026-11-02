@@ -299,14 +299,15 @@ export class Notes {
 
   /** Done: the take is closed; the server queues its transcription and notes. Resolves to the HTTP status (0 when
    * unreachable). */
-  async postDone(take: string, version: string | null, send = false): Promise<number> {
+  async postDone(take: string, version: string | null, send = false, agent = ''): Promise<number> {
     try {
-      // `send`: queue the take's notes for the agent once they're processed (contract C3). An older server ignores the
-      // body and does what it always did.
+      // `send`: queue the take's notes for the agent once they're processed (contract C3), with `agent` the one this
+      // send picked (spec/automation.md). An older server ignores the body and does what it always did.
+      const body = agent ? { send: true, agent } : { send: true };
       const r = await this.#fetch(
         doneUrl(take, version),
         send
-          ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ send: true }) }
+          ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
           : { method: 'POST' },
       );
       await r.body?.cancel().catch(() => {});

@@ -55,6 +55,39 @@
     color: var(--muted);
     font-size: 11.5px;
   }
+  /* The comments' version menu: each version, where its comments go and what's still to do. */
+  .vmenu-list {
+    min-width: 220px;
+  }
+  .vmenu-list .menu-item {
+    font-variant-numeric: tabular-nums;
+  }
+  .vmenu-list .menu-item.on {
+    color: var(--text-strong);
+    font-weight: 600;
+  }
+  .vmenu-list .into,
+  .vmenu-list .dim {
+    margin-left: 6px;
+    color: var(--muted);
+    font-weight: 400;
+  }
+  .vmenu-list .n {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 400;
+  }
+  .vmenu-list .check {
+    color: var(--text);
+  }
+  /* A phone: every menu row is a thumb's height. */
+  html[data-phone] .menu-item {
+    min-height: 44px;
+    font-size: 15px;
+  }
 
   /* ---------------------------------------------------------------- popovers */
   .pop {

@@ -9,7 +9,7 @@ export interface Mic {
 
 export const MIC_BLOCKED = 'Microphone blocked. Allow it in the address bar, then press R again.';
 /** The same, for the phone layout (no R key there). */
-export const MIC_BLOCKED_TOUCH = 'Microphone blocked. Allow it in the address bar, then tap ● again.';
+export const MIC_BLOCKED_TOUCH = 'Microphone blocked. Allow it in the address bar, then tap Record again.';
 
 /** Ask for the mic and hang an analyser on it (for the VAD and the waveform). Throws when it is blocked. */
 export async function openMic(): Promise<Mic> {

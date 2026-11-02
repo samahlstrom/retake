@@ -21,6 +21,10 @@ export interface NoteItem {
   anchor?: Anchor | null;
   /** "version": the typed comment asks for a cut. */
   wants?: string;
+  /** The version its edit goes into (`v8` for a comment on v7), when the server says. */
+  into?: string | null;
+  /** A typed comment on a video: its pen lines, normalized 0–1 to the frame, each at its own time. */
+  strokes?: { color: string; points: [number, number][]; t?: number }[] | null;
   work?: EditingTask;
   version?: string;
   take?: string;

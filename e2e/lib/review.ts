@@ -26,6 +26,8 @@ export interface ReviewHook {
     stream?: { state: 'pending' | 'rendering' | 'complete'; done: number; total: number; seconds: number };
     poster?: string }[] };
   hist: { strokes: unknown[]; images?: unknown[] };
+  /** New: the typed comment being written (spec/notes.md, "Typed comments on a video"), or null. */
+  draft?: { version: string; t: number; lines: number; text: string } | null;
   serialize: (take: unknown) => Record<string, unknown>;
   save: (take: unknown) => Promise<unknown>;
 }
@@ -99,6 +101,14 @@ export class Review {
 
   async click(selector: string): Promise<void> {
     await this.page.locator(selector).click();
+  }
+
+  /** New page: picks a pen colour (or the eraser) from the pen's popover, by mouse or by tap. */
+  async pen(what: 'red' | 'yellow' | 'green' | 'white' | 'eraser', touch = false): Promise<void> {
+    const open = (sel: string) => (touch ? this.page.locator(sel).tap() : this.page.locator(sel).click());
+    await open('#pen');
+    await open(what === 'eraser' ? '#eraser' : `.sw[data-color=${what}]`);
+    await this.page.locator('.pen-pop').waitFor({ state: 'detached', timeout: 5000 }).catch(() => {});
   }
 
   /** A finger tap (the context needs `hasTouch`). `force`: tap it even when it looks disabled (aria-disabled). */

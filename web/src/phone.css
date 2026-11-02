@@ -81,10 +81,7 @@
     border-radius: var(--radius-md);
   }
   html[data-phone] #verBtn:hover {
-    border-color: var(--border);
-  }
-  html[data-phone] #verBtn.flipped:hover {
-    border-color: color-mix(in srgb, var(--flip) 50%, transparent);
+    background: transparent;
   }
   html[data-phone] #verList {
     left: auto;
@@ -140,15 +137,26 @@
   #flip[aria-disabled='true'] {
     opacity: 0.35;
   }
+  /* The pen and what it opens, thumb sized: a 44 px button with a 26 px dot in it (the colour, an inline
+     background, is painted in the content box only). */
+  html[data-phone] #pen {
+    width: 44px;
+    height: 44px;
+  }
+  html[data-phone] #pen svg {
+    width: 26px;
+    height: 26px;
+  }
   html[data-phone] #colors {
     gap: 2px;
   }
-  /* A 44 px button with a 26 px dot in it: the color (an inline background) is painted in the content box only. */
   html[data-phone] .sw {
     width: 44px;
     height: 44px;
     padding: 9px;
-    background-clip: content-box !important;
+  }
+  html[data-phone] .sw.er {
+    padding: 0;
   }
   html[data-phone] .sw.er svg {
     width: 22px;
@@ -157,6 +165,20 @@
   html[data-phone] .sw.on::after {
     inset: 4px;
     border-width: 2px;
+  }
+  html[data-phone] .pen-pop {
+    padding: 6px;
+  }
+  /* Where Send can't reach an agent: the line floats over Record and Send (nothing moves), wrapping when long. */
+  html[data-phone] .send-notice {
+    right: 14px;
+    left: 14px;
+    bottom: calc(100% + 8px);
+    max-width: none;
+    justify-content: center;
+    white-space: normal;
+    border-radius: var(--radius-md);
+    font-size: 13px;
   }
   #undo {
     flex: none;
@@ -195,7 +217,7 @@
     border-color: var(--line);
   }
   html[data-phone] #rec:hover {
-    border-color: var(--border);
+    color: inherit;
   }
   #hint .recdot {
     color: var(--record);
@@ -262,14 +284,6 @@
   html[data-layout='portrait'] #side.drawer .icon svg {
     width: 22px;
     height: 22px;
-  }
-  html[data-layout='portrait'] #side.drawer .agent-status {
-    min-width: 0;
-    font-size: 15px;
-  }
-  html[data-layout='portrait'] #side.drawer .agent-status .name {
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
   html[data-layout='portrait'] #side.drawer .tabs button {
     min-height: 44px;
@@ -349,12 +363,18 @@
     text-align: center;
     transition: opacity 0.6s ease;
   }
+  /* Once it's gone (the first comment), its line goes too: the comments get the height. */
+  #hint.inline.gone {
+    display: none;
+  }
   html[data-layout='portrait'] #done {
     height: 64px;
     min-width: 96px;
     border-radius: 16px;
     font-size: 16px;
   }
+  /* Portrait's Record: a wide pill, a mic with the record dot and "Record"; recording, the ring, REC and the time,
+     the segment, the live waveform and a stop square. */
   html[data-phone] #rec.pill {
     flex: 1;
     min-width: 0;
@@ -362,41 +382,38 @@
     justify-content: center;
     gap: 10px;
     padding: 0 18px;
+    border: 1px solid var(--border);
     border-radius: 16px;
     background: color-mix(in srgb, var(--overlay) 4%, transparent);
+    color: var(--text);
     font-size: 17px;
     font-weight: 600;
   }
-  html[data-phone] #rec.pill .dot {
-    width: 16px;
-    height: 16px;
-    background: var(--record);
-  }
   html[data-phone] #rec.pill .k {
     margin-left: 0;
+    color: var(--dim);
     font-size: 14px;
   }
   html[data-phone] #rec.pill #wave {
     display: none;
   }
+  html[data-phone] #rec.pill .stop {
+    margin-left: 0;
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+  }
   html[data-phone] #rec.pill.on {
     justify-content: flex-start;
     border-color: color-mix(in srgb, var(--record) 60%, transparent);
     background: color-mix(in srgb, var(--record) 14%, transparent);
-  }
-  html[data-phone] #rec.pill.on .dot {
-    width: 14px;
-    height: 14px;
-    border-radius: 3px; /* a stop square */
+    color: var(--record-text);
   }
   html[data-phone] #rec.pill.on #wave {
     display: block;
     flex: 1;
     min-width: 0;
     height: 30px;
-  }
-  html[data-phone] #rec.pill.wait .dot {
-    background: var(--record-wait);
   }
 
   /* ------------------------------------------------------------------ landscape: the video fills the height */
@@ -441,6 +458,7 @@
     box-shadow: inset 2px 0 0 var(--record);
   }
   #pbar.landscape {
+    position: relative;
     grid-area: bar;
     display: flex;
     align-items: center;
@@ -476,7 +494,9 @@
     width: 76px;
     height: 22px;
   }
+  /* Landscape's Record: a round button, a mic with the record dot; recording, a stop square in a red ring. */
   html[data-phone] #rec.round {
+    position: relative;
     display: grid;
     place-items: center;
     width: 76px;
@@ -486,23 +506,26 @@
     border: 2px solid color-mix(in srgb, var(--overlay) 20%, transparent);
     border-radius: 50%;
     background: color-mix(in srgb, var(--overlay) 4%, transparent);
-  }
-  html[data-phone] #rec.round .dot {
-    width: 30px;
-    height: 30px;
-    background: var(--record);
+    color: var(--text);
   }
   html[data-phone] #rec.round.on {
     border-color: var(--record);
     background: color-mix(in srgb, var(--record) 16%, transparent);
+    color: var(--record);
   }
-  html[data-phone] #rec.round.on .dot {
+  html[data-phone] #rec.round .ring {
+    position: absolute;
+    inset: 0;
+    width: auto;
+    height: auto;
+    margin: 0;
+    background: none;
+  }
+  html[data-phone] #rec.round .stop {
+    margin: 0;
     width: 24px;
     height: 24px;
-    border-radius: 5px; /* a stop square */
-  }
-  html[data-phone] #rec.round.wait .dot {
-    background: var(--record-wait);
+    border-radius: 5px;
   }
 
   /* The notes sidebar in landscape: an overlay on the right of the video (the grid has no row to spare). */
@@ -530,20 +553,5 @@
     font-size: 13px;
     white-space: normal;
     line-height: 1.2;
-  }
-  html[data-phone] .agent-status {
-    width: auto;
-    max-width: 150px;
-    min-height: 44px;
-    padding: 0 6px;
-  }
-  /* Landscape's bar is the timeline's: the agent is its dot (tap it for the name and settings). */
-  html[data-phone] .agent-status.compact {
-    justify-content: center;
-    width: 44px;
-    padding: 0;
-  }
-  html[data-phone] .agent-status.compact .name {
-    display: none;
   }
 }

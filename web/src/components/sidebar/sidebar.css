@@ -24,20 +24,64 @@
     min-height: 0;
     overflow: auto;
   }
+  /* Row 1: the speech bubble, the version menu, then search and hide. */
   #side header {
     flex: none;
     display: flex;
     align-items: center;
     gap: 2px;
     height: 52px;
-    padding: 0 8px 0 18px;
+    padding: 0 8px 0 14px;
   }
   #side header .h {
     flex: 1;
+  }
+  #side .cicon {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 32px;
+    color: var(--text-5);
+  }
+  #side .cicon svg {
+    width: 19px;
+    height: 19px;
+  }
+  /* The version: its label and a chevron, no box (a dot when an earlier version still has something to do). */
+  #side .vmenu {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    height: 32px;
+    padding: 0 6px;
+    border: 0;
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--text);
+    font: inherit;
     font-size: 14px;
     font-weight: 600;
-    letter-spacing: 0.005em;
-    color: var(--text);
+    font-variant-numeric: tabular-nums;
+  }
+  #side button.vmenu:hover,
+  #side .vmenu[data-state='open'] {
+    background: color-mix(in srgb, var(--overlay) 6%, transparent);
+  }
+  #side .vmenu svg {
+    width: 14px;
+    height: 14px;
+    color: var(--muted);
+  }
+  #side .vmenu .dot {
+    position: absolute;
+    top: 6px;
+    right: 2px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--status-working);
   }
   #side header .search {
     flex: 1;
@@ -77,22 +121,35 @@
     height: 18px;
   }
 
-  /* To do · Done: two words, the active one underlined. */
+  /* Row 2: To do · Done, a quiet segmented toggle; an extension's tabs after it, as words. */
   #side .tabs {
     flex: none;
     display: flex;
-    gap: 20px;
-    padding: 0 18px;
+    align-items: center;
+    gap: 16px;
+    padding: 0 14px 12px;
     border-bottom: 1px solid var(--line);
+  }
+  #side .tabs .seg {
+    flex: none;
+    display: inline-flex;
+    padding: 2px;
+    border-radius: var(--radius);
+    background: color-mix(in srgb, var(--overlay) 5%, transparent);
   }
   #side .tabs button {
     position: relative;
-    padding: 0 0 11px;
+    height: 28px;
+    padding: 0 12px;
     border: 0;
+    border-radius: calc(var(--radius) - 2px);
     background: none;
     color: var(--muted);
     font-size: 13px;
     font-weight: 500;
+  }
+  #side .tabs button.ext {
+    padding: 0 2px;
   }
   #side .tabs button b {
     margin-left: 5px;
@@ -106,18 +163,33 @@
   #side .tabs button.on {
     color: var(--text);
   }
+  #side .tabs .seg button.on {
+    background: color-mix(in srgb, var(--overlay) 10%, transparent);
+  }
   #side .tabs button.on b {
     color: var(--text-6);
   }
-  #side .tabs button.on::after {
+  #side .tabs button.ext.on::after {
     content: '';
     position: absolute;
     left: 0;
     right: 0;
-    bottom: -1px;
+    bottom: -13px;
     height: 2px;
     border-radius: 1px;
     background: var(--text);
+  }
+  /* The list and the progress floating over its bottom. The scroll area fills it absolutely: WebKit doesn't give a
+     flex item's flex item a definite height, and the list would be 0 tall. */
+  #side .list {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+  #side .list > .scroll {
+    position: absolute;
+    inset: 0;
   }
 
   #side .scroll {
@@ -148,11 +220,11 @@
     padding: 0 0 64px; /* room for the floating strip at the bottom */
   }
 
-  /* The line to type a comment on an extension's version (v0): "Comment for the agent…". */
+  /* The comment box at the bottom: "Comment at 0:18 · goes into v8…" (or "Comment for the agent…" on v0). */
   #side .compose {
     flex: none;
-    padding: 12px 14px 4px;
-    border-bottom: 1px solid var(--line);
+    padding: 10px 12px 2px;
+    border-top: 1px solid var(--line);
   }
   #side .compose textarea {
     box-sizing: border-box;
@@ -181,20 +253,92 @@
   #side .compose textarea::placeholder {
     color: var(--faint);
   }
-  #side .compose .keys {
-    display: block;
-    height: 22px;
-    padding-top: 4px;
+  /* One quiet line under it, only while it's in use: when, how many drawings, what Enter does. Its room is always
+     there, so nothing moves when it shows. */
+  #side .compose .under {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 26px;
+    padding: 0 2px;
     color: var(--faint);
     font-size: 11.5px;
+    font-variant-numeric: tabular-nums;
     visibility: hidden;
   }
-  #side .compose .keys.shown {
+  #side .compose .under.shown {
     visibility: visible;
+  }
+  #side .compose .under .what {
+    color: var(--text-6);
+  }
+  #side .compose .under .grow {
+    flex: 1;
+  }
+  #side .compose .under .link {
+    min-height: 40px;
+    padding: 0 8px;
+    border: 0;
+    background: none;
+    color: var(--muted);
+    font: inherit;
+    font-size: 15px;
+  }
+  #side .compose .under .link.strong {
+    color: var(--text);
+    font-weight: 600;
+  }
+  #side .compose .under .link:disabled {
+    opacity: 0.4;
+  }
+  #side .compose.pending textarea {
+    border-color: color-mix(in srgb, var(--overlay) 22%, transparent);
+  }
+  /* Where a comment's edit goes: "→ v8", next to its status, quiet. */
+  #side .into {
+    color: var(--faint);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
   }
   /* 17 px on a phone: Safari zooms into a field whose text is smaller than 16 px. */
   html[data-phone] #side .compose {
-    padding: 10px 14px;
+    padding: 10px 14px 0;
+  }
+  /* A phone: To do · Done in the header's row (the list needs the height), and the line under the comment box only
+     while a comment is pending. */
+  #side header .tabs {
+    flex: none;
+    margin-left: 6px;
+    padding: 0;
+    border: 0;
+  }
+  html[data-phone] #side .compose .under:not(.shown) {
+    display: none;
+  }
+  html[data-phone] #side .empty {
+    padding-top: 14px;
+    padding-bottom: 14px;
+  }
+  /* A phone: the header's controls and To do · Done are thumb sized. */
+  html[data-phone] #side header {
+    height: 56px;
+  }
+  html[data-phone] #side .vmenu,
+  html[data-phone] #side .icon,
+  html[data-phone] #side .cicon {
+    height: 44px;
+  }
+  html[data-phone] #side .icon {
+    width: 44px;
+  }
+  html[data-phone] #side .tabs button {
+    height: 40px;
+    font-size: 15px;
+  }
+  html[data-phone] #side .compose .under {
+    height: 40px;
+    font-size: 13px;
   }
   html[data-phone] #side .compose textarea {
     min-height: 48px;

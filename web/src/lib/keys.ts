@@ -83,7 +83,9 @@ export function keyAction(e: KeyLike): KeyResult | null {
 
 /** The keys sheet (? or its button): every key of the player, in the order people need them. */
 export const KEY_SHEET: readonly { keys: string[]; what: string }[] = [
-  { keys: ['R'], what: 'Record your voice and pen. R again stops' },
+  { keys: ['R'], what: 'Record your voice (with what you draw). R again stops' },
+  { keys: ['Enter'], what: 'Save a typed comment (Ctrl+Enter also sends it)' },
+  { keys: ['Esc'], what: 'Cancel the comment you were writing or drawing' },
   { keys: ['Space'], what: 'Play or pause' },
   { keys: ['←', '→'], what: 'Back or forward 5 seconds' },
   { keys: [',', '.'], what: 'One frame back or forward' },

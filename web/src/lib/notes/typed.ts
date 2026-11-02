@@ -16,15 +16,31 @@ export function composeKey(e: {
   return e.ctrlKey || e.metaKey ? 'send' : 'add';
 }
 
-/** POST api/notes `{version, text, anchor?}`: a typed comment on a kind's version. Resolves to the new item. */
+/** POST api/notes: a typed comment. On a kind's version `{version, text, anchor?}`; on a video `{version, t, text,
+ * strokes, frame?, snapshot?}` (spec/notes.md, "Typed comments on a video"). Resolves to the new item. */
 export async function addTyped(o: {
   fetch: typeof fetch;
   version: string;
   text: string;
   anchor: Anchor | null;
+  /** On a video: its time, its lines, the video's size and a still of its moment (a data: URL). */
+  t?: number;
+  strokes?: { color: string; points: [number, number][]; t: number }[];
+  frame?: [number, number];
+  snapshot?: string;
 }): Promise<{ id: number; [k: string]: unknown }> {
   const body: Record<string, unknown> = { version: o.version, text: o.text };
   if (o.anchor) body.anchor = o.anchor;
+  if (typeof o.t === 'number') {
+    body.t = Math.round(o.t * 1000) / 1000;
+    body.strokes = (o.strokes ?? []).map((st) => ({
+      color: st.color,
+      points: st.points.slice(0, 2000).map(([x, y]) => [round4(x), round4(y)]),
+      t: Math.round(st.t * 1000) / 1000,
+    }));
+    if (o.frame) body.frame = o.frame;
+    if (o.snapshot) body.snapshot = o.snapshot;
+  }
   let r: Response;
   try {
     r = await o.fetch('api/notes', {
@@ -41,3 +57,5 @@ export async function addTyped(o: {
   }
   return out as { id: number };
 }
+
+const round4 = (n: number): number => Math.round(Math.min(1, Math.max(0, n)) * 1e4) / 1e4;

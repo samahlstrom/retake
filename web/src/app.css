@@ -52,6 +52,7 @@
     touch-action: none;
     cursor: default;
   }
+  /* The pen draws at any moment (not recording, into a typed comment): a crosshair for everyone who can comment. */
   #ink.pen {
     cursor: crosshair;
   }
@@ -177,20 +178,29 @@
     flex: none;
     position: relative;
   }
+  /* The version: its label and a chevron, no box. */
   #verBtn {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    height: 36px;
     background: transparent;
-    border: 1px solid var(--border);
+    border: 0;
     border-radius: var(--radius);
-    padding: 6px 11px;
+    padding: 0 6px;
     font-weight: 600;
     font-variant-numeric: tabular-nums;
   }
-  #verBtn:hover {
-    border-color: var(--border-hover);
+  #verBtn:hover,
+  #verBtn[data-state='open'] {
+    background: color-mix(in srgb, var(--overlay) 6%, transparent);
+  }
+  #verBtn .version-chevron {
+    color: var(--muted);
+    font-weight: 400;
   }
   #verBtn.flipped {
     color: var(--flip);
-    border-color: color-mix(in srgb, var(--flip) 50%, transparent);
   }
   #verList {
     position: absolute;
@@ -249,24 +259,64 @@
     border-radius: 50%;
     background: var(--voice);
   }
+  /* The pen: one button, its pen in the colour you draw with (the eraser glyph while that's on). No box. */
+  #pen {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text-5);
+  }
+  #pen:hover,
+  #pen[data-state='open'] {
+    color: var(--text);
+  }
+  #pen svg {
+    width: 22px;
+    height: 22px;
+  }
+  /* The pen's outline is the text colour; its body the pen colour (currentColor on .tip). */
+  #pen .tip .edge {
+    stroke: var(--text-5);
+  }
+  #pen:hover .tip .edge,
+  #pen[data-state='open'] .tip .edge {
+    stroke: var(--text);
+  }
+  /* What the pen opens: the four colours and the eraser, in a row. */
+  .pen-pop {
+    z-index: 110;
+    padding: 8px 10px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-lg);
+    background: var(--surface-popover);
+    box-shadow: 0 12px 34px color-mix(in srgb, var(--shadow) 55%, transparent);
+    outline: none;
+  }
   #colors {
     flex: none;
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 4px;
   }
   .sw {
-    width: 14px;
-    height: 14px;
-    padding: 0;
+    width: 34px;
+    height: 34px;
+    padding: 8px;
     border: 0;
     border-radius: 50%;
     position: relative;
+    background-clip: content-box !important;
   }
   .sw.on::after {
     content: '';
     position: absolute;
-    inset: -4px;
+    inset: 4px;
     border-radius: 50%;
     border: 1.5px solid color-mix(in srgb, var(--text-strong) 75%, transparent);
   }
@@ -277,10 +327,11 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    padding: 0;
   }
   .sw.er svg {
-    width: 14px;
-    height: 14px;
+    width: 17px;
+    height: 17px;
   }
   .sw.er.on {
     color: var(--text-strong);
@@ -292,77 +343,100 @@
         12 12,
       cell;
   }
-  /* Record, the one action and the agent's status: a group at the right end of the bar. Every width here is fixed, so
-     a label that changes ("Record" → "REC 0:12", "Send to agent" → "Send 12 to agent") moves nothing else. */
-  #voicebox {
-    flex: none;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding-left: 18px;
-    border-left: 1px solid var(--line);
-  }
+
+  /* Record: a microphone with the red record dot, and "Record". Recording, a red ring that follows your voice (the
+     --level the page sets), REC and the time, and a stop square. Its width is fixed: nothing in the bar moves. */
   #rec {
     flex: none;
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 8px;
     width: var(--record-width);
-    height: 36px;
-    padding: 0 12px;
-    border-radius: calc(var(--radius) + 1px);
-    border: 1px solid var(--border);
+    height: 40px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: var(--radius-pill);
     background: transparent;
+    color: var(--text-5);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
-  #rec .dot {
-    width: 9px;
-    height: 9px;
+  #rec:hover {
+    color: var(--text);
+  }
+  .mic {
+    position: relative;
+    flex: none;
+    display: inline-block;
+  }
+  .mic svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+  .mic .recdot {
+    position: absolute;
+    top: -1px;
+    right: -2px;
+    width: 30%;
+    height: 30%;
     border-radius: 50%;
     background: var(--record);
+    box-shadow: 0 0 0 2px var(--surface);
+  }
+  #rec .ring {
     flex: none;
+    position: relative;
+    width: 10px;
+    height: 10px;
+    margin: 0 2px 0 4px;
+    border-radius: 50%;
+    background: var(--record);
   }
-  #rec #wave {
-    display: none;
-    flex: 1;
-    min-width: 0;
-    height: 22px;
+  #rec .ring::after {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: 50%;
+    border: 2px solid var(--record);
+    opacity: calc(0.35 + var(--level, 0) * 0.65);
+    transform: scale(calc(1 + var(--level, 0) * 0.45));
+    animation: rec-pulse 1.6s ease-in-out infinite;
   }
-  #rec.on #wave {
-    display: block;
-  }
-  #rec .k {
-    color: var(--dim);
-    font-size: 12px;
-    margin-left: auto;
-  }
-  #rec:hover {
-    border-color: var(--border-hover);
+  #rec .stop {
+    flex: none;
+    width: 9px;
+    height: 9px;
+    margin-left: 2px;
+    border-radius: 2px;
+    background: currentColor;
   }
   #rec.on {
-    border-color: color-mix(in srgb, var(--record) 55%, transparent);
-    background: color-mix(in srgb, var(--record) 12%, transparent);
     color: var(--record-text);
     font-weight: 600;
   }
-  #rec.on .dot {
-    border-radius: 2px; /* a stop square */
-  }
-  #rec.wait .dot {
+  #rec.wait .recdot {
     background: var(--record-wait);
   }
+  @keyframes rec-pulse {
+    50% {
+      inset: -5px;
+    }
+  }
+  /* Send: the bar's one filled control. It says Send; its title has the count. Held, it lists the agents. */
   #done {
     flex: none;
     min-width: var(--send-min-width);
     height: 36px;
-    padding: 0 14px;
+    padding: 0 18px;
     background: transparent;
     border: 1px solid var(--border);
-    border-radius: calc(var(--radius) + 1px);
+    border-radius: var(--radius-pill);
     font-weight: 500;
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
+    -webkit-touch-callout: none;
   }
   #done:hover {
     border-color: var(--border-hover);
@@ -386,59 +460,83 @@
     opacity: 0.7;
     cursor: progress;
   }
-  /* The agent's status: a dot and its name, no box. */
-  .agent-status {
-    flex: none;
-    display: inline-flex;
+  /* The list a held Send opens: "Send to", then each agent. */
+  .agent-picker {
+    min-width: 200px;
+  }
+  .agent-picker .menu-item {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+  }
+  .agent-picker .menu-item:hover,
+  .agent-picker .menu-item:focus-visible {
+    background: color-mix(in srgb, var(--overlay) 7%, transparent);
+    outline: none;
+  }
+  .agent-picker .check {
+    color: var(--muted);
+    font-size: 11.5px;
+  }
+  /* Where Send can't reach an agent: one quiet line over the bar's right end (it floats: nothing moves). */
+  #bar {
+    position: relative;
+  }
+  .send-notice {
+    position: absolute;
+    right: var(--bar-padding);
+    bottom: calc(100% + 10px);
+    display: flex;
     align-items: center;
     gap: 7px;
-    width: var(--agent-status-width);
-    height: 36px;
-    padding: 0 4px;
-    border: 0;
-    border-radius: var(--radius);
-    background: transparent;
-    color: var(--text-5);
+    max-width: min(520px, 70%);
+    margin: 0;
+    padding: 6px 12px;
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--scrim) 72%, transparent);
+    color: var(--on-scrim);
     font-size: 12.5px;
+    backdrop-filter: blur(10px);
     white-space: nowrap;
   }
-  .agent-status .name {
+  .send-notice .text {
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .agent-status:hover,
-  .agent-status[data-state='open'] {
-    color: var(--text);
-  }
-  .agent-status .dot {
+  .send-notice .dot {
     flex: none;
     width: 7px;
     height: 7px;
     border-radius: 50%;
     background: var(--status-off);
   }
-  .agent-status.ok .dot {
-    background: var(--status-done);
+  .send-notice a {
+    flex: none;
+    color: var(--link);
+    text-decoration: none;
   }
-  .agent-status.busy .dot {
-    background: var(--status-working);
-    animation: dot-pulse 1.4s ease-in-out infinite;
-  }
-  .agent-status.off {
-    color: var(--muted);
+  .send-notice a:hover {
+    text-decoration: underline;
   }
   #keys {
     flex: none;
-    width: 28px;
-    height: 28px;
-    margin-right: -10px;
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    margin-right: -8px;
     padding: 0;
     border: 0;
     border-radius: 50%;
     background: transparent;
     color: var(--faint);
-    font-size: 14px;
-    font-weight: 600;
+  }
+  #keys svg {
+    width: 20px;
+    height: 20px;
   }
   #keys:hover,
   #keys[data-state='open'] {
@@ -452,10 +550,6 @@
     }
     #time {
       min-width: 120px;
-    }
-    .sw {
-      width: 16px;
-      height: 16px;
     }
     .float {
       font-size: 14.5px;

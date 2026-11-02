@@ -223,9 +223,9 @@ as words) and stay the same under every theme.
 | `--bar-height` | `64px` (`76px` wide) | The bar under the video |
 | `--bar-padding` | `24px` (`40px` wide) | The bar's left and right padding |
 | `--bar-gap` | `18px` (`28px` wide) | Space between the bar's parts |
-| `--record-width` | `172px` (`188px` wide) | Record's fixed width (it never changes while recording) |
-| `--send-min-width` | `136px` | Send's least width |
-| `--agent-status-width` | `140px` | The agent status's fixed width |
+| `--record-width` | `112px` (`124px` wide) | Record's fixed width: a mic and Record, or REC and the time (it never changes while recording) |
+| `--send-min-width` | `84px` | Send's least width (Send, Sending…) |
+| `--agent-status-width` | `140px` | Unused since the agent's name left the bar; kept for themes that set it |
 | `--sidebar-width` | `360px` (`400px` wide) | The comments column |
 | `--home-max-width` | `1480px` (`2000px` wide) | The home's content width |
 | `--card-min-width` | `260px` (`340px` wide) | The least width of a video card on the home |
@@ -258,13 +258,14 @@ Versioning). Classes and ids are not part of the API and can change in any relea
 | `tip` | The tip over the timeline | review |
 | `version-picker` | The version button | review |
 | `version-list` | The list of versions it opens | review |
-| `pens` | The pen colours and the eraser | review |
+| `pen-button` | The pen: one button, its pen in the colour you draw with (the eraser while that's on); it opens the pens | review |
+| `pens` | The pen's colours and the eraser, in what the pen button opens | review |
 | `pen` | One pen colour; `data-color` is its colour | review |
 | `eraser` | The eraser | review |
-| `record` | Record (bar, phone pill, phone round button) | review |
-| `send` | Send (the bar's one action) | review |
-| `agent-status` | The agent's name and dot next to Send | review |
-| `agent-menu` | What clicking the agent's status opens | review |
+| `record` | Record your voice: a microphone with the record dot; recording, a ring, REC and the time (bar, phone pill, phone round button) | review |
+| `send` | Send (the bar's one action); held, it lists the agents | review |
+| `agent-picker` | The agents a held Send lists, for that one send | review |
+| `send-notice` | The one line over Send when it can't reach an agent | review |
 | `keys` | The ? button | review |
 | `keys-sheet` | The keys it shows | review |
 | `hint` | The one-line hint | review |
@@ -277,18 +278,19 @@ Versioning). Classes and ids are not part of the API and can change in any relea
 | `flip` | Compare two versions (phone) | review |
 | `sidebar` | The comments column | review |
 | `sidebar-toggle` | The pill over the video that shows and hides it | review |
-| `tabs` | To do · Done | review |
+| `version-menu` | The version in the comments' header (`v8 ⌄`), a menu when there are more | review |
+| `version-menu-list` | The versions it lists, each with where its comments go and what's still to do (`v7 → v8 · 3 to do`) | review |
+| `tabs` | To do · Done (and an extension's tabs) | review |
 | `comment` | One comment; `data-state` is `open`, `working`, `question` or `done` | review |
 | `status` | A status: a dot and a word (in a comment, on a video card) | both |
+| `into` | Where a comment's edit goes (`→ v8`), next to its status | review |
 | `reply-box` | The field to answer the agent | review |
 | `question-card` | The agent's question under its comment (thumbnail, choices) | review |
 | `progress` | The strip at the bottom of the comments (recording, transcribing, undo) | review |
-| `version-strip` | The versions over the comments (`v1 … v7`, each with what's still to do) | review |
-| `earlier-versions` | The line saying what's still open on earlier versions | review |
 | `sketch` | A comment's drawing, small, on the still of its moment | review |
 | `more` | A ⋯ button | both |
 | `menu` | A menu a ⋯ opens | both |
-| `select` | A dropdown's button (in the agent menu) | review |
+| `select` | A dropdown's button (in Settings) | home |
 | `connect` | The "Connect your computer" command line and its Copy button | both |
 | `home` | The home page: the folder tree and the videos | home |
 | `nav` | The folder tree on the left (a drawer on a phone) | home |
@@ -304,7 +306,7 @@ Versioning). Classes and ids are not part of the API and can change in any relea
 | `nav-ext-action` | Its + (the extension's action, such as New idea) | home |
 | `nav-ext-video` | A video in that section (an idea: only an extension's version) | home |
 | `ext-slot` | Where an extension's UI mounts; `data-ext` is its id, `data-slot` the slot | home, review |
-| `comment-line` | The line to type a comment for the agent on an extension's version ("Comment for the agent…") | review |
+| `comment-line` | The comment box at the bottom of the comments ("Comment at 0:18 · goes into v8…", or "Comment for the agent…" on an extension's version) | review |
 | `brand` | The name (and logo) at the top left of the home | home |
 | `logo` | The theme's logo inside `brand` | home |
 | `brand-name` | The name inside `brand` | home |
@@ -321,6 +323,11 @@ Versioning). Classes and ids are not part of the API and can change in any relea
 
 `data-state` and `data-status` values are part of the API too: a comment's and a marker's `data-state` is `open`,
 `working`, `question` or `done`; a video card's `data-status` is the home's status word (spec/home.md).
+
+Renamed before the first release, the old name still on the new element (listed as deprecated in `api.json`, so
+`retake theme check` says what to use): `agent-status` is now `send-notice`, `agent-menu` is `agent-picker`,
+`version-strip` is `version-menu` and `earlier-versions` is `version-menu-list` (the agent's name left the bar, and the
+version strip became the comments' version menu).
 
 `web/src/theme/api.json` is the machine-readable list of parts and of deprecated names
 (`"deprecated": {"tokens": {"--old": {"use": "--new", "since": "2.0.0"}}, "parts": {…}}`); `retake theme init` and

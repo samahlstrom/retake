@@ -39,7 +39,11 @@
   <canvas id="freeze" bind:this={review.el.freeze} style:display={review.freezeShown ? 'block' : null}></canvas>
   <ImageLayer {review} />
   <AgentLayer {review} />
-  <canvas id="ink" class:pen={!!review.seg} class:erasing={review.eraser && review.canRecord} {@attach review.attachInk}
+  <canvas
+    id="ink"
+    class:pen={review.canRecord && !review.kindShown}
+    class:erasing={review.eraser && review.canRecord}
+    {@attach review.attachInk}
   ></canvas>
   {#if slotExt}
     <ExtSlot

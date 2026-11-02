@@ -98,8 +98,8 @@
     --bar-height: 64px;
     --bar-padding: 24px;
     --bar-gap: 18px;
-    --record-width: 172px;
-    --send-min-width: 136px;
+    --record-width: 112px;
+    --send-min-width: 84px;
     --agent-status-width: 140px;
     --sidebar-width: 360px;
     --home-max-width: 1480px;
@@ -114,7 +114,7 @@
       --bar-height: 76px;
       --bar-padding: 40px;
       --bar-gap: 28px;
-      --record-width: 188px;
+      --record-width: 124px;
       --sidebar-width: 400px;
       --home-max-width: 2000px;
       --card-min-width: 340px;

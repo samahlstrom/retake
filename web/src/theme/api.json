@@ -12,13 +12,14 @@
     "tip": "The tip over the timeline",
     "version-picker": "The version button",
     "version-list": "The list of versions it opens",
-    "pens": "The pen colours and the eraser",
+    "pen-button": "The pen: one button, its pen in the colour you draw with (the eraser while that's on); it opens the pens",
+    "pens": "The pen's colours and the eraser, in what the pen button opens",
     "pen": "One pen colour; data-color is its colour",
     "eraser": "The eraser",
-    "record": "Record (bar, phone pill, phone round button)",
-    "send": "Send (the bar's one action)",
-    "agent-status": "The agent's name and dot next to Send",
-    "agent-menu": "What clicking the agent's status opens",
+    "record": "Record your voice: a microphone with the record dot; recording, a ring, REC and the time (bar, phone pill, phone round button)",
+    "send": "Send (the bar's one action); held, it lists the agents",
+    "agent-picker": "The agents a held Send lists, for that one send",
+    "send-notice": "The one line over Send when it can't reach an agent",
     "keys": "The ? button",
     "keys-sheet": "The keys it shows",
     "hint": "The one-line hint",
@@ -31,19 +32,20 @@
     "flip": "Compare two versions (phone)",
     "sidebar": "The comments column",
     "sidebar-toggle": "The pill over the video that shows and hides it",
-    "tabs": "To do and Done",
+    "version-menu": "The version in the comments' header (v8 ⌄), a menu when there are more",
+    "version-menu-list": "The versions it lists, each with where its comments go and what's still to do",
+    "tabs": "To do · Done (and an extension's tabs)",
     "comment": "One comment; data-state is open, working, question or done",
     "status": "A status: a dot and a word (in a comment, on a video card)",
+    "into": "Where a comment's edit goes (→ v8), next to its status",
     "reply-box": "The field to answer the agent",
-    "comment-line": "The line to type a comment for the agent on an extension's version (Comment for the agent…)",
+    "comment-line": "The comment box at the bottom of the comments (Comment at 0:18 · goes into v8…, or Comment for the agent… on an extension's version)",
     "question-card": "The agent's question under its comment (thumbnail, choices)",
     "progress": "The strip at the bottom of the comments (recording, transcribing, undo)",
-    "version-strip": "The versions over the comments (v1 … v7, each with what's still to do)",
-    "earlier-versions": "The line saying what's still open on earlier versions",
     "sketch": "A comment's drawing, small, on the still of its moment",
     "more": "A ⋯ button",
     "menu": "A menu a ⋯ opens",
-    "select": "A dropdown's button (in the agent menu)",
+    "select": "A dropdown's button (in Settings)",
     "connect": "The Connect your computer command line and its Copy button",
     "home": "The home page: the folder tree and the videos",
     "nav": "The folder tree on the left of the home (a drawer on a phone)",
@@ -75,6 +77,23 @@
   },
   "deprecated": {
     "tokens": {},
-    "parts": {}
+    "parts": {
+      "agent-status": {
+        "use": "send-notice",
+        "since": "unreleased"
+      },
+      "agent-menu": {
+        "use": "agent-picker",
+        "since": "unreleased"
+      },
+      "version-strip": {
+        "use": "version-menu",
+        "since": "unreleased"
+      },
+      "earlier-versions": {
+        "use": "version-menu-list",
+        "since": "unreleased"
+      }
+    }
   }
 }

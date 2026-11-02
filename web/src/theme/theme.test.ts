@@ -29,8 +29,9 @@ const TOKEN_FILE = 'src/theme/tokens.css';
 const COLOUR_OK = new Set([TOKEN_FILE, 'src/lib/constants.ts', 'src/lib/theme.ts']);
 /** Files not themed yet (none: keep it that way). */
 const NOT_THEMED_YET = new Set<string>([]);
-/** Custom properties that aren't tokens but layout: a stage's aspect ratio, the tree's width and indent, Bits UI's. */
-const INTERNAL_VAR = /^--(ar|nav-w|depth|indent|bits-[a-z-]+)$/;
+/** Custom properties that aren't tokens but layout or live values: a stage's aspect ratio, the tree's width and indent,
+ * Record's voice level, Bits UI's. */
+const INTERNAL_VAR = /^--(ar|nav-w|depth|indent|level|bits-[a-z-]+)$/;
 
 const NAMED =
   'white|black|red|green|blue|yellow|orange|purple|pink|gr[ae]y|silver|navy|teal|maroon|olive|lime|aqua|fuchsia|gold|' +
@@ -165,6 +166,8 @@ describe('the cascade', () => {
 
 describe('the parts (data-part)', () => {
   const used = new Map<string, string[]>();
+  /** Every data-part value, as written on an element (its names together). */
+  const all: string[][] = [];
   for (const [path, text] of Object.entries(files)) {
     if (!path.endsWith('.svelte')) continue;
     const markup = markupOf(text);
@@ -176,23 +179,34 @@ describe('the parts (data-part)', () => {
       ),
     ];
     for (const value of values) {
+      all.push(value.split(/\s+/).filter(Boolean));
       for (const name of value.split(/\s+/).filter(Boolean)) used.set(name, [...(used.get(name) ?? []), path]);
     }
   }
   const documented = Object.keys(api.parts);
 
-  it('are all documented in api.json', () => {
-    expect([...used.keys()].filter((p) => !documented.includes(p))).toEqual([]);
+  it("are all documented in api.json (a renamed part's old name, still on its element, as deprecated)", () => {
+    const deprecated = Object.keys(api.deprecated.parts);
+    expect([...used.keys()].filter((p) => !documented.includes(p) && !deprecated.includes(p))).toEqual([]);
+  });
+  it("keep a renamed part's old name on the element that has the new one", () => {
+    for (const [old, d] of Object.entries(api.deprecated.parts as Record<string, { use: string }>)) {
+      expect(used.has(old), old).toBe(true);
+      for (const names of all.filter((n) => n.includes(old))) expect(names, `${old} → ${d.use}`).toContain(d.use);
+    }
   });
   it('are all still on the page (a documented part is only removed in a major release)', () => {
     const deprecated = Object.keys(api.deprecated.parts);
     expect(documented.filter((p) => !used.has(p) && !deprecated.includes(p))).toEqual([]);
   });
   it('cover what the spec promises', () => {
-    for (const p of ['bar', 'play', 'timeline', 'marker', 'version-picker', 'pens', 'record', 'send', 'agent-status']) {
+    for (const p of ['bar', 'play', 'timeline', 'marker', 'version-picker', 'pen-button', 'pens', 'record', 'send']) {
       expect(used.has(p), p).toBe(true);
     }
-    for (const p of ['agent-menu', 'sidebar', 'tabs', 'comment', 'status', 'reply-box', 'question-card']) {
+    for (const p of ['comment-line', 'version-menu', 'agent-picker', 'send-notice', 'into', 'sidebar', 'tabs']) {
+      expect(used.has(p), p).toBe(true);
+    }
+    for (const p of ['comment', 'status', 'reply-box', 'question-card']) {
       expect(used.has(p), p).toBe(true);
     }
     for (const p of ['agent-visuals', 'home-grid', 'video-card', 'connect-card', 'toast', 'brand', 'logo', 'nav']) {

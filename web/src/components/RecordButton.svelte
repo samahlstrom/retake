@@ -1,22 +1,33 @@
 <script lang="ts">
-  // R, in the bar: one fixed-width button. Idle it says Record and its key; recording, it shows the elapsed time, the
-  // live waveform (your mic is working) and the segment. Its width never changes, so nothing in the bar moves.
+  // R, in the bar: record your voice. Idle, a microphone with the red record dot and "Record"; recording, a red ring
+  // that follows your voice (the mic works), REC and the time, and a stop square. One fixed width, so nothing in the
+  // bar moves when it starts or stops. Recording is optional: the pen and the comment box work without it.
   import type { Review } from '../lib/review.svelte';
+  import MicGlyph from './MicGlyph.svelte';
 
   let { review }: { review: Review } = $props();
 
   const seg = $derived(review.seg);
   const recClass = $derived(seg ? 'on' : review.starting ? 'wait' : '');
-  const label = $derived(seg ? `REC ${review.recElapsed}` : review.starting ? 'Mic…' : 'Record');
-  const recTitle = $derived(
-    seg ? `Recording segment ${seg.id}. Press R to stop.` : 'Press R to record your voice and pen',
-  );
+  const name = $derived(seg ? 'Stop recording (R)' : 'Record voice (R)');
 </script>
 
-<button id="rec" data-part="record" aria-label="Record" class={recClass} title={recTitle} onclick={review.toggleRec}
-  ><span class="dot"></span><span id="recLabel">{label}</span><canvas
-    id="wave"
-    title="Your voice (live while recording)"
-    bind:this={review.el.wave}
-  ></canvas><span class="k" id="recKey">{seg ? seg.id : 'R'}</span></button
+<button
+  id="rec"
+  data-part="record"
+  class={recClass}
+  aria-label={name}
+  aria-pressed={!!seg}
+  title={name}
+  onclick={review.toggleRec}
+  bind:this={review.el.rec}
 >
+  {#if seg}
+    <span class="ring" aria-hidden="true"></span><span id="recLabel">REC {review.recElapsed}</span><span
+      class="stop"
+      aria-hidden="true"
+    ></span>
+  {:else}
+    <MicGlyph /><span id="recLabel">{review.starting ? 'Mic…' : 'Record'}</span>
+  {/if}
+</button>

@@ -8,6 +8,7 @@ import {
   forVersion,
   heading,
   historyLabels,
+  intoVersion,
   markOf,
   MARKS,
   presence,
@@ -17,6 +18,7 @@ import {
   todoByVersion,
   toggleLabel,
   toRow,
+  typedStrokes,
   versionOf,
   versionStrip,
   visible,
@@ -420,7 +422,15 @@ describe('comments belong to the version they were made on', () => {
     const withDrafts = [...family, { label: 'v8-draft2' }, { label: 'v8-draft3' }];
     const strip = versionStrip(withDrafts, 'v8-draft2', new Map([['v8', 1]]));
     expect(strip).toHaveLength(8);
-    expect(strip.at(-1)).toEqual({ version: 'v8', name: 'v8', label: 'v8-draft3', drafting: true, todo: 1, on: true });
+    expect(strip.at(-1)).toEqual({
+      version: 'v8',
+      name: 'v8',
+      label: 'v8-draft3',
+      drafting: true,
+      todo: 1,
+      on: true,
+      into: 'v9',
+    });
     // A single version and its draft: that's two, so there is a strip.
     expect(versionStrip([{ label: 'v1' }, { label: 'v2-draft1' }], 'v1', new Map()).map((e) => e.version)).toEqual([
       'v1',
@@ -499,5 +509,59 @@ describe('comments belong to the version they were made on', () => {
     // Nothing earlier to do: no line.
     expect(earlierOpen(versionStrip(family, 'v7', new Map([['v7', 2]])))).toEqual([]);
     expect(earlierOpen([])).toEqual([]);
+  });
+});
+
+describe('a comment on vN becomes an edit in vN+1', () => {
+  it('names the version a comment goes into: v7 → v8, a draft of v8 → v9, nothing for a label that isn’t vN', () => {
+    expect(intoVersion('v7')).toBe('v8');
+    expect(intoVersion('v8-draft2')).toBe('v9');
+    expect(intoVersion('v12')).toBe('v13');
+    expect(intoVersion('final')).toBeNull();
+    expect(intoVersion(null)).toBeNull();
+  });
+  it('each row knows it (the server’s `into` wins); a typed comment on a document has none', () => {
+    const ctx = { versions, shown: 'v8' };
+    expect(toRow(item({ version: 'v7' }), false, ctx).into).toBe('v8');
+    expect(toRow(item({ version: 'v7', into: 'v8' }), false, ctx).into).toBe('v8');
+    expect(toRow(item({ version: 'v7', into: 'v9' }), false, ctx).into).toBe('v9');
+    expect(toRow(item({}), false, ctx).into).toBe('v9'); // an untagged row is the shown version's
+    const doc = item({ version: 'v0', key: 'doc/1', anchor: { file: 'v0/a.md', line: 1 } });
+    expect(toRow(doc, false, { versions: [], shown: 'v0' }).into).toBeNull();
+  });
+  it('the version strip says where each version’s comments go', () => {
+    const strip = versionStrip([{ label: 'v6' }, { label: 'v7' }], 'v7', new Map([['v6', 3]]));
+    expect(strip.map((e) => [e.version, e.into, e.todo])).toEqual([
+      ['v6', 'v7', 3],
+      ['v7', 'v8', 0],
+    ]);
+  });
+});
+
+describe('a typed comment on a video', () => {
+  const lines = [
+    { color: 'yellow', points: [[0.1, 0.2] as [number, number], [0.3, 0.4] as [number, number]], t: 4.25 },
+    { color: 'red', points: [[0.5, 0.5] as [number, number]] },
+    { color: 'white', points: [] },
+  ];
+  it('has its moment (it wants a version) and its own lines, each at its time', () => {
+    const it = item({ id: 9, version: 'v8', t0: 4, t1: 4, key: 'doc/3', wants: 'version', strokes: lines });
+    const row = toRow(it, false, { versions, shown: 'v8' });
+    expect(row.typed).toBe(false);
+    expect(row.time).toBe('0:04');
+    expect(row.strokes).toEqual([
+      {
+        video_t: 4.25,
+        color: 'yellow',
+        points: [
+          [0.1, 0.2],
+          [0.3, 0.4],
+        ],
+      },
+      { video_t: 4, color: 'red', points: [[0.5, 0.5]] },
+    ]);
+    expect(typedStrokes({ strokes: null, t0: 1, version: 'v8' })).toEqual([]);
+    // A comment made from a take has no lines of its own: its drawings come from the take's history.
+    expect(toRow(item({ version: 'v8', drawings: ['red'] }), false, { versions, shown: 'v8' }).strokes).toBeUndefined();
   });
 });

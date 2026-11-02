@@ -151,20 +151,27 @@ export function agentStatus(a: AutomationState | null, now: number): AgentStatus
   };
 }
 
-/** What the agent status next to the button says. The owner is told what to do about a missing computer; everyone
- * else only that the agent is away (their Send still queues). */
-export function statusText(s: AgentStatus, owner: boolean): string {
-  if (s.online && !s.blocked) return s.agent || 'Agent';
-  if (s.local && s.blocked) return 'Agent unavailable';
-  if (!owner) return 'Agent offline';
-  return s.worker ? 'Computer offline' : 'Connect computer';
+/** The one quiet line over Send when it can't reach an agent (spec/automation.md, "No agent menu in the bar"): the
+ * local worker's `blocked` reason; on a hosted project with no computer online, for the owner, that one isn't
+ * connected (with a link to Settings), and for anyone else that sends still queue. Nothing when Send works. */
+export interface SendNotice {
+  text: string;
+  /** The owner can fix it in Settings (connect a computer). */
+  settings: boolean;
+}
+export function sendNotice(s: AgentStatus, owner: boolean): SendNotice | null {
+  if (!s.available) return null;
+  if (s.local && s.blocked) return { text: s.blocked, settings: false };
+  if (s.online || s.local) return null;
+  if (!owner) return { text: 'The editing computer is offline. Send still queues.', settings: false };
+  return { text: s.worker ? 'The editing computer is offline' : 'No editing computer connected', settings: true };
 }
 
 // ---------------------------------------------------------------- the primary button
 
 export interface SendInput {
-  /** Runs the agent here: chooses it and connects computers (the owner; an older server without roles). */
-  owner: boolean;
+  /** Kept for older callers; the button is the same for everyone who can record. */
+  owner?: boolean;
   status: AgentStatus;
   /** The reviewer recorded something this take and hasn't finished it yet. */
   takeOpen: boolean;
@@ -179,31 +186,36 @@ export interface SendInput {
 /**
  * - `send`: finish the take with `send: true` and submit the other open notes. With no computer online they queue
  *   and start when one connects.
- * - `save`: local mode whose built-in worker can't edit (`blocked`): finish the take without sending it. The agent
- *   menu (the status next to the button) says what's missing; it doesn't pop up by itself.
+ * - `save`: local mode whose built-in worker can't edit (`blocked`): finish the take without sending it. The notice
+ *   over Send says what's missing.
  * - `none`: nothing new to send; say so.
  */
 export type SendAction = 'send' | 'save' | 'none';
 
 export interface SendButton {
+  /** What it says: Send, Sending…, Saving…, Sent or Saved. Never an agent's name, never a count. */
   label: string;
   action: SendAction;
-  /** Pressing it also opens the agent menu: the owner with no computer online sees how to connect one. */
-  opens: boolean;
+  /** Its tooltip and accessible name: what a press does, with the count ("Send 3 comments to the agent"). */
+  title: string;
 }
 
 /** Runs the agent: the owner, or an older server without roles (the owner's own `retake open`). Everyone who can
- * record sends; only this one chooses the agent and connects computers. */
+ * record sends; only this one changes the agent and connects computers (in Settings). */
 export const managesAgent = (role: Role | null): boolean => role === null || role === 'owner';
 
 /** The bar's one button, the same for everyone who can record (a viewer has none). */
 export function sendButton(i: SendInput): SendButton {
   const s = i.status;
   const blocked = !!(s.local && s.blocked);
-  const label = i.unsent > 0 ? `Send ${i.unsent} to agent` : 'Send to agent';
-  const opens = !blocked && i.owner && s.available && !s.online;
-  if (i.finishing) return { label: blocked ? 'Saving…' : 'Sending…', action: 'none', opens: false };
-  if (blocked) return { label: i.saved && !i.takeOpen ? 'Saved' : label, action: 'save', opens };
-  if (i.takeOpen || i.unsent > 0) return { label, action: 'send', opens };
-  return { label: i.sent ? 'Sent' : i.saved ? 'Saved' : label, action: 'none', opens };
+  const n = i.unsent;
+  const what =
+    n === 1 ? 'Send 1 comment to the agent' : n > 1 ? `Send ${n} comments to the agent` : 'Send to the agent';
+  if (i.finishing) {
+    const label = blocked ? 'Saving…' : 'Sending…';
+    return { label, action: 'none', title: label };
+  }
+  if (blocked) return { label: i.saved && !i.takeOpen ? 'Saved' : 'Send', action: 'save', title: `Save. ${s.blocked}` };
+  if (i.takeOpen || n > 0) return { label: 'Send', action: 'send', title: what };
+  return { label: i.sent ? 'Sent' : i.saved ? 'Saved' : 'Send', action: 'none', title: 'Nothing new to send' };
 }
