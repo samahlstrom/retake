@@ -20,6 +20,10 @@ export interface CommentStatus {
   waiting: string | null;
 }
 
+/** A task's notes still to do: not finished in an earlier attempt, nor dropped from the batch. */
+export const pendingNotes = (task: Pick<EditingTask, 'notes' | 'done' | 'dropped'>): number[] =>
+  task.notes.filter((id) => !task.done?.includes(id) && !task.dropped?.includes(id));
+
 /** The task that owns a comment, if it is still running or waiting (a finished or cancelled one owns nothing). */
 export const activeTask = (task: EditingTask | null | undefined): EditingTask | null =>
   task && task.state !== 'completed' && task.state !== 'cancelled' ? task : null;
@@ -114,6 +118,10 @@ export interface AgentStatus {
   agent: string;
   /** A task is running or stopping right now. */
   working: boolean;
+  /** The comments the agent works on now (0 when none runs), and the ones sent meanwhile that wait to join that same
+   * working version (spec/automation.md, "Batches"). */
+  batch: number;
+  next: number;
   /** Local mode only: why the in-process worker can't edit (no agent installed, no timeline…), or "". */
   blocked: string;
 }
@@ -127,6 +135,8 @@ export function agentStatus(a: AutomationState | null, now: number): AgentStatus
       online: false,
       agent: '',
       working: false,
+      batch: 0,
+      next: 0,
       blocked: '',
     };
   }
@@ -140,15 +150,29 @@ export function agentStatus(a: AutomationState | null, now: number): AgentStatus
   const agents = worker?.agents ?? [];
   const agent = agents.find((p) => p.id === a.config?.agent && worker?.id === a.config?.worker) ?? agents[0] ?? null;
   const blocked = (typeof a.blocked === 'string' && a.blocked) || worker?.blocked || '';
+  const tasks = a.tasks ?? [];
+  const running = tasks.find((t) => t.state === 'running' || t.state === 'stopping');
+  const queued = tasks.filter((t) => t.state === 'queued');
   return {
     available: true,
     local: typeof a.local === 'boolean' ? a.local : null,
     worker,
     online,
     agent: agent?.name ?? '',
-    working: (a.tasks ?? []).some((t) => t.state === 'running' || t.state === 'stopping'),
+    working: !!running,
+    batch: running ? pendingNotes(running).length : 0,
+    next: running ? queued.reduce((n, t) => n + pendingNotes(t).length, 0) : 0,
     blocked,
   };
+}
+
+const comments = (n: number) => (n === 1 ? '1 comment' : `${n} comments`);
+
+/** The comments column's line while a batch runs: "Agent working on 3 comments · 2 more coming" (sent meanwhile, on
+ * their way into the same version). Null when none runs. */
+export function batchLine(s: AgentStatus): string | null {
+  if (!s.batch) return null;
+  return `Agent working on ${comments(s.batch)}${s.next ? ` · ${s.next} more coming` : ''}`;
 }
 
 /** What the agent status next to the button says. The owner is told what to do about a missing computer; everyone

@@ -14,6 +14,7 @@
   import ExtSlot from '../../ext/ExtSlot.svelte';
   import AgentStatus from '../AgentStatus.svelte';
   import { composeKey } from '../../lib/notes/typed';
+  import { batchLine } from '../../lib/status';
   import './sidebar.css';
 
   let { review }: { review: Review } = $props();
@@ -36,6 +37,8 @@
   const asking = $derived(review.versionRows.some((row) => review.statusOf(row).state === 'question'));
   const working = $derived(review.versionRows.some((row) => review.statusOf(row).state === 'working'));
   const dot = $derived(job?.error ? 'err' : job ? 'busy' : asking ? 'q' : working ? 'w' : '');
+  /** "Agent working on 3 comments": the batch the agent works on, as one group. */
+  const batch = $derived(batchLine(review.agent));
   /** A phone: the pill is an icon and the to-do count (only the icon at 0), so it fits beside the slot's ⋯. */
   const compact = $derived(review.layoutMode !== 'desktop');
   const setOpen = (v: boolean) => {
@@ -316,6 +319,9 @@
                     ? 'Recording.'
                     : 'Recording. Comments appear here as you talk.'}
                 </div>
+              {:else if batch}
+                <!-- The agent's batch, as one group: one line while it works (spec/automation.md, "Batches"). -->
+                <div class="batch-line" role="status"><span class="pulse"></span>{batch}</div>
               {/if}
             </div>
           {/if}

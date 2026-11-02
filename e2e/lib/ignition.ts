@@ -19,8 +19,9 @@ process.stdout.write(JSON.stringify({ words: words.map((w, i) => ({ w: ' ' + w, 
  * - for a comment that wants a version (Start v1): writes a 2 s video to $RETAKE_OUTPUT and v0/cuts/v1.json;
  * - otherwise, on its first attempt: keeps the person's words and adds `## Outline` and `## Script` (with `### Cold
  *   open` and `### The trick`) when the document has no script yet, asks about "Cold open" with `retake ask --file v0/<video>_v0.md --heading "Cold open"`
- *   and two options with a picture each (v0/images/jump.png and shop.png, made with ffmpeg), and reports; on a later
- *   attempt (the answer came back): writes the answer into the script's cold open and reports.
+ *   and two options with a picture each (v0/images/jump.png and shop.png, made with ffmpeg), and reports; once the
+ *   answer is in its context (a later attempt, or a follow-up round of this one): writes it into the script's cold
+ *   open and reports.
  */
 const AGENT = `import { execFileSync } from 'node:child_process';
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -37,7 +38,7 @@ if (mine.some((n) => n.detail && n.detail.wants === 'version')) {
   writeFileSync('v0/cuts/v1.json', JSON.stringify({ version: 'v1', sections: [
     { heading: 'Cold open', from: 0, to: 1 }, { heading: 'The trick', from: 1, to: 2 }] }));
   report('Built the first cut from the script');
-} else if (ctx.task.attempt === 1) {
+} else if (!(ctx.questions ?? []).some((q) => q.answer)) { // until the answer is in its context (a later attempt or round)
   if (!text.includes('## Script')) writeFileSync(doc, text.trimEnd() + '\\n\\n## Outline\\n\\n- Cold open: the jump, cold.\\n- The trick: why timing matters.\\n\\n'
     + '## Script\\n\\n### Cold open\\n\\n[The jump.] So the idea is the jump.\\n\\n### The trick\\n\\nTime it.\\n');
   // Two pictures to choose from, kept next to the document (v0/images/), as an agent asks an image decision.

@@ -61,6 +61,7 @@ export const PORTS = {
   ext: PORT_BASE + 4, // 17-ext, after 05-sidebar and 09-server
   ignition: PORT_BASE + 5, // 18, after 06-mobile and 10-eraser
   ignitionHosted: PORT_BASE + 7, // 18, after 07-share's proxy
+  batch: PORT_BASE + 1, // 20, after 03-crash-safety
 } as const;
 
 /** retake-edit, for the specs that render with the editor: $RETAKE_EDIT, else the repo's release build, else $PATH. */
