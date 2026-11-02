@@ -64,6 +64,7 @@ func TestRoot(t *testing.T) {
 		"lonely/renders/clip_v3.mp4", "lonely/other/unrelated_v1.mp4",
 		"plain/folder/movie.mp4",
 		"upper/V12/a.mp4",
+		"streams/v2905683033/v2905683033.mp4",
 	} {
 		touch(t, filepath.Join(base, f))
 	}
@@ -77,6 +78,9 @@ func TestRoot(t *testing.T) {
 		{"tutorial/v6/tutorial_v6.mp4", "tutorial"},          // every member finds the same root
 		{"nested/old/clip_v2.mov", "nested"},                 // ... from either side
 		{"plain/folder/../folder/movie.mp4", "plain/folder"}, // (callers pass cleaned paths; Dir cleans anyway)
+
+		// More than 4 digits after the v is an ID (a Twitch video's), not a version folder.
+		{"streams/v2905683033/v2905683033.mp4", "streams/v2905683033"},
 	} {
 		got := Root(filepath.Join(base, tc.video))
 		if want := filepath.Join(base, tc.root); got != want {

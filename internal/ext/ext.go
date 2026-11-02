@@ -283,7 +283,7 @@ var (
 	toolRE    = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`)
 	semverRE  = regexp.MustCompile(`^(\d+)\.(\d+)\.(\d+)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$`)
 	routeRE   = regexp.MustCompile(`^[A-Za-z0-9._~/-]{0,200}$`)
-	versionRE = regexp.MustCompile(`(?i)^v\d+$`) // a version folder: v7, V12 (project.IsVersionDir)
+	versionRE = regexp.MustCompile(`(?i)^v\d{1,4}$`) // a version folder: v7, V12 (project.IsVersionDir)
 )
 
 // ValidID reports whether id is an extension id: ^[a-z][a-z0-9-]{0,31}$.

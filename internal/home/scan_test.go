@@ -20,6 +20,38 @@ func places(list []Found) []string {
 	return out
 }
 
+// TestScanLeavesRecordingsOut: a streams folder of OBS recordings (named for their date and time) and Twitch downloads
+// (an ID after the v, alone or with a clip's range, one in a folder named for it), beside a real project. Only the
+// project is a video: a recording never shows as a family at a made-up version like v2903906005 (spec/api.md,
+// "Detection").
+func TestScanLeavesRecordingsOut(t *testing.T) {
+	top := filepath.Join(t.TempDir(), "Videos")
+	old := time.Now().Add(-time.Hour)
+	for _, rel := range []string{
+		"streams/2026-10-17 21-30-05.mp4",
+		"streams/2026-10-17 23-02-11.mkv",
+		"streams/2026-10-17/2026-10-17 21-30-05.mp4",
+		"streams/2026-10-17/twitch_v2903906005_3480-4520.mp4",
+		"streams/2026-10-17/twitch_v2903906005_5100-5400.mp4",
+		"streams/2026-10-19/v2905618565.mp4",
+		"streams/2026-10-19/v2905683033/v2905683033.mp4",
+		"streams/2026-10-19/evidence/work/v2905618565_mix.mp4",
+		"item-shop/v8/itemshop_v8.mp4",
+	} {
+		touch(t, filepath.Join(top, filepath.FromSlash(rel)), old)
+	}
+	scan := ScanDir(top)
+	want := []string{"item-shop item-shop  itemshop_v8.mp4"}
+	if got := places(scan.Videos); !reflect.DeepEqual(got, want) {
+		t.Errorf("videos:\n got %q\nwant %q", got, want)
+	}
+	for _, v := range scan.Videos {
+		if strings.Contains(v.Anchor, "2903906005") || strings.Contains(v.Anchor, "21-30-05") {
+			t.Errorf("a recording is a video: %+v", v)
+		}
+	}
+}
+
 // TestScanTree: a folder like a video maker's, with dated folders, a project with versions in vN folders and more
 // videos in its shorts folders, junk folders, a timeline project without a version, and a video too deep.
 func TestScanTree(t *testing.T) {

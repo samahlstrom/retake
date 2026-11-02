@@ -35,7 +35,9 @@ The home is the folder as a tree: **folders** that organize, **projects** in the
     `*.review`; one level, where version folders are: `C/v3/clip_v3.mp4`);
   - and `project.Root(file) == C`. So `deadlock/item-shop/v6/itemshop_v6.mp4` puts a video at `item-shop` (its `v6`
     folder is a version folder), `macro/macro_v2_roughcut.mp4` one at `macro`, and a folder of unnumbered clips
-    (`broll/`) holds none.
+    (`broll/`) holds none. Nor does a folder of recordings named for their date and time (OBS's
+    `2026-10-17 21-30-05.mp4`) or for an ID with a v (`twitch_v2903906005_3480-4520.mp4`): a version number has at
+    most 4 digits (spec/api.md, "Detection"), so they never look like one video at a made-up version.
 
   One folder holds one video: its store is the folder's `.retake/`. A folder with two families side by side
   (`a_v1.mp4` and `b_v1.mp4`) shows the one with the newest version, as before (per-video stores will lift this).
@@ -360,7 +362,7 @@ One link for the whole home, as `retake share <video>` makes one for a review (s
 ## Tests
 
 - Go: discovery in a folder (version folders, flat families, the folder itself, hidden, `.review` and unnumbered
-  files left out, names and collisions), the scan of a tree (nested folders, `vN/` folders, a project's `shorts/`,
+  files left out, date-and-time recordings and long ID numbers left out, names and collisions), the scan of a tree (nested folders, `vN/` folders, a project's `shorts/`,
   junk folders, the depth limits, links, a big generated tree in well under a second), the tree built from paths,
   the status rules, thumbnail caching (made once, remade for a changed file, the poster beside the file first),
   `/api/home` (status, thumbnail URL, newest version, order, the tree, local and hosted alike), `retake connect`

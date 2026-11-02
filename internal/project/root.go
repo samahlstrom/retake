@@ -12,8 +12,9 @@ import (
 	"github.com/samahlstrom/retake/internal/family"
 )
 
-// versionDirRE matches a version folder name: v7, V12.
-var versionDirRE = regexp.MustCompile(`(?i)^v\d+$`)
+// versionDirRE matches a version folder name: v7, V12; a version number has at most 4 digits (family.MaxVersion), so
+// v2903906005 (a video's ID) isn't one.
+var versionDirRE = regexp.MustCompile(`(?i)^v\d{1,4}$`)
 
 // IsVersionDir reports whether a folder name looks like a version folder (v<N>).
 func IsVersionDir(name string) bool { return versionDirRE.MatchString(name) }

@@ -45,6 +45,19 @@ func TestParseStem(t *testing.T) {
 		{"clipv6", false, Name{}},
 		{"_v6", false, Name{}},
 		{"clip", false, Name{}},
+		// A version number has at most 4 digits; a longer one is an ID (a Twitch video's), and a recording named
+		// for its date and time (OBS) has none.
+		{"clip_v9999", true, Name{"clip", 9999, ""}},
+		{"clip_v0012_draft", true, Name{"clip", 12, "_draft"}},
+		{"2026-10-17_v3", true, Name{"2026-10-17", 3, ""}},
+		{"clip_v10000", false, Name{}},
+		{"twitch_v2903906005_3480-4520", false, Name{}},
+		{"twitch_v2903906005", false, Name{}},
+		{"v2905618565", false, Name{}},
+		{"v2905618565_mix", false, Name{}},
+		{"2026-10-17 21-30-05", false, Name{}},
+		{"2026-10-17_21-30-05", false, Name{}},
+		{"Replay 2026-10-17 21-30-05", false, Name{}},
 	} {
 		got, ok := ParseStem(tc.stem)
 		if ok != tc.ok || got != tc.want {

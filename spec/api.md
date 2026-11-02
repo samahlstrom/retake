@@ -25,8 +25,11 @@ it talks to.
 A *version family* is a set of video files that are versions of the same edit. The opened file is the *current*
 version.
 
-- **Detection** (no `--versions` flag): the stem must match `^(?P<prefix>.+?)[_\-]v(?P<n>\d+)(?P<rest>(?:[_\-].*)?)$`
-  (case-insensitive). Search the opened file's folder and every sibling folder of it (folders under the parent),
+- **Detection** (no `--versions` flag): the stem must match `^(?P<prefix>.+?)[_\-]v(?P<n>\d{1,4})(?P<rest>(?:[_\-].*)?)$`
+  (case-insensitive). A version number is 1 to 4 digits (at most 9999); a longer number is an ID, not a version, so
+  `twitch_v2903906005_3480-4520.mp4` (a Twitch video's ID) has no version number. Neither has a name that is only a
+  date and time, such as an OBS recording's `2026-10-17 21-30-05.mp4`: a folder of recordings holds no video
+  (spec/home.md). A version folder is `v<N>` with the same N (`v7`, `V12`, not `v2903906005`). Search the opened file's folder and every sibling folder of it (folders under the parent),
   skipping folders that end in `.review`. Keep files with a video extension (`.mp4 .m4v .mov .webm .mkv`, plus `.m3u8`
   in the new server) whose prefix matches case-insensitively.
 - **One file per version number.** For the opened version, the opened file wins. For the others, a plain

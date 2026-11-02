@@ -17,8 +17,13 @@ import (
 	"github.com/samahlstrom/retake/internal/probe"
 )
 
-// verRE splits a file stem into prefix, version number and the rest ("clip", "7", "_0-010_preview").
-var verRE = regexp.MustCompile(`(?i)^(.+?)[_\-]v(\d+)((?:[_\-].*)?)$`)
+// MaxVersion is the highest version number: 4 digits (spec/api.md, "Detection"). A longer number after a v is an ID,
+// such as a Twitch video's (twitch_v2903906005_3480-4520.mp4), not a version.
+const MaxVersion = 9999
+
+// verRE splits a file stem into prefix, version number and the rest ("clip", "7", "_0-010_preview"). The number has 1
+// to 4 digits and ends the stem or comes before a separator.
+var verRE = regexp.MustCompile(`(?i)^(.+?)[_\-]v(\d{1,4})((?:[_\-].*)?)$`)
 
 // ContentTypes maps the video extensions a family may contain to their HTTP content type.
 var ContentTypes = map[string]string{
@@ -62,15 +67,16 @@ type Name struct {
 	Rest   string // "_0-010_preview"; empty for the plain file
 }
 
-// ParseStem parses a file stem such as "clip_v7_0-010_preview". ok is false if it has no version number.
+// ParseStem parses a file stem such as "clip_v7_0-010_preview". ok is false if it has no version number: none, or
+// one past MaxVersion (an ID), so a recording named for its date and time or a video's ID is never a version.
 func ParseStem(stem string) (Name, bool) {
 	m := verRE.FindStringSubmatch(stem)
 	if m == nil {
 		return Name{}, false
 	}
 	n, err := strconv.Atoi(m[2])
-	if err != nil {
-		return Name{}, false // more digits than an int holds: not a version number we can use
+	if err != nil || n > MaxVersion {
+		return Name{}, false
 	}
 	return Name{Prefix: m[1], N: n, Rest: m[3]}, true
 }
