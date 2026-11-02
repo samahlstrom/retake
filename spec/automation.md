@@ -527,7 +527,8 @@ because a comment on the one before asked for changes.
 - **Choosing the agent for one send.** Holding Send (about 500 ms, mouse or touch; a right-click too) opens a small
   list of the agents the editing computer offers, when it offers more than one: the pick goes as `agent` on that
   send's `/done` body and its `POST /api/automation/tasks` (any role that can record; the server takes it only when
-  the selected worker offers it, else the configured agent). With one agent, holding Send is a plain Send.
+  the selected worker offers it, else the configured agent; a send that joins a task already waiting keeps that
+  task's agent). With one agent, holding Send is a plain Send.
 - **No agent menu in the bar.** The agent, its fallback, where agents run and connecting a computer are in Settings
   (the home's left nav, spec/home.md). Only where Send can't reach an agent does one quiet line say so, over the bar's
   right end: "No editing computer connected · Settings" for the owner of a hosted project with no computer online,

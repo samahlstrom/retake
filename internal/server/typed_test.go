@@ -7,6 +7,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -121,15 +122,41 @@ func TestASendPicksItsAgent(t *testing.T) {
 		}
 		ids = append(ids, it.ID)
 	}
-	for i, c := range []struct{ agent, want string }{{"codex", "codex"}, {"untrusted", "claude"}, {"", "claude"}} {
-		body := fmt.Sprintf(`{"notes": [%d], "agent": %q}`, ids[i], c.agent)
-		if r := h.post("/api/automation/tasks", body, h.origin()); r.code != 200 {
+	send := func(id int64, agent string) project.EditingTask {
+		t.Helper()
+		if r := h.post("/api/automation/tasks", fmt.Sprintf(`{"notes": [%d], "agent": %q}`, id, agent), h.origin()); r.code != 200 {
 			t.Fatalf("send: %d %s", r.code, r.body)
 		}
 		a, _ := st.Automation()
-		if got := a.Tasks[len(a.Tasks)-1]; got.Agent != c.want {
-			t.Fatalf("agent %q: the task runs %q", c.agent, got.Agent)
+		for _, j := range a.Tasks {
+			if slices.Contains(j.Notes, id) {
+				return j
+			}
 		}
+		t.Fatalf("note %d has no task: %+v", id, a.Tasks)
+		return project.EditingTask{}
+	}
+	// An agent the computer doesn't offer: the configured one.
+	if got := send(ids[0], "untrusted"); got.Agent != "claude" {
+		t.Fatalf("an unknown agent: the task runs %q", got.Agent)
+	}
+	finish := func() {
+		if err := st.UpdateAutomation(func(a *project.AutomationState) (bool, error) {
+			for i := range a.Tasks {
+				a.Tasks[i].State = "completed"
+			}
+			return true, nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	finish()
+	// An offered one: the new task runs it, and a send that joins that waiting task keeps its agent.
+	if got := send(ids[1], "codex"); got.Agent != "codex" {
+		t.Fatalf("a picked agent: the task runs %q", got.Agent)
+	}
+	if got := send(ids[2], ""); got.Agent != "codex" || !slices.Contains(got.Notes, ids[1]) {
+		t.Fatalf("a send joining the waiting task: %+v", got)
 	}
 	// A take finished with a picked agent keeps it for when its notes are ready.
 	h.saveTake(take, "v6")
