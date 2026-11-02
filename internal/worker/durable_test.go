@@ -1,8 +1,11 @@
 package worker
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,7 +15,9 @@ import (
 	"time"
 
 	"github.com/samahlstrom/retake/internal/ext"
+	"github.com/samahlstrom/retake/internal/probe"
 	"github.com/samahlstrom/retake/internal/project"
+	"github.com/samahlstrom/retake/internal/server"
 	"github.com/samahlstrom/retake/internal/testmedia"
 )
 
@@ -476,5 +481,71 @@ func TestInFlightAndSnapshotState(t *testing.T) {
 	edits, err := ext.ResumeSnap(root, st).Finish()
 	if err != nil || len(edits) != 1 || edits[0].Path != "v0/script.md" || edits[0].Task != "t1" {
 		t.Fatalf("%+v %v", edits, err)
+	}
+}
+
+// TestRestartingRetakeOpenTakesTheAgentBack is retake open's restart: the server with its worker in process (the same
+// session each time) closes while its agent works in herdr, and a new one on the same folder takes the attempt back
+// at once and finishes it.
+func TestRestartingRetakeOpenTakesTheAgentBack(t *testing.T) {
+	testmedia.Need(t)
+	dir := fakeViews(t)
+	p, barrier := herdrBatch(t, OpenHerdr)
+	local := filepath.Join(scratchDir(t, "durable-local-"), "shop")
+	testmedia.Video(t, filepath.Join(local, "shop_v1.mp4"), 2)
+	st, err := project.Open(local)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	if _, err = st.Sync(project.Run{Version: "v1", Comments: []project.Comment{{Key: "n1", Text: "Fix it", T0: 0, T1: 0.5}}}); err != nil {
+		t.Fatal(err)
+	}
+	log := &syncLog{}
+	open := func() *server.Server {
+		srv := server.New(server.Options{Root: local, Video: filepath.Join(local, "shop_v1.mp4"), Store: st, FollowNewest: true,
+			Prober: probe.New(io.Discard),
+			LocalWorker: func(ctx context.Context, root string, h http.Handler, blocked func(string)) {
+				Local(ctx, Options{Root: root, Log: log}, func() []Profile { return []Profile{p} }, h, blocked)
+			}})
+		t.Cleanup(func() { _ = srv.Close() })
+		return srv
+	}
+	v := &batchVideo{st: st, local: local, log: log}
+	first := open()
+	v.wait(t, "the worker", func(a project.AutomationState) bool { return a.Config.Worker != "" })
+	v.send(t, 1)
+	waitFor(t, "the agent's line", log, func() bool { return len(lines(t, filepath.Join(barrier, "launches"))) == 1 })
+	waitFor(t, "the record", log, func() bool { rec := v.record(t); return rec != nil && rec.Pane != "" })
+	if err = first.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if !InFlight(local) {
+		t.Fatal("retake open wouldn't start this project's worker at once")
+	}
+	argv := filepath.Join(dir, "herdr", "argv.log")
+	n := len(calls(t, argv))
+	for _, c := range calls(t, argv) {
+		if c[0] == "pane" && c[1] == "close" {
+			t.Fatal("closing retake closed the agent's pane")
+		}
+	}
+	open()
+	waitFor(t, "the task taken back", log, func() bool { return strings.Contains(log.String(), "took task") })
+	if err = os.WriteFile(filepath.Join(barrier, "go"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	v.wait(t, "v2", func(a project.AutomationState) bool { return a.Tasks[0].State == "completed" })
+	j := v.task(t)
+	if j.Attempt != 1 || slices.ContainsFunc(j.Events, func(e project.TaskEvent) bool { return e.Text == project.LostError }) {
+		t.Fatalf("%+v", j)
+	}
+	for _, c := range since(calls(t, argv), n) {
+		if c[0] == "agent" && (c[1] == "prompt" || c[1] == "start") {
+			t.Fatalf("the agent was given something: %q", c)
+		}
+	}
+	if got := v.answeredIn(t, 1); got != "v2" {
+		t.Fatal(got)
 	}
 }

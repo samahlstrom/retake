@@ -276,8 +276,7 @@ func (r *runner) log(format string, args ...any) {
 }
 
 func (r *runner) controlLoop(ctx context.Context) error {
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
+	tick := time.After(0) // the first poll at once: an agent that outlived the last worker is taken back first
 	var current *project.EditingTask
 	var cancel context.CancelCauseFunc
 	var done chan outcome
@@ -290,6 +289,8 @@ func (r *runner) controlLoop(ctx context.Context) error {
 	turn := r.readTurn()
 	if adopt != nil {
 		r.askWas(adopt.AskURL)
+	} else {
+		_ = os.Remove(filepath.Join(r.dir, AskFile)) // no attempt to take back: an older crash's
 	}
 	if turn != nil {
 		r.askWas(turn.AskURL)
@@ -333,7 +334,8 @@ func (r *runner) controlLoop(ctx context.Context) error {
 				current, pending, abandoned = nil, nil, false
 				r.setActive(nil)
 			}
-		case <-ticker.C:
+		case <-tick:
+			tick = time.After(time.Second)
 			poll := project.WorkPoll{Worker: r.identity}
 			poll.Chat, poll.ChatLease = r.chatTurn()
 			if poll.Chat == "" && turn != nil {

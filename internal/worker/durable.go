@@ -73,7 +73,6 @@ type runRecord struct {
 	Snaps    []ext.SnapState     `json:"snaps,omitempty"`
 	Outcome  *savedOutcome       `json:"outcome,omitempty"` // its end, until the server has it
 	Done     bool                `json:"done,omitempty"`    // the server has its end
-	legacy   bool                // made from an older worker's files
 }
 
 // plainRun is a plain task's video: where it goes and where the agent started.
@@ -342,7 +341,7 @@ func (r *runner) legacyRecord(dir string) *runRecord {
 	t := a.Task
 	rec := &runRecord{Task: t.ID, Attempt: n, Lease: t.Lease, Agent: t.Agent, Mode: OpenBackground, Phase: phaseAgent, K: k,
 		Prompt: filepath.Join(dir, name), Context: contextPath, Report: filepath.Join(dir, "report-"+suffix+".json"),
-		Log: filepath.Join(dir, "agent-"+suffix+".log"), Notes: slices.Clone(t.Notes), Doc: docOnly(a), legacy: true}
+		Log: filepath.Join(dir, "agent-"+suffix+".log"), Notes: slices.Clone(t.Notes), Doc: docOnly(a)}
 	var view viewState
 	if b, err := os.ReadFile(filepath.Join(r.dir, "view.json")); err == nil && json.Unmarshal(b, &view) == nil &&
 		(view.Mode == OpenHerdr || view.Mode == OpenTmux) && view.Profile == t.Agent && view.Pane != "" {
@@ -390,15 +389,13 @@ func (r *runner) adoption(ctx context.Context, rec *runRecord) *project.WorkAdop
 // refused drops a record the server didn't give back: its attempt isn't running any more (someone cancelled or retried
 // it), so its background agent is stopped. A herdr or tmux session is left open.
 func (r *runner) refused(rec *runRecord) {
-	if rec.legacy {
-		return // nothing of ours to stop or mark
-	}
 	if rec.Proc.alive() {
 		r.log("%s: task %s (attempt %d) isn't running any more; stopping its agent", filepath.Base(r.opts.Root), rec.Task, rec.Attempt)
 		rec.Proc.stop()
 	}
 	rec.Proc, rec.Done = nil, true
 	r.saveRecord(rec)
+	_ = os.Remove(filepath.Join(r.dir, AskFile))
 }
 
 // InFlight reports whether the project at root has agent work a worker should take back when it starts: a task's

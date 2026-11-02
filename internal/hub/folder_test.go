@@ -606,3 +606,49 @@ func TestHubHome(t *testing.T) {
 		t.Errorf("without a session: %d", r.code)
 	}
 }
+
+// TestFolderStartsTheWorkersOfProjectsAtWork: retake open <folder> starts the worker of a project with agent work in
+// flight as it starts, without a page asking for it, so an agent that outlived the last run is taken back at once
+// (spec/automation.md, "Agents outlive Retake"). The others wait for a page.
+func TestFolderStartsTheWorkersOfProjectsAtWork(t *testing.T) {
+	dir := t.TempDir()
+	file(t, filepath.Join(dir, "a", "a_v1.mp4"), time.Now())
+	file(t, filepath.Join(dir, "b", "b_v1.mp4"), time.Now())
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	started := make(chan string, 2)
+	f := NewFolder(FolderOptions{Dir: dir, Port: ln.Addr().(*net.TCPAddr).Port, Prober: fakeProber{},
+		LocalWorker: func(ctx context.Context, root string, _ http.Handler, _ func(string)) {
+			started <- filepath.Base(root)
+			<-ctx.Done()
+		},
+		Working: func(root string) bool { return filepath.Base(root) == "b" }})
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		if _, err := f.Serve(ctx, ln); err != nil {
+			t.Error(err)
+		}
+	}()
+	select {
+	case got := <-started:
+		if got != "b" {
+			t.Fatalf("started %s", got)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the working project's worker didn't start")
+	}
+	select {
+	case got := <-started:
+		t.Fatalf("started %s without a page", got)
+	case <-time.After(200 * time.Millisecond):
+	}
+	cancel()
+	<-done
+	if err := f.Close(); err != nil {
+		t.Error(err)
+	}
+}

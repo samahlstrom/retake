@@ -162,8 +162,8 @@ func chatStory(t *testing.T, c client, root, fake string, log fmt.Stringer) {
 			t.Fatalf("raw JSON in the chat: %q", m.Text)
 		}
 	}
-	want := "person:Pull in the clip, TWO-LOOKS|agent:I'll pull the link in.|tool:Reading the doc|" +
-		"tool:Editing the doc|question:Which look?|agent:Done."
+	want := "person:Pull in the clip, TWO-LOOKS|agent:I'll pull the link in.|tool:Reading the script|" +
+		"tool:Editing the script|question:Which look?|agent:Done."
 	if strings.Join(got, "|") != want {
 		t.Fatalf("thread:\n got %s\nwant %s\n%s", strings.Join(got, "|"), want, log)
 	}

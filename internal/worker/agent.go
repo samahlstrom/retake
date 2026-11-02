@@ -51,21 +51,20 @@ const maxReport = 1 << 20
 
 // attempt is one run of a task's agent, from its start, or from an earlier worker's record, to its end.
 type attempt struct {
-	r       *runner
-	a       project.WorkAssignment // its assignment, with the notes' stills
-	t       *project.EditingTask
-	p       Profile
-	rec     *runRecord
-	dir     string // the task's folder
-	mode    string
-	extra   string // the extensions' section of the prompt
-	vs      []family.Version
-	more    *addition
-	v       *view
-	askEnv  []string
-	endAsk  func(keep bool)
-	snaps   []*ext.Snap
-	resumed bool
+	r      *runner
+	a      project.WorkAssignment // its assignment, with the notes' stills
+	t      *project.EditingTask
+	p      Profile
+	rec    *runRecord
+	dir    string // the task's folder
+	mode   string
+	extra  string // the extensions' section of the prompt
+	vs     []family.Version
+	more   *addition
+	v      *view
+	askEnv []string
+	endAsk func(keep bool)
+	snaps  []*ext.Snap
 }
 
 // execute runs a new attempt of a's task.
@@ -82,18 +81,19 @@ func (r *runner) resume(ctx context.Context, a project.WorkAssignment, rec *runR
 	if index < 0 {
 		return outcome{state: "paused", message: "Selected agent is not installed on this machine"}
 	}
-	at := &attempt{r: r, a: a, t: t, p: r.opts.Profiles[index], dir: filepath.Join(r.dir, "tasks", t.ID), rec: rec, resumed: rec != nil}
+	at := &attempt{r: r, a: a, t: t, p: r.opts.Profiles[index], dir: filepath.Join(r.dir, "tasks", t.ID), rec: rec}
 	if e := os.MkdirAll(at.dir, 0o700); e != nil {
 		return outcome{state: "paused", message: "Cannot create the local task directory"}
 	}
 	var o *outcome
 	switch {
 	case rec != nil && rec.Outcome != nil:
-		// It ended before the server heard: say it again.
+		// It ended before the server heard: say it again, and finish what its end didn't.
+		at.resnap()
 		back := rec.Outcome.back()
 		o = &back
 	case rec != nil:
-		o = at.takeBack(ctx)
+		o = at.takeBack()
 	default:
 		o = at.start(ctx)
 	}
@@ -185,7 +185,7 @@ func (at *attempt) start(ctx context.Context) *outcome {
 }
 
 // takeBack carries on with an attempt an earlier worker started: the same attempt and report file, no new prompt.
-func (at *attempt) takeBack(ctx context.Context) *outcome {
+func (at *attempt) takeBack() *outcome {
 	r, t, rec := at.r, at.t, at.rec
 	r.update(rec, func(x *runRecord) { x.Lease = t.Lease })
 	at.mode = rec.Mode
@@ -200,11 +200,7 @@ func (at *attempt) takeBack(ctx context.Context) *outcome {
 		}
 	}
 	at.askEnv, _, rec.Secret, rec.AskURL, at.endAsk = r.beginAsk(at.a, rec.Secret, true)
-	for _, st := range rec.Snaps {
-		if s := ext.ResumeSnap(r.opts.Root, st); s != nil {
-			at.snaps = append(at.snaps, s)
-		}
-	}
+	at.resnap()
 	at.batch()
 	// Notes given to its session that the server may not have heard of yet: the next poll says so.
 	r.mu.Lock()
@@ -217,8 +213,16 @@ func (at *attempt) takeBack(ctx context.Context) *outcome {
 		at.v = r.viewOf(rec) // nil when its session is gone: its report may still be there
 	}
 	r.log("%s: took task %s back (attempt %d): the agent works on", filepath.Base(r.opts.Root), t.ID, t.Attempt)
-	_ = ctx
 	return nil
+}
+
+// resnap is the record's undo snapshots, to finish.
+func (at *attempt) resnap() {
+	for _, st := range at.rec.Snaps {
+		if s := ext.ResumeSnap(at.r.opts.Root, st); s != nil {
+			at.snaps = append(at.snaps, s)
+		}
+	}
 }
 
 // batch is what the attempt needs to give its agent the comments sent while it works (spec/automation.md, "Batches"):
@@ -474,11 +478,11 @@ func (at *attempt) given(x *runRecord) {
 func (at *attempt) background(ctx context.Context) *outcome {
 	r, rec := at.r, at.rec
 	var proc *agentProc
-	_, logged := os.Stat(rec.Log)
+	_, statErr := os.Stat(rec.Log)
 	switch {
 	case rec.Proc.alive():
 		proc = r.watch(rec.Proc)
-	case rec.Proc != nil || logged == nil:
+	case rec.Proc != nil || statErr == nil:
 		// It ran, and ended while no worker watched it: its report says how it went.
 	default:
 		env := agentEnv(os.Environ(), rec.Context, rec.Report, at.p.Env)

@@ -1247,6 +1247,12 @@ func (s *Store) ControlTask(id, action, agent, message string) error {
 			} else {
 				j.State = "paused"
 			}
+			// The person's pause: its worker coming back doesn't take it back (spec/automation.md, "Agents outlive
+			// Retake").
+			j.Lost = false
+			if j.Error == LostError {
+				j.Error = "Paused by owner"
+			}
 			j.AddEvent(now, "Paused by owner")
 		case "answer":
 			if j.State != "question" || strings.TrimSpace(message) == "" {

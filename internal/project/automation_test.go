@@ -586,3 +586,27 @@ func TestAdoptingAnAttemptBack(t *testing.T) {
 		t.Fatal("an older pause not taken back", got)
 	}
 }
+
+// TestAPersonsPauseIsntTakenBack: a task paused because its worker went away, then paused by the owner, stays paused
+// when the worker comes back with its agent alive.
+func TestAPersonsPauseIsntTakenBack(t *testing.T) {
+	s, c, w := automationFixture(t)
+	if _, e := s.QueueFeedback([]int64{1}, ""); e != nil {
+		t.Fatal(e)
+	}
+	j, e := s.PollWork(w, "", "")
+	if e != nil || j == nil {
+		t.Fatal(j, e)
+	}
+	c.add(WorkerLease + ReconnectGrace)
+	if e = s.ReconcileWork(); e != nil {
+		t.Fatal(e)
+	}
+	if e = s.ControlTask(j.ID, "pause", "", ""); e != nil {
+		t.Fatal(e)
+	}
+	got, _, e := s.PollWorker(WorkPoll{Worker: w, Adopt: &WorkAdopt{Task: j.ID, Attempt: 1, Notes: []int64{1}, Alive: true}})
+	if e != nil || got != nil {
+		t.Fatal("a paused task taken back", got, e)
+	}
+}
