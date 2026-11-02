@@ -45,7 +45,7 @@ action = { title = "New idea", route = "new" }   # optional: a + button on the s
 [[kinds]]                        # optional: a kind of version
 id = "doc"                       # its full id is <ext>.<kind>: ignition.doc
 folder = "v0"                    # the version folder it claims; API 1 allows only v0
-marker = "idea.md"               # the folder is this kind only when this file is in it
+marker = "*_v0.md"               # the folder is this kind only when a file matching it is in it (a glob, or a list)
 label = "Script"                 # how the version strip and picker name it: "v0 · Script"
 status = "Idea"                  # the home's chip for a video that has only this version
 record = true                    # Record and R on this version record audio for the extension
@@ -140,7 +140,8 @@ The section's URL is the home's hash `#ext/<id>/<route>` (the folder hash starts
 
 ### Version kinds
 
-A kind is a version that isn't a video: a folder named `folder` inside a video's folder that holds `marker`.
+A kind is a version that isn't a video: a folder named `folder` inside a video's folder that holds `marker`: a file
+name or a glob (`*_v0.md`), or a list of them (any one is enough).
 
 - **Found by the scan** (spec/home.md): a video's folder is also any folder whose `v0/` holds an enabled kind's
   marker, with or without a video version. A folder with only `v0/` is a video with one version (spec/ignition.md's
@@ -222,6 +223,7 @@ interface Ctx {
   createVideo(v: { project: string; name: string; files: Record<string, string> }): Promise<{ name: string; url: string }>;
   transcribe(path: string, video?: string): Promise<{ text: string; words: Word[] }>;  // waits for the job
   onRecorded(cb: (a: { blob: Blob; type: string; duration: number; started: string }) => void): () => void;
+  onAnchor(fn: () => Anchor | null): () => void;       // version slot: where the comments column's typed comment points
   player?: Player;                                     // sidebar-tab and review-panel on a video version
   on(event: 'notes' | 'job' | 'version' | 'automation' | 'files', cb: (data: unknown) => void): () => void;
   navigate(to: { video?: string; version?: string; t?: number; route?: string }): void;
@@ -302,6 +304,8 @@ The agent loop is the same one: a comment is Open, Working, Question or Done, Se
   `{file, line, heading?, quote?}`: an owned file, the line (from 1), the nearest heading above, and up to 200
   characters of the paragraph. Readers find it by heading, then quote, then line, so it survives edits. Notes built
   from takes never retract a `doc/` note.
+- **Typing one.** On a version of a kind, the comments column has a line, "Comment for the agent…": Enter adds a typed
+  comment anchored where the version slot says (`ctx.onAnchor`), Ctrl+Enter (⌘+Enter) adds it and sends it.
 - **Done.** A note on a kind's version is Done by a `completed` report with its change: no render or version needed.
   A note with `"wants": "version"` asks for a cut, and is Done only with a new video version, as on a video.
 - **Questions with a text anchor.** `retake ask --note ID --file PATH --line N [--heading TEXT] [--quote TEXT]

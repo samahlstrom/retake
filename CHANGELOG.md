@@ -23,10 +23,13 @@ All notable changes are listed here. Versions follow semver once the first relea
   `connect` turns one on for a run. `retake serve --extensions ignition` (or `RETAKE_EXTENSIONS`, `[server]
   extensions`) allows one for everyone on a server; each person can turn it off for themselves
   (`PUT /api/me/extensions`).
-- **Ignition** (spec/ignition.md) comes with Retake, off until `retake ext enable ignition`. New idea makes a video
-  folder with only `v0/idea.md`; you type, or talk it out (R records; the words land in the document and a comment
-  asks the agent to work them in), Send has the agent shape `outline.md` and `script.md` and ask about a heading when
-  unsure, and Start v1 has it build the first cut. Everything is plain Markdown in the video's folder.
+- **Ignition** (spec/ignition.md) comes with Retake, off until `retake ext enable ignition`. An idea is one Markdown
+  document, `v0/<video>_v0.md` (named like `v1/<video>_v1.mp4`): New idea makes it, you type or talk into it (R
+  records; the words land as a plain paragraph and a comment asks the agent to work them in), Send has the agent
+  shape it into an outline and a script in the same file and ask about a heading when unsure, and ⋯ → Start v1 has it
+  build the first cut. On a phone the document fills the screen, with Record and Send below and the comments in a
+  drawer. A `v0/` from before (idea.md, outline.md, script.md) is joined into the one file, the old files left as they
+  are.
 - Before every agent attempt Retake keeps a copy of the extension's files (`.retake/history/`), so the editor can undo
   one agent edit of a document without git.
 - Core: a folder whose `v0/` holds an enabled kind's marker is a video (an idea) in the scan, `api/info`, `api/home`

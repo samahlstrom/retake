@@ -2,9 +2,10 @@
 
 This is the contract for Ignition, the first extension (spec/extensions.md). Change it here first.
 
-Ignition is where a video starts. You talk out the idea, the agent shapes your talk-outs into an outline and a script,
-and when the script is right the agent builds the first cut from it. The documents are **v0** of the video: plain
-files in the video's folder, tied to every version made from them.
+Ignition is where a video starts. You type or talk your idea into one Markdown document, the agent shapes it into an
+outline and a script in that same document, and when the script is right the agent builds the first cut from it. The
+document is **v0** of the video: one plain file in the video's folder, `v0/<video>_v0.md`, next to `v1/<video>_v1.mp4`
+and the cuts that follow.
 
 It is bundled (`extensions/ignition/`) but off until turned on: `retake ext enable ignition`, or on a hosted server
 `--extensions ignition`. It adds no core feature of its own: everything it uses is the extension API.
@@ -31,8 +32,8 @@ action = { title = "New idea", route = "new" }
 [[kinds]]
 id = "doc"
 folder = "v0"
-marker = "idea.md"
-label = "Script"
+marker = ["*_v0.md", "idea.md"]   # the document; idea.md: a v0 from before it was one file (migrated, below)
+label = "Doc"
 status = "Idea"
 record = true
 
@@ -59,32 +60,33 @@ instructions = "agent/task.md"
 context = "agent/context.md"
 ```
 
-No server and no tools: the agent edits Markdown files with what it already has.
+No server and no tools: the agent edits one Markdown file with what it already has.
 
-## v0 in a video's folder
+## v0: one document
 
 ```
 deadlock/                         a project
   jump-souls/                     the video's folder
     v0/
-      idea.md                     the pitch, in your words. Its presence makes v0 Ignition's.
-      outline.md                  the beats: one ## heading each, a line or three under it
-      script.md                   the script: one ## section per beat; paragraphs are what's said and shown
-      refs/                       anything you collect: links.md, images, clips, PDFs
-      voice/
-        20261101-190211.webm      a talk-out (Opus, as the page records takes)
-        20261101-190211.words.json   its words with times (core's transcription)
-        20261101-190211.md        its transcript as plain text
-      cuts/
-        v1.json                   which script sections a version covers, and where (below)
+      jump-souls_v0.md            the document: everything about the video before its first cut
+      voice/                      talk-outs, out of sight: 20261101-190211.webm, .words.json, .md (the sidecar)
+      cuts/v1.json                which sections of the document a version covers, and where (below)
     footage/ …                    the video's own files, as today
     v1/jump-souls_v1.mp4          the first cut
 ```
 
-- **The files are the truth.** Plain Markdown (headings are `#` lines), UTF-8, no front matter and no hidden state. Edit
-  them in any editor; Retake shows outside edits within 2 seconds (the watch lease). They diff and merge in git like
-  any text. What Ignition keeps for itself (the doc that was open, the caret) is in the browser's `localStorage`.
-- `idea.md` starts with `# <title>`. Only `idea.md` is required; the others appear when first written.
+- **The document is the truth.** `v0/<video>_v0.md`, named like the cuts (`<video>` is the video folder's name for a
+  new idea; a v0 made next to existing cuts uses their name, `clip` for `clip_v1.mp4`). Plain Markdown, UTF-8, no
+  front matter, no markers, no hidden state. It starts with `# <title>`. Edit it in any editor; Retake shows outside
+  edits within 2 seconds. It diffs and merges in git like any text. A `v0/` holding one `*_v0.md` is Ignition's; with
+  more than one, `<folder>_v0.md` wins, else the first by name.
+- **Nothing else shows.** The audio of a talk-out is kept in `v0/voice/` with its words and a sidecar
+  (`<stamp>.md`: the audio's name and the text it gave), so the document stays plain. `v0/cuts/` is for the agent and
+  the Script tab.
+- **Before it was one file.** A `v0/` with `idea.md` and no `*_v0.md` is migrated the first time Ignition opens it:
+  it writes `v0/<folder>_v0.md` with `idea.md`, then `outline.md`, then `script.md` (each file's text as it is, the
+  outline and the script under `## Outline` and `## Script` when they don't start with a `#` heading of their own),
+  and leaves the old files where they are. From then on it reads only the one file.
 - A folder with only `v0/` is a video with one version: an **idea**. Its home card shows the chip "Idea" on an empty
   thumbnail box, and it has no status dot.
 
@@ -92,8 +94,8 @@ deadlock/                         a project
 
 The + on the Ignition section (or "New idea" on its page) opens `#ext/ignition/new`: a title, and the project to put
 it in (a select of the tree's projects; the one selected in the tree, else the top). **Create** calls
-`ctx.createVideo`, which makes `<project>/<slug>/v0/idea.md` holding `# <title>` and a blank line, and opens the new
-video's page on v0 with the caret under the title. The slug is the title in lower case with every run of other
+`ctx.createVideo`, which makes `<project>/<slug>/v0/<slug>_v0.md` holding `# <title>` and a blank line, and opens the
+new video's page on v0 with the caret under the title. The slug is the title in lower case with every run of other
 characters turned into `-`, at most 63 characters, `-2`, `-3`, … when the folder exists. **Create and talk** does the
 same and starts recording.
 
@@ -102,92 +104,77 @@ channel), and is disabled with "The editing computer is offline" when it isn't c
 
 ## The editor (the version slot)
 
-Where the video would be, on v0:
+Where the video would be, on v0: **the document, and nothing else.** One plain text editor, the full width of the
+area, in a readable column (about 70 characters) at a comfortable reading size (17 px, 18 px on a phone, scaled from
+the theme's `--font-size`), in the Theme API's tokens. Markdown as typed: heading lines are bold, nothing else is styled. No tabs, no toolbar, no
+preview, no rich text.
 
-- **Header.** The documents as tabs: Idea · Outline · Script · Refs · Voice. Outline and Script are always there and
-  their file is made on first edit. Right of the tabs: **Start v1** (while the video has no cut), and a quiet
-  saved-state word in a fixed place, so nothing moves.
-- **Text.** Plain text, Markdown as typed. Heading lines are larger and bold, and nothing else is styled. No toolbar,
-  no preview, no rich text. One readable column (72 characters wide), in the Theme API's tokens (`--surface`, `--text`,
-  `--font-ui`; `--agent` for the agent's marks).
-- **Saving.** 600 ms after the last keystroke and when the text loses focus, with `If-Match` on the version the editor
-  read.
-- **Outside edits.** A changed file with no unsaved typing reloads in place, keeping the caret's line. With unsaved
-  typing, one line over the text: "Changed outside Retake · Reload · Keep mine" (Keep mine writes over it).
-- **Refs.** The files in `refs/` (name, size): drop files to add them (25 MiB each), click to open (images inline,
-  others download). `refs/links.md` is a document like the others.
-- **Voice.** The talk-outs, newest first: when, how long, play, the transcript, and **Insert at caret**.
-- **The comments column** is core's, with v0's comments (To do · Done) and Send, as on a video.
-- **The ask box**, under the text: "Ask the agent…". It names what it's about: "About: Cold open" (the heading above
-  the caret; × makes it about the whole document). Enter adds an Open comment anchored there (`ctx.comments.add`).
-  Ctrl+Enter (⌘+Enter) adds it and sends it.
+- **Saving.** 600 ms after the last keystroke and when the text loses focus, with `If-Match` on the version read. The
+  only word it shows is a quiet "Not saved · Retry" when a save fails, or "Changed outside Retake · Reload · Keep
+  mine" when the file changed under unsaved typing (Keep mine writes over it). Outside edits with nothing unsaved
+  reload in place, keeping the caret's line.
+- **⋯**, one quiet button at the top right of the document: **Start v1** (while the video has no cut), and **Undo
+  the agent's edit** (with when, while there is one to undo). Nothing else is over the text.
+- **The comments** are core's: the comments column (a drawer on a phone), To do · Done, Send, as on a video. On a kind
+  version it also has a line to type a comment: "Comment for the agent…"; Enter adds it to To do, anchored to the
+  heading above the caret (`ctx.onAnchor`, below), Ctrl+Enter (⌘+Enter) adds and sends.
+- **Questions.** A question the agent asked about a heading or line shows in the comments column, as on a video, with
+  the place it's about ("Cold open"). Clicking its place scrolls the document there and puts the caret on it. The
+  document itself gets no marks.
 - **Keys.** Typing goes to the text. Esc leaves the text, and then R talks, as on a video. The Record button always
-  works. The page's other review keys do nothing here, because there's no video.
+  works. The page's other review keys do nothing here.
+- **A phone** shows the document from the top of the screen to the bottom bar, which holds just Record and Send (the
+  version picker and the agent are in the comments drawer's header). Text is at least 17 px, and nothing scrolls
+  sideways.
+
+`ctx.onAnchor(fn)` (an addition to the page API): the version slot tells core where a typed comment points (the
+heading above the caret), so the comments column's line can anchor it.
 
 ## Talking it out
 
 R (or Record) records a **talk-out**. REC, the timer, the red edge and the level work as on a video. There is no pen.
 
-When it stops:
+When it stops, Ignition saves the audio as `v0/voice/<yyyymmdd-hhmmss>.webm` and asks for its transcript
+(`ctx.transcribe`). The words go into the document at the caret (at the end when the text had no caret yet) as a plain
+paragraph: no marker, no comment line. The sidecar `voice/<stamp>.md` keeps the audio's name and the words, for the
+agent and for you. It adds an Open comment anchored to that paragraph: "Work this talk-out into the document." So
+talk-outs pile up in To do until you press Send, the way review takes do.
 
-1. Ignition saves the audio as `v0/voice/<yyyymmdd-hhmmss>.webm` and asks for its transcript (`ctx.transcribe`).
-2. When the words come back it writes `voice/<stamp>.md` and puts the talk-out in the open document at the caret (the
-   end of `idea.md` when Refs or Voice is open):
-
-   ```
-   <!-- talk-out voice/20261101-190211.webm -->
-   So the idea is the jump to secure souls only works if you…
-   ```
-
-   The comment line is invisible in rendered Markdown and tells the agent and you where it came from.
-3. It adds an Open comment anchored to that paragraph: "Work this talk-out into the outline and script." So talk-outs
-   pile up in To do until you press Send, the way review takes do.
-
-Without transcription set up, the audio is kept, the block says `(not transcribed: <hint>)`, and the job's hint shows
-as a toast. Leaving the page before the words come back loses nothing: the transcript lands in `voice/` and the
-comment points there.
-
-With a question selected (below), a talk-out answers it instead: its transcript is sent as the answer, and the audio
-is kept in `voice/`.
+Without transcription set up, the audio is kept, nothing goes into the document, and the job's hint shows as a toast.
+Leaving the page before the words come back loses nothing: the sidecar is written when they do, and the next time the
+document opens, Ignition puts in the ones it hasn't yet. A question selected in the comments column takes the talk-out
+as its answer instead.
 
 ## Shaping it with the agent
 
-Send sends v0's open comments as one task, as on a video. The task targets Ignition, so its prompt has
-`agent/task.md`:
+Send sends v0's open comments, as on a video. The task targets Ignition, so its prompt has `agent/task.md`:
 
-- `v0/` is this video's plan. `idea.md` is the person's own words: don't rewrite or remove them.
-- Make `outline.md` the beats, with one `##` heading each, and `script.md` the same beats as `##` sections, with what's
-  said as paragraphs and what's shown in `[brackets]`. Keep the person's phrasing where it works.
-- Edit the files in place. Keep headings stable, because they're anchors and links. Move text rather than delete it,
-  and list anything cut under `## Cut` at the end of `outline.md`.
-- Each comment's change says what you did (the report).
-- When unsure, ask about a place in a document and carry on:
-  `retake ask --note 12 --file v0/script.md --heading "Cold open" --option "Start on the jump" --option "Start on the shop" "Which opening?"`.
-
-**Questions in the editor.** The anchored heading or paragraph gets a mark in the left margin, in the Question colour.
-It is found by heading, then quote, then line, so edits since don't lose it. Clicking the mark selects the question
-and scrolls the comments column to it. You answer in the column's reply box (typed, or a tapped choice) or with a
-talk-out (above). The comment goes from Question back to Working, and the same task carries on.
+- `v0/<video>_v0.md` is this video's plan, one document. The person's own words under its title are theirs: don't
+  rewrite or remove them.
+- Shape it in that file: a `## Outline` section with the beats, then a `## Script` section with the same beats as `###`
+  headings, what's said as paragraphs and what's shown in `[brackets]`. Keep the person's phrasing where it works.
+  Don't make other files.
+- Edit in place. Keep headings stable, because they're anchors. Move text rather than delete it, and list anything cut
+  under `## Cut` at the end.
+- When unsure, ask about a place in the document and carry on:
+  `retake ask --note 12 --file v0/jump-souls_v0.md --heading "Cold open" --option "Start on the jump" "Which opening?"`.
 
 **Done.** The agent's report finishes the comments with their changes. No render is needed for a note on v0. The
-edited documents reload through the watch, so you see them change.
+document reloads through the watch, so you see it change.
 
-**Undo an agent edit.** Before every agent attempt on a video that has `v0/`, Retake keeps a copy of v0's files (core's
-history, spec/extensions.md "Agent edit history"), so you can undo what the agent did to one document without git. Over
-the text, quiet and in a fixed place: "Agent edited this · Undo" for the newest agent edit of the open document. Undo
-puts the document back as it was before that attempt (a document the agent made is removed), and the next Undo goes one
-agent edit further back. When you or anything else changed the document since, Undo refuses with "Changed since the
-agent's edit". Git stays optional.
+**Undo the agent's edit.** Before every agent attempt on a video that has `v0/`, Retake keeps a copy of v0's files
+(core's history, spec/extensions.md "Agent edit history"). ⋯ → "Undo the agent's edit" puts the document back as it
+was before the newest agent edit, and the next undo goes one further back. When the document changed since, it refuses
+with "Changed since the agent's edit". Git stays optional.
 
 ## Start v1
 
-**Start v1** adds a comment on v0 with `"wants": "version"`: "Build the first cut (v1) from script.md." It's editable
-before you send it, and Ctrl+Enter sends it. The task's prompt adds:
+⋯ → **Start v1** adds a comment on v0 with `"wants": "version"`, "Build the first cut (v1) from the script.", and
+sends it. The task's prompt adds:
 
-- Build v1 from `v0/script.md`, section by section in order, with the footage and assets in the video's folder (not
-  `v0/voice/`).
+- Build v1 from the document's `## Script`, section by section in order, with the footage and assets in the video's
+  folder (not `v0/voice/`).
 - A plain project (no timeline): write the video to `$RETAKE_OUTPUT`. The worker pushes it as `v1/<folder>_v1.mp4`.
-  The folder already uses version folders, since `v0/` is one.
 - A timeline project (`edit/timeline.json` or `retake.toml`): edit the timeline, and the worker renders v1 as for any
   task.
 - Then write `v0/cuts/v1.json`.
@@ -196,8 +183,8 @@ The comment is Done with v1, the page follows it to v1, and the video's review s
 
 ## Later versions link back to the script
 
-`agent/context.md` goes into every task of a video that has `v0/`: follow `script.md` unless the notes say otherwise,
-and with each new version write `v0/cuts/<label>.json`:
+`agent/context.md` goes into every task of a video that has `v0/`: follow the document's script unless the notes say
+otherwise, and with each new version write `v0/cuts/<label>.json`:
 
 ```json
 { "version": "v3",
@@ -205,23 +192,17 @@ and with each new version write `v0/cuts/<label>.json`:
                 { "heading": "The trick", "from": 12.4, "to": 61.0 } ] }
 ```
 
-`heading` is a `##` heading of `script.md`, without the `## `. Times are seconds in that version. A section that isn't
-in the cut is left out.
-
-- **In the editor**, each `##` heading of the script has a quiet chip after it, "v3 0:12", for the newest version
-  that covers it. Clicking it opens that version at that time.
-- **On a video** (the Script sidebar tab, on videos that have v0): `script.md` read-only, with the section under the
-  playhead highlighted. Clicking a section seeks to its start, and sections the shown version doesn't cover are dimmed.
-  A heading renamed since the cut has no link until the next version's file.
+`heading` is a heading of the document's script, without its `#`s. Times are seconds in that version. A section that
+isn't in the cut is left out. **On a video** (the Script sidebar tab, on videos that have v0): the script read-only,
+with the section under the playhead highlighted; clicking a section seeks to its start.
 
 ## In the nav and the version strip
 
 - **The Ignition section**, under the folder tree: its header row opens the ideas page (`#ext/ignition/`) and its +
   makes a new idea. Its rows are the ideas (videos with only v0), most recently edited first.
-- **The ideas page**: New idea, then each idea's title (the `# ` line of `idea.md`, else the folder's name), its
+- **The ideas page**: New idea, then each idea's title (the document's `# ` line, else the folder's name), its
   project, when it was last edited and its first two lines. Clicking one opens it.
-- **The tree** shows ideas in their projects like other videos, with Ignition's icon where the status dot is.
-- **The version strip and picker** list `v0 · Script` first. A video with a cut opens on its newest cut, as today.
+- **The version strip and picker** list `v0 · Doc` first. A video with a cut opens on its newest cut, as today.
   Following latest and comparing (C) never land on v0.
 
 ## Local and hosted
@@ -247,16 +228,18 @@ in the cut is left out.
 
 ## Tests
 
-- Go: v0 with `idea.md` found by the scan (an idea folder, a video with v0 and cuts, a `v0/` without `idea.md`, a
-  `v0/clip_v0.mp4`); `api/info` and `api/home` (`no_cut`, `kind`); New idea's folder and slug collisions, locally and
-  through the machine channel; Start v1 in a v0-only plain project pushing `v1/<folder>_v1.mp4`.
-- Web unit: the anchor finder (heading, then quote, then line), the talk-out block, the cuts chips, the playhead
-  section.
+- Go: v0 with `*_v0.md` (and the old `idea.md`) found by the scan (an idea folder, a video with v0 and cuts, a `v0/`
+  without either, a `v0/clip_v0.mp4`); a marker given as a list of globs; `api/info` and `api/home` (`no_cut`,
+  `kind`); New idea's folder and slug collisions, locally and through the machine channel; Start v1 in a v0-only plain
+  project pushing `v1/<folder>_v1.mp4`.
+- Web unit: the document's name, the migration's text, the heading above the caret, the talk-out paragraph and its
+  sidecar, the playhead section.
 - e2e `e2e/tests/18-ignition.spec.ts`, with a fake transcriber (a command engine that prints fixed words) and a fake
-  agent:
-  - New idea opens v0, typing saves, and an outside edit shows.
-  - A talk-out lands in the document and adds a To do.
-  - Send runs an agent that edits `outline.md` and asks about "Cold open"; a tap answers it; Done.
-  - Start v1 runs an agent that writes a generated MP4 and `cuts/v1.json`; v1 opens; the Script tab follows the
-    playhead.
+  agent, on a phone and on a desktop:
+  - New idea opens the one document, typing saves, and an outside edit shows.
+  - A talk-out lands in the document as a plain paragraph and adds a To do.
+  - Send runs an agent that writes the outline and script into the document and asks about "Cold open"; a tap answers
+    it; Done; ⋯ undoes the agent's edit.
+  - Start v1 from ⋯ runs an agent that writes a generated MP4 and `cuts/v1.json`; v1 opens.
+  - A multi-file v0 from before is migrated into one file and the old files stay.
   - The same flow hosted (`retake serve` and `retake connect` on scratch folders).
