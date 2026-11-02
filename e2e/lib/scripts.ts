@@ -17,6 +17,7 @@ process.stdout.write(JSON.stringify({ words: words.map((w, i) => ({ w: ' ' + w, 
 /**
  * The fake agent. In a chat turn (no $RETAKE_CONTEXT: spec/chat.md) it reads the prompt on stdin and prints Claude
  * Code's stream-json: for a message that picks an opening ("Start on the jump") it writes it into the cold open; for
+ * one that says "slowly" it says a few words, runs two commands with an 8 s pause between them, and edits nothing; for
  * one with a link it puts the link alone on a line at the end; otherwise it adds `## Outline` and `## Script` (when
  * there's none yet), makes two pictures and asks "Which opening?" with them as choices (`retake ask --option`).
  * In an editing task it reads the task's context ($RETAKE_CONTEXT) and edits the one document, v0/<video>_v0.md:
@@ -51,6 +52,13 @@ if (!process.env.RETAKE_CONTEXT) {
     tool('Edit', { file_path: path, old_string: '[The jump.]', new_string: '[x]' });
     writeFileSync(doc0, text.replace('[The jump.]', '[' + picked[0] + '.]'));
     say('Done: the cold open starts on the ' + picked[1] + '.');
+  } else if (/slowly/.test(msg)) {
+    // A slow turn, for the page's live activity line: words, a command, a pause, more words and another command.
+    say('Checking the server first. ');
+    tool('Bash', { command: 'ls -la v0' });
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 8000);
+    say('It serves the script from the right place.');
+    tool('Bash', { command: 'ls v0/images' });
   } else if (link) {
     tool('WebFetch', { url: link[0], prompt: 'title' });
     tool('Edit', { file_path: path, old_string: 'x', new_string: 'y' });

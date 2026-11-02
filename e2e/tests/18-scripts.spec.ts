@@ -7,8 +7,11 @@
 //   v0/images/ and shows.
 // - The comments column is the chat with the agent (spec/chat.md). A voice message (R) is saved, transcribed and sent;
 //   the agent (a fake that prints Claude Code's stream-json) writes the outline and the script into the document while
-//   the page shows it, with one quiet line per tool, and asks "Which opening?" with two pictures; a tap answers it and
-//   the agent writes it in; ⋯ undoes the agent's edit; a link typed in the chat goes in alone on its line.
+//   the page shows it, and asks "Which opening?" with two pictures; a tap answers it and the agent writes it in; ⋯
+//   undoes the agent's edit; a link typed in the chat goes in alone on its line. The agent answers in plain words (no
+//   "Agent" label), and each turn has ONE activity line: live while it runs ("Running a command…", the words streaming
+//   in under it), then a summary ("Edited the script · read example.org/…"). The column's left edge drags it wider,
+//   remembered after a reload; a double-click resets it. Scrollbars are thin and drawn from the theme's tokens.
 // - Send makes the video: with no cut yet the agent builds v1 from the script ("Building v1…"); v1 opens, with
 //   `v0 · Script` first; back on the script, Send is dimmed with "Nothing changed since the last Send".
 // - A multi-file v0 from before (idea.md, outline.md, script.md) becomes one document and the old files stay.
@@ -251,8 +254,13 @@ async function asked(page: Page, folder: string, before: string): Promise<void> 
   await expect(chat(page).locator('[data-part="chat-agent"]', { hasText: 'Which opening do you want?' })).toBeVisible({
     timeout: 20_000,
   });
-  await expect(chat(page).locator('[data-part="chat-tool"]', { hasText: 'Editing the doc' })).toHaveCount(1);
-  expect(await chat(page).innerText()).not.toMatch(/"type"|stream_event|tool_use/);
+  // The tools are ONE line over the reply; the turn done, it sums them up (spec/chat.md, "The activity line").
+  const line = chat(page).locator('[data-part="chat-tool"]');
+  await expect(line).toHaveCount(1);
+  await expect(line).toHaveAttribute('data-state', 'done', { timeout: 20_000 });
+  await expect(line).toHaveText('Edited the script · saved an image · read the script');
+  // Plain words: no raw JSON, no "Agent" label, no line per tool.
+  expect(await chat(page).innerText()).not.toMatch(/"type"|stream_event|tool_use|^Agent$|Editing the script/m);
   const doc = read(docOf(folder));
   expect(doc).toContain('## Outline');
   expect(doc).toContain('## Script\n\n### Cold open');
@@ -270,11 +278,110 @@ async function chatLink(page: Page, folder: string): Promise<void> {
   expect(await page.evaluate(() => window.__review?.seg ?? null)).toBeNull();
   await page.keyboard.press('Enter');
   await expect(composer(page)).toHaveValue('');
-  await expect(chat(page).locator('[data-part="chat-tool"]', { hasText: 'Reading example.org/…' })).toBeVisible({
-    timeout: 30_000,
-  });
   await expect.poll(() => read(docOf(folder)), { timeout: 30_000 }).toMatch(/\n\nhttps:\/\/example\.org\/clip\n$/);
   await expect(chat(page).locator('[data-part="chat-agent"]').last()).toContainText('Added the link');
+  const line = chat(page).locator('[data-part="chat-tool"]').last();
+  await expect(line).toHaveText('Edited the script · read example.org/…', { timeout: 20_000 });
+  await expect(line).toHaveAttribute('data-state', 'done');
+}
+
+/** A slow turn: while it runs ONE live line says what the agent does now, the words stream in under it, and the
+ * composer's arrow is Stop; once it's done the line sums the turn up. */
+async function slowTurn(page: Page): Promise<void> {
+  await composer(page).click();
+  await page.keyboard.type('Check the server slowly');
+  await page.keyboard.press('Enter');
+  const line = chat(page).locator('[data-part="chat-tool"]').last();
+  await expect(line).toHaveText('Running a command…', { timeout: 30_000 });
+  await expect(line).toHaveAttribute('data-state', 'live');
+  const words = chat(page).locator('[data-part="chat-agent"]').last();
+  await expect(words).toContainText('Checking the server first.');
+  expect((await words.boundingBox())!.y).toBeGreaterThan((await line.boundingBox())!.y);
+  await expect(page.locator('#side [data-part="chat-stop"]')).toBeVisible();
+  await expect(page.locator('[data-part="chat-status"]')).toHaveText('');
+  await shot(page, 'chat-midturn');
+  await expect(line).toHaveAttribute('data-state', 'done', { timeout: 30_000 });
+  await expect(line).toHaveText('Ran 2 commands');
+  await expect(words).toContainText('It serves the script from the right place.');
+  await shot(page, 'chat-after');
+}
+
+/** The column's left edge drags it wider (the document reflows beside it), ←/→ on it resize it, the width is
+ * remembered after a reload, and a double-click goes back to the default. */
+async function dragWider(page: Page): Promise<void> {
+  const side = page.locator('#side');
+  const grip = page.locator('#side [data-part="sidebar-grip"]');
+  const width = async () => Math.round((await side.boundingBox())!.width);
+  const before = await width();
+  const docSlot = page.locator('[data-ext="scripts"][data-slot="version"]');
+  const doc = (await docSlot.boundingBox())!;
+  const g = (await grip.boundingBox())!;
+  await page.mouse.move(g.x + g.width / 2, g.y + 300);
+  await page.mouse.down();
+  await page.mouse.move(g.x + g.width / 2 - 240, g.y + 300, { steps: 8 });
+  await page.mouse.up();
+  expect(await width()).toBe(before + 240);
+  const after = (await side.boundingBox())!;
+  const doc2 = (await docSlot.boundingBox())!;
+  expect(doc2.width).toBeLessThan(doc.width - 200);
+  expect(doc2.x + doc2.width).toBeLessThanOrEqual(after.x + 1); // nothing overlaps
+  await expect(grip).toHaveAttribute('aria-valuenow', String(before + 240));
+  await shot(page, 'chat-wide');
+  await page.reload();
+  await expect(text(page)).toBeVisible({ timeout: 20_000 });
+  await expect.poll(width).toBe(before + 240);
+  await grip.focus();
+  await page.keyboard.press('ArrowRight');
+  await expect.poll(width).toBe(before + 224);
+  await page.keyboard.press('Shift+ArrowLeft');
+  await expect.poll(width).toBe(before + 272);
+  await grip.dblclick();
+  await expect.poll(width).toBe(before);
+  expect(await page.evaluate(() => localStorage.getItem('retake.sidebar-width'))).toBeNull();
+}
+
+/** Every scrolling part has a thin scrollbar in the theme's tokens (no arrows), the chat's thread and the document
+ * alike; a close-up of the chat's. */
+async function scrollbars(page: Page): Promise<void> {
+  const look = await page.evaluate(() => {
+    const of = (el: Element | null) => {
+      if (!el) return null;
+      const s = getComputedStyle(el);
+      return { width: s.scrollbarWidth, color: s.scrollbarColor };
+    };
+    /** A token's colour as computed styles write it. */
+    const token = (name: string) => {
+      const probe = document.createElement('div');
+      probe.style.color = `var(${name})`;
+      document.body.append(probe);
+      const c = getComputedStyle(probe).color;
+      probe.remove();
+      return c;
+    };
+    return {
+      want: `${token('--scrollbar-thumb')} ${token('--scrollbar-track')}`,
+      thread: of(document.querySelector('[data-part="chat-thread"]')),
+      doc: of(document.querySelector('[data-ext="scripts"] .ig-scroll')),
+      root: of(document.documentElement),
+    };
+  });
+  for (const where of ['thread', 'doc', 'root'] as const) {
+    expect(look[where], where).toEqual({ width: 'thin', color: look.want });
+  }
+  // A short window, so the thread scrolls: the close-up of its scrollbar.
+  const size = page.viewportSize()!;
+  await page.setViewportSize({ width: size.width, height: 560 });
+  const thread = chat(page).locator('[data-part="chat-thread"]');
+  await expect.poll(() => thread.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
+  await thread.evaluate((el) => el.scrollTo({ top: el.scrollHeight / 3 }));
+  const box = (await page.locator('#side').boundingBox())!;
+  mkdirSync(SHOTS, { recursive: true });
+  await page.waitForTimeout(300);
+  await page.screenshot({
+    path: join(SHOTS, `${ENGINE}-scrollbar-closeup.png`),
+    clip: { x: box.x - 160, y: 40, width: 160 + box.width, height: 420 },
+  });
+  await page.setViewportSize(size);
 }
 
 /** ⋯ and one of its items. */
@@ -453,6 +560,9 @@ test.describe('locally', () => {
       await undo(page, idea());
       await chatLink(page, idea());
       await shot(page, 'chat');
+      await slowTurn(page);
+      await dragWider(page);
+      await scrollbars(page);
       await paste(page, idea());
       await shot(page, 'editor-image');
     } finally {
