@@ -275,8 +275,8 @@ the shot under it. `retake notes list` shows the best one (`[1 stroke, on label/
 
 From the manifests of two versions, Retake builds a map from one's times to the other's: units with the same pixels,
 the same voice-over seconds, or the same shot. When a patch trims 0.3 s of voice-over, everything after it plays 0.3 s
-earlier, and C, `[` and `]`, a question's version chips and "see it in v3" all show the other version at the matching
-moment, not the same clock time. `GET /api/timemap?from=v2&to=v3` serves the map. Without manifests the time stays
+earlier, and C, the version list, a question's version chips and "see it in v3" all show the other version at the
+matching moment, not the same clock time. `GET /api/timemap?from=v2&to=v3` serves the map. Without manifests the time stays
 as it is.
 
 ### Notes carry over

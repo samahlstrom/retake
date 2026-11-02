@@ -192,8 +192,9 @@ record that says `rendering` while nobody holds the lock (a server killed mid-re
 **The page.**
 
 - A streamed version that isn't complete has a chip in the version list (`pending`, `rendering 12/50`), and the page
-  says when one is pushed: "v8 is ready, press ] to watch" (on a phone: "…, tap the version to watch").
-- Showing it (`]`, `[`, C, the list) shows its poster at once and starts watching. The video loads once the first
+  says "Updating video…" when one is pushed; following the latest shows it (spec/automation.md, "Versions versus
+  drafts").
+- Showing it (C, the version list, following the latest) shows its poster at once and starts watching. The video loads once the first
   segment is out, and plays from 0, not from the live edge (hls.js with `startPosition: 0`; Safari by
   `#EXT-X-START`). The timeline uses the expected duration, so the scale doesn't grow, and shows how much is
   rendered.
@@ -203,8 +204,8 @@ record that says `rendering` while nobody holds the lock (a server killed mid-re
 - Landing on a moment that isn't rendered yet lands at 0 instead, with a toast ("v8 is rendering: 0:41 of 3:02
   so far, from the start").
 - The page stops watching when it shows another version, when it's hidden, and when it's closed.
-- The time map and carried notes need the manifest, which exists only once the version is complete; until then C, `[`
-  and `]` keep the time and nothing carries. The `complete` event refreshes the family, the maps and the sidebar
+- The time map and carried notes need the manifest, which exists only once the version is complete; until then C
+  and the version list keep the time and nothing carries. The `complete` event refreshes the family, the maps and the sidebar
   silently: the video keeps playing (its player sees `#EXT-X-ENDLIST` by itself) and the duration and chip update.
 - `failed` shows a toast with the error.
 
@@ -242,8 +243,27 @@ cover A from 0 to its duration in order; a time maps through the segment holding
 a0)`). `segments` is empty when either version has no manifest, and an unknown version is 404. The map from B back to
 A is its own request, not this one inverted.
 
-**The page.** C, `[` `]`, a question's version chips and "see it in vN" all show the other version at the mapped
-time, so they land on the matching moment instead of the same clock time. With no map they keep the time, as before.
+**The page.** C, the version list, a question's version chips and "see it in vN" all show the other version at the
+mapped time, so they land on the matching moment instead of the same clock time. With no map they keep the time, as
+before.
+
+**C** (the only version key; the legacy `[` and `]` are gone: the version list and the comments' version strip
+switch versions) flips between the base and its partner at the matching moment, and C again flips back. The take
+stays open: what is recorded while flipped belongs to the version on screen (spec/take-format.md, `flip`).
+
+- **The partner** is the next newer version, else the previous one (v6 ⇄ v7; the newest compares with the one before
+  it). A draft (`v5-draft2`, spec/automation.md) compares with the version it is an edit of, the newest listed
+  version before it that isn't a draft (v4), so following the agent's work, C shows what changed.
+- **Comments follow the flip.** Like any switch, C shows the shown version's comments, timeline markers and drawings
+  (spec/notes.md, "Comments belong to their version"). The open take's own lines and images show only on the version
+  they were drawn on.
+- **Following the latest waits while flipped.** A new draft or render arriving while C compares never pulls the video
+  away (the page keeps watching the latest, so it keeps rendering). C back lands on the base; when the page follows
+  the latest (or the base was a draft the family stopped listing), it lands on the newest version or draft instead,
+  as following the latest would have.
+- **Refusals.** C past the end of a partner that covers less (a preview) is refused with "v7 only covers 0:00–0:10";
+  an incomplete stream is never refused (its start, with a toast). A single version says "Only one version".
+- The phone layout has no flip button: there, the version list switches versions.
 
 ## Carrying notes over
 

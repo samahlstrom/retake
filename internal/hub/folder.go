@@ -429,9 +429,6 @@ func (f *Folder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if len(parts) == 2 && parts[0] == "api" && parts[1] == "ping" {
 		perm = team.PermAny
 	}
-	if r.URL.Path == "/api/workspace" && r.Method == http.MethodPost {
-		perm = team.PermManage
-	}
 	if isHomeExt(parts) && !get {
 		perm = team.PermRecord // the extension's own role is checked inside
 	}
@@ -445,8 +442,6 @@ func (f *Folder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.homePage(w, r)
 	case len(parts) == 2 && parts[0] == "api" && parts[1] == "home" && get:
 		f.apiHome(w, r, role, scope)
-	case r.URL.Path == "/api/workspace" && r.Method == http.MethodPost:
-		f.saveWorkspace(w, r)
 	case len(parts) == 2 && parts[0] == "api" && parts[1] == "ping" && get:
 		writeJSON(w, r, http.StatusOK, map[string]bool{"ok": true})
 	case isHomeExt(parts):
@@ -492,12 +487,13 @@ func (f *Folder) identify(w http.ResponseWriter, r *http.Request, shared bool, f
 		f.refuse(w, r, http.StatusForbidden, "not allowed", page)
 		return "", "", "", false
 	}
-	if scope != "" && fp != nil {
-		layout, err := f.workspace()
-		if err != nil || !layout.Allows(scope, fp.found.Name) {
-			f.refuse(w, r, http.StatusForbidden, "not allowed", page)
-			return "", "", "", false
-		}
+	if retiredScope(scope) {
+		f.refuse(w, r, http.StatusGone, "retired link", page)
+		return "", "", "", false
+	}
+	if fp != nil && !scopeAllows(scope, fp.found.Name) {
+		f.refuse(w, r, http.StatusForbidden, "not allowed", page)
+		return "", "", "", false
 	}
 	return role, author, scope, true
 }
@@ -570,6 +566,8 @@ func (f *Folder) refuse(w http.ResponseWriter, r *http.Request, code int, msg st
 		"bad token":         "This link has expired or was revoked. Ask whoever sent it for a new one.",
 		"too many attempts": "Too many tries with a bad link. Wait a minute, then open your link again.",
 		"not allowed":       "This link can't open the reviews.",
+		"retired link": "This link was for a project or group that Retake no longer has (folders on disk organize " +
+			"videos now). Ask whoever sent it for a new link.",
 	}[msg]
 	writePage(w, r, code, "Retake", "<p>"+esc(text)+"</p>")
 }
@@ -583,6 +581,10 @@ func (f *Folder) shareLink(w http.ResponseWriter, r *http.Request, tok string) {
 	}
 	if team.Role(t.Role) == team.Agent {
 		writePage(w, r, http.StatusForbidden, "Retake", "<p>This is an agent's token, not a share link.</p>")
+		return
+	}
+	if retiredScope(t.Scope) {
+		f.refuse(w, r, http.StatusGone, "retired link", true)
 		return
 	}
 	f.touch()
@@ -635,21 +637,9 @@ func (f *Folder) projectRoute(w http.ResponseWriter, r *http.Request, shared boo
 
 // apiHome is GET /api/home.
 func (f *Folder) apiHome(w http.ResponseWriter, r *http.Request, role team.Role, scope string) {
-	layout, err := f.workspace()
-	if err != nil {
-		f.logf("workspace: %v", err)
-		writeJSON(w, r, http.StatusInternalServerError, map[string]string{"error": "could not load projects"})
-		return
-	}
-	cards := f.cards(func(video string) bool { return layout.Allows(scope, video) })
-	videos := make([]string, 0, len(cards))
-	for _, card := range cards {
-		videos = append(videos, card.Name)
-	}
-	visible := layout.Visible(scope, videos)
+	cards := f.cards(func(video string) bool { return scopeAllows(scope, video) })
 	title := filepath.Base(f.opts.Dir)
-	res := home.Response{Title: title, Role: string(role), Projects: cards, Tree: home.BuildTree(title, cards, nil),
-		Workspace: &visible}
+	res := home.Response{Title: title, Role: string(role), Projects: cards, Tree: home.BuildTree(title, cards, nil)}
 	res.Machines = []home.Machine{}
 	if role == team.Owner {
 		res.Folder = f.opts.Dir

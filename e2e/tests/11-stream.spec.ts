@@ -3,9 +3,10 @@
 // it ready (chip and toast); ] shows the poster at once and starts watching, so the server renders it, slowed down by
 // the renderer's test hook (RETAKE_EDIT_TEST_UNIT_DELAY_MS: the first three units come at ~2 s, the next two at ~11 s
 // and the last at ~15 s). v2 plays from 0 while its playlist has no ENDLIST, waits at the end of what's rendered,
-// and C flips to v1 at the same moment. Closing the page stops the render, keeping what it published; a server
-// started again (without the slow-down) resumes from the cache when the page shows v2 again, and it completes:
-// ENDLIST, the right duration, no chip, and C maps through the time map. Needs a built retake-edit ($RETAKE_EDIT,
+// and C flips to v1 at the same moment: following the latest waits while comparing, so v2 growing never pulls the
+// video back, and C returns to v2. Closing the page stops the render, keeping what it published; a server started
+// again (without the slow-down) resumes from the cache when the page shows v2 again, and it completes: ENDLIST, the
+// right duration, no chip, and C maps through the time map. Needs a built retake-edit ($RETAKE_EDIT,
 // editor/target/release, or $PATH); it skips without one.
 import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { spawn } from 'node:child_process';
@@ -170,18 +171,35 @@ test('stopping feedback follows the edited video and plays while its playlist gr
   }
 });
 
-test('removed comparison shortcuts leave the evolving video and playhead alone', async () => {
-  await ui.key(' ');
+test('C flips to v1 at the same moment while v2 renders, stays there as v2 grows, and comes back', async () => {
+  await ui.key(' '); // pause
   await page.evaluate(() => { document.querySelector('video')!.currentTime = 3; });
   await ui.waitFor(() => !document.querySelector('video')!.seeking, 5000);
-  await ui.key('c'); await ui.key('[');
-  expect(await ui.state()).toMatchObject({ shown: 'v2', flipped: false, paused: true });
-  expect((await ui.state()).t).toBeCloseTo(3, 1);
+  const before = await ui.state();
+  expect(playlist()).not.toContain('#EXT-X-ENDLIST');
+  await ui.key('c'); await ui.settle(); await sleep(200);
+  const flipped = await ui.state();
+  expect(flipped).toMatchObject({ shown: 'v1', base: 'v2', flipped: true });
+  expect(Math.abs(flipped.t - before.t)).toBeLessThan(0.05);
+  // v2's next units come in while comparing (units 4 and 5 at ~11 s): following the latest waits, so nothing pulls
+  // the video back to v2. Unit 6 would complete v2, which the next test must not see yet: past 5, don't wait.
+  const done = () => page.evaluate(() => window.__review.info.versions?.find((v) => v.label === 'v2')?.stream?.done ?? 0);
+  const d0 = await done();
+  if (d0 < 5) await expect.poll(done, { timeout: 10_000 }).toBeGreaterThan(d0);
+  await sleep(300);
+  expect(await ui.state()).toMatchObject({ shown: 'v1', base: 'v2', flipped: true });
+  await ui.key('[');
+  expect(await ui.state()).toMatchObject({ shown: 'v1', base: 'v2', flipped: true }); // not a key
+  await ui.key('c'); await ui.settle(); await sleep(200);
+  const back = await ui.state();
+  expect(back).toMatchObject({ shown: 'v2', base: 'v2', flipped: false });
+  expect(Math.abs(back.t - before.t)).toBeLessThan(0.05);
 });
 
 test('closing the page stops the render; what it published stays', async () => {
   const before = units();
-  // C above leaves the streamed version and comes back, which may already have stopped and restarted it.
+  // C above leaves the streamed version and comes back. The page keeps watching the latest while it compares, but a
+  // restart in between is harmless: count the renders from here.
   stoppedRenders = (JSON.parse(readFileSync(join(DIR, 'v2', 'demo_v2.push.json'), 'utf8')) as
     { stream: { renders: number } }).stream.renders;
   expect(before).toBeLessThan(6);
@@ -228,7 +246,14 @@ test('opened again (another server), it resumes from the cache and completes', a
   // The completion event can arrive before the player's next playlist reload (one target duration).
   await expect.poll(async () => (await ui.video()).duration, { timeout: 10_000 }).toBeCloseTo(FULL, 0);
   await expect(page.locator('#verBtn')).toBeVisible();
+  // With both manifests now, C maps through the time map: the pop's patch moves nothing, so the same moment.
   await ui.key(' ');
+  const before = await ui.state();
+  await ui.key('c'); await ui.settle(); await sleep(200);
+  const flipped = await ui.state();
+  expect(flipped).toMatchObject({ shown: 'v1', base: 'v2', flipped: true });
+  expect(Math.abs(flipped.t - before.t)).toBeLessThan(0.05);
+  await ui.key('c'); await ui.settle();
   expect((await ui.state()).shown).toBe('v2');
   await sleep(500);
   expect(renders(), 'a complete version never renders again').toBe(0);

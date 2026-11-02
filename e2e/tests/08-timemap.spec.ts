@@ -1,6 +1,6 @@
 // The review bridge's time map (spec/bridge.md): two versions rendered from the editor's demo timeline, v2 after a
-// patch that trims 0.3 s of VO air at 3.6 s on v1. Both have render manifests, so C, [ and ] land on the matching
-// moment: 9.0 s on v1 is 8.7 s on v2, while 1.0 s (before the trim) stays 1.0 s. Needs a built retake-edit
+// patch that trims 0.3 s of VO air at 3.6 s on v1. Both have render manifests, so C and the version picker land on
+// the matching moment: 9.0 s on v1 is 8.7 s on v2, while 1.0 s (before the trim) stays 1.0 s. Needs a built retake-edit
 // ($RETAKE_EDIT, editor/target/release, or $PATH); it skips without one.
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 import { copyFileSync, mkdirSync, writeFileSync } from 'node:fs';
@@ -82,13 +82,40 @@ async function press(key: string) {
   return ui.state();
 }
 
-test('current video opens at the mapped timeline without history controls', async () => {
+test('C flips to the matching moment, and back', async () => {
   await ui.open(server.url);
-  expect(await page.evaluate(() => window.__review.view)).toMatchObject({base:'v2', shown:'v2'});
+  expect(await page.evaluate(() => window.__review.view)).toMatchObject({ base: 'v2', shown: 'v2' });
   await seek(8.7);
-  await press('c'); await press('[');
-  expect((await ui.state()).t).toBeCloseTo(8.7, 1);
-  expect((await ui.state()).shown).toBe('v2');
-  await expect(page.locator('#verBtn')).toBeVisible();
+  const flipped = await press('c');
+  expect(flipped).toMatchObject({ shown: 'v1', base: 'v2', flipped: true });
+  expect(flipped.t).toBeCloseTo(9, 1); // the same moment: 0.3 s later on v1, not the same clock time
+  expect(Math.abs(flipped.t - 9)).toBeLessThan(0.05);
+  const back = await press('c');
+  expect(back).toMatchObject({ shown: 'v2', flipped: false });
+  expect(Math.abs(back.t - 8.7)).toBeLessThan(0.05);
+  // Before the trim nothing moved: the same time.
+  await seek(1);
+  const early = await press('c');
+  expect(early.shown).toBe('v1');
+  expect(Math.abs(early.t - 1)).toBeLessThan(0.05);
+  await press('c');
+});
+
+test('[ and ] are not keys; the version picker lands on the matching moment too', async () => {
+  await seek(12.7);
+  for (const key of ['[', ']']) expect(await press(key)).toMatchObject({ base: 'v2', shown: 'v2', flipped: false });
+  const pick = async (label: string) => {
+    await ui.click('#verBtn');
+    await ui.click(`#verList [data-ver="${label}"]`);
+    await ui.settle();
+    await sleep(200);
+    return ui.state();
+  };
+  const prev = await pick('v1');
+  expect(prev).toMatchObject({ base: 'v1', shown: 'v1', flipped: false });
+  expect(Math.abs(prev.t - 13)).toBeLessThan(0.05);
+  const next = await pick('v2');
+  expect(next).toMatchObject({ base: 'v2', shown: 'v2' });
+  expect(Math.abs(next.t - 12.7)).toBeLessThan(0.05);
   expect(pageErrors).toEqual([]);
 });

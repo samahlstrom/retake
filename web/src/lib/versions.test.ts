@@ -4,6 +4,7 @@ import {
   latestVersion,
   verName,
   byLabel,
+  catchUp,
   coverMessage,
   covers,
   failedToast,
@@ -14,12 +15,11 @@ import {
   fromStartMessage,
   incomplete,
   landing,
+  latestPlayable,
   neighbor,
   newlyStreamed,
   partner,
-  readyToast,
   renderedEnd,
-  stepTarget,
   streamChip,
   versionTitle,
   withStream,
@@ -55,15 +55,45 @@ describe('family navigation', () => {
     expect(flipTarget([fam[1]], 'v6', false)).toBeNull(); // "Only one version"
   });
 
-  it('steps [ and ], refusing past either end', () => {
-    expect(stepTarget(fam, 'v6', -1)).toMatchObject({ label: 'v5' });
-    expect(stepTarget(fam, 'v6', 1)).toMatchObject({ label: 'v7' });
-    expect(stepTarget(fam, 'v5', -1)).toBe('No earlier version');
-    expect(stepTarget(fam, 'v7', 1)).toBe('No later version');
+  it('pairs a draft with the version it is an edit of, so C shows what the agent changed', () => {
+    const drafts = [
+      { label: 'v4', n: 4, duration: 40 },
+      { label: 'v5-draft1', n: 5, duration: 40 },
+      { label: 'v5-draft2', n: 5, duration: 40 },
+    ];
+    expect(partner(drafts, 'v5-draft2')?.label).toBe('v4');
+    expect(partner(drafts, 'v5-draft1')?.label).toBe('v4'); // not the newer draft
+    expect(partner(drafts, 'v4')?.label).toBe('v5-draft1'); // a version still compares with the next newer entry
+    expect(partner([drafts[1]!], 'v5-draft1')).toBeNull(); // nothing before it: no partner
+    expect(flipTarget(drafts, 'v5-draft2', false)?.label).toBe('v4');
+    expect(flipTarget(drafts, 'v5-draft2', true)?.label).toBe('v5-draft2');
   });
 });
 
-describe('past-the-end checks (C and ] onto a short preview)', () => {
+describe('C back while following the latest', () => {
+  const growing = [
+    { label: 'v4', n: 4, duration: 40 },
+    { label: 'v5-draft1', n: 5, duration: 40, stream: { state: 'complete', done: 6, total: 6, seconds: 40 } },
+    { label: 'v5-draft2', n: 5, duration: 40, stream: { state: 'rendering', done: 2, total: 6, seconds: 12 } },
+  ] as const;
+
+  it('the latest playable is the newest that has the moment', () => {
+    expect(latestPlayable(growing, 5)?.label).toBe('v5-draft2');
+    expect(latestPlayable(growing, 20)?.label).toBe('v5-draft1'); // draft2 hasn't rendered 0:20 yet
+    const stopped = [growing[0], { ...growing[2], stream: { ...growing[2].stream, state: 'stopped' as const } }];
+    expect(latestPlayable(stopped, 5)?.label).toBe('v4');
+  });
+
+  it('lands on the newest when following, else on the base', () => {
+    expect(catchUp(growing, 'v5-draft1', true, 5)?.label).toBe('v5-draft2'); // a newer draft came while comparing
+    expect(catchUp(growing, 'v5-draft2', true, 5)).toBeNull(); // the base is the newest: back to it
+    expect(catchUp(growing, 'v4', false, 5)).toBeNull(); // pinned on v4: back to v4
+    // The base was a draft the family stopped listing (promoted, or replaced): the newest, even when pinned.
+    expect(catchUp(growing, 'v5-draft0', false, 5)?.label).toBe('v5-draft2');
+  });
+});
+
+describe('past-the-end checks (C or the picker onto a short preview)', () => {
   it('covers a time up to 50 ms before the end', () => {
     expect(covers(fam[2], 9.9)).toBe(true);
     expect(covers(fam[2], 9.95)).toBe(true);
@@ -85,11 +115,18 @@ describe('labels', () => {
     expect(flipToast(fam, 'v6', fam[2], true)).toBe('v7 (newer)');
     expect(flipToast(fam, 'v7', fam[1], true)).toBe('v6 (previous)');
     expect(flipToast(fam, 'v6', fam[1], false)).toBe('v6');
+    const drafts = [
+      { label: 'v4', n: 4, duration: 40 },
+      { label: 'v5-draft2', n: 5, duration: 40 },
+    ];
+    expect(flipToast(drafts, 'v4', drafts[1]!, true)).toBe('v5 draft (newer)');
+    expect(flipToast(drafts, 'v5-draft2', drafts[0]!, true)).toBe('v4 (previous)');
+    expect(flipToast(drafts, 'v5-draft2', drafts[1]!, false)).toBe('v5 draft');
   });
   it('titles the version button', () => {
-    expect(versionTitle(fam, 'v6', 'v6', false)).toBe('Version v6. [ and ] step, C flips to v7');
+    expect(versionTitle(fam, 'v6', 'v6', false)).toBe('Version v6. C flips to v7');
     expect(versionTitle(fam, 'v6', 'v7', true)).toBe('Comparing: showing v7. C goes back to v6.');
-    expect(versionTitle([fam[0]], 'v5', 'v5', false)).toBe('Version v5. [ and ] step');
+    expect(versionTitle([fam[0]], 'v5', 'v5', false)).toBe('Version v5');
   });
 });
 
@@ -216,12 +253,9 @@ describe('an incomplete stream', () => {
     expect(incomplete(done[4])).toBe(false);
   });
 
-  it('is announced once when it is pushed, with the way to get to it', () => {
+  it('is announced once when it is pushed', () => {
     expect(newlyStreamed(streaming, new Set()).map((v) => v.label)).toEqual(['v8', 'v9']);
     expect(newlyStreamed(streaming, new Set(['v8', 'v9']))).toEqual([]);
-    expect(readyToast(streaming, 'v8', 'v9', false)).toBe('v9 is ready, press ] to watch');
-    expect(readyToast(streaming, 'v6', 'v9', false)).toBe('v9 is ready, pick it in the version list');
-    expect(readyToast(streaming, 'v6', 'v9', true)).toBe('v9 is ready, tap the version to watch');
     expect(failedToast('v9', 'ffmpeg failed')).toBe("v9's render failed: ffmpeg failed");
     expect(failedToast('v9')).toBe("v9's render failed");
   });

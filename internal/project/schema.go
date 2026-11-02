@@ -108,6 +108,9 @@ CREATE TABLE workspace (
  note INTEGER PRIMARY KEY REFERENCES notes (id),
  previous_status TEXT NOT NULL
 );`,
+	// 6: the project organization of step 3 is gone (folders on disk organize videos, spec/home.md). The tokens keep
+	// their scope: a project:/group: link is refused as retired (spec/home.md, "Share scopes").
+	`DROP TABLE IF EXISTS workspace;`,
 }
 
 // pgMigrations are the same schema for Postgres (spec/server.md, "Storage drivers"): one schema per project, the
@@ -220,6 +223,8 @@ CREATE TABLE workspace (
  note BIGINT PRIMARY KEY REFERENCES notes (id),
  previous_status TEXT NOT NULL
 );`,
+	// 6: the project organization of step 3 is gone.
+	`DROP TABLE IF EXISTS workspace;`,
 }
 
 // SchemaVersion is the schema version this build writes.

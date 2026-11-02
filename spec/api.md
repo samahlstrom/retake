@@ -167,8 +167,8 @@ button is `#done`. The pen canvas is `#ink`: its box is exactly the shown video 
 normalized to it. The page has a single `<video>` element, and the test reads the playhead and play state from it.
 
 New: on a phone the page has its own layout, with the same ids. `<html data-layout>` says which one is on
-(`desktop`, `portrait` or `landscape`). The phone layout's controls are `#play`, `#verBtn` (the version list), `#flip`
-(C), `#undo` (Z), the pen colors `.sw[data-color]`, `#rec` (R) and `#done`.
+(`desktop`, `portrait` or `landscape`). The phone layout's controls are `#play`, `#verBtn` (the version list), `#undo`
+(Z), the pen colors `.sw[data-color]`, `#rec` (R) and `#done` (Send). It has no flip button: C is a keyboard key.
 
 ## CLI (milestone 1)
 

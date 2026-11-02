@@ -100,6 +100,9 @@ describe('home', () => {
       tree: { title: '', path: '', project: false, videos: [], children: [] },
     });
     expect(normalizeHome({ projects: 'nope' }).projects).toEqual([]);
+    // An older server's project organization (gone: folders on disk organize videos) is ignored.
+    const old = normalizeHome({ projects: [], workspace: { revision: 1, projects: [], placements: [] } });
+    expect(old).not.toHaveProperty('workspace');
   });
 
   it('reads the tree: its videos are the cards, and an older server gets one at the top', () => {

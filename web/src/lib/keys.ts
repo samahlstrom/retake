@@ -1,6 +1,7 @@
-// Keyboard: the legacy player's keys, unchanged, plus N (milestone 2) to show or hide the notes sidebar, E for the
-// eraser and > for the next video of a home. Handled on window in the capture phase so they work whatever has focus, and nothing else on the page sees
-// them.
+// Keyboard: the legacy player's keys, plus N (milestone 2) to show or hide the notes sidebar, E for the eraser and >
+// for the next video of a home. The legacy [ and ] (step the version) are gone: the version picker and the comments'
+// version strip do that; C still flips. Handled on window in the capture phase so they work whatever has focus, and
+// nothing else on the page sees them.
 
 export type Action =
   | 'save'
@@ -13,8 +14,6 @@ export type Action =
   | 'frameNext'
   | 'escape'
   | 'flip'
-  | 'stepPrev'
-  | 'stepNext'
   | 'color1'
   | 'color2'
   | 'color3'
@@ -35,6 +34,9 @@ const PLAIN: Record<string, Action> = {
   ',': 'framePrev',
   '.': 'frameNext',
   Escape: 'escape',
+  // C: the comparison version at the same moment, and back (spec/bridge.md, "The page"). Its comments, markers and
+  // drawings come with it (spec/notes.md, "Comments belong to their version").
+  c: 'flip',
   '1': 'color1',
   '2': 'color2',
   '3': 'color3',
@@ -50,7 +52,7 @@ const PLAIN: Record<string, Action> = {
 };
 
 /** Keys that do nothing on auto-repeat (holding R must not toggle recording on and off). */
-const NO_REPEAT = 'kzrfcne[]>? ';
+const NO_REPEAT = 'kzrfcne>? ';
 
 export interface KeyLike {
   key: string;
@@ -89,7 +91,6 @@ export const KEY_SHEET: readonly { keys: string[]; what: string }[] = [
   { keys: ['E'], what: 'Eraser' },
   { keys: ['Z'], what: 'Undo the last line' },
   { keys: ['C'], what: 'Flip to the other version and back' },
-  { keys: ['[', ']'], what: 'Older or newer version' },
   { keys: ['N'], what: 'Show or hide comments' },
   { keys: ['>'], what: 'Next video to review' },
   { keys: ['F'], what: 'Full screen' },

@@ -59,18 +59,19 @@ through `/api/ping`, and always stopped. Its log is in `<work>/logs/`.
 
 **`02-scenario`** ports the legacy `tests/e2e_headless.mjs` and `check_e2e.py`, without the transcription and notes
 checks. It runs against both servers.
-- **Family.** v5, v6 and the v7 preview are found. The newer draft decoy is skipped.
+- **Family.** v5, v6 and the v7 preview are found (legacy; this server opens the newest version, so its family is v5
+  and v6). The newer draft decoy is skipped.
 - **A.** Without recording, play works and a drag draws nothing: no stroke, no take, and the "Press R" hint shows.
 - **S1–S4.**
   - R-gated recording and pen.
   - An unrecorded loop whose speech and drag are dropped.
-  - C flips to v7 at the same frame (within 40 ms) and back.
+  - C flips to the partner at the same frame (within 40 ms) and back: v7 on the legacy player, v5 here.
   - S3 is recorded while flipped.
   - Done.
   - The serialized take has S1–S4 with the right version and flip, and strokes 1 (red, S1) and 2 (green, S4).
   - It matches `$defs/dataBody`.
-- **`[ ]`.** Steps keep the time (within 0.8 s) and the play state. `]` and C past the preview's end are refused
-  ("only covers"). `]` inside the preview switches.
+- **`[ ]`.** Legacy: steps keep the time (within 0.8 s) and the play state, `]` and C past the preview's end are
+  refused ("only covers"), and `]` inside the preview switches. Here `[` and `]` are not keys and change nothing.
 - **Reload.** The two strokes come back as history, and no take is open.
 - **On disk.**
   - There is exactly one take, on v6, and none for v5 or v7.
@@ -100,8 +101,9 @@ checks. It runs against both servers.
 **`04-hls`** (new only)
 - `/video/v8/<file>` serves the playlist, init and segments (with ranges), and nothing outside the folder.
 - v8 is detected from its own folder.
-- C flips mp4 → m3u8 at the same time, and the playlist plays (currentTime advances, readyState ≥ 2).
-- C flips back, `]` steps to the m3u8 keeping the time and play state, and `[` steps back.
+- The page opens v8. C flips m3u8 → mp4 at the same time, C flips back, and the playlist plays (currentTime
+  advances, readyState ≥ 2). C after playing flips at the same time again.
+- `[` and `]` are not keys: playback and the playhead go on.
 
 **`05-sidebar`** (new only; milestone 2, `spec/notes.md`)
 - The family is v5 and v6 (the newest, opened). The sidebar's content needs an agent, so `GET /api/notes`,
@@ -163,7 +165,8 @@ VO air at 3.6 s. Both have render manifests. It skips without a built `retake-ed
 - `/api/timemap` maps v1 onto v2 (9.0 s → 8.7 s, 1.0 s stays) and back, and an unknown version is a 404.
 - C on v2 at 8.7 s shows v1 at 9.0 s (the matching moment, not the same clock time), and C again goes back to 8.7 s.
   Before the trim, C keeps the time.
-- `[` and `]` step the base to the matching moment too (12.7 s on v2 is 13.0 s on v1).
+- `[` and `]` are not keys. Picking v1 in the version list lands on the matching moment too (12.7 s on v2 is 13.0 s
+  on v1), and picking v2 comes back.
 
 **`09-server`** (new only; milestone 3b, `spec/server.md`): `retake serve` with the default drivers (SQLite and local
 files) in a scratch data folder. The admin, the project (with v6 as its first version) and the members come from the

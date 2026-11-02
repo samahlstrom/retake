@@ -207,7 +207,7 @@ The list as it stood:
 
 ### Share controls in the review UI
 
-Owners can create viewer/reviewer links from the player or project workspace, without using the CLI. Links last seven days. Folder links can be scoped to a named project, group or video (spec/home.md); the token's optional `scope` is enforced for every request. Older unscoped tokens retain their existing access. Tokens remain hashed and revocable. UI-created tunnels live with the serving process and stop when it stops. A link is reported ready only after the public host is available. No email or invitation is sent automatically.
+Owners can create viewer/reviewer links from the player, without using the CLI. Links last seven days. A folder link opens the whole folder or one video (`video:<name>`, spec/home.md "Share scopes"); the token's optional `scope` is enforced for every request. Links made for the removed project organization (`project:`/`group:` scopes) are refused with 410 and a page that says why. Older unscoped tokens retain their existing access. Tokens remain hashed and revocable. UI-created tunnels live with the serving process and stop when it stops. A link is reported ready only after the public host is available. No email or invitation is sent automatically.
 
 Comment deletion and restoration (`POST /api/notes/<id>/delete|restore`) require approve permission, like reopening
 feedback. Viewers, reviewer-only links and editing agents cannot delete other people's review history.

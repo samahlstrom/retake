@@ -160,8 +160,8 @@ retake open how-to/v3/how-to_v3.mp4
 ```
 
 1. Play to step two and pause. The label is bigger.
-2. Press **C**. The page shows v2 at the same moment, with the small label. The sidebar now shows v2's notes as they
-   were resolved: #1 with ✓, the change, and "answered in v3".
+2. Press **C**. The page shows v2 at the same moment, with the small label. The comments switch with it: v2's Done
+   tab has #1, with the change and "See v3".
 3. Press **C** again to come back to v3.
 
 On v3, the newest version, the sidebar shows only the agent's open questions. There are none here.

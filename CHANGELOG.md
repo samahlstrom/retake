@@ -4,6 +4,15 @@ All notable changes are listed here. Versions follow semver once the first relea
 
 ## Unreleased
 
+### C is back; the old project grouping is gone
+- C flips to the comparison version at the same moment again, and C flips back; after a trim the time map lands it on
+  the matching moment. The comments, markers and drawings switch with it. While you compare, following the agent's
+  live drafts waits (nothing pulls the video away), and C back lands on the newest draft. A draft compares with the
+  version it is an edit of. `[` and `]` stay gone: the version list and the comments' version strip switch versions.
+- The project organization that only lived in Retake's database is removed: `POST /api/workspace`, `workspace` in
+  `GET /api/home`, its table (store schema step 6 drops it, SQLite and Postgres) and the `project:`/`group:` share
+  scopes. A link with such a scope answers 410 with a page that says why. Folders on disk organize videos.
+
 ### Extensions, and Ignition (extension API v1)
 - An extension adds a tool around review without changing it (spec/extensions.md, docs/extensions.md): a section in
   the home's left column, a page, a tab next to the comments, its own kind of version (`v0`), files it owns in a
@@ -66,8 +75,7 @@ All notable changes are listed here. Versions follow semver once the first relea
   filter, a resize handle, ☰ to hide it, and a drawer on a phone. A folder or project shows its videos as cards;
   the selection is in the URL hash and remembered with the opened folders. The review page's back link reads
   "Project › video" (`deadlock › item-shop`) and returns to the same place.
-- The organizing that lived only in Retake's database (New project, New group, Move to) is gone from the page; its
-  API stays for now.
+- The organizing that lived only in Retake's database (New project, New group, Move to) is gone from the page.
 ### Moving or copying a project keeps its stills
 - The project store keeps paths relative to the project folder (notes' snapshots, pushed versions, transcribe
   jobs' take folders). Opening an older store fixes its absolute paths, also ones from where the folder used to be.

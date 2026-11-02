@@ -398,7 +398,8 @@ its version files and runs the agent, and the agent makes the next version howev
   takes recorded on them still save.
 - The host registers each immutable render revision in the video family as above. Pending/progressive render
   metadata reaches browsers through the existing events API. Following latest switches to the new revision once
-  it can play the current position; recording and an explicit historical selection remain pinned.
+  it can play the current position; recording, comparing with C and an explicit historical selection remain
+  pinned (C back catches up: spec/bridge.md, "The page").
 - Browser media requests are relayed to the connected worker over worker-initiated HTTP requests ("The media
   relay" above). Only registered revision directories, the project's version files, and relative, regular media
   files beside a playlist version are readable. Traversal, symlink escapes, arbitrary URLs, and executable paths

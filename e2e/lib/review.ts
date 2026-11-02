@@ -166,7 +166,7 @@ export class Review {
     });
   }
 
-  /** Waits until a version switch (C, [ or ]) has finished. */
+  /** Waits until a version switch (C, or the picker) has finished. */
   async settle(): Promise<void> {
     await this.waitFor(() => !window.__review.view.switching, 8000);
   }

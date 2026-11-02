@@ -108,9 +108,9 @@ host (an `--allow-host` name, or one in the folder's hosts table) needs a token 
 `Authorization: Bearer` or the `retake_share` cookie; its role applies on the home and on every project. On
 `/p/<name>/...` a Bearer token of that video's own store works too (an agent token from `retake token create
 <video> --role agent` on `/p/<name>/mcp`). Existing single-video share links and cookies continue working when the
-main address becomes a workspace: their hosts are recognized, and their tokens open a filtered home containing
-only that video and its containing project/group. They never grant access to another video's API, media, notes,
-events, or worker routes. The token remains in its original store, so expiry and revocation keep working. Hosts,
+main address becomes the folder's home: their hosts are recognized, and their tokens open a filtered home containing
+only that video (scope `video:<name>`, "Share scopes" below). They never grant access to another video's API, media,
+notes, events, or worker routes. The token remains in its original store, so expiry and revocation keep working. Hosts,
 origins, the 401/403/429 answers, rate limits and `Cache-Control: private` are those of spec/team.md.
 
 ### `GET /api/home`
@@ -318,7 +318,8 @@ One link for the whole home, as `retake share <video>` makes one for a review (s
   junk folders, the depth limits, links, a big generated tree in well under a second), the tree built from paths,
   the status rules, thumbnail caching (made once, remade for a changed file, the poster beside the file first),
   `/api/home` (status, thumbnail URL, newest version, order, the tree, local and hosted alike), `retake connect`
-  sending each video's path, `api/poster` and unwatch, and share tokens scoped to the folder.
+  sending each video's path, `api/poster` and unwatch, share tokens scoped to the folder or to one video, and retired
+  `project:`/`group:` links refused with 410 and a page (the migration that drops the organization keeps their rows).
 - Web unit tests: the tree's rows (opened, filtered, dots), the hash, and the remembered state.
 - e2e `e2e/tests/12-home.spec.ts`: a folder with three generated projects. The home lists them with thumbnails and
   statuses; a card opens its review page with the poster; a take and Done make it Reviewed; "Next video" and `>` go
@@ -326,37 +327,32 @@ One link for the whole home, as `retake share <video>` makes one for a review (s
 - e2e `e2e/tests/16-nav.spec.ts`: a nested folder. The tree opens, a project shows its videos, a video opens, its
   back link returns to the same place, a hash link opens it, and on a phone the drawer does the same.
 
-## Project workspace and in-app sharing
+## Share scopes
 
-**The page no longer shows this organization**: the folder tree above replaced it (folders on disk are the
-organization), so there is no New project, New group, Rename or Move to, and `?project=<id>` opens the top. The API
-below stays as it is (`workspace` in `GET /api/home`, `POST /api/workspace`, and share scopes), until it is removed or
-given back a place.
+Folders on disk are the organization (the tree above). The project organization that lived only in Retake's database
+(projects and groups made in the page, New project, New group, Rename, Move to, `workspace` in `GET /api/home` and
+`POST /api/workspace`) is removed, with its `workspace` table (project store schema step 6, SQLite and Postgres).
+`POST /api/workspace` is 404 like any unknown route, and `GET /api/home` no longer has `workspace`. An old
+`?project=<id>` link opens the home's top.
 
-The home is a project workspace. Its hierarchy is project → freely named groups → videos → versions. Groups describe organization; review/render status is separate. Existing detected version families remain videos at their existing `/p/<name>/` URLs. Media and saved takes are never moved when organizing them.
+A token in the folder's store (`tokens.scope`) opens:
 
-The main application address opens **Projects**. It never automatically opens a video, including when there is
-only one project or video. Clicking a project opens `/?project=<id>`, showing its groups and video cards; clicking
-a video opens its existing review URL. Reload, browser Back and direct project links retain this selection. The
-player has a **Projects** link and a link to its containing project. The folder-backed application is served on
-the main address; the standalone `open <video>` command remains an explicit review-only tool, not the app launcher.
-Empty projects stay visible and offer organization controls rather than dropping the user into an editor.
+- the whole folder: no scope, the usual share link (`retake share <folder>`);
+- one video: `video:<name>`. A video's own share link opened on the folder's address works this way (its token is in
+  that video's store, and counts as `video:<name>`). The home lists that video only, and every other project's routes
+  answer 403 "not allowed".
 
-`GET /api/home` retains `projects` (the legacy video cards) and adds `workspace: {revision, projects:[{id,title,groups:[{id,title}]}], placements:[{video,project,group}]}`. With no saved organization there is one default project named after the opened folder and an Ungrouped section. Newly discovered videos join that default project. Owners can create and rename projects/groups and move videos through the UI. Search and status filtering work across groups. The player exposes a visible Projects link back to this workspace.
-
-`POST /api/workspace` saves the organization with its expected revision. It is owner-only and origin checked. Invalid memberships and unknown video IDs return 400; stale revisions return 409 so another person's edits are never silently overwritten. State lives in the home store and is shared across browsers, rather than in localStorage. Reads for a scoped share expose only included videos and organization.
-
-`POST /api/shares` creates a share with `{role:"reviewer"|"viewer", scope:"project:<id>"|"group:<project>/<group>"|"video:<name>", label?:string}`. The owner chooses Share then Copy link. Default access is can-comment, expiry is seven days, and scope is explicit. The server reuses an active public host or starts the configured HTTPS tunnel; it never presents a localhost address as an external share link. The response is `{url,id,expires,role,scope}`. `DELETE /api/shares/<id>` revokes a link. Secrets are returned only on creation and stored only as hashes. Scoped tokens are checked on every media, notes, recording and event request, not just hidden from the home. Moving a video out of a shared project/group removes that link's access to it. Guests cannot create shares or change organization.
-
-A video opened standalone also has `POST /api/shares` for that video family. `retake open <video> --home-url URL` optionally supplies the owner's Projects navigation when an existing workspace is served separately; guest responses omit this owner-only address. The folder-hosted player uses its normal relative Projects link.
-
-The current account-based team server keeps its existing membership model. Organization metadata and token scopes use the shared store's SQLite/Postgres schema; this change does not claim a new team administration interface.
+`project:<id>` and `group:<project>/<group>`, the scopes of links made for that organization, are **retired**: what
+they opened is gone. The server never guesses a replacement. Such a link is refused everywhere with 410: `/s/<token>`
+sets no cookie, and the page routes (`/`, `/p/<name>/`) answer a short page, "This link was for a project or group
+that Retake no longer has (folders on disk organize videos now). Ask whoever sent it for a new link."; the API answers
+`{"error": "retired link"}`. The token rows stay (revocable, listed by `retake share list`); the owner makes a new
+folder or video link. Any other unknown scope opens nothing (403 on a project, an empty home).
 
 ## Dropdown appearance and interaction
 
-Project filters and video placement controls use the same styled select menu as comment filters and agent
-settings. Both the closed control and the open menu use Retake's dark surface, rounded border, chevron, selected
-checkmark and visible hover/focus states. Menus are portaled above panels, stay within the viewport, and scroll
-when long. They expose combobox/listbox semantics, support arrow keys, typeahead, Enter and Escape, and retain
-the last saved placement if saving fails. Menu keystrokes never start recording or seek the video. Disabled and
-saving controls cannot change values. Existing version-picker behavior is unchanged.
+Comment filters and agent settings use one styled select menu. Both the closed control and the open menu use
+Retake's dark surface, rounded border, chevron, selected checkmark and visible hover/focus states. Menus are portaled
+above panels, stay within the viewport, and scroll when long. They expose combobox/listbox semantics, support arrow
+keys, typeahead, Enter and Escape. Menu keystrokes never start recording or seek the video. Disabled and saving
+controls cannot change values. Existing version-picker behavior is unchanged.

@@ -112,16 +112,17 @@ import type {
 import { mapTime, TimeMaps } from './timemap';
 import {
   byLabel,
+  catchUp,
   failedToast,
   flipRefusal,
   flipTarget,
   flipToast,
   incomplete,
   landing,
+  latestPlayable,
   neighbor,
   newlyStreamed,
   renderedEnd,
-  stepTarget,
   withStream,
 } from './versions';
 import { Watcher } from './watch';
@@ -1576,7 +1577,7 @@ export class Review {
       p = this.#norm(e),
       from = this.#eraseLast ?? p;
     this.#eraseLast = p;
-    const own = t.id && !t.closed ? t.strokes : [];
+    const own = t.id && !t.closed ? t.strokes.filter(this.#onShown) : [];
     const hist = this.hist.strokes.filter(
       (st) => typeof st.id === 'number' && !!st.take && !st.undone && !st.sourceVersion,
     );
@@ -1838,7 +1839,7 @@ export class Review {
       if (a > 0.02) out.push({ key, url: im.url, box: im.box, alpha: a, id: a > 0.3 ? id : null });
     };
     this.hist.images.forEach((im, i) => add(im, `h${i}`, null));
-    for (const im of t.images) add(im, `t${t.id}:${im.id}`, this.seg ? im.id : null);
+    for (const im of t.images) if (this.#onShown(im)) add(im, `t${t.id}:${im.id}`, this.seg ? im.id : null);
     const sig = out.map((c) => `${c.key} ${c.alpha} ${c.box.join(',')} ${c.id}`).join('|');
     if (sig === this.#cardSig) return;
     this.#cardSig = sig;
@@ -2030,14 +2031,18 @@ export class Review {
     if (v) this.toast.say('Updating video…', 2500);
   }
 
+  /** A line or image of the open take shows on the version it was drawn on only: flipped with C to the other version,
+   * the take's lines on the base wait for C back (another version's drawings never show on this one). */
+  #onShown = (x: { version?: string | null }): boolean => !x.version || x.version === this.shown;
+
+  /** Following the latest (spec/automation.md, "Versions versus drafts"). It waits while recording and while C
+   * compares (flipped): a new draft never pulls the video away under the reviewer; C back catches up. */
   async followCurrent(): Promise<void> {
-    while (this.followLatest && !this.finishing && !this.seg && !this.starting && !this.switching) {
-      const current = this.versions
-        .filter((v) => !v.kind) // never an extension's version (v0)
-        .reverse()
-        .find(
-          (v) => v.stream?.state !== 'stopped' && (!incomplete(v) || (renderedEnd(v) ?? 0) > this.video.currentTime),
-        );
+    while (this.followLatest && !this.flipped && !this.finishing && !this.seg && !this.starting && !this.switching) {
+      const current = latestPlayable(
+        this.versions.filter((v) => !v.kind), // never an extension's version (v0)
+        this.video.currentTime,
+      );
       if (!current || current.label === this.shown) return;
       await this.setBase(current.label);
       if (this.shown !== current.label) return;
@@ -2114,7 +2119,7 @@ export class Review {
     };
   };
 
-  // ---------------------------------------------------------------- versions: [ ] steps, C flips to the partner
+  // ---------------------------------------------------------------- versions: C flips, the picker switches
   /** The matching moment, same play state; the last frame stays up while the other file loads. The moment comes
    * through the time map between the two versions (spec/bridge.md); without one it's the same time. */
   async showVersion(label: string): Promise<boolean> {
@@ -2243,7 +2248,8 @@ export class Review {
     }
   }
 
-  /** Fetches the time maps from the version on screen to the ones C, [ and ] go to next, so they're here in time. */
+  /** Fetches the time maps from the version on screen to the one C goes to next and its neighbors (the picker's
+   * usual picks), so they're here in time. */
   #prefetchMaps(): void {
     if (this.kindShown) return;
     for (const label of [
@@ -2255,9 +2261,16 @@ export class Review {
     }
   }
 
-  /** C: flip between the base and its partner (the next newer version, else the previous one). */
+  /** C: flip between the base and its partner (versions.ts, `partner`), at the matching moment. The take stays
+   * open. While flipped, following the latest waits; C back lands on the base, or, when following the latest (or the
+   * base was a draft the family stopped listing), on the newest version or draft that came meanwhile. */
   flip = async (): Promise<void> => {
     if (this.switching) return;
+    const newer = this.flipped ? catchUp(this.cuts, this.base, this.followLatest, this.video.currentTime) : null;
+    if (newer) {
+      await this.setBase(newer.label);
+      return;
+    }
     const target = flipTarget(this.cuts, this.base, this.flipped);
     if (!target) {
       this.toast.say('Only one version');
@@ -2299,12 +2312,6 @@ export class Review {
     void this.loadHistory(label);
     const note = this.#landNote;
     this.toast.say(note ?? 'Video updated', note ? 3200 : 1400);
-  }
-
-  stepBase(dir: number): void {
-    const n = stepTarget(this.versions, this.base, dir);
-    if (typeof n === 'string') this.toast.say(n);
-    else void this.setBase(n.label);
   }
 
   pickVersion = (label: string): void => {
@@ -2567,12 +2574,6 @@ export class Review {
       case 'flip':
         void this.flip();
         break;
-      case 'stepPrev':
-        this.stepBase(-1);
-        break;
-      case 'stepNext':
-        this.stepBase(1);
-        break;
       case 'color1':
       case 'color2':
       case 'color3':
@@ -2726,7 +2727,7 @@ export class Review {
       this.#lctx,
       ink.width,
       ink.height,
-      [...this.visibleHistoryStrokes, ...this.take.strokes],
+      [...this.visibleHistoryStrokes, ...this.take.strokes.filter(this.#onShown)],
       vt,
       this.seg ? 1 : 0.85,
       this.drawing,

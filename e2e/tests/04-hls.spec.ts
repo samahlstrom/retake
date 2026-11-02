@@ -1,6 +1,7 @@
 // New in milestone 1: a version can be a chunked playlist (.m3u8 with fMP4 segments). The family here is
 // v6/clip_v6.mp4 plus clip_v8/clip_v8.m3u8 (+ init.mp4 and seg_NNN.m4s beside it): a sibling folder of v6, so family
-// detection finds it as v8. C and [ ] move between the mp4 and the playlist like between any two versions.
+// detection finds it as v8. The page opens the newest, v8, and C flips between the playlist and the mp4 like between
+// any two versions; [ and ] are not keys.
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 import { LEGACY, PORTS } from '../lib/env.ts';
 import { FULL } from '../lib/fixtures.ts';
@@ -69,10 +70,16 @@ test('family: the mp4 v6 and the m3u8 v8 in its own folder', async () => {
   expect(versions[1]![2] as number).toBeCloseTo(FULL, 0);
 });
 
-test('the latest HLS video plays and removed comparison keys leave it selected', async () => {
+test('C flips from the m3u8 to the mp4 at the same time, C flips back, and the playlist plays', async () => {
   await page.evaluate(() => { document.querySelector('video')!.currentTime = 12; });
   await ui.waitFor(() => !document.querySelector('video')!.seeking, 5000);
   const before = await ui.state();
+  expect(before).toMatchObject({ shown: 'v8', base: 'v8', flipped: false });
+  await ui.key('c'); await ui.settle(); await sleep(300);
+  const flipped = await ui.state();
+  expect(flipped).toMatchObject({ shown: 'v6', base: 'v8', flipped: true, paused: true });
+  expect(Math.abs(flipped.t - before.t)).toBeLessThan(0.1);
+
   await ui.key('c'); await ui.settle(); await sleep(300);
   const after = await ui.state();
   expect(after).toMatchObject({ shown: 'v8', base: 'v8', flipped: false, paused: true });
@@ -89,14 +96,17 @@ test('the latest HLS video plays and removed comparison keys leave it selected',
   await ui.key(' ');
   await sleep(200);
 
+  // C again, after playing: the mp4 at the same time.
   const b2 = await ui.state();
   await ui.key('c'); await ui.settle(); await sleep(200);
   const a2 = await ui.state();
-  expect(a2).toMatchObject({ shown: 'v8', base: 'v8', flipped: false, paused: true });
+  expect(a2).toMatchObject({ shown: 'v6', base: 'v8', flipped: true, paused: true });
   expect(Math.abs(a2.t - b2.t)).toBeLessThan(0.1);
+  await ui.key('c'); await ui.settle(); await sleep(200);
+  expect(await ui.state()).toMatchObject({ shown: 'v8', base: 'v8', flipped: false });
 });
 
-test('removed version shortcuts preserve HLS playback and its playhead', async () => {
+test('[ and ] are not keys: HLS playback and its playhead go on', async () => {
   await ui.key(' ');
   await sleep(1000);
   const before = await ui.state();
