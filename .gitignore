@@ -27,3 +27,7 @@ e2e/playwright-report/
 
 # component previews: the WebPs are made on demand (retake-edit component preview); the sheets are committed
 /library/**/previews/*.webp
+
+# Ignition's page code: built by web's `npm run build` (web/vite.ignition.config.ts) from extensions/ignition/src
+/extensions/ignition/ui/ignition.js
+/extensions/ignition/ui/ignition.css

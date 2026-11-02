@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && vite build -c vite.ignition.config.ts",
+    "check:ignition": "svelte-check --workspace ../extensions/ignition/src --tsconfig \"$PWD/../extensions/ignition/src/tsconfig.json\" --fail-on-warnings && prettier --check ../extensions/ignition/src",
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json --fail-on-warnings && tsc -p tsconfig.node.json",
     "lint": "eslint . && prettier --check .",

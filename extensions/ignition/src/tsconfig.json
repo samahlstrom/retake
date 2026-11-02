@@ -1,0 +1,25 @@
+{
+  "//": "Type-checks Ignition's page code (svelte-check, run from web/; see web/vite.ignition.config.ts). The packages are web's.",
+  "compilerOptions": {
+    "target": "es2022",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "lib": ["es2023", "dom", "dom.iterable"],
+    "types": [],
+    "paths": {
+      "svelte": ["../../../web/node_modules/svelte/types/index.d.ts"],
+      "svelte/*": ["../../../web/node_modules/svelte/types/index.d.ts"],
+      "vitest": ["../../../web/node_modules/vitest/dist/index.d.ts"]
+    },
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["**/*.ts", "**/*.svelte"]
+}
