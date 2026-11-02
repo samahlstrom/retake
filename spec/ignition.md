@@ -114,6 +114,14 @@ tokens. No tabs and no toolbar.
   to `[x]`), links that open on a tap, `>` quotes and `---` rules. The markup characters (`#`, `**`, list markers,
   `>`, a link's brackets and address) are hidden except on the lines the caret or the selection touches, where the
   text is shown as typed.
+- **Images.** `![caption](images/x.png)` (a path relative to `v0/`) shows the image inline: the column's full width
+  on a phone, rounded, with the caption under it; on the caret's line the Markdown shows instead. Pasting or dropping
+  an image saves it as `v0/images/<name>` (a new name when one is taken, 25 MiB at most) and puts its Markdown at the
+  caret. Hosted, images go through the same owned-file routes as the document.
+- **Image decisions.** A question the agent asks about a place in the document with image options (`retake ask --file
+  v0/<video>_v0.md --heading "Cold open" --option "Ink@images/ink.png" --option "Neon@images/neon.png" "Which look?"`)
+  also shows inline, right after its heading or line: the question and its images side by side (stacked on a phone).
+  Tapping one answers it, as tapping the choice in the comments column does; once answered it goes away.
 
 - **Saving.** 600 ms after the last keystroke and when the text loses focus, with `If-Match` on the version read. The
   only word it shows is a quiet "Not saved · Retry" when a save fails, or "Changed outside Retake · Reload · Keep
@@ -130,8 +138,11 @@ tokens. No tabs and no toolbar.
 - **Keys.** Typing goes to the text. Esc leaves the text, and then R talks, as on a video. The Record button always
   works. The page's other review keys do nothing here.
 - **A phone** shows the document from the top of the screen to the bottom bar, which holds just Record and Send (the
-  version picker and the agent are in the comments drawer's header). Text is at least 17 px, and nothing scrolls
-  sideways.
+  version picker and the agent are in the comments drawer's header). The top row is back on the left, and on the right
+  ⋯ with the comments' count beside it as a small icon and number (no number at 0). Text is at least 17 px and wraps
+  inside the screen; nothing scrolls sideways. The bottom bar stays above Safari's toolbar and the home indicator
+  (`viewport-fit=cover`, the safe-area insets, `dvh`). Phone checks run in Chromium and in WebKit (iPhone device
+  descriptors).
 
 `ctx.onAnchor(fn)` (an addition to the page API): the version slot tells core where a typed comment points (the
 heading above the caret), so the comments column's line can anchor it.
@@ -157,6 +168,8 @@ Send sends v0's open comments, as on a video. The task targets Ignition, so its 
 
 - `v0/<video>_v0.md` is this video's plan, one document. The person's own words under its title are theirs: don't
   rewrite or remove them.
+- Images go in `v0/images/` and into the document as `![caption](images/<name>.png)`; for a decision between looks,
+  ask with image options (`--option "Ink@v0/images/ink.png"`), and the person picks one in the document.
 - Shape it in that file: a `## Outline` section with the beats, then a `## Script` section with the same beats as `###`
   headings, what's said as paragraphs and what's shown in `[brackets]`. Keep the person's phrasing where it works.
   Don't make other files.
