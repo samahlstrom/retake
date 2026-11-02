@@ -80,6 +80,7 @@ type runner struct {
 	versions              int             // the family's versions, from the last poll: outside a task, render only while 0
 	warned                map[string]bool // profiles already logged as having no interactive command
 	ask                   askState        // questions from inside a task (ask.go)
+	batch                 batchState      // the video's next batch, for a live session (batch.go)
 	life                  context.Context // the worker's whole run: its question endpoint lives this long
 	extJobs               *extwork.Jobs   // transcriptions of owned audio files, for the relay's ext.transcribe
 
@@ -253,7 +254,8 @@ func Run(ctx context.Context, o Options) error {
 
 type outcome struct {
 	state, message, result string
-	version                string // a plain task's new version file
+	version                string           // a plain task's new version file
+	changes                map[int64]string // what changed for each note, from the report
 	usage                  *project.AgentUsage
 }
 
@@ -296,8 +298,8 @@ func (r *runner) controlLoop(ctx context.Context) error {
 			var assignment project.WorkAssignment
 			pollCtx, pollCancel := context.WithTimeout(ctx, 5*time.Second)
 			started := time.Now()
-			told := r.unsentTold()
-			e := r.call(pollCtx, "/api/worker/poll", map[string]any{"worker": r.identity, "task": task, "lease": lease, "told": told}, &assignment)
+			told, join := r.unsentTold(), r.unsentJoin()
+			e := r.call(pollCtx, "/api/worker/poll", project.WorkPoll{Worker: r.identity, Task: task, Lease: lease, Told: told, Join: join}, &assignment)
 			pollCancel()
 			if e != nil {
 				if lastError != e.Error() {
@@ -336,6 +338,7 @@ func (r *runner) controlLoop(ctx context.Context) error {
 			r.mu.Unlock()
 			if task != "" {
 				r.acked(told) // the server keeps them on the task now
+				r.joined(join)
 			}
 			if current == nil && assignment.Task != nil {
 				if !project.ValidWorkID(assignment.Task.ID) || !project.ValidWorkID(assignment.Task.Lease) || assignment.Task.Worker != r.identity.ID {
@@ -343,6 +346,7 @@ func (r *runner) controlLoop(ctx context.Context) error {
 				}
 				current = assignment.Task
 				r.setActive(current)
+				r.resetBatch()
 				stopping = false
 				abandoned = false
 				child, childCancel := context.WithCancel(ctx)
@@ -353,6 +357,7 @@ func (r *runner) controlLoop(ctx context.Context) error {
 				current = assignment.Task
 				r.setActive(current)
 				r.sawQuestions(current, assignment.Questions)
+				r.offer(assignment.Next, assignment.Notes)
 				if current.Stop {
 					cancel()
 					stopping = true
@@ -363,10 +368,13 @@ func (r *runner) controlLoop(ctx context.Context) error {
 				if stopping {
 					result = outcome{state: "stopped", message: "Agent process stopped; working files retained"}
 				}
-				told := r.unsentTold()
-				report := project.WorkReport{Worker: r.identity.ID, Task: current.ID, Lease: current.Lease, State: result.state, Message: result.message, Result: result.result, Version: result.version, Usage: result.usage, Told: told}
+				told, join := r.unsentTold(), r.unsentJoin()
+				report := project.WorkReport{Worker: r.identity.ID, Task: current.ID, Lease: current.Lease, State: result.state,
+					Message: result.message, Result: result.result, Version: result.version, Usage: result.usage, Told: told,
+					Join: join, Notes: result.changes}
 				if r.call(ctx, "/api/worker/report", report, nil) == nil {
 					r.acked(told)
+					r.joined(join)
 					cancel()
 					current = nil
 					pending = nil
