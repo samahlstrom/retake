@@ -4,7 +4,6 @@ package worker
 
 import (
 	"errors"
-	"os"
 	"os/exec"
 )
 
@@ -12,6 +11,8 @@ import (
 func lockProject(string) (func(), error) {
 	return nil, errors.New("editing workers currently require Linux or macOS")
 }
-func ownGroup(*exec.Cmd)            {}
-func stopGroup(p *os.Process) error { return p.Kill() }
-func killGroup(p *os.Process)       { _ = p.Kill() }
+func detach(*exec.Cmd)     {}
+func stopGroup(int) error  { return errors.ErrUnsupported }
+func killGroup(int)        {}
+func procStart(int) string { return "" }
+func endGroup(int, string) {}

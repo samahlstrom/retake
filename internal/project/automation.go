@@ -13,8 +13,19 @@ import (
 	"github.com/samahlstrom/retake/internal/bridge"
 )
 
-// WorkerLease is deliberately longer than the worker's disconnect cancellation deadline.
+// WorkerLease is how long an attempt's lease lasts without a poll. A worker polls every second.
 const WorkerLease = 30 * time.Second
+
+// ReconnectGrace is how long a lapsed attempt or chat turn stays running for its worker to come back and take it back
+// (spec/automation.md, "Agents outlive Retake"): a restart of Retake never stops an agent, so a lapse is usually one.
+// After it the task pauses (LostError) and the turn ends.
+var ReconnectGrace = 10 * time.Minute
+
+// LostError is a task's error when it paused because its worker didn't come back within the grace.
+const LostError = "Worker disconnected; retry or switch agent"
+
+// lapsed reports whether a lease that ran out at until is past its grace at now.
+func lapsed(until, now int64) bool { return until+int64(ReconnectGrace.Seconds()) <= now }
 
 // AgentProfile is a locally configured executable. The server only receives its identity, never its command.
 type AgentProfile struct {
@@ -86,7 +97,13 @@ type EditingTask struct {
 	Done  []int64   `json:"done,omitempty"`
 	// Dropped is the notes that left the batch: retracted or answered outside it (spec/automation.md, "Batches").
 	Dropped []int64 `json:"dropped,omitempty"`
+	// Lost says it paused because its worker didn't come back within the grace: that worker may take it back
+	// (spec/automation.md, "Agents outlive Retake").
+	Lost bool `json:"lost,omitempty"`
 }
+
+// lost reports whether t is paused because its worker went away (Lost, or the error an older version gave it).
+func (t *EditingTask) lost() bool { return t.State == "paused" && (t.Lost || t.Error == LostError) }
 
 // AgentUsage reports provider telemetry, never an invented remaining subscription balance.
 type AgentUsage struct {
@@ -246,9 +263,12 @@ func (s *Store) reconcileWork(t *tx, a *AutomationState) (bool, error) {
 		if j.State == "completed" || j.State == "cancelled" {
 			continue
 		}
-		if (j.State == "running" || j.State == "stopping") && j.Until <= now {
+		// A lapsed lease is usually Retake restarting: the agent works on, and its worker takes it back. Only after the
+		// grace does the task pause (spec/automation.md, "Agents outlive Retake").
+		if (j.State == "running" || j.State == "stopping") && lapsed(j.Until, now) {
 			j.State = "paused"
-			j.Error = "Worker disconnected; retry or switch agent"
+			j.Error = LostError
+			j.Lost = true
 			j.Lease = ""
 			j.Stop = false
 			j.AddEvent(now, j.Error)
@@ -929,6 +949,67 @@ type WorkPoll struct {
 	// Chat and ChatLease are the chat turn the worker runs (spec/chat.md), which the poll renews.
 	Chat      string `json:"chat,omitempty"`
 	ChatLease string `json:"chat_lease,omitempty"`
+	// Adopt asks for an attempt back after the worker restarted, in place of Task (spec/automation.md, "Agents outlive
+	// Retake").
+	Adopt *WorkAdopt `json:"adopt,omitempty"`
+}
+
+// WorkAdopt is an attempt a worker found in its records and wants back: its lease, the notes its agent has had, and
+// whether its agent is alive or has written its report.
+type WorkAdopt struct {
+	Task    string  `json:"task"`
+	Attempt int     `json:"attempt"`
+	Lease   string  `json:"lease,omitempty"`
+	Notes   []int64 `json:"notes,omitempty"`
+	Alive   bool    `json:"alive"`
+}
+
+// owns reports whether p proves w runs an attempt or a turn here: its lease. Such a poll may come from a new session of
+// the same worker (a restart).
+func (a *AutomationState) owns(w string, p WorkPoll) bool {
+	lease := p.Lease
+	task := p.Task
+	if p.Adopt != nil {
+		task, lease = p.Adopt.Task, p.Adopt.Lease
+	}
+	if j := a.Task(task); j != nil && lease != "" && j.Worker == w && j.Lease == lease &&
+		(j.State == "running" || j.State == "stopping") {
+		return true
+	}
+	c := a.chatTurn()
+	return p.Chat != "" && c != nil && c.ID == p.Chat && c.Worker == w && c.Lease != "" && c.Lease == p.ChatLease
+}
+
+// adopt gives w the attempt it asks back for (spec/automation.md, "Agents outlive Retake"): one still running with its
+// lease, renewed, or one paused because w went away, running again with a new lease while nothing else runs. nil when
+// it isn't w's to take.
+func (a *AutomationState) adopt(w EditingWorker, ad WorkAdopt, now int64) *EditingTask {
+	j := a.Task(ad.Task)
+	if j == nil || j.Worker != w.ID || j.Attempt != ad.Attempt {
+		return nil
+	}
+	until := now + int64(WorkerLease.Seconds())
+	switch {
+	case (j.State == "running" || j.State == "stopping") && j.Lease != "" && j.Lease == ad.Lease:
+		if j.Until <= now {
+			j.AddEvent(now, "Reconnected to the agent")
+		}
+		j.Until = until
+		return j
+	case j.lost() && ad.Alive:
+		busy := slices.ContainsFunc(a.Tasks, func(o EditingTask) bool { return o.State == "running" || o.State == "stopping" })
+		if c := a.chatTurn(); c != nil && c.State != ChatQueued {
+			busy = true
+		}
+		// A note to do that the agent never had (a batch merged in while it was paused) needs a new attempt.
+		if busy || slices.ContainsFunc(j.Pending(), func(id int64) bool { return !slices.Contains(ad.Notes, id) }) {
+			return nil
+		}
+		j.State, j.Lease, j.Until, j.Error, j.Lost, j.Stop, j.NextAgent = "running", NewWorkID(), until, "", false, false, ""
+		j.AddEvent(now, "Reconnected to the agent after a restart")
+		return j
+	}
+	return nil
 }
 
 // PollWork registers a heartbeat and renews or claims an exclusive task attempt. told is the answers to the active
@@ -960,7 +1041,7 @@ func (s *Store) PollWorkerChat(p WorkPoll) (task, next *EditingTask, chat *ChatT
 		now := s.Now().Unix()
 		changed := false
 		old := a.Worker(w.ID)
-		if old != nil && old.Session != w.Session && old.Seen+int64(WorkerLease.Seconds()) > now {
+		if old != nil && old.Session != w.Session && old.Seen+int64(WorkerLease.Seconds()) > now && !a.owns(w.ID, p) {
 			return false, errors.New("worker already connected")
 		}
 		w.Seen = now
@@ -986,11 +1067,23 @@ func (s *Store) PollWorkerChat(p WorkPoll) (task, next *EditingTask, chat *ChatT
 			}
 			return changed, nil
 		}
+		if p.Adopt != nil {
+			// Taking an attempt back: this poll claims nothing else.
+			if j := a.adopt(w, *p.Adopt, now); j != nil {
+				clone := *j
+				task = &clone
+				next = a.next(j.ID)
+			}
+			return true, nil
+		}
 		if p.Task != "" {
 			j := a.Task(p.Task)
-			if j == nil || j.Worker != w.ID || j.Lease != p.Lease || j.Lease == "" {
+			if j == nil || j.Worker != w.ID || j.Lease != p.Lease || j.Lease == "" || j.State != "running" && j.State != "stopping" {
 				stale = true
 				return changed, nil
+			}
+			if j.Until <= now {
+				j.AddEvent(now, "Reconnected to the agent")
 			}
 			j.Until = now + int64(WorkerLease.Seconds())
 			changed = j.tell(p.Told) || changed
@@ -1048,6 +1141,7 @@ func (s *Store) PollWorkerChat(p WorkPoll) (task, next *EditingTask, chat *ChatT
 			j.Until = now + int64(WorkerLease.Seconds())
 			j.Attempt++
 			j.Error = ""
+			j.Lost = false
 			j.Stop = false
 			j.AddEvent(now, "Agent picked up the task")
 			clone := *j
@@ -1099,7 +1193,8 @@ func (s *Store) processing() (bool, error) {
 // WorkAttempt verifies fencing before accepting any worker mutation.
 func (a *AutomationState) WorkAttempt(id, worker, lease string, now int64) (*EditingTask, error) {
 	j := a.Task(id)
-	if j == nil || j.Worker != worker || j.Lease == "" || j.Lease != lease || j.Until <= now || j.State != "running" && j.State != "stopping" {
+	// A lapsed lease still counts within the grace: its worker is back (spec/automation.md, "Agents outlive Retake").
+	if j == nil || j.Worker != worker || j.Lease == "" || j.Lease != lease || lapsed(j.Until, now) || j.State != "running" && j.State != "stopping" {
 		return nil, errors.New("stale task attempt")
 	}
 	return j, nil

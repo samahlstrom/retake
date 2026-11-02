@@ -1,14 +1,12 @@
 package worker
 
 import (
-	"bufio"
+	"bytes"
 	"context"
 	"crypto/subtle"
 	"errors"
 	"fmt"
-	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -32,7 +30,7 @@ var (
 // chatRun is the turn this worker runs.
 type chatRun struct {
 	id, lease string
-	cancel    context.CancelFunc
+	cancel    context.CancelCauseFunc // errStop: a person's Stop, or the turn isn't this worker's; else the worker leaves
 	done      chan struct{}
 	secret    string // its retake ask secret
 
@@ -68,35 +66,63 @@ func (r *runner) takeChat(ctx context.Context, cw *project.ChatWork) {
 	r.mu.Unlock()
 	switch {
 	case cw == nil && run != nil:
-		run.cancel()
+		run.cancel(errStop)
 	case cw != nil && run != nil && (run.id != cw.ID || cw.Stop):
-		run.cancel()
+		run.cancel(errStop)
 	case cw != nil && run == nil && !cw.Stop:
-		child, cancel := context.WithCancel(ctx)
-		run = &chatRun{id: cw.ID, lease: cw.Lease, cancel: cancel, done: make(chan struct{}), secret: newSecret()}
-		r.mu.Lock()
-		r.chat = run
-		r.mu.Unlock()
-		go func() {
-			defer close(run.done)
-			defer cancel()
-			r.runChat(child, *cw, run)
-			r.mu.Lock()
-			if r.chat == run {
-				r.chat = nil
-			}
-			r.mu.Unlock()
-		}()
+		r.startChat(ctx, *cw, nil)
 	}
 }
 
-// stopChat stops the running turn and waits for it.
-func (r *runner) stopChat() {
+// resumeChat carries on with the turn an earlier worker left running (rec), when the server gave it back (cw); else
+// its agent is stopped and its record goes (spec/automation.md, "Agents outlive Retake").
+func (r *runner) resumeChat(ctx context.Context, cw *project.ChatWork, rec *turnRecord) {
+	if cw == nil || cw.ID != rec.Turn {
+		if rec.Proc.alive() {
+			r.log("%s: the chat's turn isn't running any more; stopping its agent", filepath.Base(r.opts.Root))
+			rec.Proc.stop()
+		}
+		_ = os.Remove(r.turnPath())
+		r.takeChat(ctx, cw)
+		return
+	}
+	run := r.startChat(ctx, *cw, rec)
+	r.log("%s: took the chat's turn back: the agent works on", filepath.Base(r.opts.Root))
+	if cw.Stop {
+		run.cancel(errStop)
+	}
+}
+
+// startChat runs turn cw (rec: taken back) until it ends, or the worker leaves.
+func (r *runner) startChat(ctx context.Context, cw project.ChatWork, rec *turnRecord) *chatRun {
+	child, cancel := context.WithCancelCause(ctx)
+	run := &chatRun{id: cw.ID, lease: cw.Lease, cancel: cancel, done: make(chan struct{}), secret: newSecret()}
+	if rec != nil && rec.Secret != "" {
+		run.secret = rec.Secret
+	}
+	r.mu.Lock()
+	r.chat = run
+	r.mu.Unlock()
+	go func() {
+		defer close(run.done)
+		defer cancel(nil)
+		r.runChat(child, cw, run, rec)
+		r.mu.Lock()
+		if r.chat == run {
+			r.chat = nil
+		}
+		r.mu.Unlock()
+	}()
+	return run
+}
+
+// leaveChat lets the running turn go as the worker leaves: its agent works on, for the next worker to take back.
+func (r *runner) leaveChat() {
 	r.mu.Lock()
 	run := r.chat
 	r.mu.Unlock()
 	if run != nil {
-		run.cancel()
+		run.cancel(nil)
 		<-run.done
 	}
 }
@@ -290,11 +316,24 @@ type chatSender struct {
 	session string
 	sent    string // the session the server has
 	stop    func()
+	offset  int64       // how far into the turn's output the events added so far go
+	gen     int         // the turn's process the offset is in: a new one starts its output at 0
+	saved   func(int64) // keeps how far the server has them
 }
 
-func (s *chatSender) add(evs []project.ChatEvent, session string) {
+// restart starts reading a new process's output.
+func (s *chatSender) restart() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.offset = 0
+	s.gen++
+}
+
+// add queues the events read up to offset in the turn's output.
+func (s *chatSender) add(evs []project.ChatEvent, session string, offset int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.offset = max(s.offset, offset)
 	for _, e := range evs {
 		if n := len(s.events); n > 0 && e.Type == "text" && s.events[n-1].Type == "text" {
 			s.events[n-1].Text += e.Text
@@ -312,7 +351,7 @@ func (s *chatSender) flush(ctx context.Context, end *project.ChatEnd) error {
 	s.posting.Lock()
 	defer s.posting.Unlock()
 	s.mu.Lock()
-	evs, session := s.events, s.session
+	evs, session, offset, gen := s.events, s.session, s.offset, s.gen
 	s.events = nil
 	s.mu.Unlock()
 	if len(evs) == 0 && end == nil && session == s.sent {
@@ -328,7 +367,7 @@ func (s *chatSender) flush(ctx context.Context, end *project.ChatEnd) error {
 	err := s.r.call(ctx, "/api/worker/chat", p, &answer)
 	if err != nil {
 		var he *httpError
-		if errors.As(err, &he) && he.status == 409 {
+		if errors.As(err, &he) && he.status == 409 && strings.Contains(he.message, "isn't running on this worker") {
 			s.stop() // not this worker's turn any more
 			return err
 		}
@@ -338,56 +377,70 @@ func (s *chatSender) flush(ctx context.Context, end *project.ChatEnd) error {
 		return err
 	}
 	s.sent = session
+	s.mu.Lock()
+	same := gen == s.gen
+	s.mu.Unlock()
+	if s.saved != nil && same {
+		s.saved(offset)
+	}
 	if answer.Stop {
 		s.stop()
 	}
 	return nil
 }
 
-// runChat runs one turn and tells the server how it ended.
-func (r *runner) runChat(ctx context.Context, cw project.ChatWork, run *chatRun) {
+// runChat runs one turn (or, rec, carries on with one an earlier worker started) and tells the server how it ended.
+// When the worker leaves meanwhile, the turn's agent works on and nothing is told: the next worker takes it back.
+func (r *runner) runChat(ctx context.Context, cw project.ChatWork, run *chatRun, rec *turnRecord) {
 	name := filepath.Base(r.opts.Root)
 	life := r.life
 	if life == nil {
 		life = context.Background()
 	}
-	stopped := ctx.Done()
-	procCtx, stopProc := context.WithCancel(ctx)
-	defer stopProc()
-	send := &chatSender{r: r, run: run, stop: stopProc}
+	procCtx, stopProc := context.WithCancelCause(ctx)
+	defer stopProc(nil)
+	if rec == nil {
+		rec = &turnRecord{Turn: cw.ID, Lease: cw.Lease, Agent: cw.Agent, Session: cw.Session, Secret: run.secret}
+	}
+	rec.Lease = cw.Lease
+	send := &chatSender{r: r, run: run, stop: func() { stopProc(errStop) }, offset: rec.Offset,
+		saved: func(off int64) { r.saveTurn(rec, func(x *turnRecord) { x.Offset = max(x.Offset, off) }) }}
 	run.mu.Lock()
 	run.send = send
 	run.mu.Unlock()
 	flushing := make(chan struct{})
+	tick, quit := time.NewTicker(chatFlush), make(chan struct{})
 	go func() {
 		defer close(flushing)
-		tick := time.NewTicker(chatFlush)
 		defer tick.Stop()
 		for {
 			select {
-			case <-procCtx.Done():
+			case <-quit:
 				return
 			case <-tick.C:
 				_ = send.flush(life, nil)
 			}
 		}
 	}()
-	end := r.chatTurnRun(procCtx, cw, run, send)
-	stopProc()
+	end, left := r.chatTurnRun(procCtx, cw, run, send, rec)
+	close(quit)
 	<-flushing
-	select {
-	case <-stopped:
-		if end.State != "stopped" {
-			end = project.ChatEnd{State: "stopped", Info: project.ChatStopped}
-		}
-	default:
+	if left {
+		return // the worker is going away; the agent works on
+	}
+	if stopped(procCtx) && end.State != "stopped" {
+		end = project.ChatEnd{State: "stopped", Info: project.ChatStopped}
 	}
 	// The end must reach the server; a hosted one may be briefly out of reach.
 	for i := 0; i < 30; i++ {
 		err := send.flush(life, &end)
 		var he *httpError
-		if err == nil || errors.As(err, &he) && he.status < 500 || life.Err() != nil {
+		if err == nil || errors.As(err, &he) && he.status < 500 {
+			_ = os.Remove(r.turnPath())
 			break
+		}
+		if life.Err() != nil {
+			break // the next worker sends it
 		}
 		select {
 		case <-life.Done():
@@ -398,90 +451,162 @@ func (r *runner) runChat(ctx context.Context, cw project.ChatWork, run *chatRun)
 }
 
 // chatTurnRun runs the agent for a turn (once more as a new session when a resumed one fails before saying anything)
-// and says how it ended.
-func (r *runner) chatTurnRun(ctx context.Context, cw project.ChatWork, run *chatRun, send *chatSender) project.ChatEnd {
+// and says how it ended; left when the worker left while it ran.
+func (r *runner) chatTurnRun(ctx context.Context, cw project.ChatWork, run *chatRun, send *chatSender, rec *turnRecord) (project.ChatEnd, bool) {
 	index := slices.IndexFunc(r.opts.Profiles, func(p Profile) bool { return p.ID == cw.Agent })
 	if index < 0 {
-		return project.ChatEnd{State: "failed", Info: "The chat's agent isn't installed on the editing computer"}
+		return project.ChatEnd{State: "failed", Info: "The chat's agent isn't installed on the editing computer"}, false
 	}
 	p := r.opts.Profiles[index]
 	kindExt, doc, word := r.chatDoc()
 	dir := filepath.Join(r.dir, "chat")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return project.ChatEnd{State: "failed", Info: project.ChatFailed}
+		return project.ChatEnd{State: "failed", Info: project.ChatFailed}, false
 	}
 	// A copy of the extensions' files first, so ⋯ → Undo the agent's edit undoes this turn.
-	finish := r.snapshot("chat-" + cw.ID)
-	defer finish()
-	session := cw.Session
+	var snaps []*ext.Snap
+	if rec.Run == 0 {
+		r.stopOrphans("", cw.ID) // one agent per video
+		snaps = r.snapshot("chat-" + cw.ID)
+		var states []ext.SnapState
+		for _, s := range snaps {
+			states = append(states, s.State())
+		}
+		url, _ := r.askURL()
+		r.saveTurn(rec, func(x *turnRecord) { x.Snaps, x.AskURL = states, url })
+	} else {
+		for _, st := range rec.Snaps {
+			if s := ext.ResumeSnap(r.opts.Root, st); s != nil {
+				snaps = append(snaps, s)
+			}
+		}
+	}
+	left := false
+	defer func() {
+		if left {
+			return
+		}
+		for _, s := range snaps {
+			if _, err := s.Finish(); err != nil {
+				r.log("%s: couldn't record the agent's edits: %v", filepath.Base(r.opts.Root), err)
+			}
+		}
+	}()
+	session := rec.Session
 	if agentStyle(p.Command) == "" {
 		session = ""
 	}
-	for attempt := 0; ; attempt++ {
+	for attempt := max(rec.Run, 1); ; attempt++ {
 		stream := newChatStream(r.opts.Root, doc, word)
-		prompt := r.chatPrompt(cw, kindExt, doc, session != "")
-		tail, err := r.chatProcess(ctx, p, chatArgv(p.Command, session), prompt, run, stream, send,
-			filepath.Join(dir, fmt.Sprintf("%s-%d.log", cw.ID, attempt+1)))
-		if ctx.Err() != nil {
-			return project.ChatEnd{State: "stopped", Info: project.ChatStopped}
+		if attempt > rec.Run {
+			// A new process for the turn.
+			base := filepath.Join(dir, fmt.Sprintf("%s-%d", cw.ID, attempt))
+			prompt := r.chatPrompt(cw, kindExt, doc, session != "")
+			if err := os.WriteFile(base+".md", []byte(prompt), 0o600); err != nil {
+				return project.ChatEnd{State: "failed", Info: project.ChatFailed}, false
+			}
+			env := chatEnv(os.Environ(), p.Env)
+			if url, err := r.askURL(); err == nil {
+				env = append(env, "RETAKE_ASK_URL="+url, "RETAKE_ASK_TOKEN="+run.secret)
+			}
+			proc, err := startDetached(chatArgv(p.Command, session), r.opts.Root, env, base+".md", base+".out", base+".log")
+			if err != nil {
+				return project.ChatEnd{State: "failed", Info: project.ChatFailed}, false
+			}
+			send.restart()
+			r.saveTurn(rec, func(x *turnRecord) {
+				x.Run, x.Session, x.Out, x.Log, x.Offset, x.Proc = attempt, session, base+".out", base+".log", 0, proc
+			})
+		}
+		tail, gone, err := r.chatRead(ctx, rec, stream, send)
+		if gone {
+			left = true
+			return project.ChatEnd{}, true
+		}
+		if stopped(ctx) {
+			return project.ChatEnd{State: "stopped", Info: project.ChatStopped}, false
 		}
 		if _, limited := telemetry(tail); limited {
-			return project.ChatEnd{State: "failed", Info: project.ChatLimited}
+			return project.ChatEnd{State: "failed", Info: project.ChatLimited}, false
 		}
-		if err != nil && session != "" && !stream.said && attempt == 0 {
+		if err != nil && session != "" && !stream.said && attempt == 1 {
 			r.log("%s: the agent couldn't resume the chat's session; starting a new one", filepath.Base(r.opts.Root))
 			session = ""
 			continue
 		}
 		if err != nil {
-			return project.ChatEnd{State: "failed", Info: project.ChatFailed}
+			return project.ChatEnd{State: "failed", Info: project.ChatFailed}, false
 		}
-		return project.ChatEnd{State: "done"}
+		return project.ChatEnd{State: "done"}, false
 	}
 }
 
-// chatProcess runs one agent process for a turn, reading its output into the stream as it comes.
-func (r *runner) chatProcess(ctx context.Context, p Profile, argv []string, prompt string, run *chatRun,
-	stream *chatStream, send *chatSender, logPath string) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...) //nolint:gosec // trusted local argv, never supplied by the host
-	cmd.Dir = r.opts.Root
-	cmd.Stdin = strings.NewReader(prompt)
-	cmd.Env = chatEnv(os.Environ(), p.Env)
-	if url, err := r.askURL(); err == nil {
-		cmd.Env = append(cmd.Env, "RETAKE_ASK_URL="+url, "RETAKE_ASK_TOKEN="+run.secret)
+// chatRead reads the output of the turn's process as it writes it, from the start of its file: the words the server
+// has already (up to the record's offset) only rebuild the stream's state, the rest goes to the server. It returns
+// when the process has ended (gone: when the worker leaves while it runs), with the end of its output and how it
+// exited (unknown, nil, for an earlier worker's).
+func (r *runner) chatRead(ctx context.Context, rec *turnRecord, stream *chatStream, send *chatSender) (tail []byte, gone bool, err error) {
+	var proc *agentProc
+	switch {
+	case rec.Proc != nil && rec.Proc.own:
+		proc = rec.Proc
+	case rec.Proc.alive():
+		proc = r.watch(rec.Proc)
 	}
-	ownGroup(cmd)
-	cmd.Cancel = func() error { return stopGroup(cmd.Process) }
-	cmd.WaitDelay = 3 * time.Second
-	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600) //nolint:gosec // generated name under a validated turn ID
+	f, err := os.Open(rec.Out)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	defer func() { _ = logFile.Close() }()
-	log := &boundedLog{file: logFile}
-	cmd.Stderr = log
-	out, err := cmd.StdoutPipe()
-	if err != nil {
-		return nil, err
-	}
-	if err = cmd.Start(); err != nil {
-		return nil, err
-	}
-	lines := bufio.NewReaderSize(io.TeeReader(out, log), 1<<16)
-	for {
-		line, err := lines.ReadBytes('\n')
-		if len(line) > 0 {
-			stream.line(line)
-			send.add(stream.take(), stream.session)
+	defer func() { _ = f.Close() }()
+	skip := rec.Offset
+	var pos int64
+	var partial []byte
+	buf := make([]byte, 64<<10)
+	line := func(l []byte) {
+		pos += int64(len(l))
+		stream.line(l)
+		evs := stream.take()
+		if pos > skip {
+			send.add(evs, stream.session, pos)
 		}
-		if err != nil {
+	}
+	ended := proc == nil
+	for {
+		n, _ := f.Read(buf)
+		if n > 0 {
+			data := append(partial, buf[:n]...)
+			for i := bytes.IndexByte(data, '\n'); i >= 0; i = bytes.IndexByte(data, '\n') {
+				line(data[:i+1])
+				data = data[i+1:]
+			}
+			partial = slices.Clone(data)
+			continue
+		}
+		if ended {
+			if len(partial) > 0 {
+				line(partial) // its last line, without a newline
+			}
 			break
 		}
+		select {
+		case <-proc.done:
+			ended = true // read what it wrote last, then stop
+		case <-ctx.Done():
+			if !stopped(ctx) {
+				return nil, true, nil
+			}
+			proc.stop()
+			ended = true
+		case <-time.After(50 * time.Millisecond):
+		}
 	}
-	err = cmd.Wait()
-	killGroup(cmd.Process)
-	send.add(stream.take(), stream.session)
-	return log.tail, err
+	var exit error
+	if proc != nil && proc.own {
+		exit = proc.err
+		killGroup(proc.PID) // what it left running in its group
+	}
+	r.saveTurn(rec, func(x *turnRecord) { x.Proc = nil })
+	return append(tailOf(rec.Out, 64<<10), tailOf(rec.Log, 64<<10)...), false, exit
 }
 
 // chatEnv is a turn's environment: the worker's without its own variables, and the profile's.

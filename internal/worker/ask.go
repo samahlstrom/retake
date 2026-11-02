@@ -44,6 +44,7 @@ const MaxAskBody = 48 << 20
 // as the server last said them (plus what was asked since), and answers told to the agent that the server hasn't
 // heard of yet.
 type askState struct {
+	was       string // host:port the endpoint had in an earlier worker, to listen on again
 	url       string
 	secret    string
 	notes     map[int64]project.WorkNote // the attempt's notes, for a question's default version and time
@@ -71,7 +72,12 @@ func (r *runner) askURL() (string, error) {
 	if r.ask.url != "" {
 		return r.ask.url, nil
 	}
-	l, err := net.Listen("tcp", "127.0.0.1:0")
+	// The port it had, when it's free: an agent that outlived the last worker has that URL in its environment
+	// (spec/automation.md, "Agents outlive Retake").
+	l, err := net.Listen("tcp", r.ask.was)
+	if r.ask.was == "" || err != nil {
+		l, err = net.Listen("tcp", "127.0.0.1:0")
+	}
 	if err != nil {
 		return "", err
 	}
@@ -85,11 +91,14 @@ func (r *runner) askURL() (string, error) {
 	return r.ask.url, nil
 }
 
-// beginAsk gives an attempt its secret and writes the ask file; end takes both away. a is the attempt's assignment:
-// every answer in it is in the agent's context, so it is told; fresh is those the agent hadn't been told before.
-func (r *runner) beginAsk(a project.WorkAssignment) (env []string, fresh []project.TaskQuestion, end func()) {
+// beginAsk gives an attempt its secret (secret when it has one: an attempt taken back keeps it) and writes the ask
+// file; end takes both away, or with keep leaves the file for the agent that works on after its worker. a is the
+// attempt's assignment: for a new attempt every answer in it is in the agent's context, so it is told; fresh is those
+// the agent hadn't been told before. An attempt taken back (resumed) hasn't seen the answers that came meanwhile: they
+// stay untold, for its session or its next round.
+func (r *runner) beginAsk(a project.WorkAssignment, secret string, resumed bool) (env []string, fresh []project.TaskQuestion, key, url string, end func(keep bool)) {
 	for _, q := range a.Questions {
-		if q.Answer != nil && !slices.Contains(a.Task.Told, q.Answer.ID) {
+		if q.Answer != nil && !slices.Contains(a.Task.Told, q.Answer.ID) && !resumed {
 			fresh = append(fresh, q)
 		}
 	}
@@ -107,9 +116,11 @@ func (r *runner) beginAsk(a project.WorkAssignment) (env []string, fresh []proje
 	url, err := r.askURL()
 	if err != nil {
 		r.log("Can't listen for the agent's questions: %v", err)
-		return nil, fresh, func() {}
+		return nil, fresh, secret, "", func(bool) {}
 	}
-	secret := newSecret()
+	if secret == "" {
+		secret = newSecret()
+	}
 	r.mu.Lock()
 	r.ask.secret = secret
 	r.mu.Unlock()
@@ -117,13 +128,28 @@ func (r *runner) beginAsk(a project.WorkAssignment) (env []string, fresh []proje
 	if err = writeJSON(path, AskEndpoint{URL: url, Token: secret}); err != nil {
 		r.log("Can't write %s: %v", path, err)
 	}
-	return []string{"RETAKE_ASK_URL=" + url, "RETAKE_ASK_TOKEN=" + secret}, fresh, func() {
+	return []string{"RETAKE_ASK_URL=" + url, "RETAKE_ASK_TOKEN=" + secret}, fresh, secret, url, func(keep bool) {
 		r.mu.Lock()
 		if r.ask.secret == secret {
 			r.ask.secret = ""
 		}
 		r.mu.Unlock()
-		_ = os.Remove(path)
+		if !keep {
+			_ = os.Remove(path)
+		}
+	}
+}
+
+// askWas remembers the endpoint an earlier worker had (its ask.json, or a record's), to listen on that port again.
+func (r *runner) askWas(url string) {
+	host := strings.TrimPrefix(url, "http://")
+	if url == "" || host == url || !strings.HasPrefix(host, "127.0.0.1:") {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.ask.url == "" && r.ask.was == "" {
+		r.ask.was = host
 	}
 }
 

@@ -283,8 +283,8 @@ func docOnly(a project.WorkAssignment) bool {
 }
 
 // snapshot keeps a copy of every extension's owned files before an agent attempt (spec/extensions.md, "Agent edit
-// history"), so a person can undo the agent's edit of a document. finish records what the agent changed.
-func (r *runner) snapshot(task string) (finish func()) {
+// history"), so a person can undo the agent's edit of a document. Finishing them records what the agent changed.
+func (r *runner) snapshot(task string) []*ext.Snap {
 	var snaps []*ext.Snap
 	for _, e := range r.opts.Exts.List() {
 		if e.Files == nil || !r.hasOwned(e) {
@@ -297,11 +297,5 @@ func (r *runner) snapshot(task string) (finish func()) {
 		}
 		snaps = append(snaps, s)
 	}
-	return func() {
-		for _, s := range snaps {
-			if _, err := s.Finish(); err != nil {
-				r.log("%s: couldn't record the agent's edits: %v", filepath.Base(r.opts.Root), err)
-			}
-		}
-	}
+	return snaps
 }

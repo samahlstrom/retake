@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -27,9 +28,10 @@ import (
 
 // batchVideo is one plain video (<name>_v1.mp4 and notes 1..n on v1) on a server, with a worker running these profiles.
 type batchVideo struct {
-	st    *project.Store
-	local string
-	log   *syncLog
+	st               *project.Store
+	local            string
+	log              *syncLog
+	url, token, base string
 }
 
 func scratchDir(t *testing.T, prefix string) string {
@@ -50,6 +52,15 @@ func scratchDir(t *testing.T, prefix string) string {
 }
 
 func startBatchVideo(t *testing.T, base, name string, n int, profiles ...Profile) *batchVideo {
+	t.Helper()
+	v := serveVideo(t, base, name, n)
+	v.start(t, profiles...)
+	v.wait(t, "the worker", func(a project.AutomationState) bool { return a.Config.Worker != "" && len(a.ListedFiles()) == 1 })
+	return v
+}
+
+// serveVideo is one plain video (<name>_v1.mp4 and notes 1..n on v1) on a server, with no worker yet.
+func serveVideo(t *testing.T, base, name string, n int) *batchVideo {
 	t.Helper()
 	local, hosted := filepath.Join(base, name), filepath.Join(base, name+"-hosted")
 	testmedia.Video(t, filepath.Join(local, name+"_v1.mp4"), 2) // a family per video: never one across sibling folders
@@ -76,29 +87,38 @@ func startBatchVideo(t *testing.T, base, name string, n int, profiles ...Profile
 	srv := server.New(server.Options{Root: hosted, Store: st, Port: ts.Listener.Addr().(*net.TCPAddr).Port, FollowNewest: true})
 	ts.Config.Handler = srv
 	ts.Start()
-	ctx, cancel := context.WithCancel(context.Background())
-	finished := make(chan error, 1)
-	log := &syncLog{}
-	go func() {
-		finished <- Run(ctx, Options{URL: ts.URL, Token: token, Root: local, Name: "Test machine", Profiles: profiles,
-			Editor: bridge.Editor{Configured: filepath.Join(base, "no-retake-edit")}, Log: log})
-	}()
 	t.Cleanup(func() {
-		cancel()
-		select {
-		case err := <-finished:
-			if err != nil {
-				t.Error(err)
-			}
-		case <-time.After(15 * time.Second):
-			t.Error("worker did not stop")
-		}
 		ts.Close()
 		_ = srv.Close()
 	})
-	v := &batchVideo{st: st, local: local, log: log}
-	v.wait(t, "the worker", func(a project.AutomationState) bool { return a.Config.Worker != "" && len(a.ListedFiles()) == 1 })
-	return v
+	return &batchVideo{st: st, local: local, log: &syncLog{}, url: ts.URL, token: token, base: base}
+}
+
+// start runs a worker on the video, as retake worker does; stop quits it the way Ctrl+C does (its agents work on).
+func (v *batchVideo) start(t *testing.T, profiles ...Profile) (stop func()) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	finished := make(chan error, 1)
+	go func() {
+		finished <- Run(ctx, Options{URL: v.url, Token: v.token, Root: v.local, Name: "Test machine", Profiles: profiles,
+			Editor: bridge.Editor{Configured: filepath.Join(v.base, "no-retake-edit")}, Log: v.log})
+	}()
+	var once sync.Once
+	stop = func() {
+		once.Do(func() {
+			cancel()
+			select {
+			case err := <-finished:
+				if err != nil {
+					t.Error(err)
+				}
+			case <-time.After(15 * time.Second):
+				t.Error("worker did not stop")
+			}
+		})
+	}
+	t.Cleanup(stop)
+	return stop
 }
 
 func (v *batchVideo) wait(t *testing.T, label string, test func(project.AutomationState) bool) project.AutomationState {
@@ -424,18 +444,23 @@ func TestAnOlderTargetStartsFromItsOwnSource(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(r.dir, "renders", v8, "source.json"), []byte(`{"rev":8}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := r.checkout("../escape"); err == nil {
+	keep := filepath.Join(t.TempDir(), "timeline-before.json")
+	if _, err := r.checkout("../escape", keep); err == nil {
 		t.Fatal("a render id with a path")
 	}
-	restore, err := r.checkout(v8)
-	if err != nil {
-		t.Fatal(err)
+	kept, err := r.checkout(v8, keep)
+	if err != nil || kept != keep {
+		t.Fatal(kept, err)
 	}
 	if b, _ := os.ReadFile(r.timeline); string(b) != `{"rev":8}` {
 		t.Fatalf("checked out: %s", b)
 	}
-	restore()
+	// The newest source is kept in a file, so a later worker can put it back when the agent outlived this one.
+	r.restore(kept)
 	if b, _ := os.ReadFile(r.timeline); string(b) != `{"rev":9}` {
 		t.Fatalf("restored: %s", b)
+	}
+	if _, err := os.Stat(keep); !os.IsNotExist(err) {
+		t.Fatal("the kept source stays after it's back", err)
 	}
 }

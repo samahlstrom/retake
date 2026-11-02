@@ -61,8 +61,11 @@ type FolderOptions struct {
 	RescanEvery time.Duration
 	// Project adjusts a project's server options before its server is made (the streaming side's hooks, tests).
 	Project func(name string, o *server.Options)
-	// LocalWorker is each project's server.Options.LocalWorker: its editing worker, in this process.
+	// LocalWorker is each project's server.Options.LocalWorker: its editing worker, in this process. Working says
+	// whether a project has agent work in flight, whose worker Serve starts at once to take it back
+	// (spec/automation.md, "Agents outlive Retake").
 	LocalWorker func(ctx context.Context, root string, h http.Handler, blocked func(string))
+	Working     func(root string) bool
 	// Exts are the extensions in effect (spec/extensions.md): their kinds are found by the scan, and their files,
 	// list and routes are served at the home and under every video. FileTranscriber transcribes owned audio files.
 	Exts            *ext.Set
@@ -298,9 +301,23 @@ func (f *Folder) Idle() bool {
 	return true
 }
 
+// wake starts the workers of the projects with agent work in flight, without waiting for a page to open them: an agent
+// that outlived the last run is taken back at once (spec/automation.md, "Agents outlive Retake").
+func (f *Folder) wake() {
+	if f.opts.LocalWorker == nil || f.opts.Working == nil {
+		return
+	}
+	for _, fd := range f.rescan(false) {
+		if f.opts.Working(fd.Root) {
+			f.projectOf(fd)
+		}
+	}
+}
+
 // Serve serves on ln until ctx is done, or until the pages have been gone for IdleExit. idle reports which. Call Close
 // once it has returned.
 func (f *Folder) Serve(ctx context.Context, ln net.Listener) (idle bool, err error) {
+	go f.wake()
 	errLog := io.Discard
 	if f.opts.Verbose {
 		errLog = f.opts.Log

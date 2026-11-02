@@ -143,12 +143,12 @@ type addition struct {
 
 // round is one more part of an attempt: what the agent is given and where it reports.
 type round struct {
-	ids                                         []int64 // notes it gets
-	answers                                     []project.TaskQuestion
-	notes                                       []project.WorkNote // their details, with stills
-	next                                        project.WorkAssignment
-	k                                           int
-	contextPath, reportPath, promptPath, prompt string
+	ids                                                  []int64 // notes it gets
+	answers                                              []project.TaskQuestion
+	notes                                                []project.WorkNote // their details, with stills
+	next                                                 project.WorkAssignment
+	k                                                    int
+	contextPath, reportPath, promptPath, logPath, prompt string
 }
 
 // prepare writes the next round's files, when there is anything to give: the next batch's notes not given yet, and
@@ -189,6 +189,7 @@ func (r *runner) prepare(ctx context.Context, m *addition, answers, followUp boo
 	rd.contextPath = filepath.Join(m.dir, fmt.Sprintf("context-%d-%d.json", t.Attempt, rd.k))
 	rd.reportPath = filepath.Join(m.dir, fmt.Sprintf("report-%d-%d.json", t.Attempt, rd.k))
 	rd.promptPath = filepath.Join(m.dir, fmt.Sprintf("prompt-%d-%d.md", t.Attempt, rd.k))
+	rd.logPath = filepath.Join(m.dir, fmt.Sprintf("agent-%d-%d.log", t.Attempt, rd.k))
 	if err := m.write(rd.next, rd.contextPath); err != nil {
 		return nil, fmt.Errorf("can't save the context of the added comments: %w", err)
 	}
@@ -221,11 +222,11 @@ func (r *runner) commit(m *addition, rd *round) {
 }
 
 // more gives a live session what it hasn't had (answers too, with answers set) as one message for the same task. It
-// returns the new report path, "" when there was nothing to give.
-func (r *runner) more(ctx context.Context, v *view, m *addition, answers bool) (string, []int64, error) {
+// returns the round, whose report file counts now; nil when there was nothing to give.
+func (r *runner) more(ctx context.Context, v *view, m *addition, answers bool) (*round, error) {
 	rd, err := r.prepare(ctx, m, answers, false)
 	if rd == nil || err != nil {
-		return "", nil, err
+		return nil, err
 	}
 	t := m.a.Task
 	line := fmt.Sprintf("More comments for Retake task %s (attempt %d): follow the instructions in %s", t.ID, t.Attempt, rd.promptPath)
@@ -233,33 +234,30 @@ func (r *runner) more(ctx context.Context, v *view, m *addition, answers bool) (
 		line = fmt.Sprintf("Answers for Retake task %s (attempt %d): follow the instructions in %s", t.ID, t.Attempt, rd.promptPath)
 	}
 	if err = v.say(ctx, line); err != nil {
-		return "", nil, err
+		return nil, err
 	}
 	r.commit(m, rd)
-	return rd.reportPath, rd.ids, nil
+	return rd, nil
 }
 
 // nextRound starts another round of the attempt after its agent reported, when comments were sent meanwhile (or, in
 // the background, answers came to its questions): in herdr or tmux a message in the session, in the background a
-// follow-up run of the same agent, so they go in the same version. It moves the prompt, context, report and log to
-// the round's, and reports whether there is one.
-func (r *runner) nextRound(ctx context.Context, mode string, v *view, m *addition, prompt, contextPath, reportPath, logName *string) ([]int64, bool, error) {
+// follow-up run of the same agent, so they go in the same version. It returns the notes the round does and the round,
+// whose prompt, context, report and log are the attempt's now; a nil round when there is none.
+func (r *runner) nextRound(ctx context.Context, mode string, v *view, m *addition) ([]int64, *round, error) {
 	if mode != OpenBackground {
-		next, ids, err := r.more(ctx, v, m, true)
-		if err != nil || next == "" {
-			return nil, false, err
+		rd, err := r.more(ctx, v, m, true)
+		if err != nil || rd == nil {
+			return nil, nil, err
 		}
-		*reportPath = next
-		r.log("%s: gave the agent %d more comments (%s) after its report", filepath.Base(r.opts.Root), len(ids), noteIDs(ids))
-		return ids, true, nil
+		r.log("%s: gave the agent %d more comments (%s) after its report", filepath.Base(r.opts.Root), len(rd.ids), noteIDs(rd.ids))
+		return rd.ids, rd, nil
 	}
 	rd, err := r.prepare(ctx, m, true, true)
 	if rd == nil || err != nil {
-		return nil, false, err
+		return nil, nil, err
 	}
 	r.commit(m, rd)
-	*prompt, *contextPath, *reportPath = rd.prompt, rd.contextPath, rd.reportPath
-	*logName = fmt.Sprintf("agent-%d-%d.log", m.a.Task.Attempt, rd.k)
 	ids := slices.Clone(rd.ids)
 	for _, q := range rd.answers {
 		if !slices.Contains(ids, q.Note) {
@@ -267,7 +265,7 @@ func (r *runner) nextRound(ctx context.Context, mode string, v *view, m *additio
 		}
 	}
 	r.log("%s: the agent carries on with %d more comments (%s) in the same version", filepath.Base(r.opts.Root), len(rd.ids), noteIDs(rd.ids))
-	return ids, true, nil
+	return ids, rd, nil
 }
 
 // morePrompt is the prompt of comments (and answers) added to a running task in its session.

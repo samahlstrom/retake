@@ -195,7 +195,7 @@ func TestStoppingAHerdrTaskClosesItsPane(t *testing.T) {
 	t.Setenv("FAKE_AGENT_MODE", "hang")
 	r, log := viewRunner(t, "item-shop", claudeInHerdr)
 	argv := filepath.Join(dir, "herdr", "argv.log")
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancelCause(context.Background())
 	done := make(chan outcome, 1)
 	go func() { done <- r.execute(ctx, task("t1")) }()
 	pids := filepath.Join(dir, "herdr", "pids-w1:p2")
@@ -208,7 +208,7 @@ func TestStoppingAHerdrTaskClosesItsPane(t *testing.T) {
 			t.Fatal("the agent never got its line", log)
 		}
 	}
-	cancel()
+	cancel(errStop) // a person's pause or switch
 	select {
 	case got := <-done:
 		if got.state != "stopped" {
@@ -415,7 +415,7 @@ func TestTmuxRunsEachVideosAgentInAWindow(t *testing.T) {
 	t.Setenv("FAKE_AGENT_MODE", "hang")
 	codex := tmuxProfile(t, "codex")
 	r.opts.Profiles = append(r.opts.Profiles, codex)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancelCause(context.Background())
 	done := make(chan outcome, 1)
 	a := task("t3")
 	a.Task.Agent = "codex"
@@ -429,7 +429,7 @@ func TestTmuxRunsEachVideosAgentInAWindow(t *testing.T) {
 			t.Fatal("the agent never started")
 		}
 	}
-	cancel()
+	cancel(errStop) // a person's pause or switch
 	if got := <-done; got.state != "stopped" {
 		t.Fatalf("%+v", got)
 	}
@@ -483,8 +483,8 @@ func TestTmuxForReal(t *testing.T) {
 		t.Fatalf("windows %q %v", out, e)
 	}
 	t.Setenv("FAKE_AGENT_MODE", "hang")
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
+	ctx, cancel := context.WithCancelCause(context.Background())
+	cancel(errStop) // a person's pause or switch
 	if got := r.execute(ctx, task("t3")); got.state != "stopped" {
 		t.Fatalf("%+v", got)
 	}

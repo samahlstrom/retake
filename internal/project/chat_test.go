@@ -209,11 +209,21 @@ func TestChatStopAndLostWorker(t *testing.T) {
 		End: &ChatEnd{State: "stopped", Info: ChatStopped}}); err != nil {
 		t.Fatal(err)
 	}
-	// A worker that goes away: its turn ends once its lease runs out; a message that waited gets the next turn.
+	// A worker that goes away: its turn ends once its lease and the grace after it run out; a message that waited gets
+	// the next turn. Within the grace, the turn is still the worker's to take back.
 	_, _ = s.PostChat(ChatPost{Text: "three"})
 	_, turn = pollChat(t, s, w, nil)
 	_, _ = s.PostChat(ChatPost{Text: "four"})
 	c.add(WorkerLease + time.Second)
+	back := w
+	back.Session = "restarted"
+	if _, chat := pollChat(t, s, back, turn); chat == nil || chat.ID != turn.ID || chat.State != ChatRunning {
+		t.Fatalf("a restarted worker didn't take its turn back: %+v", chat)
+	}
+	if _, err := s.ChatProgress(w.ID, ChatProgress{Turn: turn.ID, Lease: turn.Lease, Events: []ChatEvent{{Type: "text", Text: "on"}}}); err != nil {
+		t.Fatal("words after a restart", err)
+	}
+	c.add(WorkerLease + ReconnectGrace)
 	v, err := s.ChatView()
 	if err != nil {
 		t.Fatal(err)
@@ -221,7 +231,7 @@ func TestChatStopAndLostWorker(t *testing.T) {
 	if v.Turn == nil || v.Turn.State != ChatQueued || !v.Offline {
 		t.Fatalf("after the lease %+v", v)
 	}
-	if got := roles(v.Messages); !strings.HasSuffix(got, "person:three | person:four | info:"+ChatOffline) {
+	if got := roles(v.Messages); !strings.HasSuffix(got, "person:three | person:four | agent:on | info:"+ChatOffline) {
 		t.Fatal(got)
 	}
 	if _, err = s.ChatProgress(w.ID, ChatProgress{Turn: turn.ID, Lease: turn.Lease}); !errors.Is(err, ErrStaleChat) {

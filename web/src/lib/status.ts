@@ -187,9 +187,11 @@ export function sendNotice(s: AgentStatus, owner: boolean): SendNotice | null {
 const comments = (n: number) => (n === 1 ? '1 comment' : `${n} comments`);
 
 /** The comments column's line while a batch runs: "Agent working on 3 comments · 2 more coming" (sent meanwhile, on
- * their way into the same version). Null when none runs. */
+ * their way into the same version). While the editing computer is offline the agent works on regardless (agents
+ * outlive Retake, spec/automation.md): "Reconnecting to the agent". Null when none runs. */
 export function batchLine(s: AgentStatus): string | null {
   if (!s.batch) return null;
+  if (!s.online) return 'Reconnecting to the agent';
   return `Agent working on ${comments(s.batch)}${s.next ? ` · ${s.next} more coming` : ''}`;
 }
 

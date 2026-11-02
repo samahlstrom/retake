@@ -18,6 +18,7 @@ import (
 	"github.com/samahlstrom/retake/internal/home"
 	"github.com/samahlstrom/retake/internal/hub"
 	"github.com/samahlstrom/retake/internal/probe"
+	"github.com/samahlstrom/retake/internal/worker"
 )
 
 // retake open <folder> and retake share <folder>: every project in a folder, with the home screen (spec/home.md).
@@ -93,6 +94,7 @@ func newFolder(env Env, cfg config.Config, st config.Settings, o hub.FolderOptio
 	o.Jobs = &engines
 	o.CheckEvery, o.Log, o.Version = env.CheckEvery, env.Stderr, Version()
 	o.LocalWorker = localWorker(env, cfg, o.Exts) // each project's editing worker runs in this process
+	o.Working = worker.InFlight                   // and the ones with agents at work start at once
 	o.FileTranscriber = fileTranscriber(cfg)
 	if env.Clock != nil {
 		o.Now = env.Clock.Now

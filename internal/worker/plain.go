@@ -159,6 +159,40 @@ The next agent may differ from you; leave useful context on disk. Do not delete 
 `, contextPath, start, output, into) + extra + askRules(reportPath, "A completed report is only a request: Retake checks that the new video plays before resolving the comment. Do not run retake push or mark notes complete yourself.")
 }
 
+// plainPlan is where a plain task's video goes (into, the target's label and file) and where its agent starts (from):
+// comments on vN become edits in vN+1, the target made or updated in place. The agent starts from the target when it
+// exists (it has the earlier changes), else from the version the notes were made on. vs is the versions now; output is
+// where the agent writes its video.
+func (r *runner) plainPlan(target string, vs []family.Version, output string) (*plainRun, error) {
+	label, dest, exists, err := r.plainTarget(target, ".mp4")
+	if err != nil {
+		return nil, err
+	}
+	rel := func(p string) string {
+		if rp, e := filepath.Rel(r.opts.Root, p); e == nil {
+			return rp
+		}
+		return p
+	}
+	pl := &plainRun{Output: output, Updating: exists, Into: fmt.Sprintf("%s (%s)", label, rel(dest))}
+	switch {
+	case exists:
+		pl.From = dest
+		pl.Into = fmt.Sprintf("%s, in place of %s (Retake keeps the earlier file)", label, rel(dest))
+	case len(vs) > 0:
+		pl.From = newestPath(vs)
+		for _, v := range vs {
+			if project.LabelNumber(v.Label) == project.LabelNumber(label)-1 {
+				pl.From = v.Path
+			}
+		}
+	}
+	for _, v := range vs {
+		pl.Before = append(pl.Before, v.Label)
+	}
+	return pl, nil
+}
+
 // plainTarget is where a plain task's video goes: its target's file, existing or not, else (a task from before
 // targets) the next version's (spec/automation.md, "Comments on vN become edits in vN+1").
 func (r *runner) plainTarget(target, ext string) (label, dest string, exists bool, err error) {
