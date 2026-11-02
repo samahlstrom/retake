@@ -48,6 +48,28 @@ to the others). The comment turns Done once that video plays.
 - Each task's prompt, context, log and report are in `.retake/worker/tasks/<task>/` (no log in herdr or tmux: the
   session is the log).
 
+## Chat with the agent about a script
+
+On a script (Scripts, v0 of a video), the column beside the document is a chat with the same agent: ask it to shape
+the script, pull in a link ("put this video under the cold open: https://…"), find or make an image, tighten the
+hook. It edits the document while you watch and answers in a few words; its tool use shows as one quiet line each
+("Editing the doc", "Reading youtube.com/…"). When it wants you to choose, it asks with choices to tap, pictures side
+by side. Press R (or the mic) to say it instead of typing; images you paste, drop or attach go in `v0/images/`. ⋯ →
+"Undo the agent's edit" undoes a reply's edit. When you like the script, press **Send**: the agent builds v1 from it
+(or, once cuts exist, brings the next version in line with the script's changes).
+
+- Each message is one run of the agent in the video's folder, on this computer (or the connected one, hosted). Claude
+  Code runs as `claude -p --output-format stream-json --verbose --include-partial-messages --dangerously-skip-permissions
+  --disallowedTools=AskUserQuestion`, then with `--resume <session>` for the next message, so it remembers the chat;
+  Codex runs `codex exec --json …` and then `codex exec resume … <thread> -`. Your own `[[agents]]` run once per message
+  with the recent chat in the prompt. It is always in the background, even with `open_agents_in` set.
+- Messages you send while it works wait for its next turn. **Stop** (the square in place of the send arrow) stops
+  that reply's process only.
+- One agent per video: while Send's build of v1 runs, a chat message waits ("The agent is busy with v1's edits"), and
+  the build waits while the chat replies.
+- The chat is kept with the review's data (`.retake/` on the server), never in `v0/`; its instructions are the Scripts
+  extension's plus the chat's own rules (spec/chat.md).
+
 ## When the agent is unsure
 
 The agent never asks in its terminal. When a note is unclear, it asks about the moment of the video it's unsure of,

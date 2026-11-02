@@ -32,7 +32,7 @@ One thread per video (project), with one agent session.
   | `person` | What the person typed or said | `by` (their name), `images` (paths in the video's folder, `v0/images/x.png`), `voice` (the recording's path), `answer` (the question it answers), `waiting` while no turn has it yet |
   | `agent` | The agent's words, Markdown | `streaming` while the turn still adds to it |
   | `tool` | One quiet line for what the agent is doing ("Editing the script") | |
-  | `question` | `retake ask` from inside a turn | `options` (`[{text, image?}]`, `image` a URL), `anchor`, `answer` once picked |
+  | `question` | `retake ask` from inside a turn | `options` (`[{text, image?}]`), `images`, `anchor`, `answer` once picked; its images are URLs (`api/chat/files/…`) |
   | `info` | One quiet line from Retake ("Stopped", "Usage limit reached") | |
 
 - A text is at most 20000 characters, a message at most 8 images. Image paths are owned files of the kind's

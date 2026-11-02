@@ -4,6 +4,20 @@ All notable changes are listed here. Versions follow semver once the first relea
 
 ## Unreleased
 
+### Chat with the agent on a script
+- On a script, the column beside the document (the sheet on a phone) is a chat with the agent in place of the
+  comments (spec/chat.md): ask it, and it edits the document while you watch, pulls in links and images, and asks with
+  choices to tap (pictures side by side, stacked on a phone). Its tool use is one quiet line each; no raw JSON. R or
+  the mic sends a voice message (transcribed); pasted, dropped or attached images go in `v0/images/`. Stop stops the
+  reply; messages sent meanwhile wait for the next turn. ⋯ → Undo the agent's edit undoes a reply's edit.
+- The agent runs on the editing computer (the in-process worker locally, the connected one hosted), one turn per
+  message: Claude Code streams its words and resumes its session (`--resume`), Codex resumes its thread, other agents
+  get the recent chat. A turn never runs beside an editing task: "The agent is busy with v1's edits".
+- **Send on a script makes the video**: with no cut it builds v1 from the script ("Building v1…"); once cuts exist it
+  brings the next version in line with the script's changes, by the batch rule. With nothing changed since the last
+  Send it is dimmed and says so. ⋯ → Start v1 is gone. On a phone the document doesn't raise the keyboard until ⋯ →
+  Type in the script.
+
 ### Ignition is now Scripts
 - The extension that turns an idea into a script and a first cut is called **Scripts** (id `scripts`,
   `extensions/scripts/`, spec/scripts.md), with a page icon in the nav and "New script" on its +. "Draft" stays the

@@ -2,8 +2,9 @@
 
 This is the contract for Scripts, the first extension (spec/extensions.md). Change it here first.
 
-Scripts is where a video starts. You type or talk your idea into one Markdown document, the agent shapes it into an
-outline and a script in that same document, and when the script is right the agent builds the first cut from it. The
+Scripts is where a video starts. You talk to the agent in the chat beside one Markdown document (spec/chat.md): it
+shapes your idea into an outline and a script in that document while you watch, pulls in links and images, and asks
+with choices when it should. When you like the script, Send builds the first cut from it. The
 document is **v0** of the video: one plain file in the video's folder, `v0/<video>_v0.md`, next to `v1/<video>_v1.mp4`
 and the cuts that follow.
 
@@ -45,6 +46,7 @@ marker = ["*_v0.md", "idea.md"]   # the document; idea.md: a v0 from before it w
 label = "Doc"
 status = "Idea"
 record = true
+chat = true                       # the agent chat in place of the comments (spec/chat.md)
 
 [[slots]]
 slot = "page"
@@ -131,7 +133,8 @@ tokens. No tabs and no toolbar.
 - **Image decisions.** A question the agent asks about a place in the document with image options (`retake ask --file
   v0/<video>_v0.md --heading "Cold open" --option "Ink@images/ink.png" --option "Neon@images/neon.png" "Which look?"`)
   also shows inline, right after its heading or line: the question and its images side by side (stacked on a phone).
-  Tapping one answers it, as tapping the choice in the comments column does; once answered it goes away.
+  Tapping one answers it; once answered it goes away. (A question asked from a chat turn shows in the chat instead,
+  spec/chat.md.)
 - **Embeds.** A web address alone on its own line shows what it points to: a player or a post for the sites below,
   a quiet card for any other page ("Embeds", below).
 
@@ -139,27 +142,26 @@ tokens. No tabs and no toolbar.
   only word it shows is a quiet "Not saved · Retry" when a save fails, or "Changed outside Retake · Reload · Keep
   mine" when the file changed under unsaved typing (Keep mine writes over it). Outside edits with nothing unsaved
   go in as the smallest edit, keeping the caret on its word. Undo (Ctrl+Z) only undoes your typing.
-- **⋯**, one quiet button at the top right of the document: **Start v1** (while the video has no cut), and **Undo
-  the agent's edit** (with when, while there is one to undo). Nothing else is over the text.
-- **The comments** are core's: the comments column (a drawer on a phone), To do · Done, Send, as on a video. On a kind
-  version it also has a line to type a comment: "Comment for the agent…"; Enter adds it to To do, anchored to the
-  heading above the caret (`ctx.onAnchor`, below), Ctrl+Enter (⌘+Enter) adds and sends.
-- **Questions.** A question the agent asked about a heading or line shows in the comments column, as on a video, with
-  the place it's about ("Cold open"). Clicking its place scrolls the document there and puts the caret on it (core
-  sends the slot `ctx.on('reveal')` with the anchor). It also shows in the document under its place: its words and
-  its choices, with pictures side by side (stacked on a phone). A tap answers it from either place, and it leaves the
-  document once answered.
-- **Keys.** Typing goes to the text. Esc leaves the text, and then R talks, as on a video. The Record button always
-  works. The page's other review keys do nothing here.
-- **A phone** shows the document from the top of the screen to the bottom bar, which holds just Record and Send (the
-  version picker and the agent are in the comments drawer's header). The top row is back on the left, and on the right
-  ⋯ with the comments' count beside it as a small icon and number (no number at 0). Text is at least 17 px and wraps
-  inside the screen; nothing scrolls sideways. The bottom bar stays above Safari's toolbar and the home indicator
-  (`viewport-fit=cover`, the safe-area insets, `dvh`). Phone checks run in Chromium and in WebKit (iPhone device
-  descriptors).
+- **⋯**, one quiet button at the top right of the document: **Undo the agent's edit** (with when, while there is one
+  to undo), and on a phone **Type in the script** (below). Nothing else is over the text. (Start v1 is gone: Send does
+  it.)
+- **The chat** is core's (spec/chat.md): the column beside the document (the sheet on a phone) is the chat with the
+  agent, in place of the comments. A script has no To do or Done. The agent is the main editor now: you ask, it edits,
+  the document reloads in place while you watch (the caret and the scroll stay where they are).
+- **Questions.** An older question the agent asked about a heading from a comment's task (`retake ask --file`) still
+  shows in the document under its place, with its choices; a tap answers it. Questions from the chat show in the chat.
+- **Keys.** Typing goes to the text. Esc leaves the text, and then R records a voice message for the chat. The page's
+  other review keys do nothing here.
+- **A phone** shows the document from the top of the screen to the bottom bar, which holds the chat's pill ("Ask the
+  agent…", with its mic) and Send. Tapping the pill opens the chat sheet with the keyboard up; the sheet covers the
+  bar and stays above the keyboard, and its header has the version. Reading never raises the keyboard: the document
+  is read-only to the keyboard until ⋯ → **Type in the script** (⋯ → **Done typing** goes back). The top row is back on
+  the left, and on the right the chat's bubble and ⋯. Text is at least 17 px and wraps inside the screen; nothing
+  scrolls sideways. The bottom bar stays above Safari's toolbar and the home indicator (`viewport-fit=cover`, the
+  safe-area insets, `dvh`). Phone checks run in Chromium and in WebKit (iPhone device descriptors).
 
 `ctx.onAnchor(fn)` (an addition to the page API): the version slot tells core where a typed comment points (the
-heading above the caret), so the comments column's line can anchor it.
+heading above the caret). A script has no comment line now, but the API stays for other kinds.
 
 ## Embeds
 
@@ -211,22 +213,19 @@ what they are, not as addresses. So in a script's document, and only there:
 
 ## Talking it out
 
-R (or Record) records a **talk-out**. REC, the timer, the red edge and the level work as on a video. There is no pen.
+R (or the chat's mic) records a **voice message** for the chat (spec/chat.md, "Images and voice"): REC, the timer and
+the red edge work as on a video, there is no pen. When it stops, the audio is saved as
+`v0/voice/<yyyymmdd-hhmmss>.webm`, transcribed with the editing computer's `[transcribe]`, and its words are sent to
+the agent as your message. It makes no comment and adds nothing to the document by itself: the agent works it in.
+Without transcription set up, the audio is kept and the job's hint shows in the chat.
 
-When it stops, Scripts saves the audio as `v0/voice/<yyyymmdd-hhmmss>.webm` and asks for its transcript
-(`ctx.transcribe`). The words go into the document at the caret (at the end when the text had no caret yet) as a plain
-paragraph: no marker, no comment line. The sidecar `voice/<stamp>.md` keeps the audio's name and the words, for the
-agent and for you. It adds an Open comment anchored to that paragraph: "Work this talk-out into the document." So
-talk-outs pile up in To do until you press Send, the way review takes do.
-
-Without transcription set up, the audio is kept, nothing goes into the document, and the job's hint shows as a toast.
-Leaving the page before the words come back loses nothing: the sidecar is written when they do, and the next time the
-document opens, Scripts puts in the ones it hasn't yet. A question selected in the comments column takes the talk-out
-as its answer instead.
+A kind without `chat` keeps the talk-out of before (the words go into the document at the caret with a sidecar in
+`v0/voice/`, and an Open comment asks the agent to work them in); Scripts has `chat = true`.
 
 ## Shaping it with the agent
 
-Send sends v0's open comments, as on a video. The task targets Scripts, so its prompt has `agent/task.md`:
+You ask in the chat; each message is a turn of the agent (spec/chat.md, "Turns"). Its prompt has the chat's rules, and
+before them Scripts' `agent/context.md` and `agent/task.md`:
 
 - `v0/<video>_v0.md` is this video's plan, one document. The person's own words under its title are theirs: don't
   rewrite or remove them.
@@ -240,18 +239,28 @@ Send sends v0's open comments, as on a video. The task targets Scripts, so its p
 - When unsure, ask about a place in the document and carry on:
   `retake ask --note 12 --file v0/jump-souls_v0.md --heading "Cold open" --option "Start on the jump" "Which opening?"`.
 
-**Done.** The agent's report finishes the comments with their changes. No render is needed for a note on v0. The
-document reloads through the watch, so you see it change.
+The agent answers in a few words in the chat; the document reloads through the watch, so you see it change. When it
+asks with choices (`retake ask --option …`, no `--note`), they show in the chat to tap.
 
-**Undo the agent's edit.** Before every agent attempt on a video that has `v0/`, Retake keeps a copy of v0's files
-(core's history, spec/extensions.md "Agent edit history"). ⋯ → "Undo the agent's edit" puts the document back as it
-was before the newest agent edit, and the next undo goes one further back. When the document changed since, it refuses
-with "Changed since the agent's edit". Git stays optional.
+**Undo the agent's edit.** Before every agent attempt and every chat turn on a video that has `v0/`, Retake keeps a
+copy of v0's files (core's history, spec/extensions.md "Agent edit history"). ⋯ → "Undo the agent's edit" puts the
+document back as it was before the newest agent edit, and the next undo goes one further back. When the document
+changed since, it refuses with "Changed since the agent's edit". Git stays optional.
 
-## Start v1
+## Send: "I like it, make the video"
 
-⋯ → **Start v1** adds a comment on v0 with `"wants": "version"`, "Build the first cut (v1) from the script.", and
-sends it. The task's prompt adds:
+Send on the script makes the video (spec/chat.md, "Send on a chat version"), with no confirmation; the chat's status
+line says what started ("Building v1…").
+
+- **No cut yet:** a comment on v0 with `"wants": "version"`, "Build the first cut (v1) from the doc." (the kind's label),
+  sent at once. It makes v1.
+- **Cuts exist:** a comment on the newest cut at 0:00, "Bring the video in line with the doc's changes
+  (v0/<video>_v0.md).", which goes into the next version by the batch rule: comments on vN become edits in vN+1, one
+  agent per edit batch.
+- **Nothing changed** since the last Send (the document's sha256 is the one sent, and its comment is working or
+  done): Send is dimmed and says "Nothing changed since the last Send". Never a silent no-op.
+
+The task's prompt for the first cut adds:
 
 - Build v1 from the document's `## Script`, section by section in order, with the footage and assets in the video's
   folder (not `v0/voice/`).
@@ -301,7 +310,6 @@ with the section under the playhead highlighted; clicking a section seeks to its
 
 - **Your own skills, prompts and workflows.** They belong to your agent's setup. Your Claude Code or Codex loads them as
   it always does, and Scripts never names, installs or calls them. Its instructions are neutral and short.
-- A chat with the agent. The agent works through comments, Send and questions, the same loop as on a video.
 - Generated voices, text-to-speech or voice-over. The voice is the person's own.
 - Editing the video by its transcript, a project board, titles, thumbnails, publishing. Those are other extensions, or
   none.
@@ -311,8 +319,8 @@ with the section under the playhead highlighted; clicking a section seeks to its
 
 - Go: v0 with `*_v0.md` (and the old `idea.md`) found by the scan (an idea folder, a video with v0 and cuts, a `v0/`
   without either, a `v0/clip_v0.mp4`); a marker given as a list of globs; `api/info` and `api/home` (`no_cut`,
-  `kind`); New script's folder and slug collisions, locally and through the machine channel; Start v1 in a v0-only plain
-  project pushing `v1/<folder>_v1.mp4`.
+  `kind`); New script's folder and slug collisions, locally and through the machine channel; the first cut in a
+  v0-only plain project pushing `v1/<folder>_v1.mp4`; the chat and Send (spec/chat.md, "Tests").
 - Web unit: the document's name, the migration's text, the heading above the caret, the talk-out paragraph and its
   sidecar, the playhead section.
 - Web unit: embeds: each site's addresses to its frame (and what stays a card), the raw frame's sanitizer, the
@@ -325,9 +333,11 @@ with the section under the playhead highlighted; clicking a section seeks to its
 - e2e `e2e/tests/18-scripts.spec.ts`, with a fake transcriber (a command engine that prints fixed words) and a fake
   agent, on a phone and on a desktop:
   - New script opens the one document, typing saves, and an outside edit shows.
-  - A talk-out lands in the document as a plain paragraph and adds a To do.
-  - Send runs an agent that writes the outline and script into the document and asks about "Cold open"; a tap answers
-    it; Done; ⋯ undoes the agent's edit.
-  - Start v1 from ⋯ runs an agent that writes a generated MP4 and `cuts/v1.json`; v1 opens.
+  - A voice message goes to the chat; the agent writes the outline and script into the document while the page shows
+    it and asks "Which opening?" with two pictures; a tap answers it; ⋯ undoes the agent's edit; a link typed in the
+    chat goes in alone on its line.
+  - Send builds v1 (an MP4 and `cuts/v1.json`); v1 opens; back on the script, Send says nothing changed.
+  - On a phone: the pill and Send in the bar, the chat sheet with its composer focused, reading without the keyboard,
+    ⋯ → Type in the script.
   - A multi-file v0 from before is migrated into one file and the old files stay.
   - The same flow hosted (`retake serve` and `retake connect` on scratch folders).

@@ -49,6 +49,7 @@ marker = "*_v0.md"               # the folder is this kind only when a file matc
 label = "Script"                 # how the version strip and picker name it: "v0 · Script"
 status = "Idea"                  # the home's chip for a video that has only this version
 record = true                    # Record and R on this version record audio for the extension
+chat = true                      # optional: the agent chat in place of the comments on this version (spec/chat.md)
 
 [[slots]]                        # where its UI mounts (below)
 slot = "version"
@@ -163,6 +164,9 @@ name or a glob (`*_v0.md`), or a list of them (any one is enough).
   makes no take. Without `record`, Record is hidden on that version.
 - **Comments on it** are typed, through the extension (`ctx.comments.add`), not recorded takes ("Comments and
   questions on an extension's version" below).
+- **The chat** (`chat = true`, spec/chat.md): the comments column on its version is the chat with the agent instead,
+  core's, with the extension's agent instructions; Record and R record a voice message for it (not `ctx.onRecorded`),
+  and Send makes the video from the version's document.
 
 ### UI slots
 
@@ -184,7 +188,7 @@ name or a glob (`*_v0.md`), or a list of them (any one is enough).
 - `GET api/ext` (at the home and under a video, needs watch) lists the enabled extensions for this person: `{"api": 1,
   "extensions": [{id, name, version, base, module, style, nav, kinds, slots, files, server, machine}]}` (`base` is
   `ext/<id>/`; `machine` is false when the video's editing computer lacks it). A kind is `{id, kind, folder, marker,
-  label, status, record}` with `id` the full id (`scripts.doc`) and `kind` the manifest's (`doc`); a slot's `kind` is
+  label, status, record, chat}` with `id` the full id (`scripts.doc`) and `kind` the manifest's (`doc`); a slot's `kind` is
   the full id too.
 - The page imports `ext/<id>/<module>?v=<version>` the first time one of its slots is shown, and never before. The
   module exports one function per slot it fills: `page`, `version`, `sidebarTab`, `reviewPanel`. Each is

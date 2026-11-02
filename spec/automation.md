@@ -523,7 +523,9 @@ because a comment on the one before asked for changes.
   `config`, `task`, `notes` (the task's notes, plus every open note of every version as context), `questions` (the
   task's, with their answers), `versions` (how many versions the family has, drafts not counted) and, for a running
   attempt, `next` (the queued task of its target it may take in, "Comments on vN become edits in vN+1"). A poll may carry `told` (answers that
-  reached the agent) and `join` (notes of `next` given to the agent's session); a report may carry both. In Local mode
+  reached the agent) and `join` (notes of `next` given to the agent's session); a report may carry both. A poll also
+  carries the chat turn the worker runs (`chat`, `chat_lease`) and its answer the turn it owns (`chat`): a turn and
+  a task never run at once (spec/chat.md). In Local mode
   the in-process worker reaches these handlers without HTTP or a token.
 - Existing video URLs serve remote versions through the relay. Existing viewing permissions apply to all media.
 - The bar has one action for everyone who can record: **Send**. It says just "Send", never an agent's name; how many
