@@ -13,7 +13,8 @@ instructions come from that kind's extension.
 ## Where it shows
 
 - A kind with `chat = true` (spec/extensions.md, "Version kinds") has a chat in place of the comments column on its
-  version: no To do, no Done, no comment line. On a phone it is the sheet the comments use.
+  version: no To do, no Done, no comment line. On a computer its width is the column's, which its left edge resizes
+  (spec/notes.md, "The column's width"). On a phone it is the sheet the comments use.
 - Other versions keep their comments. A video's chat is one thread for the whole video, shown on its kind's version.
 
 ## The thread
@@ -31,7 +32,7 @@ One thread per video (project), with one agent session.
   |---|---|---|
   | `person` | What the person typed or said | `by` (their name), `images` (paths in the video's folder, `v0/images/x.png`), `voice` (the recording's path), `answer` (the question it answers), `waiting` while no turn has it yet |
   | `agent` | The agent's words, Markdown | `streaming` while the turn still adds to it |
-  | `tool` | One quiet line for what the agent is doing ("Editing the script") | |
+  | `tool` | What the agent is doing ("Editing the script"); the page folds a turn's into its one activity line ("How the page shows it") | |
   | `question` | `retake ask` from inside a turn | `options` (`[{text, image?}]`), `images`, `anchor`, `answer` once picked; its images are URLs (`api/chat/files/…`) |
   | `info` | One quiet line from Retake ("Stopped", "Usage limit reached") | |
 
@@ -111,6 +112,58 @@ output:
   sub-agents add nothing.
 - At the end, a usage limit is an `info` "Usage limit reached. Pick another agent in Settings or try later.", a
   process that failed is "The agent stopped without finishing", and a stop is "Stopped".
+
+## How the page shows it
+
+The agent answers like a person talking back, the way a chat app shows a reply: no name, no badge, no coloured rule,
+no box.
+
+- **The person's messages** are quiet bubbles on the right (their words, images, a voice message's mic), with "Next"
+  under one that waits for the next turn. That's how the two sides tell apart.
+- **The agent's words** are plain text across the column, under the person's bubble. Markdown renders (paragraphs,
+  lists, code, links, which are underlined in the text's own colour), and images show inline. A turn's words read as
+  one reply: the messages of a turn (its `turn`) are one block, in order, even when the person typed while it ran.
+- **A question** is the agent's words with its choices to tap under them (quiet outlined buttons, the picked one
+  filled): image choices side by side, stacked on a phone.
+- **An info line** ("Stopped") is one quiet centred line where it happened.
+
+### The activity line
+
+A turn's tool lines are never listed one by one. Each turn has ONE muted line at the top of its reply (part
+`chat-tool`), and the words stream in under it.
+
+- **While the turn is live** (it is the chat's `turn`), the line says what is happening now and replaces itself as
+  that changes, with a soft shimmer and no dot: "Waiting for the agent…" while queued (or why it waits: "The agent is
+  busy with v3's edits", "The editing computer is offline", the local worker's `blocked` reason, without the shimmer),
+  "Working…" until the first tool and while the agent writes, the newest tool line with an ellipsis while it runs
+  ("Running a command…", "Editing the script…", "Reading example.org/…"), and "Stopping…". The line keeps its room
+  the whole turn, so nothing below it moves as it changes, and while the reply is longer than the thread it stays
+  pinned at the top of the thread (`position: sticky`). A queued turn with nothing said yet shows its line after the
+  person's message.
+- **When the turn ends**, the line becomes one quiet summary that never wraps (it ends in an ellipsis where it doesn't
+  fit), or goes away for a turn that used no tools. The summary counts the turn's tool lines in at most three parts,
+  joined with " · " and starting with a capital: "Edited the script · ran 3 commands".
+
+  | Tool lines | Part (one) | Part (several) |
+  |---|---|---|
+  | Editing the script | edited the script | edited the script |
+  | Editing <name> | edited <name> | edited N files |
+  | Saving an image | saved an image | saved N images |
+  | Reading <host>/… (a page) | read <host>/… | read N pages |
+  | Searching for "…", Searching the web | searched the web | searched the web N times |
+  | Downloading from <host>, Downloading a file | downloaded from <host> (a file) | downloaded N files |
+  | Running a command | ran a command | ran N commands |
+  | Reading the script | read the script | read the script |
+  | Reading <name> (a file) | read <name> | read N files |
+  | Looking at an image | looked at an image | looked at N images |
+  | Looking through the files | looked through the files | looked through the files |
+
+  The parts go in that order (what changed first, then the web, then commands, then what it read), and the first
+  three that have something are shown. "Working" and lines it doesn't know add nothing.
+- **The status line** under the thread (`chat-status`) says only what a Send started ("Building v1…", "Updating
+  v2…", or that it waits for the editing computer); a turn's own states are its activity line, so there is never a
+  second line about the turn.
+- **Scrolling.** The thread follows its end while the reader is there (within 48 px of it); scrolled up, it stays put.
 
 ## Undo
 
@@ -212,7 +265,10 @@ use the editing computer that way.
   session on the next turn, a turn queued behind a task, stop killing only that process, the snapshot that undoes a
   turn, the hosted path through HTTP; the stream parsers on the captured Claude Code and Codex formats
   (`internal/worker/testdata/`).
-- Web unit: the thread's events (text at the right offset, a gap reads again), the tool and info lines, choices.
-- e2e (`e2e/tests/24-chat.spec.ts`), desktop and phone (Chromium, and WebKit iPhone in Docker): chat with a fake
-  agent, the document reloads as it edits, a choice is tapped, Stop, Send builds v1 and is then disabled with its
+- Web unit: the thread's events (text at the right offset, a gap reads again), the blocks (a turn's messages as one,
+  even around a waiting message), the activity line (each live state, the newest tool, the summary's parts, counts,
+  order and cap), the status line (only a Send's build), choices.
+- e2e (`e2e/tests/18-scripts.spec.ts` and `19-phone-webkit.spec.ts`), desktop and phone (Chromium, and WebKit iPhone
+  in Docker): chat with a fake agent, the document reloads as it edits, one activity line per turn (live while a slow
+  turn runs, then its summary; no "Agent" label), a choice is tapped, Send builds v1 and is then disabled with its
   reason.

@@ -52,9 +52,10 @@ to the others). The comment turns Done once that video plays.
 
 On a script (Scripts, v0 of a video), the column beside the document is a chat with the same agent: ask it to shape
 the script, pull in a link ("put this video under the cold open: https://…"), find or make an image, tighten the
-hook. It edits the document while you watch and answers in a few words; its tool use shows as one quiet line each
-("Editing the doc", "Reading youtube.com/…"). When it wants you to choose, it asks with choices to tap, pictures side
-by side. Press R (or the mic) to say it instead of typing; images you paste, drop or attach go in `v0/images/`. ⋯ →
+hook. It edits the document while you watch and answers in a few plain words, like a person replying. What it's doing
+shows as one quiet line over its reply that changes as it goes ("Reading youtube.com/…", "Editing the script…") and,
+when it's done, sums up ("Edited the script · ran 3 commands"). When it wants you to choose, it asks with choices to
+tap, pictures side by side. Drag the column's left edge to make the chat wider. Press R (or the mic) to say it instead of typing; images you paste, drop or attach go in `v0/images/`. ⋯ →
 "Undo the agent's edit" undoes a reply's edit. When you like the script, press **Send**: the agent builds v1 from it
 (or, once cuts exist, brings the next version in line with the script's changes).
 

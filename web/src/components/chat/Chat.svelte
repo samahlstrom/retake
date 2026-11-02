@@ -1,16 +1,18 @@
 <script lang="ts">
   // The chat with the agent (spec/chat.md), in the comments column of a kind's version that has one (a script): the
-  // thread, then one quiet status line, then the composer. The person's messages on the right; the agent's words on
-  // the left in the agent's colours (as its questions on a video), its tool use as one quiet line each, its
-  // questions with choices to tap (pictures side by side, stacked on a phone). The composer: one line "Ask the
-  // agent…", a quiet attach icon, the mic (a voice message: its words are sent) and the send arrow, which is a stop
-  // square while the agent replies and nothing is typed. Enter sends, Shift+Enter is a new line. Images pasted,
-  // dropped or picked are saved in the video's v0/images/ and go with the message. Nothing shifts: the status line
-  // always has its room.
+  // thread, then one quiet status line (what a Send started), then the composer. The person's messages are quiet
+  // bubbles on the right; the agent answers in plain text across the column, like a person talking back (no name, no
+  // rule, no box). Each turn of the agent is one block with ONE activity line at its top: while the turn runs it says
+  // what the agent does now and replaces itself ("Running a command…"), and when the turn ends it sums up ("Edited the
+  // script · ran 3 commands"). Questions have choices to tap (pictures side by side, stacked on a phone). The
+  // composer: one line "Ask the agent…", a quiet attach icon, the mic (a voice message: its words are sent) and the
+  // send arrow, which is a stop square while the agent replies and nothing is typed. Enter sends, Shift+Enter is a new
+  // line. Images pasted, dropped or picked are saved in the video's v0/images/ and go with the message. Nothing
+  // shifts: the status line always has its room, and so does a live turn's activity line.
   import { tick } from 'svelte';
   import type { Review } from '../../lib/review.svelte';
   import { renderMarkdown } from '../../lib/chat/markdown';
-  import { openQuestion, statusLine, type ChatMessage } from '../../lib/chat/thread';
+  import { activity, blocks, openQuestion, statusLine, type ChatMessage } from '../../lib/chat/thread';
 
   let { review }: { review: Review } = $props();
 
@@ -25,6 +27,7 @@
     }),
   );
   const asking = $derived(openQuestion(view));
+  const shown = $derived(blocks(view));
   const canWrite = $derived(review.canRecord);
 
   let draft = $state('');
@@ -91,14 +94,6 @@
     if (!p || p.includes('..') || /^[a-z]+:/i.test(p) || p.startsWith('/')) return null;
     return fileUrl(p.startsWith('v0/') ? p : `v0/${p}`);
   }
-
-  /** The agent's messages start a group with its chip; the rest of the group follows it quietly. */
-  const groupStart = (i: number): boolean => {
-    const m = view.messages[i]!,
-      prev = view.messages[i - 1];
-    const agentish = (x?: ChatMessage) => !!x && (x.role === 'agent' || x.role === 'tool' || x.role === 'question');
-    return agentish(m) && !agentish(prev);
-  };
 
   async function attach(files: Iterable<File>) {
     for (const f of files) {
@@ -177,8 +172,9 @@
         >
       </p>
     {/if}
-    {#each view.messages as m, i (m.id)}
-      {#if m.role === 'person'}
+    {#each shown as b (b.key)}
+      {#if b.kind === 'person'}
+        {@const m = b.message}
         <div class="msg person" data-part="chat-person" data-id={m.id}>
           {#if m.images?.length}
             <div class="pics">
@@ -196,44 +192,64 @@
           </p>
           {#if m.waiting}<span class="note">Next</span>{/if}
         </div>
-      {:else if m.role === 'agent'}
-        <div class="msg agent" class:start={groupStart(i)} data-part="chat-agent" data-id={m.id}>
-          {#if groupStart(i)}<span class="agent-chip">Agent</span>{/if}
-          <!-- eslint-disable-next-line svelte/no-at-html-tags -- renderMarkdown escapes everything it doesn't make -->
-          <div class="md">{@html renderMarkdown(m.text, image)}</div>
-        </div>
-      {:else if m.role === 'tool'}
-        <div class="msg tool" class:start={groupStart(i)} data-part="chat-tool">
-          {#if groupStart(i)}<span class="agent-chip">Agent</span>{/if}
-          <span class="line"><span class="tick" aria-hidden="true"></span>{m.text}</span>
-        </div>
-      {:else if m.role === 'question'}
-        <div class="msg agent question" class:start={groupStart(i)} data-part="chat-question" data-id={m.id}>
-          {#if groupStart(i)}<span class="agent-chip">Agent</span>{/if}
-          <p class="ask">{m.text}</p>
-          {#if m.images?.length}
-            <div class="pics agent-pics">
-              {#each m.images as u (u)}<a href={u} target="_blank" rel="noopener"><img src={u} alt="" /></a>{/each}
-            </div>
-          {/if}
-          {#if m.options?.length}
-            <div class="choices" class:pictures={m.options.some((o) => o.image?.url)} role="group" aria-label="Choices">
-              {#each m.options as o (o.text)}
-                <button
-                  class="choice"
-                  class:picked={m.answer === o.text}
-                  disabled={!canWrite || asking !== m.id || chat.posting}
-                  onclick={() => void choose(m, o.text)}
-                >
-                  {#if o.image?.url}<span class="pic"><img src={o.image.url} alt="" /></span>{/if}
-                  <span class="choice-text">{o.text}</span>
-                </button>
-              {/each}
-            </div>
-          {/if}
-        </div>
       {:else}
-        <p class="msg info" data-part="chat-info">{m.text}</p>
+        {@const act = activity(view, b, review.agent.online)}
+        <div class="reply" data-turn={b.turn || undefined}>
+          {#if act.state === 'live' || act.text}
+            <p
+              class="activity"
+              class:live={act.state === 'live'}
+              data-part="chat-tool"
+              data-state={act.state}
+              aria-live={act.state === 'live' ? 'polite' : undefined}
+              title={act.text}
+            >
+              <span class="t" class:moving={act.moving}>{act.text}</span>
+            </p>
+          {/if}
+          {#each b.messages as m (m.id)}
+            {#if m.role === 'agent'}
+              {#if m.text}
+                <div class="msg agent" data-part="chat-agent" data-id={m.id}>
+                  <!-- eslint-disable-next-line svelte/no-at-html-tags -- renderMarkdown escapes everything it doesn't make -->
+                  <div class="md">{@html renderMarkdown(m.text, image)}</div>
+                </div>
+              {/if}
+            {:else if m.role === 'question'}
+              <div class="msg agent question" data-part="chat-question" data-id={m.id}>
+                <p class="ask">{m.text}</p>
+                {#if m.images?.length}
+                  <div class="pics agent-pics">
+                    {#each m.images as u (u)}<a href={u} target="_blank" rel="noopener"><img src={u} alt="" /></a
+                      >{/each}
+                  </div>
+                {/if}
+                {#if m.options?.length}
+                  <div
+                    class="choices"
+                    class:pictures={m.options.some((o) => o.image?.url)}
+                    role="group"
+                    aria-label="Choices"
+                  >
+                    {#each m.options as o (o.text)}
+                      <button
+                        class="choice"
+                        class:picked={m.answer === o.text}
+                        disabled={!canWrite || asking !== m.id || chat.posting}
+                        onclick={() => void choose(m, o.text)}
+                      >
+                        {#if o.image?.url}<span class="pic"><img src={o.image.url} alt="" /></span>{/if}
+                        <span class="choice-text">{o.text}</span>
+                      </button>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
+            {:else if m.role === 'info'}
+              <p class="msg info" data-part="chat-info">{m.text}</p>
+            {/if}
+          {/each}
+        </div>
       {/if}
     {/each}
     {#each chat.voices as v (v.id)}
@@ -247,7 +263,7 @@
   </div>
 
   <div class="status" data-part="chat-status" aria-live="polite">
-    {#if status}<span class="pulse" class:still={!!view.busy || view.offline || !!view.blocked}></span>{status}{/if}
+    {status}
   </div>
 
   {#if canWrite}
@@ -365,7 +381,7 @@
       content: '';
       position: absolute;
       inset: 6px;
-      border: 1.5px dashed color-mix(in srgb, var(--agent) 70%, transparent);
+      border: 1.5px dashed var(--border-hover);
       border-radius: var(--radius-md);
       pointer-events: none;
     }
@@ -374,10 +390,10 @@
       min-height: 0;
       overflow-y: auto;
       overscroll-behavior: contain;
-      padding: 14px 14px 6px;
+      padding: 14px 16px 6px;
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 18px;
     }
     .empty {
       margin: auto 8px;
@@ -398,6 +414,13 @@
       line-height: 1.5;
       color: var(--text);
       overflow-wrap: anywhere;
+    }
+    /* One turn of the agent: its activity line, then its words (and questions) as one reply. */
+    .reply {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-width: 0;
     }
     .person {
       align-self: flex-end;
@@ -449,35 +472,10 @@
       height: 72px;
       object-fit: cover;
     }
-    .agent,
-    .tool {
+    /* The agent talks like a person: plain text across the column, no name, no rule, no box. */
+    .agent {
       align-self: stretch;
-      padding-left: 12px;
-      border-left: 2px solid color-mix(in srgb, var(--agent) 45%, transparent);
-    }
-    .agent.start,
-    .tool.start {
-      margin-top: 4px;
-    }
-    /* One agent reply is one group: its rule runs on unbroken. */
-    .agent:not(.start),
-    .tool:not(.start) {
-      margin-top: -10px;
-      padding-top: 6px;
-    }
-    .agent-chip {
-      display: inline-block;
-      margin: 0 0 4px;
-      padding: 1px 7px;
-      border-radius: 999px;
-      background: var(--agent);
-      color: var(--agent-ink);
-      font-size: 10.5px;
-      font-weight: 700;
-      letter-spacing: 0.02em;
-    }
-    .start .agent-chip {
-      display: table;
+      line-height: 1.6;
     }
     .md :global(p) {
       margin: 0 0 8px;
@@ -515,9 +513,13 @@
       color: var(--muted);
     }
     .md :global(a) {
-      color: var(--agent-text);
+      color: inherit;
       text-decoration: underline;
+      text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
       text-underline-offset: 2px;
+    }
+    .md :global(a:hover) {
+      text-decoration-color: currentColor;
     }
     .md :global(img) {
       display: block;
@@ -530,19 +532,55 @@
       border: 0;
       border-top: 1px solid var(--line);
     }
-    .tool .line {
-      display: flex;
-      align-items: center;
-      gap: 7px;
-      color: var(--faint);
-      font-size: 12px;
-    }
-    .tool .tick {
+    /* The turn's one activity line: what the agent does now (live, a soft shimmer, pinned to the top of the thread
+       while the reply is longer than it), then what it did. One line, never wrapping; it keeps its room while live. */
+    .activity {
       flex: none;
-      width: 5px;
-      height: 5px;
-      border-radius: 50%;
-      background: color-mix(in srgb, var(--agent) 60%, transparent);
+      height: 20px;
+      margin: 0;
+      color: var(--faint);
+      font-size: 12.5px;
+      line-height: 20px;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+    .activity.live {
+      position: sticky;
+      top: 0; /* the scrollport's top edge: the thread's padding doesn't count */
+      z-index: 1;
+      height: 26px;
+      margin: -3px 0;
+      padding: 3px 0;
+      background: var(--surface-raised);
+    }
+    .activity .t {
+      display: inline-block;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      vertical-align: top;
+    }
+    .activity .t.moving {
+      background: linear-gradient(90deg, var(--faint) 0 35%, var(--text-5) 50%, var(--faint) 65% 100%) 0 0 / 250% 100%;
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      animation: chat-shimmer 2s linear infinite;
+    }
+    @keyframes chat-shimmer {
+      from {
+        background-position: 100% 0;
+      }
+      to {
+        background-position: 0 0;
+      }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .activity .t.moving {
+        animation: none;
+        background: none;
+        color: var(--muted);
+      }
     }
     .question .ask {
       margin: 0;
@@ -572,9 +610,9 @@
       gap: 6px;
       min-width: 0;
       padding: 7px 12px;
-      border: 1px solid color-mix(in srgb, var(--agent) 45%, transparent);
+      border: 1px solid var(--border);
       border-radius: 9px;
-      background: color-mix(in srgb, var(--overlay) 3%, transparent);
+      background: transparent;
       color: var(--text);
       font: inherit;
       font-size: 13px;
@@ -585,8 +623,8 @@
     }
     .choice:hover:not(:disabled),
     .choice:focus-visible {
-      border-color: var(--agent);
-      background: color-mix(in srgb, var(--agent) 14%, transparent);
+      border-color: var(--border-hover);
+      background: color-mix(in srgb, var(--overlay) 5%, transparent);
     }
     .choice:disabled {
       cursor: default;
@@ -594,8 +632,8 @@
     }
     .choice.picked {
       opacity: 1;
-      border-color: var(--agent);
-      background: color-mix(in srgb, var(--agent) 18%, transparent);
+      border-color: var(--border-hover);
+      background: color-mix(in srgb, var(--overlay) 9%, transparent);
     }
     .choice .pic {
       display: block;
@@ -635,37 +673,18 @@
     }
     .status {
       flex: none;
-      display: flex;
-      align-items: center;
-      gap: 8px;
       height: 24px;
       padding: 0 16px;
       overflow: hidden;
       color: var(--faint);
       font-size: 12px;
+      line-height: 24px;
       white-space: nowrap;
       text-overflow: ellipsis;
-    }
-    .pulse {
-      flex: none;
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background: var(--agent);
-      animation: chat-pulse 1.4s ease-in-out infinite;
-    }
-    .pulse.still {
-      animation: none;
-      background: var(--faint);
     }
     @keyframes chat-pulse {
       50% {
         opacity: 0.35;
-      }
-    }
-    @media (prefers-reduced-motion: reduce) {
-      .pulse {
-        animation: none;
       }
     }
     .composer {

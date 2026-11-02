@@ -179,24 +179,15 @@ export function openQuestion(view: ChatView): number | null {
 }
 
 /**
- * The quiet line under the thread, or "": what the agent is doing for the chat ("Replying…"), why it waits (busy with
- * an edit, the computer offline, the local worker blocked), or the build a Send started ("Building v1…").
+ * The quiet line under the thread, or "": the build a Send started ("Building v1…"). A turn's own states (queued,
+ * busy, offline, working) are its activity line, so while a turn is on this says nothing.
  */
 export function statusLine(
   view: ChatView,
   a: AutomationState | null,
   o: { cuts: readonly string[]; online: boolean },
 ): string {
-  const t = view.turn;
-  if (t) {
-    if (view.blocked && t.state === 'queued') return view.blocked;
-    if (view.busy) return view.busy;
-    if (view.offline || (!o.online && t.state === 'queued')) return 'The editing computer is offline';
-    if (t.state === 'stopping') return 'Stopping…';
-    if (t.state === 'queued') return 'Waiting for the agent…';
-    const last = view.messages.at(-1);
-    return last?.role === 'agent' && last.streaming ? '' : 'Working…';
-  }
+  if (view.turn) return '';
   const task = (a?.tasks ?? []).find((j) => j.state === 'running' || j.state === 'stopping' || j.state === 'queued');
   if (task?.target) {
     const verb = o.cuts.includes(task.target) ? 'Updating' : 'Building';
@@ -204,6 +195,133 @@ export function statusLine(
     return `${verb} ${task.target}…`;
   }
   return '';
+}
+
+/** What the thread shows: a person's message, or one turn of the agent's (its words, questions and lines, in order). */
+export type ChatBlock =
+  | { kind: 'person'; key: string; message: ChatMessage }
+  | { kind: 'agent'; key: string; turn: string; messages: ChatMessage[] };
+
+const agentSide = (m: ChatMessage): boolean => m.role !== 'person';
+
+/**
+ * The thread as blocks: each person's message on its own, and each turn's agent messages as one block, in order, at
+ * the place of its first one (a message typed while the turn ran comes after the whole reply). Agent messages with no
+ * turn are grouped while they follow each other. A turn that is on but hasn't said anything yet gets an empty block at
+ * the end, for its activity line.
+ */
+export function blocks(view: ChatView): ChatBlock[] {
+  const out: ChatBlock[] = [];
+  const byTurn = new Map<string, Extract<ChatBlock, { kind: 'agent' }>>();
+  let loose: Extract<ChatBlock, { kind: 'agent' }> | null = null;
+  for (const m of view.messages) {
+    if (!agentSide(m)) {
+      out.push({ kind: 'person', key: `p${m.id}`, message: m });
+      loose = null;
+      continue;
+    }
+    if (m.turn) {
+      const b = byTurn.get(m.turn);
+      if (b) b.messages.push(m);
+      else {
+        const nb = { kind: 'agent' as const, key: `t${m.turn}`, turn: m.turn, messages: [m] };
+        byTurn.set(m.turn, nb);
+        out.push(nb);
+      }
+      loose = null;
+      continue;
+    }
+    if (loose) loose.messages.push(m);
+    else {
+      loose = { kind: 'agent', key: `a${m.id}`, turn: '', messages: [m] };
+      out.push(loose);
+    }
+  }
+  const t = view.turn;
+  if (t && !byTurn.has(t.id)) out.push({ kind: 'agent', key: `t${t.id}`, turn: t.id, messages: [] });
+  return out;
+}
+
+/** A turn's one activity line: what it does now (`live`), or what it did (`done`, "" when it used no tools). */
+export interface Activity {
+  state: 'live' | 'done';
+  text: string;
+  /** The line shimmers: the agent is at work, not waiting on something (busy, offline, blocked). */
+  moving: boolean;
+}
+
+/** "Running a command" → "Running a command…" (a line that ends in … already keeps it). */
+const going = (s: string): string => (s.endsWith('…') ? s : `${s}…`);
+
+/**
+ * The activity line of a turn's block (spec/chat.md, "The activity line"): live while its turn is the chat's turn,
+ * saying what happens now, else the summary of its tool lines. `online` is whether the editing computer is seen.
+ */
+export function activity(
+  view: ChatView,
+  block: { turn: string; messages: readonly ChatMessage[] },
+  online = true,
+): Activity {
+  const t = view.turn;
+  if (!t || !block.turn || t.id !== block.turn)
+    return {
+      state: 'done',
+      text: summary(block.messages.filter((m) => m.role === 'tool').map((m) => m.text)),
+      moving: false,
+    };
+  const live = (text: string, moving = true): Activity => ({ state: 'live', text, moving });
+  if (view.blocked && t.state === 'queued') return live(view.blocked, false);
+  if (view.busy) return live(view.busy, false);
+  if (view.offline || (!online && t.state === 'queued')) return live('The editing computer is offline', false);
+  if (t.state === 'stopping') return live('Stopping…');
+  if (t.state === 'queued') return live('Waiting for the agent…');
+  const last = block.messages.at(-1);
+  return live(last?.role === 'tool' && last.text ? going(last.text) : 'Working…');
+}
+
+/** One kind of tool line in a turn's summary: its words for `n` of them (`m` matched the first). */
+interface Part {
+  re: RegExp;
+  say: (n: number, m: RegExpExecArray) => string;
+  /** Counted by distinct line (the same file edited three times is one file), else line by line. */
+  distinct?: boolean;
+}
+
+/** The summary's parts, in the order they show: what changed, the web, commands, then what it read. A line counts for
+ * the first part that matches it. */
+const PARTS: readonly Part[] = [
+  { re: /^Editing (the .+)$/, say: (_n, m) => `edited ${m[1]}`, distinct: true }, // the kind's document
+  { re: /^Editing (.+)$/, say: (n, m) => (n === 1 ? `edited ${m[1]}` : `edited ${n} files`), distinct: true },
+  { re: /^Saving an image$/, say: (n) => (n === 1 ? 'saved an image' : `saved ${n} images`) },
+  { re: /^Reading (.+\/…|a page)$/, say: (n, m) => (n === 1 ? `read ${m[1]}` : `read ${n} pages`), distinct: true },
+  { re: /^Searching (?:for .+|the web)$/, say: (n) => (n === 1 ? 'searched the web' : `searched the web ${n} times`) },
+  { re: /^Downloading (from .+|a file)$/, say: (n, m) => (n === 1 ? `downloaded ${m[1]}` : `downloaded ${n} files`) },
+  { re: /^Running a command$/, say: (n) => (n === 1 ? 'ran a command' : `ran ${n} commands`) },
+  { re: /^Reading (the .+)$/, say: (_n, m) => `read ${m[1]}`, distinct: true }, // the kind's document
+  { re: /^Reading (.+)$/, say: (n, m) => (n === 1 ? `read ${m[1]}` : `read ${n} files`), distinct: true },
+  { re: /^Looking at an image$/, say: (n) => (n === 1 ? 'looked at an image' : `looked at ${n} images`) },
+  { re: /^Looking through the files$/, say: () => 'looked through the files' },
+];
+
+/** The most parts a summary shows. */
+export const SUMMARY_PARTS = 3;
+
+/**
+ * A finished turn's summary of its tool lines, "" for none: at most SUMMARY_PARTS parts, joined with " · ", starting
+ * with a capital ("Edited the script · ran 3 commands"). "Working" and lines it doesn't know add nothing.
+ */
+export function summary(lines: readonly string[]): string {
+  const taken = PARTS.map(() => [] as string[]);
+  for (const line of lines) {
+    const i = PARTS.findIndex((p) => p.re.test(line));
+    if (i >= 0) taken[i]!.push(line);
+  }
+  const parts = PARTS.flatMap((p, i) => {
+    const all = p.distinct ? [...new Set(taken[i])] : taken[i]!;
+    return all.length ? [p.say(all.length, p.re.exec(all[0]!)!)] : [];
+  });
+  const s = parts.slice(0, SUMMARY_PARTS).join(' · ');
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 /** Send on the chat's version: whether it does anything, and why not. */
