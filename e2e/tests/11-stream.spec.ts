@@ -181,11 +181,12 @@ test('C flips to v1 at the same moment while v2 renders, stays there as v2 grows
   const flipped = await ui.state();
   expect(flipped).toMatchObject({ shown: 'v1', base: 'v2', flipped: true });
   expect(Math.abs(flipped.t - before.t)).toBeLessThan(0.05);
-  // What v2's progress does (the family refreshes, the page follows the latest) leaves the comparison alone.
-  await page.evaluate(async () => {
-    await window.__review.refreshFamily!({ why: 'rendering' });
-    await window.__review.followCurrent!();
-  });
+  // v2's next units come in while comparing (units 4 and 5 at ~11 s): following the latest waits, so nothing pulls
+  // the video back to v2. Unit 6 would complete v2, which the next test must not see yet: past 5, don't wait.
+  const done = () => page.evaluate(() => window.__review.info.versions?.find((v) => v.label === 'v2')?.stream?.done ?? 0);
+  const d0 = await done();
+  if (d0 < 5) await expect.poll(done, { timeout: 10_000 }).toBeGreaterThan(d0);
+  await sleep(300);
   expect(await ui.state()).toMatchObject({ shown: 'v1', base: 'v2', flipped: true });
   await ui.key('[');
   expect(await ui.state()).toMatchObject({ shown: 'v1', base: 'v2', flipped: true }); // not a key
