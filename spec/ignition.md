@@ -104,10 +104,16 @@ channel), and is disabled with "The editing computer is offline" when it isn't c
 
 ## The editor (the version slot)
 
-Where the video would be, on v0: **the document, and nothing else.** One plain text editor, the full width of the
-area, in a readable column (about 70 characters) at a comfortable reading size (17 px, 18 px on a phone, scaled from
-the theme's `--font-size`), in the Theme API's tokens. Markdown as typed: heading lines are bold, nothing else is styled. No tabs, no toolbar, no
-preview, no rich text.
+Where the video would be, on v0: **the document, and nothing else.** One editor, the full width of the area, in a
+readable column (about 70 characters) at a comfortable reading size (17 px, 18 px on a phone), in the Theme API's
+tokens. No tabs and no toolbar.
+
+- **Live preview** (as Obsidian does it): the editor is CodeMirror 6 editing the raw text, so the file is exactly what
+  was typed, never rewritten. The Markdown is shown rendered: headings at their sizes, bold, italic, inline code,
+  bullet and numbered lists with a hanging indent, task boxes (`- [ ]`) you tap to tick (that changes only the `[ ]`
+  to `[x]`), links that open on a tap, `>` quotes and `---` rules. The markup characters (`#`, `**`, list markers,
+  `>`, a link's brackets and address) are hidden except on the lines the caret or the selection touches, where the
+  text is shown as typed.
 
 - **Saving.** 600 ms after the last keystroke and when the text loses focus, with `If-Match` on the version read. The
   only word it shows is a quiet "Not saved · Retry" when a save fails, or "Changed outside Retake · Reload · Keep
