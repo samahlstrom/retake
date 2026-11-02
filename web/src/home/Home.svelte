@@ -10,6 +10,7 @@
   import FolderNav from './FolderNav.svelte';
   import ConnectBlock from '../components/ConnectBlock.svelte';
   import ExtSlot from '../ext/ExtSlot.svelte';
+  import Settings from './Settings.svelte';
   import { brandOf, homeTitle } from '../lib/brand';
 
   let { home }: { home: Home } = $props();
@@ -20,7 +21,13 @@
   const todo = $derived(toReview(videos));
   const extPage = $derived(home.extOpen);
   const title = $derived(
-    extPage ? (extPage.nav?.title ?? extPage.name) : node.path ? node.title : home.res.title || 'Videos',
+    home.settings
+      ? 'Settings'
+      : extPage
+        ? (extPage.nav?.title ?? extPage.name)
+        : node.path
+          ? node.title
+          : home.res.title || 'Videos',
   );
   const connect = $derived(needsComputer(home.res));
   const user = $derived(home.res.user);
@@ -84,7 +91,9 @@
               >{/if}</span
           ></a
         >
-        {#if home.ext}
+        {#if home.settings}
+          <span aria-hidden="true">/</span><span class="here" aria-current="page">Settings</span>
+        {:else if home.ext}
           {#if extPage}<span aria-hidden="true">/</span><span class="here" aria-current="page">{title}</span>{/if}
         {:else}
           {#each home.trail.slice(1) as n (n.path)}
@@ -103,7 +112,9 @@
         </div>
       {/if}
     </div>
-    {#if home.ext}
+    {#if home.settings}
+      <Settings />
+    {:else if home.ext}
       {#if extPage}
         <ExtSlot
           ext={extPage}

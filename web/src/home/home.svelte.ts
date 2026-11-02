@@ -89,6 +89,8 @@ export class Home {
   extsLoaded = $state(false);
   /** An extension's page is open (`#ext/<id>/<route>`), in place of the video cards. */
   ext = $state.raw<{ id: string; route: string } | null>(null);
+  /** The settings page is open (`#settings`, the owner's), in place of the video cards. */
+  settings = $state(false);
   /** A short message (an extension's ctx.toast). */
   readonly toast = new Toast();
   readonly loader: ExtLoader;
@@ -227,7 +229,10 @@ export class Home {
   /** Selects a folder or project ("" for the top) and opens it and the folders above it. The URL hash follows
    * (replaced, so Back doesn't step through selections). */
   select(path: string, writeHash = true): void {
-    if (writeHash) this.ext = null; // a folder in the tree: the cards again
+    if (writeHash) {
+      this.ext = null; // a folder in the tree: the cards again
+      this.settings = false;
+    }
     this.selected = path;
     if (path) this.topOpen = true;
     for (const p of [...ancestors(path), path]) if (p) this.expanded.add(p);
@@ -239,8 +244,16 @@ export class Home {
     this.#save();
   }
 
-  /** Follows the URL hash: an extension's page (`#ext/<id>/<route>`), else a folder's selection. */
+  /** Follows the URL hash: the settings (`#settings`), an extension's page (`#ext/<id>/<route>`), else a folder's
+   * selection. */
   route(hash: string): void {
+    if (/^#?settings$/.test(hash)) {
+      this.ext = null;
+      this.settings = true;
+      if (this.phone) this.drawer = false;
+      return;
+    }
+    this.settings = false;
     const e = parseExtHash(hash);
     if (!e) {
       this.ext = null;

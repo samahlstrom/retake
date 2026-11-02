@@ -67,6 +67,8 @@ type FolderOptions struct {
 	// list and routes are served at the home and under every video. FileTranscriber transcribes owned audio files.
 	Exts            *ext.Set
 	FileTranscriber func() (transcribe.Transcriber, error)
+	// Settings is what the settings page reads and writes (settings.go); nil: it has none.
+	Settings *LocalSettings
 }
 
 // Folder serves a folder of projects.
@@ -446,6 +448,8 @@ func (f *Folder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, r, http.StatusOK, map[string]bool{"ok": true})
 	case isHomeExt(parts):
 		f.homeExt(w, r, role, parts)
+	case len(parts) == 2 && parts[0] == "api" && parts[1] == "settings":
+		f.settingsRoute(w, r, role)
 	case len(parts) == 1 && parts[0] == "favicon.ico" && get:
 		w.Header().Set("Cache-Control", "no-store")
 		w.WriteHeader(http.StatusNoContent)

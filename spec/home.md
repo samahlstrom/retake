@@ -247,6 +247,52 @@ nothing more than the videos.
 - A viewer's link sees the same home; their review pages are view only (spec/team.md).
 - Test hook: `window.__home = { loaded, projects, selected }` (`selected`: the selected path, "" for the top).
 
+## Settings
+
+The owner's settings live on the home: **Settings** (a gear) at the bottom of the folder column opens them in the main
+area, at `#settings` (a folder in the column, or Back, goes to the cards again). Only the owner sees the entry; the
+routes refuse anyone else (403). They replace the agent menu the review page had: the review page shows no agent.
+
+- **Agent.** The *default agent*, from the agents the computers offer (none chosen yet: each computer's first), and
+  *If its usage runs out*: "Pause and ask me" (the default) or "Switch to <another agent>". Saving them sets every
+  project's editing config (`api/automation`'s `config.agent` and `config.fallback`) where that project's computer
+  offers the agent; a project no computer polled yet takes the default at its first poll (the worker offers it first).
+  A new default agent that was the fallback leaves no fallback.
+- **Where agents run**: background, herdr or tmux (spec/automation.md, "Watching the agents"). Locally it's
+  `open_agents_in`, used by agents started after retake restarts. On the team server it's each computer's own setting,
+  shown read-only.
+- **Computers.** Locally: this computer, online while its workers run, and its agents. On the team server: the
+  computers (`machines`), and "Connect your computer" (the `POST api/connect` line) when none is online.
+- **Extensions**: the installed ones, each with an on/off switch (locally `[extensions] enabled`, as `retake ext
+  enable` does, with a project extension's pin). A change applies when retake restarts, and the row says so. On the
+  team server they're the server's own (`--extensions`), read-only.
+- **Theme**: the theme folder in effect, its name when a theme is there, else that `retake theme init` makes one
+  (read-only).
+
+### `GET api/settings` and `POST api/settings`
+
+At the home's root (`retake open <folder>`; the team server's `/api/settings`), owner only, POSTs origin-checked.
+
+```json
+{ "hosted": false, "agents": [{"id": "claude", "name": "Claude Code"}], "agent": "claude", "fallback": "",
+  "open_in": "background", "open_in_editable": true,
+  "extensions": [{"id": "ignition", "name": "Ignition", "description": "…", "on": true, "loaded": true}],
+  "extensions_editable": true, "theme": {"folder": "~/.config/retake/theme", "used": false},
+  "config": "~/.config/retake/config.toml", "machines": [ … as in api/home … ] }
+```
+
+- `agents` is this computer's agents (locally, the config read again) or every computer's (hosted). `agent` "" means
+  none chosen. `loaded` says whether an extension is in effect now; it differs from `on` until a restart. Paths under
+  the home folder show as `~/…`. `config` is there locally only.
+- `POST` takes any of `{"agent", "fallback", "open_in", "extensions": {"<id>": true|false}}` and answers like `GET`.
+  Everything is checked before anything is written: an unknown key, an agent no computer offers, a fallback that is
+  the default agent, an `open_in` other than background, herdr or tmux, or an extension that isn't installed is 400
+  with `{"error"}` and changes nothing. On the team server `open_in` and `extensions` are 400 (not its settings).
+- **Locally** the change goes to `$XDG_CONFIG_HOME/retake/config.toml` (`default_agent`, `fallback_agent`,
+  `open_agents_in`, `[extensions] enabled`; docs/config.md), line by line: the rest of the file, comments included,
+  stays as it is, and a default value removes its line. **Hosted** the agent and fallback are kept in the server's
+  database (the `settings/agents` setting).
+
 ## Moving through projects (the review page)
 
 Only when the page is a project of a home: its path ends in `/p/<name>/` and `<home>api/home` answers. Then:

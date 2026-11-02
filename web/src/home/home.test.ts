@@ -234,3 +234,26 @@ describe("an extension's page on the home", () => {
     expect(home.toast.msg).toBe('Created');
   });
 });
+
+describe('the settings page on the home', () => {
+  it('opens from #settings in place of the cards, and a folder or an extension closes it', async () => {
+    const home = new Home({ storage: null, fetch: (async () => answer(200, body)) as unknown as typeof fetch });
+    await home.refresh();
+    home.phone = true;
+    home.drawer = true;
+    home.route('#settings');
+    expect(home.settings).toBe(true);
+    expect(home.ext).toBeNull();
+    expect(home.drawer).toBe(false);
+    home.select('item-shop');
+    expect(home.settings).toBe(false);
+    home.route('#settings');
+    home.route('#ext/ignition/');
+    expect(home.settings).toBe(false);
+    expect(home.ext?.id).toBe('ignition');
+    home.route('#settings');
+    home.route('#/2026-10-19');
+    expect(home.settings).toBe(false);
+    expect(home.selected).toBe('2026-10-19');
+  });
+});

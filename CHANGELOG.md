@@ -4,6 +4,13 @@ All notable changes are listed here. Versions follow semver once the first relea
 
 ## Unreleased
 
+### Settings on the home
+- **Settings** at the bottom of the home's folder column (the owner's): the default agent and what happens when its
+  usage runs out (moved here from the review page's agent menu, and applied to every project), where agents run,
+  extensions on and off, the theme folder, and the computers ("Connect your computer" on the team server). Locally it
+  writes `config.toml` (new keys `default_agent` and `fallback_agent`), keeping the rest of the file.
+  `GET`/`POST api/settings` (spec/home.md, "Settings").
+
 ### C is back; the old project grouping is gone
 - C flips to the comparison version at the same moment again, and C flips back; after a trim the time map lands it on
   the matching moment. The comments, markers and drawings switch with it. While you compare, following the agent's

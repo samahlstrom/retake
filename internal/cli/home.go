@@ -45,7 +45,7 @@ func openFolder(ctx context.Context, a openArgs, env Env, cfg config.Config, st 
 	}
 	port := ln.Addr().(*net.TCPAddr).Port
 	f := newFolder(env, cfg, st, hub.FolderOptions{Dir: dir, Port: port, UI: page, IdleExit: idleDuration(st.IdleExit),
-		Verbose: a.verbose, AllowHosts: a.allow, Exts: exts})
+		Verbose: a.verbose, AllowHosts: a.allow, Exts: exts, Settings: localSettings(env, cfg, tdir, a.exts, dir)})
 	url := fmt.Sprintf("http://127.0.0.1:%d/", port)
 	printFolderStartup(env.Stdout, f, url, st.IdleExit)
 	if st.OpenBrowser {

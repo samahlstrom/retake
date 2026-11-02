@@ -313,6 +313,11 @@ Versioning). Classes and ids are not part of the API and can change in any relea
 | `connect-card` | The "Connect your computer" card | home |
 | `home-grid` | A grid of videos | home |
 | `video-card` | One video; `data-status` is its status | home |
+| `nav-settings` | Settings, at the bottom of the folder tree (the owner's) | home |
+| `settings` | The settings page | home |
+| `settings-section` | A group of settings (Agent, Computers, Extensions, Theme) | home |
+| `settings-row` | One setting: its name, a line about it, and its control | home |
+| `settings-switch` | An on/off switch (an extension) | home |
 
 `data-state` and `data-status` values are part of the API too: a comment's and a marker's `data-state` is `open`,
 `working`, `question` or `done`; a video card's `data-status` is the home's status word (spec/home.md).

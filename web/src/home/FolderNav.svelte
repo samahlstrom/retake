@@ -290,6 +290,27 @@
       {/each}
     </div>
   {/each}
+  {#if home.res.role === 'owner'}
+    <div class="foot">
+      <a
+        class="row settings-link"
+        class:selected={home.settings}
+        data-part="nav-settings"
+        href="#settings"
+        aria-current={home.settings ? 'page' : undefined}
+        ><span class="chev" aria-hidden="true"
+          ><svg viewBox="0 0 20 20"
+            ><circle cx="10" cy="10" r="2.6" fill="none" stroke="currentColor" stroke-width="1.5" /><path
+              d="M10 2.75v2M10 15.25v2M17.25 10h-2M4.75 10h-2M15.13 4.87l-1.42 1.42M6.29 13.71l-1.42 1.42M15.13 15.13l-1.42-1.42M6.29 6.29 4.87 4.87"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+            /></svg
+          ></span
+        ><span class="label">Settings</span></a
+      >
+    </div>
+  {/if}
   {#if home.loaded && home.filter.trim() && !list.length}
     <p class="none-found">Nothing matches “{home.filter.trim()}”.</p>
   {/if}
@@ -361,6 +382,20 @@
     .rows.fit {
       flex: 0 1 auto;
       padding-bottom: 8px;
+    }
+    /* Settings, at the bottom of the column. */
+    .foot {
+      flex: none;
+      margin-top: auto;
+      padding: 6px 6px 10px;
+      border-top: 1px solid var(--line);
+    }
+    .settings-link {
+      color: var(--text-5);
+    }
+    .settings-link .chev svg {
+      width: 16px;
+      height: 16px;
     }
     .ext-nav {
       flex: 0 1 auto;

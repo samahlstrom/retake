@@ -327,3 +327,78 @@ func TestSetExtensionRefuses(t *testing.T) {
 		t.Error("made a folder for nothing")
 	}
 }
+
+func TestSetTop(t *testing.T) {
+	for _, tc := range []struct {
+		name, before, key, value, after string
+	}{
+		{name: "a new file", key: "default_agent", value: "codex", after: "default_agent = \"codex\"\n"},
+		{name: "after the top keys", key: "open_agents_in", value: "herdr",
+			before: "# mine\nname = \"Ana\"\n\n# how it renders\n[render]\nencoder = \"x264\"\n",
+			after:  "# mine\nname = \"Ana\"\nopen_agents_in = \"herdr\"\n\n# how it renders\n[render]\nencoder = \"x264\"\n"},
+		{name: "a file that starts with a table", key: "fallback_agent", value: "claude",
+			before: "[render]\nencoder = \"x264\"\n",
+			after:  "fallback_agent = \"claude\"\n\n[render]\nencoder = \"x264\"\n"},
+		{name: "replaces, keeps its comment", key: "default_agent", value: "claude",
+			before: "default_agent = \"codex\" # pick\nport = 9000\n",
+			after:  "default_agent = \"claude\"  # pick\nport = 9000\n"},
+		{name: "empty removes it", key: "fallback_agent", value: "",
+			before: "fallback_agent = \"codex\"\nport = 9000\n", after: "port = 9000\n"},
+		{name: "a table's own key is another key", key: "default_agent", value: "codex",
+			before: "[extensions.x]\ndefault_agent = \"y\"\n",
+			after:  "default_agent = \"codex\"\n\n[extensions.x]\ndefault_agent = \"y\"\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := filepath.Join(t.TempDir(), "retake", "config.toml")
+			if tc.before != "" {
+				if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(p, []byte(tc.before), 0o640); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := SetTop(p, tc.key, tc.value); err != nil {
+				t.Fatal(err)
+			}
+			b, err := os.ReadFile(p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(b) != tc.after {
+				t.Errorf("file:\n%s\nwant:\n%s", b, tc.after)
+			}
+			c, _, err := Load(p)
+			if err != nil {
+				t.Fatalf("the file doesn't load: %v", err)
+			}
+			if got := topValue(c, tc.key); got != tc.value {
+				t.Errorf("%s = %q", tc.key, got)
+			}
+		})
+	}
+}
+
+func TestSetTopRefuses(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "config.toml")
+	for _, tc := range []struct{ key, value string }{
+		{"port", "1"}, {"default_agent", "no spaces"}, {"open_agents_in", "screen"}, {"fallback_agent", "a\"b"},
+	} {
+		if err := SetTop(p, tc.key, tc.value); err == nil {
+			t.Errorf("%s = %q was written", tc.key, tc.value)
+		}
+	}
+	if _, err := os.Stat(p); err == nil {
+		t.Error("a refused value made the file")
+	}
+	if err := os.WriteFile(p, []byte("name = \n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetTop(p, "default_agent", "codex"); err == nil {
+		t.Error("edited a broken file")
+	}
+	if _, _, err := Parse("default_agent = \"a b\"\n"); err == nil {
+		t.Error("a bad default_agent parsed")
+	}
+}

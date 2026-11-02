@@ -29,7 +29,12 @@ type Config struct {
 	// OpenAgentsIn is where agents run (spec/automation.md, "Watching the agents"): "background" (default), "herdr"
 	// or "tmux". An [[agents]] entry's open_in wins.
 	OpenAgentsIn *string `toml:"open_agents_in"`
-	Agents       []Agent `toml:"agents"` // [[agents]]: what retake open and retake worker may run
+	// DefaultAgent is the agent id a project edits with (spec/home.md, "Settings"): the worker offers it first, and the
+	// settings page sets it on every project. FallbackAgent is the one to switch to when its usage runs out; unset or
+	// "" pauses and asks.
+	DefaultAgent  *string `toml:"default_agent"`
+	FallbackAgent *string `toml:"fallback_agent"`
+	Agents        []Agent `toml:"agents"` // [[agents]]: what retake open and retake worker may run
 
 	Transcribe Transcribe `toml:"transcribe"`
 	Share      Share      `toml:"share"`
@@ -185,6 +190,14 @@ func Parse(s string) (Config, []string, error) {
 	}
 	if o := c.OpenAgentsIn; o != nil && !ValidOpenIn(*o) {
 		return Config{}, warnings, fmt.Errorf("open_agents_in %q isn't background, herdr or tmux", *o)
+	}
+	for _, k := range []struct {
+		name string
+		v    *string
+	}{{"default_agent", c.DefaultAgent}, {"fallback_agent", c.FallbackAgent}} {
+		if k.v != nil && *k.v != "" && !agentID.MatchString(*k.v) {
+			return Config{}, warnings, fmt.Errorf("%s %q isn't an agent id (letters, digits, - or _)", k.name, *k.v)
+		}
 	}
 	ids := map[string]bool{}
 	for i, a := range c.Agents {
@@ -376,6 +389,81 @@ func SetExtension(path, id string, on bool, pin string) error {
 		return fmt.Errorf("%s: can't edit [extensions] here: set enabled = %s by hand", path, tomlList(enabled))
 	}
 	return writeConfig(path, out)
+}
+
+// TopKeys are the top-level keys SetTop writes (the settings page's, spec/home.md "Settings").
+var TopKeys = []string{"default_agent", "fallback_agent", "open_agents_in"}
+
+// SetTop sets a top-level string key of the config file at path to value, or removes its line when value is "" (the
+// default). Only TopKeys are written. The rest of the file, comments included, stays as it is; the file and its
+// folder are made when missing. The result is parsed again, so a value the file can't hold is refused.
+func SetTop(path, key, value string) error {
+	if !slices.Contains(TopKeys, key) {
+		return fmt.Errorf("%q isn't a key the settings write", key)
+	}
+	b, err := os.ReadFile(path) //nolint:gosec // the user's own config file
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	text := string(b)
+	if _, _, err := Parse(text); err != nil {
+		return fmt.Errorf("%s: %w (fix it first)", path, err)
+	}
+	lines := strings.Split(text, "\n")
+	_, end, _ := region(lines, "")
+	line := key + " = " + strconv.Quote(value)
+	switch i := keyLine(lines, 0, end, key); {
+	case i >= 0 && value == "":
+		text2 := strings.Join(lines[i:], "\n")
+		stop, ok := valueEnd(text2, strings.IndexByte(text2, '=')+1)
+		if !ok {
+			return fmt.Errorf("%s: %s's value doesn't end", path, key)
+		}
+		lines = slices.Delete(lines, i, i+strings.Count(text2[:stop], "\n")+1)
+	case i >= 0:
+		if lines, err = replaceValue(lines, i, line); err != nil {
+			return fmt.Errorf("%s: %w", path, err)
+		}
+	case value == "":
+		return nil // already unset
+	default:
+		// After the last key of the top table, before the first [table] (and the comments above it).
+		at := end
+		for at > 0 && (strings.TrimSpace(lines[at-1]) == "" || strings.HasPrefix(strings.TrimSpace(lines[at-1]), "#")) {
+			at--
+		}
+		ins := []string{line}
+		if at == 0 && end < len(lines) {
+			ins = append(ins, "") // a file that starts with a table: a blank line before it
+		}
+		lines = slices.Insert(lines, at, ins...)
+	}
+	out := strings.Join(lines, "\n")
+	got, _, err := Parse(out)
+	if err != nil {
+		return fmt.Errorf("%s: %w", path, err)
+	}
+	if v := topValue(got, key); v != value {
+		return fmt.Errorf("%s: can't edit %s here: set %s by hand", path, key, line)
+	}
+	return writeConfig(path, out)
+}
+
+// topValue is the value of one of TopKeys ("" when unset).
+func topValue(c Config, key string) string {
+	var p *string
+	switch key {
+	case "default_agent":
+		p = c.DefaultAgent
+	case "fallback_agent":
+		p = c.FallbackAgent
+	case "open_agents_in":
+		p = c.OpenAgentsIn
+	}
+	if p == nil {
+		return ""
+	}
+	return *p
 }
 
 // region is a table's lines: from after its header to before the next header (or the end). The root table's

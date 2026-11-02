@@ -279,3 +279,37 @@ env = { ANTHROPIC_BASE_URL = "https://openrouter.ai/api", ANTHROPIC_AUTH_TOKEN =
 		}
 	}
 }
+
+// default_agent goes first, so a project's first poll picks it (spec/home.md, "Settings").
+func TestDefaultAgentFirst(t *testing.T) {
+	c, _, err := config.Parse(`find_agents = false
+default_agent = "b"
+[[agents]]
+id = "a"
+command = ["a"]
+[[agents]]
+id = "b"
+command = ["b"]
+[[agents]]
+id = "c"
+command = ["c"]
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids := func(c config.Config) string {
+		var out []string
+		for _, p := range agentProfiles(Env{}, c) {
+			out = append(out, p.ID)
+		}
+		return strings.Join(out, " ")
+	}
+	if got := ids(c); got != "b a c" {
+		t.Errorf("order: %s", got)
+	}
+	gone := "zz"
+	c.DefaultAgent = &gone
+	if got := ids(c); got != "a b c" {
+		t.Errorf("an agent that isn't there: %s", got)
+	}
+}

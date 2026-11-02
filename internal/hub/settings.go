@@ -1,0 +1,440 @@
+package hub
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"path/filepath"
+	"slices"
+
+	"github.com/samahlstrom/retake/internal/config"
+	"github.com/samahlstrom/retake/internal/ext"
+	"github.com/samahlstrom/retake/internal/home"
+	"github.com/samahlstrom/retake/internal/project"
+	"github.com/samahlstrom/retake/internal/team"
+	"github.com/samahlstrom/retake/internal/theme"
+)
+
+// The settings page (spec/home.md, "Settings"): GET and POST api/settings at the home, for the owner only. Locally
+// (retake open <folder>) they are the user's config file; on the team server, the server's own settings. The default
+// agent and its fallback also go to every project's automation config, which is where a task's agent comes from.
+
+// LocalSettings is what retake open's settings read and write. The CLI fills it in.
+type LocalSettings struct {
+	ConfigPath string // config.toml, where changes go ($XDG_CONFIG_HOME/retake/config.toml)
+	ThemeDir   string // the theme folder in effect; "" = theming is off
+	// Agents are the agents this computer offers (the local worker's profiles, with the config read again).
+	Agents func() []project.AgentProfile
+	// Extensions are the extensions installed here (on or not); nil = none.
+	Extensions func() []*ext.Ext
+	// Home is the user's home folder, which paths show as ~ ("" = none).
+	Home string
+}
+
+// SettingsView is GET api/settings.
+type SettingsView struct {
+	Hosted bool `json:"hosted"`
+	// Agents are the agents to choose from: this computer's (local), every connected computer's (hosted).
+	Agents   []home.MachineAgent `json:"agents"`
+	Agent    string              `json:"agent"`    // the default agent; "" = each computer's first
+	Fallback string              `json:"fallback"` // "" = pause and ask
+	// OpenIn is where agents run (background, herdr, tmux). On the team server it's each computer's own setting.
+	OpenIn         string `json:"open_in"`
+	OpenInEditable bool   `json:"open_in_editable"`
+	// Extensions: the installed ones, on or off. Loaded is whether it's in effect now (a change applies at restart).
+	Extensions         []SettingsExt  `json:"extensions"`
+	ExtensionsEditable bool           `json:"extensions_editable"`
+	Theme              SettingsTheme  `json:"theme"`
+	Config             string         `json:"config,omitempty"` // the config file (local)
+	Machines           []home.Machine `json:"machines"`
+}
+
+// SettingsExt is one extension on the settings page.
+type SettingsExt struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	On          bool   `json:"on"`
+	Loaded      bool   `json:"loaded"`
+}
+
+// SettingsTheme is the theme folder: where it is and whether one is there.
+type SettingsTheme struct {
+	Folder string `json:"folder"` // "" = theming is off
+	Used   bool   `json:"used"`
+	Name   string `json:"name,omitempty"`
+}
+
+// settingsChange is POST api/settings: only the fields given change.
+type settingsChange struct {
+	Agent      *string         `json:"agent"`
+	Fallback   *string         `json:"fallback"`
+	OpenIn     *string         `json:"open_in"`
+	Extensions map[string]bool `json:"extensions"`
+}
+
+// readChange decodes a POST body: JSON, no unknown keys, at most 16 KiB.
+func readChange(w http.ResponseWriter, r *http.Request) (settingsChange, error) {
+	var c settingsChange
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&c); err != nil {
+		return c, errors.New(`give {"agent", "fallback", "open_in", "extensions": {"<id>": true|false}}`)
+	}
+	if dec.More() {
+		return c, errors.New("one JSON object")
+	}
+	if len(c.Extensions) > 64 {
+		return c, errors.New("too many extensions")
+	}
+	return c, nil
+}
+
+// checkAgents checks a change's agent and fallback against the agents offered, given the current ones.
+func checkAgents(c settingsChange, offered []home.MachineAgent, agent, fallback string) (string, string, error) {
+	has := func(id string) bool {
+		return slices.ContainsFunc(offered, func(a home.MachineAgent) bool { return a.ID == id })
+	}
+	if c.Agent != nil {
+		if *c.Agent != "" && !has(*c.Agent) {
+			return "", "", fmt.Errorf("no agent %q here", *c.Agent)
+		}
+		agent = *c.Agent
+	}
+	if c.Fallback != nil {
+		if *c.Fallback != "" && !has(*c.Fallback) {
+			return "", "", fmt.Errorf("no agent %q here", *c.Fallback)
+		}
+		fallback = *c.Fallback
+	}
+	if fallback != "" && fallback == agent {
+		if c.Fallback == nil {
+			fallback = "" // a new default agent that was the fallback: no fallback
+		} else {
+			return "", "", errors.New("the fallback is another agent than the default")
+		}
+	}
+	return agent, fallback, nil
+}
+
+// applyAgents sets a project's agent and fallback when its computer offers them: the default agent (when one is
+// chosen) and the fallback ("" pauses and asks). A project no computer polled yet takes it at its first poll.
+func applyAgents(st *project.Store, agent, fallback string) error {
+	return st.UpdateAutomation(func(a *project.AutomationState) (bool, error) {
+		w := a.Worker(a.Config.Worker)
+		if w == nil {
+			return false, nil
+		}
+		changed := false
+		if agent != "" && w.HasAgent(agent) && a.Config.Agent != agent {
+			a.Config.Agent, changed = agent, true
+		}
+		fb := fallback
+		if fb != "" && (!w.HasAgent(fb) || fb == a.Config.Agent) {
+			fb = ""
+		}
+		if a.Config.Fallback != fb {
+			a.Config.Fallback, changed = fb, true
+		}
+		return changed, nil
+	})
+}
+
+// agentsOf is every agent the machines offer, once each, in order.
+func agentsOf(ms []home.Machine) []home.MachineAgent {
+	out := []home.MachineAgent{}
+	for _, m := range ms {
+		for _, a := range m.Agents {
+			if !slices.ContainsFunc(out, func(x home.MachineAgent) bool { return x.ID == a.ID }) {
+				out = append(out, a)
+			}
+		}
+	}
+	return out
+}
+
+// themeInfo says where the theme folder is and whether a theme is there.
+func themeInfo(dir, homeDir string) SettingsTheme {
+	t := SettingsTheme{Folder: tilde(dir, homeDir)}
+	if th := theme.Load(dir); th != nil {
+		t.Used, t.Name = true, th.Settings.Name
+	}
+	return t
+}
+
+// tilde shows a path under the home folder with ~.
+func tilde(p, homeDir string) string {
+	if homeDir == "" || p == "" {
+		return p
+	}
+	if rel, err := filepath.Rel(homeDir, p); err == nil && filepath.IsLocal(rel) {
+		return "~/" + filepath.ToSlash(rel)
+	}
+	return p
+}
+
+// --- retake open <folder>
+
+// settingsRoute is GET and POST api/settings of retake open <folder>: the owner's own config file.
+func (f *Folder) settingsRoute(w http.ResponseWriter, r *http.Request, role team.Role) {
+	ls := f.opts.Settings
+	switch {
+	case role != team.Owner:
+		writeJSON(w, r, http.StatusForbidden, map[string]string{"error": "only the owner changes the settings"})
+		return
+	case ls == nil:
+		writeJSON(w, r, http.StatusNotFound, map[string]string{"error": "no settings here"})
+		return
+	case r.Method == http.MethodPost:
+		if err := f.changeSettings(w, r, ls); err != nil {
+			writeJSON(w, r, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+	case r.Method != http.MethodGet && r.Method != http.MethodHead:
+		writeJSON(w, r, http.StatusMethodNotAllowed, map[string]string{"error": "GET or POST"})
+		return
+	}
+	v, err := f.settingsView(ls)
+	if err != nil {
+		writeJSON(w, r, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, r, http.StatusOK, v)
+}
+
+// localConfig reads the config file now ("" path: an empty config).
+func localConfig(ls *LocalSettings) (config.Config, error) {
+	if ls.ConfigPath == "" {
+		return config.Config{}, nil
+	}
+	c, _, err := config.Load(ls.ConfigPath)
+	if err != nil {
+		return c, fmt.Errorf("%s: %w", ls.ConfigPath, err)
+	}
+	return c, nil
+}
+
+// localAgents is the agents this computer offers.
+func (f *Folder) localAgents(ls *LocalSettings) []home.MachineAgent {
+	if ls.Agents == nil {
+		return agentsOf(f.machines())
+	}
+	out := []home.MachineAgent{}
+	for _, a := range ls.Agents() {
+		out = append(out, home.MachineAgent{ID: a.ID, Name: a.Name})
+	}
+	return out
+}
+
+func str(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
+}
+
+func (f *Folder) settingsView(ls *LocalSettings) (SettingsView, error) {
+	c, err := localConfig(ls)
+	if err != nil {
+		return SettingsView{}, err
+	}
+	v := SettingsView{Agents: f.localAgents(ls), Agent: str(c.DefaultAgent), Fallback: str(c.FallbackAgent),
+		OpenIn: str(c.OpenAgentsIn), OpenInEditable: ls.ConfigPath != "", ExtensionsEditable: ls.ConfigPath != "",
+		Theme: themeInfo(ls.ThemeDir, ls.Home), Config: tilde(ls.ConfigPath, ls.Home), Machines: f.machines(),
+		Extensions: []SettingsExt{}}
+	if v.OpenIn == "" {
+		v.OpenIn = config.OpenBackground
+	}
+	if ls.Extensions != nil {
+		seen := map[string]bool{}
+		for _, e := range ls.Extensions() {
+			if seen[e.ID] {
+				continue
+			}
+			seen[e.ID] = true
+			v.Extensions = append(v.Extensions, SettingsExt{ID: e.ID, Name: extName(e), Description: e.Description,
+				On: slices.Contains(c.Extensions.Enabled, e.ID), Loaded: f.opts.Exts.Get(e.ID) != nil})
+		}
+	}
+	return v, nil
+}
+
+func extName(e *ext.Ext) string {
+	if e.Name != "" {
+		return e.Name
+	}
+	return e.ID
+}
+
+// changeSettings validates a change in full, then writes it to the config file and applies the agents to the
+// projects.
+func (f *Folder) changeSettings(w http.ResponseWriter, r *http.Request, ls *LocalSettings) error {
+	c, err := readChange(w, r)
+	if err != nil {
+		return err
+	}
+	if ls.ConfigPath == "" {
+		return errors.New("there is no config file to write")
+	}
+	cur, err := localConfig(ls)
+	if err != nil {
+		return err
+	}
+	agent, fallback, err := checkAgents(c, f.localAgents(ls), str(cur.DefaultAgent), str(cur.FallbackAgent))
+	if err != nil {
+		return err
+	}
+	if c.OpenIn != nil && !config.ValidOpenIn(*c.OpenIn) {
+		return fmt.Errorf("open_in %q isn't background, herdr or tmux", *c.OpenIn)
+	}
+	installed := map[string]*ext.Ext{}
+	if ls.Extensions != nil {
+		for _, e := range ls.Extensions() {
+			if installed[e.ID] == nil {
+				installed[e.ID] = e
+			}
+		}
+	}
+	for id := range c.Extensions {
+		if installed[id] == nil {
+			return fmt.Errorf("no extension %q is installed", id)
+		}
+	}
+	// Valid: write it.
+	if c.Agent != nil || c.Fallback != nil {
+		if err := config.SetTop(ls.ConfigPath, "default_agent", agent); err != nil {
+			return err
+		}
+		if err := config.SetTop(ls.ConfigPath, "fallback_agent", fallback); err != nil {
+			return err
+		}
+	}
+	if c.OpenIn != nil {
+		v := *c.OpenIn
+		if v == config.OpenBackground {
+			v = "" // the default: no line
+		}
+		if err := config.SetTop(ls.ConfigPath, "open_agents_in", v); err != nil {
+			return err
+		}
+	}
+	ids := make([]string, 0, len(c.Extensions))
+	for id := range c.Extensions {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
+	for _, id := range ids {
+		e, pin := installed[id], ""
+		if e.Where == ext.WhereProject {
+			pin = e.Hash
+		}
+		if err := config.SetExtension(ls.ConfigPath, id, c.Extensions[id], pin); err != nil {
+			return err
+		}
+	}
+	if c.Agent != nil || c.Fallback != nil {
+		for _, fd := range f.rescan(false) {
+			fp := f.projectOf(fd)
+			if fp == nil {
+				continue
+			}
+			if st := fp.projectStore(); st != nil {
+				if err := applyAgents(st, agent, fallback); err != nil {
+					f.logf("settings: %s: %v", fd.Name, err)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// --- the team server
+
+// settingsKey is the team server's settings row: {"agent", "fallback"}.
+const settingsKey = "settings/agents"
+
+type hostedAgents struct {
+	Agent    string `json:"agent"`
+	Fallback string `json:"fallback"`
+}
+
+func (h *Hub) hostedAgents() hostedAgents {
+	var a hostedAgents
+	if v, err := h.st.Accounts.Setting(settingsKey); err == nil && v != "" {
+		_ = json.Unmarshal([]byte(v), &a)
+	}
+	return a
+}
+
+// settingsRoute is GET and POST api/settings on the team server: admins only (the home's owner).
+func (h *Hub) settingsRoute(w http.ResponseWriter, r *http.Request, s *session) {
+	if !s.user.Admin {
+		h.fail(w, r, http.StatusForbidden, "only the owner changes the settings")
+		return
+	}
+	ps, err := h.st.Accounts.ProjectsOf(s.user)
+	if err != nil {
+		h.storeFailed(w, r, err)
+		return
+	}
+	var stores []*project.Store
+	var workers [][]project.EditingWorker
+	for _, p := range ps {
+		if p.Role != team.Owner {
+			continue
+		}
+		pr, err := h.project(p.Name)
+		if err != nil {
+			h.logf("project %s: %v", p.Name, err)
+			continue
+		}
+		stores = append(stores, pr.store)
+		if a, err := pr.store.Automation(); err == nil {
+			workers = append(workers, a.Workers)
+		}
+	}
+	machines := home.Machines(h.opts.Now(), workers...)
+	cur := h.hostedAgents()
+	switch r.Method {
+	case http.MethodPost:
+		c, err := readChange(w, r)
+		if err == nil && c.OpenIn != nil {
+			err = errors.New("where agents run is each computer's own setting (open_agents_in in its config.toml)")
+		}
+		if err == nil && len(c.Extensions) > 0 {
+			err = errors.New("the server's extensions are set where it runs (--extensions, RETAKE_EXTENSIONS)")
+		}
+		var agent, fallback string
+		if err == nil {
+			agent, fallback, err = checkAgents(c, agentsOf(machines), cur.Agent, cur.Fallback)
+		}
+		if err != nil {
+			h.fail(w, r, http.StatusBadRequest, err.Error())
+			return
+		}
+		cur = hostedAgents{Agent: agent, Fallback: fallback}
+		raw, _ := json.Marshal(cur)
+		if err := h.st.Accounts.SetSetting(settingsKey, string(raw)); err != nil {
+			h.storeFailed(w, r, err)
+			return
+		}
+		for _, st := range stores {
+			if err := applyAgents(st, agent, fallback); err != nil {
+				h.logf("settings: %v", err)
+			}
+		}
+	case http.MethodGet, http.MethodHead:
+	default:
+		h.fail(w, r, http.StatusMethodNotAllowed, "GET or POST")
+		return
+	}
+	v := SettingsView{Hosted: true, Agents: agentsOf(machines), Agent: cur.Agent, Fallback: cur.Fallback,
+		OpenIn: config.OpenBackground, Theme: themeInfo(h.opts.Theme, ""), Machines: machines,
+		Extensions: []SettingsExt{}}
+	for _, e := range h.opts.Exts.List() {
+		v.Extensions = append(v.Extensions, SettingsExt{ID: e.ID, Name: extName(e), Description: e.Description,
+			On: true, Loaded: true})
+	}
+	h.json(w, r, http.StatusOK, v)
+}
