@@ -13,6 +13,7 @@
   import VersionMenu from './VersionMenu.svelte';
   import CommentBox from './CommentBox.svelte';
   import ExtSlot from '../../ext/ExtSlot.svelte';
+  import Chat from '../chat/Chat.svelte';
   import { batchLine } from '../../lib/status';
   import './sidebar.css';
 
@@ -22,6 +23,8 @@
   const view = $derived(review.sidebar);
   const job = $derived(notes.job);
   const tab = $derived(review.extTab);
+  /** A kind's version with the agent chat (spec/chat.md): the column is the chat, no To do · Done. */
+  const chatting = $derived(review.chatShown);
   const pill = $derived(
     job && !view.rows.length
       ? job.text
@@ -35,7 +38,21 @@
   );
   const asking = $derived(review.versionRows.some((row) => review.statusOf(row).state === 'question'));
   const working = $derived(review.versionRows.some((row) => review.statusOf(row).state === 'working'));
-  const dot = $derived(job?.error ? 'err' : job ? 'busy' : asking ? 'q' : working ? 'w' : '');
+  const dot = $derived(
+    chatting
+      ? review.chat.view.turn
+        ? 'w'
+        : ''
+      : job?.error
+        ? 'err'
+        : job
+          ? 'busy'
+          : asking
+            ? 'q'
+            : working
+              ? 'w'
+              : '',
+  );
   /** A phone: the header and To do · Done share one row (the list needs the height), unless an extension adds
    * tabs. */
   const oneRow = $derived(review.layoutMode !== 'desktop' && !review.extTabs.length && !review.kindDrawer);
@@ -103,7 +120,11 @@
                   {...props}
                   data-part="sidebar-toggle"
                   class={['compact', view.panel && 'open'].filter(Boolean).join(' ')}
-                  aria-label={pinned ? `Comments: ${pill}` : `${view.panel ? 'Hide' : 'Show'} comments: ${pill}`}
+                  aria-label={chatting
+                    ? `${view.panel ? 'Hide' : 'Show'} the chat`
+                    : pinned
+                      ? `Comments: ${pill}`
+                      : `${view.panel ? 'Hide' : 'Show'} comments: ${pill}`}
                   ><svg viewBox="0 0 24 24" aria-hidden="true"
                     ><path
                       d="M6 5h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-7l-4.5 3.5V17H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z"
@@ -112,21 +133,35 @@
                       stroke-width="1.7"
                       stroke-linejoin="round"
                     /></svg
-                  >{#if review.todoCount}<span class="n">{review.todoCount}</span>{/if}{#if dot}<span class="dot {dot}"
+                  >{#if review.todoCount && !chatting}<span class="n">{review.todoCount}</span>{/if}{#if dot}<span
+                      class="dot {dot}"
                     ></span>{/if}</Collapsible.Trigger
                 >
               {/snippet}
             </Tooltip.Trigger>
             <Tooltip.Content class="sideTip" side="left" sideOffset={8}>
-              {pinned ? 'To do' : view.panel ? 'Hide comments' : 'Show comments'} <b>N</b>
+              {chatting
+                ? view.panel
+                  ? 'Hide the chat'
+                  : 'Chat with the agent'
+                : pinned
+                  ? 'To do'
+                  : view.panel
+                    ? 'Hide comments'
+                    : 'Show comments'} <b>N</b>
             </Tooltip.Content>
           </Tooltip.Root>
         {/if}
         <Collapsible.Content
           id="side"
           data-part="sidebar"
-          aria-label="Comments"
-          class={[tab?.slot === 'review-panel' && 'wide', review.kindShown && 'kind', review.kindDrawer && 'drawer']
+          aria-label={chatting ? 'Chat' : 'Comments'}
+          class={[
+            tab?.slot === 'review-panel' && 'wide',
+            review.kindShown && 'kind',
+            review.kindDrawer && 'drawer',
+            chatting && 'chatting',
+          ]
             .filter(Boolean)
             .join(' ') || undefined}
         >
@@ -162,38 +197,42 @@
                 ></span
               >
               <VersionMenu {review} />
-              {#if oneRow}{@render tabs()}{/if}
+              {#if oneRow && !chatting}{@render tabs()}{/if}
               <span class="h"></span>
             {/if}
-            <button
-              class="icon"
-              class:on={searching}
-              aria-label={searching ? 'Close search' : 'Search comments'}
-              title={searching ? 'Close search' : 'Search'}
-              onclick={() => (searching ? closeSearch() : openSearch())}
-            >
-              {#if searching}
-                <svg viewBox="0 0 20 20" aria-hidden="true"
-                  ><path
-                    d="M5.5 5.5l9 9m0-9-9 9"
-                    stroke="currentColor"
-                    stroke-width="1.6"
-                    stroke-linecap="round"
-                  /></svg
-                >
-              {:else}
-                <svg viewBox="0 0 20 20" aria-hidden="true"
-                  ><circle cx="8.75" cy="8.75" r="5" fill="none" stroke="currentColor" stroke-width="1.6" /><path
-                    d="m12.5 12.5 4 4"
-                    stroke="currentColor"
-                    stroke-width="1.6"
-                    stroke-linecap="round"
-                  /></svg
-                >
-              {/if}
-            </button>
+            {#if !chatting}<button
+                class="icon"
+                class:on={searching}
+                aria-label={searching ? 'Close search' : 'Search comments'}
+                title={searching ? 'Close search' : 'Search'}
+                onclick={() => (searching ? closeSearch() : openSearch())}
+              >
+                {#if searching}
+                  <svg viewBox="0 0 20 20" aria-hidden="true"
+                    ><path
+                      d="M5.5 5.5l9 9m0-9-9 9"
+                      stroke="currentColor"
+                      stroke-width="1.6"
+                      stroke-linecap="round"
+                    /></svg
+                  >
+                {:else}
+                  <svg viewBox="0 0 20 20" aria-hidden="true"
+                    ><circle cx="8.75" cy="8.75" r="5" fill="none" stroke="currentColor" stroke-width="1.6" /><path
+                      d="m12.5 12.5 4 4"
+                      stroke="currentColor"
+                      stroke-width="1.6"
+                      stroke-linecap="round"
+                    /></svg
+                  >
+                {/if}
+              </button>{/if}
             {#if review.kindDrawer}
-              <Collapsible.Trigger class="icon hide" title="Hide comments" aria-label="Hide comments">
+              <Collapsible.Trigger
+                class="icon hide"
+                title={chatting ? 'Hide the chat' : 'Hide comments'}
+                aria-label={chatting ? 'Hide the chat' : 'Hide comments'}
+              >
                 <svg viewBox="0 0 20 20" aria-hidden="true"
                   ><path
                     d="M5 8l5 5 5-5"
@@ -206,7 +245,11 @@
                 >
               </Collapsible.Trigger>
             {:else if !view.phone}
-              <Collapsible.Trigger class="icon hide" title="Hide comments (N)" aria-label="Hide comments">
+              <Collapsible.Trigger
+                class="icon hide"
+                title={chatting ? 'Hide the chat (N)' : 'Hide comments (N)'}
+                aria-label={chatting ? 'Hide the chat' : 'Hide comments'}
+              >
                 <svg viewBox="0 0 20 20" aria-hidden="true"
                   ><path
                     d="M8 5l5 5-5 5"
@@ -220,8 +263,10 @@
               </Collapsible.Trigger>
             {/if}
           </header>
-          {#if !oneRow}{@render tabs()}{/if}
-          {#if tab}
+          {#if !oneRow && !chatting}{@render tabs()}{/if}
+          {#if chatting}
+            <Chat {review} />
+          {:else if tab}
             <ExtSlot
               ext={tab.ext}
               slot={tab.slot}
@@ -302,7 +347,7 @@
               </div>
             </div>
           {/if}
-          {#if review.canRecord && !tab}<CommentBox {review} />{/if}
+          {#if review.canRecord && !tab && !chatting}<CommentBox {review} />{/if}
         </Collapsible.Content>
       {/snippet}
     </Collapsible.Root>

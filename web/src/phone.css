@@ -281,6 +281,17 @@
     border-radius: 16px 16px 0 0;
     box-shadow: 0 -16px 48px color-mix(in srgb, var(--shadow) 60%, transparent);
   }
+  /* The chat (spec/chat.md) covers the bar too, its composer at the bottom, and stays above the on-screen keyboard
+     (Chat.svelte keeps --chat-top and --chat-kb, from the visual viewport). */
+  html[data-layout='portrait'] #side.drawer.chatting {
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: calc(var(--chat-top, 0px) + 64px + env(safe-area-inset-top));
+    bottom: var(--chat-kb, 0px);
+    height: auto;
+    z-index: 6;
+  }
   html[data-layout='portrait'] #side.drawer header {
     height: 60px;
     gap: 8px;

@@ -3,7 +3,8 @@
   // for the keys. Calm: no boxes around icons, Send the only filled control, and every part a fixed width, so nothing
   // moves when recording starts (the bar's top edge turns red, Record shows REC and the time, the pen stays a click
   // away). A viewer's share link has no pen, no Record and no Send. On an extension's kind of version (v0) there is no
-  // video: no play, time, timeline or pen; the version, Record (when the kind records) and Send stay put. Where Send
+  // video: no play, time, timeline or pen; the version, Record (when the kind records) and Send stay put (with the
+  // agent chat, spec/chat.md, Record is the chat's mic, and R still records a voice message). Where Send
   // can't reach an agent, one quiet line says so over the bar's right end.
   import type { Review } from '../lib/review.svelte';
   import VersionPicker from './VersionPicker.svelte';
@@ -31,7 +32,7 @@
   <VersionPicker {review} />
   {#if review.canRecord}
     {#if !review.kindShown}<PenButton {review} />{/if}
-    {#if review.recordHere}<RecordButton {review} />{/if}
+    {#if review.recordHere && !review.chatShown}<RecordButton {review} />{/if}
     <SendButton {review} />
     <SendNotice {review} />
   {/if}

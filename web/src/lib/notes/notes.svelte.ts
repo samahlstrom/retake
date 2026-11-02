@@ -102,7 +102,7 @@ export class Notes {
 
   constructor(private readonly deps: NotesDeps = {}) {}
 
-  /** Listen to an event of GET api/events (`notes`, `job`, `version`, `automation`, `ext.files`) with its data. A
+  /** Listen to an event of GET api/events (`notes`, `job`, `version`, `automation`, `ext.files`, `chat`) with its data. A
    * listener that throws is logged; the page's own handling goes on. */
   on = (name: string, cb: (data: unknown) => void): (() => void) => {
     let set = this.#listeners.get(name);
@@ -232,6 +232,12 @@ export class Notes {
       seen(e);
       const d = parse<{ ext?: unknown; files?: unknown }>(e.data);
       if (d && typeof d.ext === 'string' && Array.isArray(d.files)) this.#emit('ext.files', d);
+    });
+    // The chat with the agent (spec/chat.md): its messages, words and turn.
+    es.addEventListener('chat', (e) => {
+      seen(e);
+      const d = parse<unknown>(e.data);
+      if (d && typeof d === 'object') this.#emit('chat', d);
     });
     es.onerror = () => {
       if (es.readyState !== 2) return; // CONNECTING: the browser retries by itself

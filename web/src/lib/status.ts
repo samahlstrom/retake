@@ -224,6 +224,8 @@ export interface SendButton {
   action: SendAction;
   /** Its tooltip and accessible name: what a press does, with the count ("Send 3 comments to the agent"). */
   title: string;
+  /** It would do nothing (a chat's script unchanged since the last Send): dimmed, and a press says `title`. */
+  disabled?: boolean;
 }
 
 /** Runs the agent: the owner, or an older server without roles (the owner's own `retake open`). Everyone who can

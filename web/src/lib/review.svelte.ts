@@ -131,10 +131,20 @@ import { palette } from './theme';
 import { brandOf, reviewTitle } from './brand';
 import { clamp, fmt, isoLocal, now, r3, stamp } from './util';
 import { ExtLoader, type ExtInfo } from '../ext/loader';
-import type { Host } from '../ext/ctx';
+import { makeCtx, type Host } from '../ext/ctx';
 import type { Anchor, Player, Recorded, Role as ExtRole, SlotName } from '../ext/retake-ext';
 import { addTyped } from './notes/typed';
-import { kindRecords, openingVersion, sidebarTabs, versionName, versionSlot, type ExtTab } from '../ext/kinds';
+import {
+  kindChat,
+  kindRecords,
+  openingVersion,
+  sidebarTabs,
+  versionName,
+  versionSlot,
+  type ExtTab,
+} from '../ext/kinds';
+import { Chat, type ChatFiles } from './chat/chat.svelte';
+import { sendState } from './chat/thread';
 
 export interface Elements {
   stage: HTMLElement;
@@ -147,6 +157,8 @@ export interface Elements {
   comment?: HTMLTextAreaElement | null;
   /** Record, whose ring follows your voice while recording. */
   rec?: HTMLElement | null;
+  /** The chat's composer, on a kind's version with a chat (spec/chat.md). */
+  chatBox?: HTMLTextAreaElement | null;
 }
 
 /** An image card on the video this frame: a take's own image (resizable while recording) or an earlier take's. */
@@ -434,6 +446,41 @@ export class Review {
   get versionExt(): ExtInfo | null {
     return versionSlot(this.exts, this.kindShown);
   }
+  /** The extension whose kind's version on screen has the agent chat in place of the comments (spec/chat.md). */
+  get chatExt(): ExtInfo | null {
+    return kindChat(this.exts, this.kindShown);
+  }
+  /** The version on screen has the chat: the comments column is the chat, Send makes the video. */
+  get chatShown(): boolean {
+    return !!this.chatExt;
+  }
+  /** The agent the last held Send picked on this page: the chat's messages go to it too. */
+  chatAgent = $state('');
+  #chatCtx: { ext: ExtInfo; files: ChatFiles } | null = null;
+  /** The chat's way to its kind's extension: its files (images, voice) and transcription. */
+  chatFiles(): ChatFiles | null {
+    const ext = this.chatExt;
+    if (!ext) return null;
+    if (this.#chatCtx?.ext !== ext) {
+      const { ctx } = makeCtx(ext, 'sidebar-tab', this.extHost('sidebar-tab'));
+      this.#chatCtx = { ext, files: { id: ext.id, files: () => ctx.files(), transcribe: (p) => ctx.transcribe(p) } };
+    }
+    return this.#chatCtx.files;
+  }
+  /** The chat (spec/chat.md). */
+  readonly chat = new Chat({
+    ext: () => this.chatFiles(),
+    folder: () => this.homeMe?.path?.split('/').filter(Boolean).pop() || this.homeCtx?.project || this.info.name || '',
+    toast: (text) => this.toast.say(text, 4000),
+  });
+  /** A phone's pill in the bar: the chat opens with its composer focused (the keyboard comes up). */
+  openChat = (): void => {
+    if (!this.chatShown) return;
+    if (!this.sidebar.panel) this.toggleSidebar();
+    const focus = () => this.el.chatBox?.focus();
+    focus();
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => requestAnimationFrame(focus));
+  };
   /** Record and R work here: always on a video; on a kind's version when the kind says `record`. */
   get recordHere(): boolean {
     return !this.kindShown || kindRecords(this.exts, this.kindShown);
@@ -786,8 +833,13 @@ export class Review {
       );
   };
 
-  /** The talk-out (R on a kind's version) is over: its audio goes to the extension's `ctx.onRecorded`. */
+  /** The talk-out (R on a kind's version) is over: on a chat's version it's a voice message (spec/chat.md), else its
+   * audio goes to the extension's `ctx.onRecorded`. */
   #deliverTalk(a: Recorded): void {
+    if (this.chatShown) {
+      void this.chat.voice(a, this.chatAgent);
+      return;
+    }
     if (!this.#recorded.size) {
       this.toast.say('Nothing kept that recording: the version’s extension isn’t listening', 5000);
       return;
@@ -1042,8 +1094,16 @@ export class Review {
     return !!this.take.id && !this.take.closed;
   }
 
-  /** The bar's one button: Send N to agent, Sent, … (lib/status.ts). */
+  /** The bar's one button: Send N to agent, Sent, … (lib/status.ts). On a chat's version: make the video from the
+   * script, unless nothing changed since the last Send (then it says so, and does nothing else). */
   get button(): SendButton {
+    if (this.chatShown) {
+      if (this.sending) return { label: 'Sending…', action: 'none', title: 'Sending…' };
+      const st = sendState(this.chat.view, this.chat.doc);
+      return st.ok
+        ? { label: 'Send', action: 'send', title: 'Make the video from the script' }
+        : { label: 'Send', action: 'none', title: st.why, disabled: true };
+    }
     return sendButton({
       owner: this.owner,
       status: this.agent,
@@ -1059,6 +1119,10 @@ export class Review {
    * saved first and goes with it. */
   primary = async (agent = ''): Promise<void> => {
     this.pickerOpen = false;
+    if (this.chatShown) {
+      await this.sendScript(agent);
+      return;
+    }
     const extra: number[] = [];
     if (this.draftHasContent) {
       const id = await this.saveDraft(false);
@@ -1091,6 +1155,31 @@ export class Review {
         break;
     }
   };
+
+  /** Send on a chat's version: "I like it, make the video" (spec/chat.md). No confirmation: the chat's status line
+   * says what started ("Building v1…"). Never silent: unchanged, it says so. */
+  async sendScript(agent = ''): Promise<void> {
+    if (this.sending) return;
+    if (agent) this.chatAgent = agent;
+    const b = this.button;
+    if (b.disabled) {
+      this.toast.say(b.title, 3000);
+      return;
+    }
+    this.sending = true;
+    try {
+      const w = this.agent.worker;
+      if (this.owner && w && !this.automation.state?.config?.worker)
+        await this.automation.configure({ worker: w.id, agent: w.agents[0]?.id ?? '', fallback: '' });
+      const into = await this.chat.send(agent);
+      if (into === null) return;
+      void this.automation.refresh();
+      if (!this.agent.online)
+        this.toast.say(`Sent to ${into}. The agent starts when the editing computer is online.`, 4000);
+    } finally {
+      this.sending = false;
+    }
+  }
 
   /** Send: the take in progress goes with `send: true` (its notes go once transcribed, contract C3), and every other
    * open note nobody sent yet goes now. Anyone who can record sends; with no computer online it all waits in the
@@ -3147,6 +3236,9 @@ export class Review {
       this.exts = list;
       this.extsLoaded = true;
     });
+    // The chat's thread and its document's changes (spec/chat.md).
+    this.notes.on('chat', this.chat.onEvent);
+    this.notes.on('ext.files', this.chat.onFiles);
 
     try {
       this.info = (await (await fetch('api/info')).json()) as Info;

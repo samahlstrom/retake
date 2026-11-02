@@ -41,6 +41,12 @@ export function versionSlot(exts: readonly ExtInfo[], kind: string | null | unde
 export const kindRecords = (exts: readonly ExtInfo[], kind: string | null | undefined): boolean =>
   !!kindOf(exts, kind)?.kind.record;
 
+/** The extension of a kind whose version has the agent chat in place of the comments (spec/chat.md), or null. */
+export const kindChat = (exts: readonly ExtInfo[], kind: string | null | undefined): ExtInfo | null => {
+  const k = kindOf(exts, kind);
+  return k?.kind.chat ? k.ext : null;
+};
+
 /** One of the comments column's extension tabs. */
 export interface ExtTab {
   /** `<id>/<slot>`. */

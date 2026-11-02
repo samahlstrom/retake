@@ -4,6 +4,7 @@ import {
   extHash,
   iconUrl,
   kindOf,
+  kindChat,
   kindRecords,
   kindStatus,
   navSections,
@@ -32,6 +33,7 @@ const scripts: ExtInfo = {
       label: 'Script',
       status: 'Idea',
       record: true,
+      chat: true,
     },
   ],
   slots: [
@@ -89,8 +91,12 @@ describe('kinds of versions', () => {
     expect(versionSlot(exts, null)).toBeNull();
     expect(versionSlot([hello], 'scripts.doc')).toBeNull();
     expect(kindRecords(exts, 'scripts.doc')).toBe(true);
-    const quiet = { ...scripts, kinds: [{ ...scripts.kinds[0]!, record: false }] };
+    const quiet = { ...scripts, kinds: [{ ...scripts.kinds[0]!, record: false, chat: false }] };
     expect(kindRecords([quiet], 'scripts.doc')).toBe(false);
+    // The chat replaces the comments only on a kind that says so (spec/chat.md).
+    expect(kindChat(exts, 'scripts.doc')?.id).toBe('scripts');
+    expect(kindChat([quiet], 'scripts.doc')).toBeNull();
+    expect(kindChat(exts, null)).toBeNull();
   });
 
   it('open the newest cut as always; a v0-only video on v0; a deep link where it says', () => {

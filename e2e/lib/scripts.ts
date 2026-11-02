@@ -15,7 +15,11 @@ process.stdout.write(JSON.stringify({ words: words.map((w, i) => ({ w: ' ' + w, 
 `;
 
 /**
- * The fake agent. It reads the task's context ($RETAKE_CONTEXT) and edits the one document, v0/<video>_v0.md:
+ * The fake agent. In a chat turn (no $RETAKE_CONTEXT: spec/chat.md) it reads the prompt on stdin and prints Claude
+ * Code's stream-json: for a message that picks an opening ("Start on the jump") it writes it into the cold open; for
+ * one with a link it puts the link alone on a line at the end; otherwise it adds `## Outline` and `## Script` (when
+ * there's none yet), makes two pictures and asks "Which opening?" with them as choices (`retake ask --option`).
+ * In an editing task it reads the task's context ($RETAKE_CONTEXT) and edits the one document, v0/<video>_v0.md:
  * - for a comment that wants a version (Start v1): writes a 2 s video to $RETAKE_OUTPUT and v0/cuts/v1.json;
  * - otherwise, on its first attempt: keeps the person's words and adds `## Outline` and `## Script` (with `### Cold
  *   open` and `### The trick`) when the document has no script yet, asks about "Cold open" with `retake ask --file v0/<video>_v0.md --heading "Cold open"`
@@ -25,6 +29,53 @@ process.stdout.write(JSON.stringify({ words: words.map((w, i) => ({ w: ' ' + w, 
  */
 const AGENT = `import { execFileSync } from 'node:child_process';
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+const doc0 = 'v0/' + readdirSync('v0').filter((f) => f.endsWith('_v0.md')).sort()[0];
+if (!process.env.RETAKE_CONTEXT) {
+  // A chat turn (spec/chat.md): the prompt on stdin, Claude Code's stream-json out.
+  const prompt = readFileSync(0, 'utf8');
+  const msg = prompt.slice(prompt.lastIndexOf("The person's message"));
+  const sid = 'e2e-session';
+  const out = (o) => process.stdout.write(JSON.stringify({ ...o, session_id: sid, parent_tool_use_id: null }) + '\\n');
+  const say = (t) => {
+    out({ type: 'stream_event', event: { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } } });
+    for (const w of t.split(/(?<= )/)) out({ type: 'stream_event', event: { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: w } } });
+  };
+  let n = 0;
+  const tool = (name, input) => out({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 't' + ++n, name, input }] } });
+  const path = process.cwd() + '/' + doc0;
+  const text = readFileSync(doc0, 'utf8');
+  out({ type: 'system', subtype: 'init', cwd: process.cwd() });
+  const picked = /Start on the (jump|shop)/.exec(msg);
+  const link = /https?:\\/\\/\\S+/.exec(msg);
+  if (picked) {
+    tool('Edit', { file_path: path, old_string: '[The jump.]', new_string: '[x]' });
+    writeFileSync(doc0, text.replace('[The jump.]', '[' + picked[0] + '.]'));
+    say('Done: the cold open starts on the ' + picked[1] + '.');
+  } else if (link) {
+    tool('WebFetch', { url: link[0], prompt: 'title' });
+    tool('Edit', { file_path: path, old_string: 'x', new_string: 'y' });
+    writeFileSync(doc0, text.trimEnd() + '\\n\\n' + link[0] + '\\n');
+    say('Added the link at the end, on its own line.');
+  } else {
+    say("I'll shape it into an outline and a script.");
+    tool('Read', { file_path: path });
+    tool('Edit', { file_path: path, old_string: 'x', new_string: 'y' });
+    if (!text.includes('## Script')) writeFileSync(doc0, text.trimEnd() + '\\n\\n## Outline\\n\\n- Cold open: the jump, cold.\\n- The trick: why timing matters.\\n\\n'
+      + '## Script\\n\\n### Cold open\\n\\n[The jump.] So the idea is the jump.\\n\\n### The trick\\n\\nTime it.\\n');
+    mkdirSync('v0/images', { recursive: true });
+    for (const [name, src] of [['jump', 'testsrc2'], ['shop', 'smptebars']]) {
+      execFileSync('ffmpeg', ['-nostdin', '-v', 'error', '-y', '-threads', '2', '-f', 'lavfi', '-i', src + '=s=320x180',
+        '-frames:v', '1', 'v0/images/' + name + '.png']);
+    }
+    tool('Write', { file_path: process.cwd() + '/v0/images/jump.png', content: '' });
+    tool('Bash', { command: 'retake ask --option "Start on the jump@v0/images/jump.png" "Which opening?"' });
+    execFileSync(process.env.RETAKE_BIN_FOR_AGENT, ['ask', '--file', doc0, '--heading', 'Cold open',
+      '--option', 'Start on the jump@v0/images/jump.png', '--option', 'Start on the shop@v0/images/shop.png', 'Which opening?']);
+    say('Wrote the outline and the script. Which opening do you want?');
+  }
+  out({ type: 'result', subtype: 'success', is_error: false, result: 'ok' });
+  process.exit(0);
+}
 const ctx = JSON.parse(readFileSync(process.env.RETAKE_CONTEXT, 'utf8'));
 const report = (message) => writeFileSync(process.env.RETAKE_REPORT, JSON.stringify({ state: 'completed', message }));
 const mine = (ctx.notes ?? []).filter((n) => ctx.task.notes.includes(n.id));

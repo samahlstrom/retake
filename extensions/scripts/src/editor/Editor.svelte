@@ -1,9 +1,10 @@
 <script lang="ts">
   // The version slot (spec/scripts.md, "The editor"): the one document, v0/<video>_v0.md, and nothing else. Its
-  // Markdown as a live preview, the full height of the area, in a readable column. One quiet ⋯ at the top right: Start
-  // v1 (while there's no cut) and Undo the agent's edit. Core keeps Record, Send, the agent and the comments column
-  // (where comments are typed: ctx.onAnchor says where they point; a comment's place comes back as ctx.on('reveal')).
-  // The agent's open questions about the document also show in it, under their places, with their choices to tap.
+  // Markdown as a live preview, the full height of the area, in a readable column. One quiet ⋯ at the top right: Undo
+  // the agent's edit, and on a phone "Type in the script" (there the agent is the main editor: reading or scrolling
+  // never raises the keyboard until you choose to type). Core keeps Record, Send (which makes the video from the
+  // script), the agent and the chat beside it (spec/chat.md). The agent's open questions about the document also show
+  // in it, under their places, with their choices to tap.
   import { onMount, untrack } from 'svelte';
   import type { Ctx, Edit } from '../types';
   import { Doc } from './doc.svelte';
@@ -14,7 +15,6 @@
   import { isChanged, sayError } from '../lib/errors';
   import { NEW_KEY, storageOf, takeHandOff, TALK_KEY } from '../lib/ideas';
   import { ago } from '../lib/stamp';
-  import { hasCut as cutIn, START_V1 } from '../lib/versions';
   import { imageName, imageUrl, MAX_IMAGE } from '../lib/links';
   import { stamp } from '../lib/stamp';
   import type { Question } from './live';
@@ -95,28 +95,10 @@
     }
   }
 
-  // ---------------------------------------------------------------- Start v1: while the video has no cut
-  let hasCut = $state<boolean | null>(null);
-  async function loadInfo(): Promise<void> {
-    try {
-      const r = await fetch('api/info', { credentials: 'same-origin' });
-      if (r.ok) hasCut = cutIn(await r.json());
-    } catch {
-      /* unknown: Start v1 stays hidden */
-    }
-  }
-
-  async function startV1(): Promise<void> {
-    menu = false;
-    try {
-      await doc?.flush();
-      const it = await comments.add({ text: START_V1, wants: 'version' });
-      await comments.send([it.id]);
-      c.toast('Sent. The agent builds v1 from the script.');
-    } catch (e) {
-      c.toast(sayError(e));
-    }
-  }
+  // ---------------------------------------------------------------- a phone: reading, until you choose to type
+  /** On a phone the document is read-only to the keyboard until ⋯ → Type in the script. */
+  const phoneLayout = !!phone?.matches;
+  let typing = $state(false);
 
   // ---------------------------------------------------------------- the agent's edits: Undo
   let edit = $state<Edit | null>(null);
@@ -218,7 +200,7 @@
   let menu = $state(false);
   let moreEl = $state<HTMLButtonElement>();
   let menuEl = $state<HTMLDivElement>();
-  const canStart = $derived(canWrite && hasCut === false && !!doc);
+  const canType = $derived(canWrite && phoneLayout && !!doc && !doc.loadError);
   const canUndo = $derived(canWrite && !!edit);
   /** How far the ⋯ sits from the slot's right edge: at the column's right edge, clear of core's comments pill. */
   let right = $state(16);
@@ -266,7 +248,6 @@
 
   onMount(() => {
     void open();
-    void loadInfo();
     const offs: (() => void)[] = [];
     offs.push(
       files.watch((changed) => {
@@ -278,7 +259,6 @@
         }
       }),
     );
-    offs.push(c.on('version', () => void loadInfo()));
     offs.push(
       c.on('job', () => {
         void loadHistory();
@@ -382,19 +362,19 @@
           {doc.loadError} · <button class="ig-link" onclick={() => void doc?.retry()}>Try again</button>
         </p>
       {:else if doc}
-        <TextPane
-          {doc}
-          {scroller}
-          readonly={!canWrite}
-          caret={fresh ? doc.text.length : null}
-          focus={canWrite && !talkOnOpen && !touch}
-          {questions}
-          image={imageSrc}
-          answer={(q, t) => void answerQuestion(q, t)}
-          openQuestion={(q) => c.selectComment(q.id)}
-          {saveImage}
-          bind:api={pane}
-        />
+        {#key typing}<TextPane
+            {doc}
+            {scroller}
+            readonly={!canWrite || (phoneLayout && !typing)}
+            caret={fresh ? doc.text.length : null}
+            focus={canWrite && !talkOnOpen && (!touch || typing)}
+            {questions}
+            image={imageSrc}
+            answer={(q, t) => void answerQuestion(q, t)}
+            openQuestion={(q) => c.selectComment(q.id)}
+            {saveImage}
+            bind:api={pane}
+          />{/key}
       {/if}
     </div>
   </div>
@@ -410,7 +390,7 @@
     </div>
   {/if}
 
-  {#if canStart || canUndo}
+  {#if canType || canUndo}
     <button
       bind:this={moreEl}
       class={['ig-more', menu && 'ig-on']}
@@ -425,7 +405,7 @@
       ></button
     >
   {/if}
-  {#if menu && (canStart || canUndo)}
+  {#if menu && (canType || canUndo)}
     <div
       bind:this={menuEl}
       class="ig-menu"
@@ -440,9 +420,19 @@
         }
       }}
     >
-      {#if canStart}
-        <button role="menuitem" class="ig-item" data-part="scripts-start-v1" onclick={startV1}>
-          <span>Start v1</span><span class="ig-item-sub">The agent builds the first cut from the script</span>
+      {#if canType}
+        <button
+          role="menuitem"
+          class="ig-item"
+          data-part="scripts-type"
+          onclick={() => {
+            menu = false;
+            typing = !typing;
+          }}
+        >
+          <span>{typing ? 'Done typing' : 'Type in the script'}</span><span class="ig-item-sub"
+            >{typing ? 'Back to reading' : 'Or ask the agent'}</span
+          >
         </button>
       {/if}
       {#if canUndo && edit}

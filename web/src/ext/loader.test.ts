@@ -65,6 +65,7 @@ const apiExt = {
           label: 'Script',
           status: 'Idea',
           record: true,
+          chat: true,
         },
       ],
       slots: [{ slot: 'version', kind: 'scripts.doc' }],
@@ -121,6 +122,7 @@ describe('GET api/ext', () => {
       label: 'Script',
       status: 'Idea',
       record: true,
+      chat: true,
     });
     expect(a[1]!.machine).toBe(false);
   });

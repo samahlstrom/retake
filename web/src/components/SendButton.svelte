@@ -61,6 +61,8 @@
   data-part="send"
   class="primary"
   class:saved={b.label === 'Saved' || b.label === 'Sent'}
+  class:off={b.disabled}
+  aria-disabled={b.disabled || undefined}
   aria-busy={review.finishing || review.sending}
   aria-label={b.title}
   aria-haspopup={pick ? 'menu' : undefined}

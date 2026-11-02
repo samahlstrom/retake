@@ -21,6 +21,7 @@ const scripts: ExtInfo = {
       label: 'Script',
       status: 'Idea',
       record: true,
+      chat: false,
     },
   ],
   slots: [],

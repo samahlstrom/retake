@@ -15,6 +15,12 @@
     }, 5000);
     return () => clearInterval(timer);
   });
+  // A kind's version with the chat (spec/chat.md): its thread and its document, for the column and for Send.
+  $effect(() => {
+    if (!review.chatShown) return;
+    void review.chat.refresh();
+    void review.chat.loadDoc();
+  });
 </script>
 
 <svelte:window onkeydowncapture={review.onKeydown} onpagehide={review.onPageHide} />

@@ -24,6 +24,8 @@ export interface ExtKind {
   label: string;
   status: string;
   record: boolean;
+  /** Its version has the agent chat in place of the comments (spec/chat.md). */
+  chat: boolean;
 }
 
 /** One `[[slots]]` entry: `kind` is a full kind id or ''. */
@@ -95,6 +97,7 @@ export function normalizeExts(body: unknown): ExtInfo[] {
         label: str(k.label),
         status: str(k.status),
         record: k.record === true,
+        chat: k.chat === true,
       })),
       slots: list(e.slots)
         .filter((s) => (SLOTS as readonly string[]).includes(str(s.slot)))
