@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -177,5 +178,152 @@ func TestResolvePrecedence(t *testing.T) {
 				t.Errorf("Resolve = %+v, want %+v", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestParseExtensions(t *testing.T) {
+	in := `[server]
+extensions = ["ignition", "board"]
+
+[extensions]
+enabled = ["ignition", "hello"]
+enable = ["typo"]
+
+[extensions.pins]
+hello = "b3:00"
+
+[extensions.ignition]
+model = "small"
+words = 3
+`
+	c, warnings, err := Parse(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := c.Extensions
+	if !slices.Equal(e.Enabled, []string{"ignition", "hello"}) || e.Pins["hello"] != "b3:00" ||
+		e.Settings["ignition"]["model"] != "small" || e.Settings["ignition"]["words"] != int64(3) {
+		t.Errorf("extensions %+v", e)
+	}
+	if !slices.Equal(c.Server.Extensions, []string{"ignition", "board"}) {
+		t.Errorf("server extensions %v", c.Server.Extensions)
+	}
+	if !slices.Equal(warnings, []string{`unknown key "extensions.enable"`}) {
+		t.Errorf("warnings %v", warnings)
+	}
+	for _, bad := range []string{"[extensions]\nenabled = \"ignition\"\n", "[extensions]\nenabled = [1]\n",
+		"[extensions]\npins = 3\n", "[extensions.pins]\nx = 1\n", "extensions = 3\n"} {
+		if _, _, err := Parse(bad); err == nil {
+			t.Errorf("no error for %q", bad)
+		}
+	}
+	if c, _, err := Parse(""); err != nil || c.Extensions.Enabled != nil || c.Extensions.Pins != nil {
+		t.Errorf("empty: %+v %v", c.Extensions, err)
+	}
+}
+
+func TestSetExtension(t *testing.T) {
+	pin := "b3:" + strings.Repeat("ab", 32)
+	pin2 := "b3:" + strings.Repeat("cd", 32)
+	for _, tc := range []struct {
+		name, before string
+		id           string
+		on           bool
+		pin          string
+		after        string
+	}{
+		{name: "a new file", id: "ignition", on: true, after: "[extensions]\nenabled = [\"ignition\"]\n"},
+		{name: "keeps the rest", id: "ignition", on: true,
+			before: "# my config\nname = \"Ana\" # me\n\n[transcribe]\nmodel = \"small\"\n",
+			after:  "# my config\nname = \"Ana\" # me\n\n[transcribe]\nmodel = \"small\"\n\n[extensions]\nenabled = [\"ignition\"]\n"},
+		{name: "adds to the list", id: "hello", on: true,
+			before: "[extensions] # tools\nenabled = [\"ignition\"] # on\n\n[render]\nencoder = \"x264\"\n",
+			after:  "[extensions] # tools\nenabled = [\"ignition\", \"hello\"]  # on\n\n[render]\nencoder = \"x264\"\n"},
+		{name: "a list over lines", id: "ignition", on: false,
+			before: "[extensions]\nenabled = [\n  \"ignition\", # the first\n  \"hello\",\n]\nother = 1\n",
+			after:  "[extensions]\nenabled = [\"hello\"]\nother = 1\n"},
+		{name: "a table without enabled", id: "hello", on: true,
+			before: "[extensions]\n\n[extensions.hello]\ngreeting = \"hi\"\n",
+			after:  "[extensions]\nenabled = [\"hello\"]\n\n[extensions.hello]\ngreeting = \"hi\"\n"},
+		{name: "before its settings table", id: "hello", on: true,
+			before: "port = 9000\n\n[extensions.hello]\ngreeting = \"hi\"\n",
+			after:  "port = 9000\n\n[extensions]\nenabled = [\"hello\"]\n\n[extensions.hello]\ngreeting = \"hi\"\n"},
+		{name: "a dotted key", id: "hello", on: true,
+			before: "extensions.enabled = [\"ignition\"]\nport = 9000\n",
+			after:  "extensions.enabled = [\"ignition\", \"hello\"]\nport = 9000\n"},
+		{name: "already on", id: "ignition", on: true,
+			before: "[extensions]\nenabled = [\"ignition\", \"hello\"]\n",
+			after:  "[extensions]\nenabled = [\"ignition\", \"hello\"]\n"},
+		{name: "a pin", id: "proj", on: true, pin: pin, before: "port = 9000\n",
+			after: "port = 9000\n\n[extensions]\nenabled = [\"proj\"]\n\n[extensions.pins]\nproj = \"" + pin + "\"\n"},
+		{name: "a new pin", id: "proj", on: true, pin: pin2,
+			before: "[extensions]\nenabled = [\"proj\"]\n\n[extensions.pins]\nproj = \"" + pin + "\" # old\nother = \"" + pin + "\"\n",
+			after:  "[extensions]\nenabled = [\"proj\"]\n\n[extensions.pins]\nproj = \"" + pin2 + "\"  # old\nother = \"" + pin + "\"\n"},
+		{name: "a pin in its table", id: "proj", on: true, pin: pin2,
+			before: "[extensions]\nenabled = []\n\n[extensions.pins]\nother = \"" + pin + "\"\n",
+			after:  "[extensions]\nenabled = [\"proj\"]\n\n[extensions.pins]\nproj = \"" + pin2 + "\"\nother = \"" + pin + "\"\n"},
+		{name: "off drops the pin", id: "proj", on: false,
+			before: "[extensions]\nenabled = [\"proj\", \"ignition\"]\n\n[extensions.pins]\nproj = \"" + pin + "\"\n",
+			after:  "[extensions]\nenabled = [\"ignition\"]\n\n[extensions.pins]\n"},
+		{name: "off when it isn't there", id: "hello", on: false, before: "port = 9000\n", after: "port = 9000\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := filepath.Join(t.TempDir(), "retake", "config.toml")
+			if tc.before != "" {
+				if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(p, []byte(tc.before), 0o640); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := SetExtension(p, tc.id, tc.on, tc.pin); err != nil {
+				t.Fatal(err)
+			}
+			b, err := os.ReadFile(p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(b) != tc.after {
+				t.Errorf("file:\n%s\nwant:\n%s", b, tc.after)
+			}
+			st, _ := os.Stat(p)
+			if want := map[bool]os.FileMode{true: 0o600, false: 0o640}[tc.before == ""]; st.Mode().Perm() != want {
+				t.Errorf("mode %v", st.Mode())
+			}
+			if _, _, err := Load(p); err != nil {
+				t.Errorf("the file doesn't load: %v", err)
+			}
+		})
+	}
+}
+
+func TestSetExtensionRefuses(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "config.toml")
+	if err := SetExtension(p, "Bad_ID", true, ""); err == nil {
+		t.Error("bad id")
+	}
+	if err := SetExtension(p, "ok", true, "b3:short"); err == nil {
+		t.Error("bad pin")
+	}
+	for _, before := range []string{"name = \n", "extensions = { enabled = [\"a\"] }\n"} {
+		if err := os.WriteFile(p, []byte(before), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := SetExtension(p, "hello", true, ""); err == nil {
+			t.Errorf("edited %q", before)
+		}
+		if b, _ := os.ReadFile(p); string(b) != before {
+			t.Errorf("changed %q to %q", before, b)
+		}
+	}
+	// Turning off what's off in no file makes no file.
+	none := filepath.Join(dir, "none", "config.toml")
+	if err := SetExtension(none, "hello", false, ""); err != nil {
+		t.Error(err)
+	}
+	if _, err := os.Stat(filepath.Dir(none)); err == nil {
+		t.Error("made a folder for nothing")
 	}
 }

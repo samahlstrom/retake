@@ -1,0 +1,29 @@
+@import url("other.css");
+@layer base;
+:root {
+  --broken-gap: 4px;
+}
+[data-ext='broken'] p,
+li {
+  color: var(--text-3);
+}
+@media (min-width: 600px) {
+  [data-ext="broken"] .wide {
+    gap: var(--broken-gap);
+  }
+  .loose {
+    color: var(--no-such-token);
+  }
+}
+@font-face {
+  font-family: "Plain";
+  src: url(plain.woff2);
+}
+@keyframes spin {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+/* a comment { with braces } */
+[data-ext=broken] a::after {
+  content: "}";
+}

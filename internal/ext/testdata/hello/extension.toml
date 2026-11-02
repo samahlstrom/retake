@@ -1,0 +1,19 @@
+api = 1
+id = "hello"
+name = "Hello"
+version = "0.1.0"
+description = "Says hello on the home and next to the comments."
+
+[ui]
+module = "ui/hello.js"
+style = "ui/hello.css"
+
+[nav]
+title = "Hello"
+
+[[slots]]
+slot = "page"
+
+[[slots]]
+slot = "sidebar-tab"
+title = "Hello"

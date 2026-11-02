@@ -1,0 +1,6 @@
+[data-ext='hello'] li,
+[data-ext='hello'] p {
+  color: var(--text-3);
+  font-family: var(--font-ui);
+  padding: 8px 16px;
+}

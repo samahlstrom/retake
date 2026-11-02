@@ -6,11 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"sort"
+	"strconv"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 )
@@ -33,6 +36,7 @@ type Config struct {
 	Edit       Edit       `toml:"edit"`
 	Render     Render     `toml:"render"`
 	Server     Server     `toml:"server"`
+	Extensions Extensions `toml:"extensions"`
 }
 
 // Server is the [server] table (spec/server.md, "Running it"): retake serve's settings, and the admin commands'
@@ -52,6 +56,8 @@ type Server struct {
 	SMTPURL        *string  `toml:"smtp_url"`
 	SMTPFrom       *string  `toml:"smtp_from"`
 	RelayCache     *string  `toml:"relay_cache"`
+	// Extensions are the extensions the server allows, for everyone (spec/extensions.md, "Turning them on").
+	Extensions []string `toml:"extensions"`
 }
 
 // Agent is one [[agents]] entry (docs/config.md): a program the editing worker runs for a task. Env is added to its
@@ -158,6 +164,9 @@ func Parse(s string) (Config, []string, error) {
 		}
 		warnings = append(warnings, fmt.Sprintf("unknown key %q", k.String()))
 	}
+	for _, k := range c.Extensions.unknown {
+		warnings = append(warnings, fmt.Sprintf("unknown key %q", "extensions."+k))
+	}
 	sort.Strings(warnings)
 	if c.Port != nil && (*c.Port < 1 || *c.Port > 65535) {
 		return Config{}, warnings, fmt.Errorf("port %d is out of range (1-65535)", *c.Port)
@@ -250,4 +259,327 @@ func Resolve(c Config, f Flags) Settings {
 		s.OpenBrowser = false
 	}
 	return s
+}
+
+// Extensions is the [extensions] table (spec/extensions.md, "Turning them on"): the extensions retake open, share and
+// connect turn on, the content hashes of the project extensions among them, and a settings table per extension
+// ([extensions.<id>]), which goes to its server and tools, never to the page.
+type Extensions struct {
+	Enabled  []string
+	Pins     map[string]string         // id -> "b3:<hex>"
+	Settings map[string]map[string]any // id -> its table
+	unknown  []string                  // keys that are neither enabled, pins nor a table
+}
+
+// UnmarshalTOML reads [extensions]: enabled, pins and the per-extension tables.
+func (e *Extensions) UnmarshalTOML(data any) error {
+	m, ok := data.(map[string]any)
+	if !ok {
+		return errors.New("extensions must be a table")
+	}
+	for k, v := range m {
+		switch k {
+		case "enabled":
+			list, ok := v.([]any)
+			if !ok {
+				return errors.New("extensions.enabled must be a list of extension ids")
+			}
+			for _, x := range list {
+				id, ok := x.(string)
+				if !ok {
+					return errors.New("extensions.enabled must be a list of extension ids")
+				}
+				e.Enabled = append(e.Enabled, id)
+			}
+		case "pins":
+			t, ok := v.(map[string]any)
+			if !ok {
+				return errors.New("extensions.pins must be a table of id = \"b3:…\"")
+			}
+			e.Pins = map[string]string{}
+			for id, x := range t {
+				pin, ok := x.(string)
+				if !ok {
+					return fmt.Errorf("extensions.pins.%s must be a string", id)
+				}
+				e.Pins[id] = pin
+			}
+		default:
+			t, ok := v.(map[string]any)
+			if !ok {
+				e.unknown = append(e.unknown, k)
+				continue
+			}
+			if e.Settings == nil {
+				e.Settings = map[string]map[string]any{}
+			}
+			e.Settings[k] = t
+		}
+	}
+	return nil
+}
+
+var (
+	extIDRE  = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
+	pinRE    = regexp.MustCompile(`^b3:[0-9a-f]{64}$`)
+	headerRE = regexp.MustCompile(`^\s*\[\[?\s*([^\]]*?)\s*\]\]?\s*(?:#.*)?$`)
+)
+
+// SetExtension turns the extension id on or off in the config file at path (`retake ext enable` and `disable`):
+// it edits [extensions] enabled, and the id's line in [extensions.pins] (set to pin when on and pin isn't "",
+// removed when off). The rest of the file, comments included, stays as it is; the file and its folder are made when
+// missing.
+func SetExtension(path, id string, on bool, pin string) error {
+	if !extIDRE.MatchString(id) {
+		return fmt.Errorf("%q isn't an extension id", id)
+	}
+	if pin != "" && !pinRE.MatchString(pin) {
+		return fmt.Errorf("pin %q isn't b3:<64 hex digits>", pin)
+	}
+	b, err := os.ReadFile(path) //nolint:gosec // the user's own config file
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	text := string(b)
+	c, _, err := Parse(text)
+	if err != nil {
+		return fmt.Errorf("%s: %w (fix it first)", path, err)
+	}
+	enabled := slices.Clone(c.Extensions.Enabled)
+	switch {
+	case !on:
+		enabled = slices.DeleteFunc(enabled, func(s string) bool { return s == id })
+	case !slices.Contains(enabled, id):
+		enabled = append(enabled, id)
+	}
+	pins := map[string]string{}
+	maps.Copy(pins, c.Extensions.Pins)
+	switch {
+	case !on:
+		delete(pins, id)
+	case pin != "":
+		pins[id] = pin
+	}
+	if slices.Equal(enabled, c.Extensions.Enabled) && pins[id] == c.Extensions.Pins[id] {
+		return nil // already so
+	}
+	lines := strings.Split(text, "\n")
+	if lines, err = setEnabled(lines, enabled); err != nil {
+		return fmt.Errorf("%s: %w", path, err)
+	}
+	if lines, err = setPin(lines, id, pins[id]); err != nil {
+		return fmt.Errorf("%s: %w", path, err)
+	}
+	out := strings.Join(lines, "\n")
+	got, _, err := Parse(out)
+	if err != nil || !slices.Equal(got.Extensions.Enabled, enabled) || got.Extensions.Pins[id] != pins[id] {
+		return fmt.Errorf("%s: can't edit [extensions] here: set enabled = %s by hand", path, tomlList(enabled))
+	}
+	return writeConfig(path, out)
+}
+
+// region is a table's lines: from after its header to before the next header (or the end). The root table's
+// header is -1.
+func region(lines []string, table string) (header, end int, ok bool) {
+	header = -1
+	if table != "" {
+		header = slices.IndexFunc(lines, func(l string) bool {
+			m := headerRE.FindStringSubmatch(l)
+			return m != nil && !strings.HasPrefix(strings.TrimSpace(l), "[[") && dotted(m[1]) == table
+		})
+		if header < 0 {
+			return 0, 0, false
+		}
+	}
+	end = len(lines)
+	for i := header + 1; i < len(lines); i++ {
+		if headerRE.MatchString(lines[i]) {
+			end = i
+			break
+		}
+	}
+	return header, end, true
+}
+
+// dotted is a table name without spaces around its dots or quotes around its keys.
+func dotted(name string) string {
+	parts := strings.Split(name, ".")
+	for i, p := range parts {
+		parts[i] = strings.Trim(strings.TrimSpace(p), `"'`)
+	}
+	return strings.Join(parts, ".")
+}
+
+// keyLine finds the line of key in lines[from:to].
+func keyLine(lines []string, from, to int, key string) int {
+	re := regexp.MustCompile(`^\s*(?:` + regexp.QuoteMeta(key) + `|"` + regexp.QuoteMeta(key) + `")\s*=`)
+	for i := from; i < to; i++ {
+		if re.MatchString(lines[i]) {
+			return i
+		}
+	}
+	return -1
+}
+
+// setEnabled writes enabled = [...] in [extensions], or as extensions.enabled at the top, replacing what's there.
+func setEnabled(lines []string, enabled []string) ([]string, error) {
+	line := "enabled = " + tomlList(enabled)
+	if h, end, ok := region(lines, "extensions"); ok {
+		if i := keyLine(lines, h+1, end, "enabled"); i >= 0 {
+			return replaceValue(lines, i, line)
+		}
+		return slices.Insert(lines, h+1, line), nil
+	}
+	_, end, _ := region(lines, "")
+	if i := keyLine(lines, 0, end, "extensions.enabled"); i >= 0 {
+		return replaceValue(lines, i, "extensions."+line)
+	}
+	if keyLine(lines, 0, end, "extensions") >= 0 {
+		return nil, errors.New("extensions is an inline table")
+	}
+	// A new [extensions] table: before its first sub-table, else at the end.
+	at := slices.IndexFunc(lines, func(l string) bool {
+		m := headerRE.FindStringSubmatch(l)
+		return m != nil && strings.HasPrefix(dotted(m[1]), "extensions.")
+	})
+	block := []string{"[extensions]", line}
+	if at >= 0 {
+		return slices.Insert(lines, at, append(block, "")...), nil
+	}
+	return appendBlock(lines, block), nil
+}
+
+// setPin sets id's line in [extensions.pins] to pin, or removes it when pin is "".
+func setPin(lines []string, id, pin string) ([]string, error) {
+	h, end, ok := region(lines, "extensions.pins")
+	if !ok {
+		if pin == "" {
+			return lines, nil
+		}
+		return appendBlock(lines, []string{"[extensions.pins]", id + " = " + strconv.Quote(pin)}), nil
+	}
+	i := keyLine(lines, h+1, end, id)
+	switch {
+	case i >= 0 && pin == "":
+		return slices.Delete(lines, i, i+1), nil
+	case i >= 0:
+		return replaceValue(lines, i, id+" = "+strconv.Quote(pin))
+	case pin == "":
+		return lines, nil
+	}
+	return slices.Insert(lines, h+1, id+" = "+strconv.Quote(pin)), nil
+}
+
+// appendBlock adds a table at the end of the file, after a blank line.
+func appendBlock(lines []string, block []string) []string {
+	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
+		lines = lines[:len(lines)-1]
+	}
+	if len(lines) > 0 {
+		lines = append(lines, "")
+	}
+	return append(append(lines, block...), "")
+}
+
+// replaceValue replaces the key-value that starts on line i (its value may run over several lines, as an array can)
+// with line, keeping a comment after the value.
+func replaceValue(lines []string, i int, line string) ([]string, error) {
+	text := strings.Join(lines[i:], "\n")
+	eq := strings.IndexByte(text, '=')
+	end, ok := valueEnd(text, eq+1)
+	if !ok {
+		return nil, errors.New("a value doesn't end")
+	}
+	last := i + strings.Count(text[:end], "\n")
+	rest := strings.TrimSpace(strings.SplitN(text[end:], "\n", 2)[0])
+	if strings.HasPrefix(rest, "#") {
+		line += "  " + rest
+	}
+	return slices.Replace(lines, i, last+1, line), nil
+}
+
+// valueEnd is where the TOML value that starts at s[i:] ends: after its closing ] or }, its string, or its word.
+func valueEnd(s string, i int) (int, bool) {
+	for i < len(s) && (s[i] == ' ' || s[i] == '\t') {
+		i++
+	}
+	depth := 0
+	for i < len(s) {
+		switch ch := s[i]; {
+		case ch == '"' || ch == '\'':
+			q := s[i : i+1]
+			if strings.HasPrefix(s[i:], q+q+q) {
+				q += q + q
+			}
+			j := i + len(q)
+			for j < len(s) && !strings.HasPrefix(s[j:], q) {
+				if s[j] == '\\' && q[0] == '"' {
+					j++
+				}
+				j++
+			}
+			if j >= len(s) {
+				return 0, false
+			}
+			i = j + len(q)
+			if depth == 0 {
+				return i, true
+			}
+			continue
+		case ch == '#' && depth > 0:
+			for i < len(s) && s[i] != '\n' {
+				i++
+			}
+			continue
+		case ch == '[' || ch == '{':
+			depth++
+		case ch == ']' || ch == '}':
+			depth--
+			if depth == 0 {
+				return i + 1, true
+			}
+		case depth == 0 && (ch == '\n' || ch == '#'):
+			return i, true
+		}
+		i++
+	}
+	return i, depth == 0
+}
+
+// tomlList is a list of ids as a TOML array.
+func tomlList(ids []string) string {
+	q := make([]string, len(ids))
+	for i, id := range ids {
+		q[i] = strconv.Quote(id)
+	}
+	return "[" + strings.Join(q, ", ") + "]"
+}
+
+// writeConfig writes the config file through a temp file and a rename, keeping its mode (0600 for a new one).
+func writeConfig(path, text string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		return err
+	}
+	mode := fs.FileMode(0o600)
+	if st, err := os.Stat(path); err == nil {
+		mode = st.Mode().Perm()
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".config.toml.*")
+	if err != nil {
+		return err
+	}
+	_, err = tmp.WriteString(text)
+	if cerr := tmp.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Chmod(tmp.Name(), mode)
+	}
+	if err == nil {
+		err = os.Rename(tmp.Name(), path)
+	}
+	if err != nil {
+		_ = os.Remove(tmp.Name())
+	}
+	return err
 }

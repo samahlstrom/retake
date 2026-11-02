@@ -1,0 +1,31 @@
+api = 1
+id = "broken"
+name = "Broken"
+version = "0.1.0"
+colour = "red"
+
+[ui]
+module = "ui/broken.js"
+style = "ui/broken.css"
+
+[[kinds]]
+id = "doc"
+folder = "v0"
+marker = "idea.md"
+
+[[slots]]
+slot = "version"
+kind = "doc"
+
+[[slots]]
+slot = "sidebar-tab"
+title = "Broken"
+
+[[slots]]
+slot = "toolbar"
+
+[files]
+owns = ["v0/**", ".retake/notes.json", "**/*.md", "clip_v2.mp4"]
+
+[agent]
+context = "agent/context.md"
