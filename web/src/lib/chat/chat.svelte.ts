@@ -1,6 +1,6 @@
 // The chat with the agent on a kind's version (spec/chat.md): the thread, kept current by the page's `chat` events;
 // sending a message (with images saved in the video's v0/images/ first, through the kind's extension's files), a
-// voice message (saved, transcribed, its words sent), a tap on a question's choice, Stop, and Send ("make the video").
+// voice message (saved in v0/voice/chat/, transcribed, its words sent), a tap on a question's choice, Stop, and Send ("make the video").
 import type { Files, FileInfo } from '../../ext/retake-ext';
 import {
   applyEvent,
@@ -197,7 +197,8 @@ export class Chat {
     }
   };
 
-  /** A voice message: the recording is saved as v0/voice/<stamp>.<ext>, transcribed, and its words are sent. */
+  /** A voice message: the recording is saved as v0/voice/chat/<stamp>.<ext> (apart from a script's own talk-outs,
+   * which it puts into the document itself), transcribed, and its words are sent. */
   voice = async (a: { blob: Blob; type: string }, agent = ''): Promise<void> => {
     const ext = this.deps.ext();
     if (!ext) return;
@@ -208,7 +209,7 @@ export class Chat {
     set('saving');
     const kind = a.type.includes('mp4') ? 'm4a' : a.type.includes('ogg') ? 'ogg' : 'webm';
     // eslint-disable-next-line svelte/prefer-svelte-reactivity -- a timestamp, not state
-    const path = `v0/voice/${stampOf(new Date())}.${kind}`;
+    const path = `v0/voice/chat/${stampOf(new Date())}.${kind}`;
     try {
       await ext.files().write(path, a.blob, { ifMatch: '*' });
     } catch (e) {

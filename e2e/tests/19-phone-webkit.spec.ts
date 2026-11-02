@@ -3,7 +3,9 @@
 // - an Scripts document (v0) with a long paragraph, long words, headings, a list and a task, and a plain video;
 // - nothing is wider than the screen (no sideways scroll, no element past the right edge);
 // - Record and Send are fully on screen (inside innerHeight and the visual viewport);
-// - the top bar fits: back on the left, the comments toggle and the document's ⋯ on the right, none overlapping;
+// - the top bar fits: back on the left, the chat's toggle and the document's ⋯ on the right, none overlapping;
+// - the chat (spec/chat.md): the bar holds its pill and Send; the pill opens the chat sheet with its composer focused,
+//   over the bar; a message gets the (fake) agent's reply with its picture choices stacked; the sheet closes again;
 // - the home fits too.
 // Screenshots go to .retake-work/scripts-shots/webkit-<what>-<device>.png. Under Chromium the file skips.
 import { devices, expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
@@ -99,7 +101,9 @@ async function barOnScreen(page: Page, where: string): Promise<void> {
     if (!bar) return null;
     const b = bar.getBoundingClientRect();
     const vv = visualViewport!;
-    const parts = [...bar.querySelectorAll<HTMLElement>('#rec, #done')].map((e) => e.getBoundingClientRect().bottom);
+    const parts = [...bar.querySelectorAll<HTMLElement>('#rec, #done, [data-part="chat-pill"]')].map(
+      (e) => e.getBoundingClientRect().bottom,
+    );
     return { top: b.top, bottom: b.bottom, parts, inner: innerHeight, vv: vv.offsetTop + vv.height };
   });
   expect(r, `${where}: the bottom bar is there`).not.toBeNull();
@@ -183,26 +187,41 @@ test.describe('phones in WebKit', () => {
         await shot(page, 'doc-list', device);
         await page.locator('[data-ext="scripts"] .ig-scroll').evaluate((el) => (el.scrollTop = 0));
 
-        // The comments drawer over it.
-        await page.locator('#sideToggle').click();
-        await expect(page.locator('#side.drawer')).toBeVisible();
-        await fitsWidth(page, `${device}: the drawer`);
-        await barOnScreen(page, `${device}: the drawer`);
-        await shot(page, 'drawer', device);
-        // A typed comment: the toggle then shows the to-do count beside its icon, still clear of the ⋯.
-        const words = `Tighter cold open (${device})`;
-        await page.locator('#side [data-part="comment-line"] textarea').fill(words);
-        await page.locator('#side [data-part="comment-line"] textarea').press('Enter');
-        await expect(page.locator('#side .item', { hasText: words })).toBeVisible({ timeout: 10_000 });
-        await page.locator('#sideToggle').click();
+        // The chat: its pill and Send in the bar; the pill opens the sheet with the composer focused, over the bar.
+        const pill = page.locator('#precord [data-part="chat-pill"]');
+        await expect(pill).toBeVisible();
+        await shot(page, 'chat-closed', device);
+        await pill.locator('.ask').tap();
+        const sheet = page.locator('#side.drawer.chatting');
+        await expect(sheet).toBeVisible();
+        await expect.poll(() => page.evaluate(() => document.activeElement?.getAttribute('aria-label'))).toBe(
+          'Ask the agent',
+        );
+        await fitsWidth(page, `${device}: the chat sheet`);
+        const box = (await sheet.boundingBox())!;
+        expect(box.y + box.height, `${device}: the sheet reaches the bottom`).toBeGreaterThanOrEqual(
+          (await page.evaluate(() => innerHeight)) - 1,
+        );
+        await shot(page, 'chat-open', device);
+        // A message, and the agent's reply with its two pictures to choose from, stacked.
+        await page.locator('#side [data-part="chat-composer"] textarea').fill(`Give me two openings (${device})`);
+        await page.locator('#side [data-part="chat-composer"] textarea').press('Enter');
+        const q = page.locator('#side [data-part="chat-question"]').last();
+        await expect(q).toContainText('Which opening?', { timeout: 60_000 });
+        await expect(q.locator('.choice')).toHaveCount(2);
+        const xs = await q.locator('.choice').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().x));
+        expect(Math.abs(xs[0]! - xs[1]!)).toBeLessThan(1);
+        await page.locator('#side [data-part="chat-composer"] textarea').blur();
+        await fitsWidth(page, `${device}: the chat with a question`);
+        await shot(page, 'chat-question', device);
+        await page.locator('#side.drawer .icon.hide').tap();
         await expect(page.locator('#side.drawer')).toBeHidden();
-        await expect(page.locator('#sideToggle')).toHaveText(/^\d+$/);
-        await topBarFits(page, `${device}: the document with a to do`, [
+        await barOnScreen(page, `${device}: the document after the chat`);
+        await topBarFits(page, `${device}: the document after the chat`, [
           '[data-part~="review-back"]',
           '#sideToggle',
           '[data-part~="scripts-more"]',
         ]);
-        await shot(page, 'doc-todo', device);
 
         // A plain video.
         await page.goto(`${server.url}p/deadlock-item-shop/`);

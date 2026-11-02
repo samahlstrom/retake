@@ -215,7 +215,7 @@ what they are, not as addresses. So in a script's document, and only there:
 
 R (or the chat's mic) records a **voice message** for the chat (spec/chat.md, "Images and voice"): REC, the timer and
 the red edge work as on a video, there is no pen. When it stops, the audio is saved as
-`v0/voice/<yyyymmdd-hhmmss>.webm`, transcribed with the editing computer's `[transcribe]`, and its words are sent to
+`v0/voice/chat/<yyyymmdd-hhmmss>.webm` (never picked up as a talk-out), transcribed with the editing computer's `[transcribe]`, and its words are sent to
 the agent as your message. It makes no comment and adds nothing to the document by itself: the agent works it in.
 Without transcription set up, the audio is kept and the job's hint shows in the chat.
 

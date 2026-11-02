@@ -40,7 +40,7 @@ const EventChat = "chat"
 const (
 	MaxChatText    = 20000
 	MaxChatImages  = 8
-	MaxChatShown   = 500     // the newest messages GET api/chat gives
+	MaxChatShown   = 500    // the newest messages GET api/chat gives
 	maxChatReply   = 200000 // characters of one agent message; more is dropped
 	maxChatHistory = 12 << 10
 	chatHistory    = 20

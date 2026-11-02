@@ -94,11 +94,11 @@ func TestChatStreamTools(t *testing.T) {
 func TestChatToolLines(t *testing.T) {
 	c := newChatStream("/work/video", "v0/jump_v0.md", "script")
 	for in, want := range map[[2]string]string{
-		{"v0/jump_v0.md", "w"}:              "Editing the script",
-		{"./v0/jump_v0.md", "r"}:            "Reading the script",
+		{"v0/jump_v0.md", "w"}:               "Editing the script",
+		{"./v0/jump_v0.md", "r"}:             "Reading the script",
 		{"/work/video/v0/images/a.png", "w"}: "Saving an image",
-		{"v0/images/a.png", "r"}:            "Looking at an image",
-		{"/elsewhere/notes.txt", "w"}:       "Editing notes.txt",
+		{"v0/images/a.png", "r"}:             "Looking at an image",
+		{"/elsewhere/notes.txt", "w"}:        "Editing notes.txt",
 	} {
 		if got := c.fileLine(in[0], in[1] == "w"); got != want {
 			t.Errorf("%v: %q, want %q", in, got, want)

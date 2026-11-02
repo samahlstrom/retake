@@ -172,3 +172,43 @@ func TestNoChatWithoutTheKindsChat(t *testing.T) {
 		t.Fatalf("%d %s", r.code, r.body)
 	}
 }
+
+// Once cuts exist, Send brings the next version in line with the script: a comment on the newest cut at 0:00, which
+// goes into the version after it by the batch rule.
+func TestChatSendAfterCuts(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "jump")
+	for p, body := range map[string]string{"v0/jump_v0.md": "# Jump\n", "v1/jump_v1.mp4": "video", "v2/jump_v2.mp4": "video"} {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(root, p)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(root, p), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h := start(t, Options{Root: root, Video: filepath.Join(root, "v2", "jump_v2.mp4"), Exts: chatSet(t, true),
+		FollowNewest: true})
+	t.Cleanup(func() { _ = h.srv.Close() })
+	r := h.post("/api/chat/send", `{"file":"v0/jump_v0.md"}`, h.origin())
+	if r.code != 200 || !strings.Contains(string(r.body), `"target":"v3"`) {
+		t.Fatalf("send: %d %s", r.code, r.body)
+	}
+	st, err := h.srv.store(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, err := st.Note(1)
+	if err != nil || n.Version != "v2" || !n.WantsVersion() || n.T0 != 0 ||
+		n.Text != "Bring the video in line with the script's changes (v0/jump_v0.md)." {
+		t.Fatalf("the comment: %+v %v", n, err)
+	}
+	a, _ := st.Automation()
+	if len(a.Tasks) != 1 || a.Tasks[0].Target != "v3" || a.Tasks[0].State != "queued" {
+		t.Fatalf("its batch: %+v", a.Tasks)
+	}
+	var v struct {
+		Sent *project.ChatSentView `json:"sent"`
+	}
+	if json.Unmarshal(h.get("/api/chat", nil).body, &v) != nil || v.Sent == nil || v.Sent.Target != "v3" || v.Sent.Open {
+		t.Fatalf("sent: %+v", v.Sent)
+	}
+}

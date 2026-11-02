@@ -231,7 +231,9 @@ async function voiceMessage(page: Page, folder: string): Promise<void> {
   const mine = chat(page).locator('[data-part="chat-person"]', { hasText: WORDS });
   await expect(mine).toBeVisible({ timeout: 30_000 });
   await expect(mine.locator('svg.voice')).toHaveCount(1);
-  const voice = readdirSync(join(folder, 'v0', 'voice'));
+  // The words went to the agent, not into the document (no talk-out of before, now or when it opens again).
+  expect(read(docOf(folder))).not.toContain(WORDS);
+  const voice = readdirSync(join(folder, 'v0', 'voice', 'chat'));
   expect(voice.some((f) => f.endsWith('.webm'))).toBe(true);
   expect(voice.some((f) => f.endsWith('.words.json'))).toBe(true);
   await asked(page, folder, before);
@@ -441,7 +443,7 @@ test.describe('locally', () => {
           await noOverflow(p, `the ⋯ menu at ${size.width}`);
           await shot(p, 'menu', size);
           await p.locator('[data-part="scripts-type"]').click();
-          await expect(text(p).locator('.cm-content')).toHaveAttribute('contenteditable', 'true');
+          await expect(text(p)).toHaveAttribute('contenteditable', 'true');
         } finally {
           await phone.context.close();
         }

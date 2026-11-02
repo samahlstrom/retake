@@ -136,8 +136,9 @@ offers choices) and the words start the next turn. Typing a reply works too.
 - Pasting, dropping or picking images in the composer saves each one in `v0/images/` with the kind's extension's
   files route (`PUT api/ext/<id>/files/v0/images/<name>`, `If-Match: *`, a new name when it's taken, 25 MiB at most),
   so it works hosted too, and the message carries their paths. The chat shows them inline.
-- R or Record on a chat version records a **voice message**: the audio is saved as `v0/voice/<yyyymmdd-hhmmss>.webm`
-  through the same files route, transcribed with the computer's `[transcribe]` (`POST api/ext/<id>/transcribe`), and
+- R or Record on a chat version records a **voice message**: the audio is saved as
+  `v0/voice/chat/<yyyymmdd-hhmmss>.webm` through the same files route (apart from talk-outs, which a kind without a
+  chat puts into its document itself), transcribed with the computer's `[transcribe]` (`POST api/ext/<id>/transcribe`), and
   its words are sent as the message (`voice` names the audio). It makes no comment. Without transcription the audio
   is kept and the job's hint shows as a toast.
 

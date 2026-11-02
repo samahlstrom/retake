@@ -230,12 +230,15 @@ CLI.
 **`19-phone-webkit`** (new only; WebKit only, `RETAKE_E2E_WEBKIT`): `retake open` with Scripts on, a v0 document
 written as the owner writes one (a long paragraph, an unbroken 60-letter word, a long URL, headings, a list, a task)
 and a plain video, on the iPhone 13 and iPhone 15:
-- Nothing is wider than the screen: no sideways scroll, and no element past either edge (the document, the comments
-  drawer, the video page, the home).
-- Record and Send are wholly on screen, inside `innerHeight` and the visual viewport.
-- The top bar fits: back on the left, the document's ⋯ at the right edge and the comments toggle (an icon, and the
-  to-do count once there is one) just left of it, none overlapping, each at least 40 px.
-- Screenshots: `.retake-work/scripts-shots/webkit-<doc|drawer|doc-todo|video|home>-<device>.png`.
+- Nothing is wider than the screen: no sideways scroll, and no element past either edge (the document, the chat
+  sheet, the video page, the home).
+- The bar (the chat's pill and Send on a script, Record and Send on a video) is wholly on screen, inside `innerHeight`
+  and the visual viewport.
+- The top bar fits: back on the left, the document's ⋯ at the right edge and the chat's toggle just left of it, none
+  overlapping, each at least 40 px.
+- The chat (spec/chat.md): the pill opens the sheet over the bar with its composer focused; a message gets the fake
+  agent's reply and question, its two picture choices stacked; the sheet closes again.
+- Screenshots: `.retake-work/scripts-shots/webkit-<doc|doc-list|chat-closed|chat-open|chat-question|video|home>-<device>.png`.
 
 **`21-comment`** (new only; `spec/notes.md`, "Typed comments on a video", and `spec/automation.md`, "HTTP and UI"):
 `retake open <folder>` with a scratch config of two fake agents (their program is `true`), desktop Chromium.
