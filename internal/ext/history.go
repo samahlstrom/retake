@@ -86,6 +86,41 @@ func Snapshot(root string, owns []string, task string) (*Snap, error) {
 	return s, nil
 }
 
+// SnapState is a snapshot as a worker's record keeps it, so a later worker can finish it (spec/automation.md, "Agents
+// outlive Retake").
+type SnapState struct {
+	ID     string            `json:"id"`
+	Task   string            `json:"task,omitempty"`
+	Owns   []string          `json:"owns"`
+	Before map[string]string `json:"before"`
+	Copied []string          `json:"copied,omitempty"`
+}
+
+// State is s as a record keeps it.
+func (s *Snap) State() SnapState {
+	st := SnapState{ID: s.id, Task: s.task, Owns: s.folder.Owns, Before: s.before}
+	for p := range s.copied {
+		st.Copied = append(st.Copied, p)
+	}
+	sort.Strings(st.Copied)
+	return st
+}
+
+// ResumeSnap is the snapshot st of the video folder root, to finish. nil when st isn't one.
+func ResumeSnap(root string, st SnapState) *Snap {
+	if !editID.MatchString(st.ID) {
+		return nil
+	}
+	s := &Snap{folder: Folder{Root: root, Owns: st.Owns}, task: st.Task, id: st.ID, before: st.Before, copied: map[string]bool{}}
+	if s.before == nil {
+		s.before = map[string]string{}
+	}
+	for _, p := range st.Copied {
+		s.copied[p] = true
+	}
+	return s
+}
+
 func (s *Snap) dir() string      { return HistoryDir + "/" + s.id }
 func (s *Snap) filesDir() string { return s.dir() + "/files" }
 

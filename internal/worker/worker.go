@@ -85,6 +85,9 @@ type runner struct {
 	life                  context.Context // the worker's whole run: its question endpoint lives this long
 	extJobs               *extwork.Jobs   // transcriptions of owned audio files, for the relay's ext.transcribe
 
+	recMu sync.Mutex // the running attempt's record, which the control loop gives a new lease (durable.go)
+	rec   *runRecord
+
 	famMu  sync.Mutex
 	fam    []family.Version // the project's versions at famAt (family)
 	famAt  time.Time
@@ -232,6 +235,12 @@ func Run(ctx context.Context, o Options) error {
 	// Without an agent, a worker that talks to a server still relays the project's video, so it plays there as it
 	// does in retake open; it just never takes a task.
 	r.render = lastRender(r.dir) // a restart with unchanged source renders and registers nothing
+	if b, err := os.ReadFile(filepath.Join(r.dir, AskFile)); err == nil {
+		var was AskEndpoint
+		if json.Unmarshal(b, &was) == nil {
+			r.askWas(was.URL) // an agent that outlived the last worker may ask there
+		}
+	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	r.life = ctx
@@ -267,67 +276,96 @@ func (r *runner) log(format string, args ...any) {
 }
 
 func (r *runner) controlLoop(ctx context.Context) error {
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
+	tick := time.After(0) // the first poll at once: an agent that outlived the last worker is taken back first
 	var current *project.EditingTask
-	var cancel context.CancelFunc
+	var cancel context.CancelCauseFunc
 	var done chan outcome
 	var pending *outcome
-	var abandoned, stopping bool
+	var abandoned, stopping, readopt bool
 	var lastError string
 	registered := false
+	// What an earlier worker left running, to take back (spec/automation.md, "Agents outlive Retake").
+	adopt := r.adoptable(ctx)
+	turn := r.readTurn()
+	if adopt != nil {
+		r.askWas(adopt.AskURL)
+	} else {
+		_ = os.Remove(filepath.Join(r.dir, AskFile)) // no attempt to take back: an older crash's
+	}
+	if turn != nil {
+		r.askWas(turn.AskURL)
+	}
 	defer func() {
+		// The worker is going away: its agent works on, for the next worker to take back.
 		if cancel != nil {
-			cancel()
+			cancel(nil)
 		}
 		if done != nil {
 			<-done
 		}
-		r.stopChat()
+		r.leaveChat()
 	}()
+	run := func(a project.WorkAssignment, rec *runRecord) {
+		current = a.Task
+		r.setActive(current)
+		r.resetBatch()
+		stopping, abandoned, readopt = false, false, false
+		child, childCancel := context.WithCancelCause(ctx)
+		cancel = childCancel
+		done = make(chan outcome, 1)
+		go func(ch chan outcome) {
+			defer childCancel(nil)
+			ch <- r.resume(child, a, rec)
+		}(done)
+	}
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		case result := <-done:
-			pending = &result
 			done = nil
-		case <-ticker.C:
-			var task, lease string
-			if current != nil {
-				task, lease = current.ID, current.Lease
+			if result.state == detached {
+				continue // the worker is going away: there's nothing to report
+			}
+			pending = &result
+			if abandoned {
+				// The attempt isn't this worker's any more: nothing to report.
+				r.finished(current.ID)
+				current, pending, abandoned = nil, nil, false
+				r.setActive(nil)
+			}
+		case <-tick:
+			tick = time.After(time.Second)
+			poll := project.WorkPoll{Worker: r.identity}
+			poll.Chat, poll.ChatLease = r.chatTurn()
+			if poll.Chat == "" && turn != nil {
+				poll.Chat, poll.ChatLease = turn.Turn, turn.Lease
+			}
+			switch {
+			case current != nil && readopt:
+				poll.Adopt = &project.WorkAdopt{Task: current.ID, Attempt: current.Attempt, Lease: current.Lease,
+					Notes: r.withGiven(current).Notes, Alive: true}
+			case current != nil:
+				poll.Task, poll.Lease = current.ID, current.Lease
+				poll.Told, poll.Join = r.unsentTold(), r.unsentJoin()
+			case adopt != nil && poll.Chat == "":
+				poll.Adopt = r.adoption(ctx, adopt)
 			}
 			var assignment project.WorkAssignment
 			pollCtx, pollCancel := context.WithTimeout(ctx, 5*time.Second)
 			started := time.Now()
-			told, join := r.unsentTold(), r.unsentJoin()
-			chat, chatLease := r.chatTurn()
-			e := r.call(pollCtx, "/api/worker/poll", project.WorkPoll{Worker: r.identity, Task: task, Lease: lease, Told: told,
-				Join: join, Chat: chat, ChatLease: chatLease}, &assignment)
+			e := r.call(pollCtx, "/api/worker/poll", poll, &assignment)
 			pollCancel()
 			if e != nil {
 				if lastError != e.Error() {
 					r.log("Worker connection: %v", e)
 					lastError = e.Error()
 				}
-				r.mu.Lock()
-				last := r.connected
-				r.mu.Unlock()
+				// Lost connectivity stops nothing: the agent works on, and the lease is renewed (or the attempt taken
+				// back) once the server answers. A lease the server no longer has is asked back for.
 				var he *httpError
-				stale := errors.As(e, &he) && he.status == 409
-				if chat != "" && (stale || time.Since(last) > 10*time.Second) {
-					r.takeChat(ctx, nil) // the server can't see the turn: stop it before its lease runs out
-				}
-				if current != nil && (stale || time.Since(last) > 10*time.Second) {
-					cancel()
-					stopping = true
-					abandoned = stale
-				}
-				if abandoned && done == nil {
-					current = nil
-					pending = nil
-					abandoned = false
-					r.setActive(nil)
+				if current != nil && poll.Task != "" && errors.As(e, &he) && he.status == 409 && strings.Contains(he.message, "no longer owns") {
+					readopt = true
 				}
 				continue
 			}
@@ -343,38 +381,67 @@ func (r *runner) controlLoop(ctx context.Context) error {
 			r.selected = assignment.Config.Worker == r.identity.ID
 			r.versions = assignment.Versions
 			r.mu.Unlock()
-			if task != "" {
-				r.acked(told) // the server keeps them on the task now
-				r.joined(join)
+			if poll.Task != "" {
+				r.acked(poll.Told) // the server keeps them on the task now
+				r.joined(poll.Join)
 			}
-			r.takeChat(ctx, assignment.Chat)
+			if turn != nil && poll.Chat == turn.Turn {
+				r.resumeChat(ctx, assignment.Chat, turn)
+				turn = nil
+			} else {
+				r.takeChat(ctx, assignment.Chat)
+			}
+			switch {
+			case poll.Adopt != nil && current == nil:
+				// A record of an earlier worker: its attempt, taken back, or not this worker's any more.
+				rec := adopt
+				adopt = nil
+				if assignment.Task != nil && assignment.Task.ID == rec.Task && assignment.Task.Worker == r.identity.ID &&
+					project.ValidWorkID(assignment.Task.Lease) {
+					run(assignment, rec)
+				} else {
+					r.refused(rec)
+				}
+				continue
+			case poll.Adopt != nil:
+				// Its lease had gone: the attempt carries on with the one it got back, or stops.
+				readopt = false
+				if assignment.Task != nil && assignment.Task.ID == current.ID && project.ValidWorkID(assignment.Task.Lease) {
+					current = assignment.Task
+					r.setActive(current)
+					r.setLease(current.ID, current.Lease)
+				} else if !abandoned {
+					r.log("%s: task %s isn't this worker's any more; stopping its agent", filepath.Base(r.opts.Root), current.ID)
+					abandoned = true
+					if done != nil {
+						cancel(errStop)
+					} else {
+						r.finished(current.ID)
+						current, pending, abandoned = nil, nil, false
+						r.setActive(nil)
+					}
+				}
+				continue
+			}
 			if current == nil && assignment.Task != nil {
 				if !project.ValidWorkID(assignment.Task.ID) || !project.ValidWorkID(assignment.Task.Lease) || assignment.Task.Worker != r.identity.ID {
 					return errors.New("host returned an invalid task assignment")
 				}
-				current = assignment.Task
-				r.setActive(current)
-				r.resetBatch()
-				stopping = false
-				abandoned = false
-				child, childCancel := context.WithCancel(ctx)
-				cancel = childCancel
-				done = make(chan outcome, 1)
-				go func(ch chan outcome, a project.WorkAssignment) { defer childCancel(); ch <- r.execute(child, a) }(done, assignment)
+				run(assignment, nil)
 			} else if current != nil && assignment.Task != nil {
 				current = assignment.Task
 				r.setActive(current)
 				r.sawQuestions(current, assignment.Questions)
 				r.offer(assignment.Next, assignment.Notes)
-				if current.Stop {
-					cancel()
+				if current.Stop && done != nil {
+					cancel(errStop) // a person's pause, switch or withdrawal
 					stopping = true
 				}
 			}
-			if pending != nil && current != nil {
+			if pending != nil && current != nil && !abandoned {
 				result := *pending
 				if stopping {
-					result = outcome{state: "stopped", message: "Agent process stopped; working files retained"}
+					result = outcome{state: "stopped", message: "Agent process stopped; working files retained", usage: result.usage}
 				}
 				told, join := r.unsentTold(), r.unsentJoin()
 				report := project.WorkReport{Worker: r.identity.ID, Task: current.ID, Lease: current.Lease, State: result.state,
@@ -383,7 +450,7 @@ func (r *runner) controlLoop(ctx context.Context) error {
 				if r.call(ctx, "/api/worker/report", report, nil) == nil {
 					r.acked(told)
 					r.joined(join)
-					cancel()
+					r.finished(current.ID)
 					current = nil
 					pending = nil
 					r.setActive(nil)
@@ -391,6 +458,26 @@ func (r *runner) controlLoop(ctx context.Context) error {
 			}
 		}
 	}
+}
+
+// setRecord makes rec the running attempt's record (nil: none).
+func (r *runner) setRecord(rec *runRecord) {
+	r.recMu.Lock()
+	defer r.recMu.Unlock()
+	r.rec = rec
+}
+
+// setLease gives the running attempt's record the lease the server gave it back with.
+func (r *runner) setLease(task, lease string) {
+	r.recMu.Lock()
+	rec := r.rec
+	if rec == nil || rec.Task != task {
+		r.recMu.Unlock()
+		return
+	}
+	rec.Lease = lease
+	r.recMu.Unlock()
+	r.saveRecord(rec)
 }
 
 func (r *runner) setActive(t *project.EditingTask) {

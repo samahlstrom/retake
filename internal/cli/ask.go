@@ -271,6 +271,11 @@ func askEndpoint(getenv func(string) string) (worker.AskEndpoint, error) {
 	if u, t := getenv("RETAKE_ASK_URL"), getenv("RETAKE_ASK_TOKEN"); u != "" && t != "" {
 		return worker.AskEndpoint{URL: u, Token: t}, nil
 	}
+	return askFile()
+}
+
+// askFile is the nearest .retake/worker/ask.json from the current folder up.
+func askFile() (worker.AskEndpoint, error) {
 	dir, err := os.Getwd()
 	if err != nil {
 		return worker.AskEndpoint{}, err
@@ -311,13 +316,23 @@ func askInTask(ctx context.Context, a taskAsk, text string, env Env) int {
 	}
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(end.URL, "/")+"/ask", bytes.NewReader(body))
-	if err != nil {
-		return opFailed(env, "ask", err, a.asJSON)
+	post := func(end worker.AskEndpoint) (*http.Response, error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(end.URL, "/")+"/ask", bytes.NewReader(body))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Authorization", "Bearer "+end.Token)
+		req.Header.Set("Content-Type", "application/json")
+		return http.DefaultClient.Do(req)
 	}
-	req.Header.Set("Authorization", "Bearer "+end.Token)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := post(end)
+	if err != nil {
+		// The worker that started this agent may have restarted on another port: its ask.json says where it is now
+		// (spec/automation.md, "Agents outlive Retake").
+		if now, ferr := askFile(); ferr == nil && now.URL != end.URL {
+			resp, err = post(now)
+		}
+	}
 	if err != nil {
 		return opFailed(env, "ask", fmt.Errorf("can't reach the task's worker (has the task ended?): %w", err), a.asJSON)
 	}

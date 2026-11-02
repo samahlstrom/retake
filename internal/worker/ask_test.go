@@ -74,7 +74,7 @@ func TestAskEndpointNeedsTheAttemptsSecret(t *testing.T) {
 	r.life = ctx
 	task := &project.EditingTask{ID: "task", Lease: "lease", Notes: []int64{1}}
 	r.setActive(task)
-	env, _, end := r.beginAsk(project.WorkAssignment{Task: task})
+	env, _, _, _, end := r.beginAsk(project.WorkAssignment{Task: task}, "", false)
 	var url, token string
 	for _, kv := range env {
 		k, v, _ := strings.Cut(kv, "=")
@@ -125,7 +125,7 @@ func TestAskEndpointNeedsTheAttemptsSecret(t *testing.T) {
 		t.Fatalf("questions %+v", r.ask.questions)
 	}
 	// The attempt ends: its secret and file go with it.
-	end()
+	end(false)
 	if _, e = os.Stat(filepath.Join(r.dir, AskFile)); !os.IsNotExist(e) {
 		t.Fatal("ask.json outlived its attempt")
 	}

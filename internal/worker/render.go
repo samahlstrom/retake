@@ -297,27 +297,39 @@ func lastRender(dir string) project.LiveRender {
 }
 
 // checkout puts the source of render id (its source.json) in the timeline, for a task that updates an older version
-// than the newest (spec/automation.md, "Comments on vN become edits in vN+1"), and returns what puts the timeline as
-// it was back.
-func (r *runner) checkout(id string) (restore func(), err error) {
+// than the newest (spec/automation.md, "Comments on vN become edits in vN+1"). The timeline as it was goes to keep,
+// for restore to put back once the task ends (a later worker's, when the agent outlived this one); it returns keep.
+func (r *runner) checkout(id, keep string) (string, error) {
 	if !project.ValidWorkID(id) {
-		return nil, fmt.Errorf("invalid render %q", id)
+		return "", fmt.Errorf("invalid render %q", id)
 	}
 	doc, err := os.ReadFile(filepath.Join(r.dir, "renders", id, "source.json")) //nolint:gosec // a render's own snapshot
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	now, err := os.ReadFile(r.timeline)
 	if err != nil {
-		return nil, err
+		return "", err
+	}
+	if err = os.WriteFile(keep, now, 0o600); err != nil { //nolint:gosec // the task's own folder
+		return "", err
 	}
 	if err = os.WriteFile(r.timeline, doc, 0o600); err != nil { //nolint:gosec // the project's own timeline
-		return nil, err
+		return "", err
 	}
 	r.log("%s: started from %s's source; the newest version's comes back after", filepath.Base(r.opts.Root), id)
-	return func() {
-		if e := os.WriteFile(r.timeline, now, 0o600); e != nil { //nolint:gosec // the project's own timeline
-			r.log("%s: couldn't put the newest version's source back: %v", filepath.Base(r.opts.Root), e)
-		}
-	}, nil
+	return keep, nil
+}
+
+// restore puts the timeline checkout kept back.
+func (r *runner) restore(keep string) {
+	doc, err := os.ReadFile(keep) //nolint:gosec // the task's own folder
+	if err == nil {
+		err = os.WriteFile(r.timeline, doc, 0o600) //nolint:gosec // the project's own timeline
+	}
+	if err != nil {
+		r.log("%s: couldn't put the newest version's source back: %v", filepath.Base(r.opts.Root), err)
+		return
+	}
+	_ = os.Remove(keep)
 }

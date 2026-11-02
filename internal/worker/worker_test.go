@@ -208,8 +208,8 @@ func TestCancellingAgentStopsItsChildBeforeHandoff(t *testing.T) {
 		t.Fatal(e)
 	}
 	r := &runner{opts: Options{Root: root, Profiles: []Profile{{AgentProfile: project.AgentProfile{ID: "slow"}, Command: []string{bin, "-test.run=^TestAgentProcess$", "--", "slow"}}}}, dir: filepath.Join(root, ".retake", "worker"), timeline: filepath.Join(root, "timeline.json")}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx, cancel := context.WithCancelCause(context.Background())
+	defer cancel(nil)
 	done := make(chan outcome, 1)
 	go func() {
 		done <- r.execute(ctx, project.WorkAssignment{Task: &project.EditingTask{ID: "task", Agent: "slow", Attempt: 1}})
@@ -225,7 +225,7 @@ func TestCancellingAgentStopsItsChildBeforeHandoff(t *testing.T) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	cancel()
+	cancel(errStop) // a person's pause or switch
 	select {
 	case result := <-done:
 		if result.state != "stopped" {
@@ -327,6 +327,39 @@ func TestAgentProcess(t *testing.T) {
 		if e = writeJSON(os.Getenv("RETAKE_REPORT"), report); e != nil {
 			t.Fatal(e)
 		}
+		return
+	case "durable": // a plain project's agent that outlives its worker: waits for $DURABLE_DIR/go, then makes the next version
+		var c plainContext
+		if e = json.Unmarshal(b, &c); e != nil || len(c.Family) == 0 {
+			t.Fatal("plain context", e)
+		}
+		dir := os.Getenv("DURABLE_DIR")
+		log, e := os.OpenFile(filepath.Join(dir, "launches"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+		if e != nil {
+			t.Fatal(e)
+		}
+		_, _ = fmt.Fprintf(log, "%v\n", c.Task.Notes)
+		_ = log.Close()
+		fmt.Println(`{"type":"system","subtype":"init"}`)
+		for deadline := time.Now().Add(60 * time.Second); ; time.Sleep(20 * time.Millisecond) {
+			if _, e = os.Stat(filepath.Join(dir, "go")); e == nil {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatal("never told to go on")
+			}
+		}
+		video, e := os.ReadFile(c.Family[len(c.Family)-1].Path)
+		if e == nil {
+			e = os.WriteFile(os.Getenv("RETAKE_OUTPUT"), video, 0o600)
+		}
+		if e == nil {
+			e = writeJSON(os.Getenv("RETAKE_REPORT"), agentResult{State: "completed", Message: "Fixed it while Retake restarted"})
+		}
+		if e != nil {
+			t.Fatal(e)
+		}
+		fmt.Println(`{"type":"result","usage":{"input_tokens":120,"output_tokens":24},"total_cost_usd":0.04}`)
 		return
 	case "plain-lazy": // a plain project's agent that says it's done without a video
 		if e = writeJSON(os.Getenv("RETAKE_REPORT"), agentResult{State: "completed", Message: "Done, I think"}); e != nil {

@@ -92,12 +92,17 @@ func TestAutomationLeaseExpiryPersistsAndRejectsDuplicateWorker(t *testing.T) {
 	if _, e = s.PollWork(other, "", ""); e == nil {
 		t.Fatal("simultaneous duplicate worker allowed")
 	}
+	// A lapsed lease is renewed within the grace: a restart of Retake isn't the end of the agent.
 	c.add(WorkerLease + time.Second)
+	if r, e := s.PollWork(w, j.ID, j.Lease); e != nil || r.State != "running" || r.Lease != j.Lease {
+		t.Fatal("lapsed lease not renewed", r, e)
+	}
+	c.add(WorkerLease + ReconnectGrace)
 	if _, e = s.PollWork(w, j.ID, j.Lease); e == nil {
 		t.Fatal("expired lease renewed")
 	}
 	a, e := s.Automation()
-	if e != nil || a.Tasks[0].State != "paused" || a.Tasks[0].Lease != "" {
+	if e != nil || a.Tasks[0].State != "paused" || a.Tasks[0].Lease != "" || !a.Tasks[0].Lost || a.Tasks[0].Error != LostError {
 		t.Fatal(a, e)
 	}
 	// A second store simulates a restarted host; the queue and pause survive.
@@ -258,6 +263,14 @@ func TestWithdrawnFeedbackNeverStartsAndOfflineStateExpiresWithoutWorkerPolling(
 		t.Fatal(e)
 	}
 	a, e := s.Automation()
+	if e != nil || len(a.Tasks) != 1 || a.Tasks[0].State != "running" {
+		t.Fatal("paused within the grace", a, e)
+	}
+	c.add(ReconnectGrace)
+	if e = s.ReconcileWork(); e != nil {
+		t.Fatal(e)
+	}
+	a, e = s.Automation()
 	if e != nil || len(a.Tasks) != 1 || a.Tasks[0].State != "paused" {
 		t.Fatal(a, e)
 	}
@@ -390,7 +403,7 @@ func TestQueuedFeedbackWaitsForAComputer(t *testing.T) {
 		t.Fatal(e)
 	}
 	// The computer goes away; a send waits for it, and it picks the send up when it comes back.
-	c.add(WorkerLease + time.Minute)
+	c.add(WorkerLease + ReconnectGrace)
 	if _, e = s.QueueFeedback([]int64{2}, ""); e != nil {
 		t.Fatal(e)
 	}
@@ -486,5 +499,114 @@ func TestVersionFilesBelongToOneWorkerAndCompleteAPlainTask(t *testing.T) {
 	}
 	if a, _ = s.Automation(); a.Task(task.ID).State != "completed" || a.Task(task.ID).Result != "v7" {
 		t.Fatalf("%+v", a.Task(task.ID))
+	}
+}
+
+// TestAdoptingAnAttemptBack: a restarted worker (a new session) takes its attempt back with its lease, lapsed or not,
+// and at once; one paused after the grace comes back running with a new lease when its agent is alive and nothing else
+// runs; anything else is refused, and an adopting poll claims nothing.
+func TestAdoptingAnAttemptBack(t *testing.T) {
+	s, c, w := automationFixture(t)
+	if _, e := s.QueueFeedback([]int64{1}, ""); e != nil {
+		t.Fatal(e)
+	}
+	j, e := s.PollWork(w, "", "")
+	if e != nil || j == nil {
+		t.Fatal(j, e)
+	}
+	adopt := func(w EditingWorker, ad WorkAdopt) *EditingTask {
+		t.Helper()
+		got, _, e := s.PollWorker(WorkPoll{Worker: w, Adopt: &ad})
+		if e != nil {
+			t.Fatal(e)
+		}
+		return got
+	}
+	// A restart within the lease: a new session, let in at once because it holds the lease.
+	restarted := w
+	restarted.Session = "restarted"
+	if _, e = s.PollWork(restarted, "", ""); e == nil {
+		t.Fatal("a new session without the lease was let in while the old one is fresh")
+	}
+	got := adopt(restarted, WorkAdopt{Task: j.ID, Attempt: 1, Lease: j.Lease, Notes: []int64{1}, Alive: true})
+	if got == nil || got.Lease != j.Lease || got.State != "running" {
+		t.Fatal("not taken back", got)
+	}
+	if got := adopt(restarted, WorkAdopt{Task: j.ID, Attempt: 1, Lease: "someone-else"}); got != nil {
+		t.Fatal("taken back with another lease", got)
+	}
+	if got := adopt(restarted, WorkAdopt{Task: j.ID, Attempt: 2, Lease: j.Lease}); got != nil {
+		t.Fatal("taken back as another attempt", got)
+	}
+	// Lapsed, within the grace: the same lease, renewed, with an event.
+	c.add(WorkerLease + time.Minute)
+	if got = adopt(w, WorkAdopt{Task: j.ID, Attempt: 1, Lease: j.Lease, Alive: true}); got == nil || got.Lease != j.Lease ||
+		got.Events[len(got.Events)-1].Text != "Reconnected to the agent" {
+		t.Fatal("lapsed attempt not taken back", got)
+	}
+	// Past the grace it's paused; an agent that's gone stays paused; a live one comes back with a new lease.
+	c.add(WorkerLease + ReconnectGrace)
+	if e = s.ReconcileWork(); e != nil {
+		t.Fatal(e)
+	}
+	if got = adopt(w, WorkAdopt{Task: j.ID, Attempt: 1, Lease: j.Lease, Notes: []int64{1}}); got != nil {
+		t.Fatal("a dead agent's attempt taken back", got)
+	}
+	// A note it never had (merged in while paused) needs a new attempt.
+	if got = adopt(w, WorkAdopt{Task: j.ID, Attempt: 1, Lease: j.Lease, Notes: []int64{2}, Alive: true}); got != nil {
+		t.Fatal("taken back without its note", got)
+	}
+	got = adopt(w, WorkAdopt{Task: j.ID, Attempt: 1, Lease: j.Lease, Notes: []int64{1}, Alive: true})
+	if got == nil || got.State != "running" || got.Lease == "" || got.Lease == j.Lease || got.Attempt != 1 || got.Lost || got.Error != "" {
+		t.Fatal("paused attempt not taken back", got)
+	}
+	if _, e = s.ReportWork(WorkReport{Worker: w.ID, Task: j.ID, Lease: got.Lease, State: "question", Message: "which blue?"}, 0); e != nil {
+		t.Fatal(e)
+	}
+	// Refused: an adopting poll claims nothing, even with work queued.
+	if _, e = s.QueueFeedback([]int64{2}, ""); e != nil {
+		t.Fatal(e)
+	}
+	if got = adopt(w, WorkAdopt{Task: j.ID, Attempt: 1, Lease: got.Lease, Notes: []int64{1}, Alive: true}); got != nil {
+		t.Fatal("a question's attempt taken back, or a claim", got)
+	}
+	// An older version's pause ("Worker disconnected", without lost) counts too.
+	next, e := s.PollWork(w, "", "")
+	if e != nil || next == nil {
+		t.Fatal(next, e)
+	}
+	if e = s.UpdateAutomation(func(a *AutomationState) (bool, error) {
+		k := a.Task(next.ID)
+		k.State, k.Error, k.Lease = "paused", LostError, ""
+		return true, nil
+	}); e != nil {
+		t.Fatal(e)
+	}
+	if got = adopt(w, WorkAdopt{Task: next.ID, Attempt: next.Attempt, Notes: next.Notes, Alive: true}); got == nil || got.State != "running" {
+		t.Fatal("an older pause not taken back", got)
+	}
+}
+
+// TestAPersonsPauseIsntTakenBack: a task paused because its worker went away, then paused by the owner, stays paused
+// when the worker comes back with its agent alive.
+func TestAPersonsPauseIsntTakenBack(t *testing.T) {
+	s, c, w := automationFixture(t)
+	if _, e := s.QueueFeedback([]int64{1}, ""); e != nil {
+		t.Fatal(e)
+	}
+	j, e := s.PollWork(w, "", "")
+	if e != nil || j == nil {
+		t.Fatal(j, e)
+	}
+	c.add(WorkerLease + ReconnectGrace)
+	if e = s.ReconcileWork(); e != nil {
+		t.Fatal(e)
+	}
+	if e = s.ControlTask(j.ID, "pause", "", ""); e != nil {
+		t.Fatal(e)
+	}
+	got, _, e := s.PollWorker(WorkPoll{Worker: w, Adopt: &WorkAdopt{Task: j.ID, Attempt: 1, Notes: []int64{1}, Alive: true}})
+	if e != nil || got != nil {
+		t.Fatal("a paused task taken back", got, e)
 	}
 }

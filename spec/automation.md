@@ -40,8 +40,9 @@ upload or an inbound connection to the worker. This is an addition to the existi
   and results survive server restart. A lease identifies each attempt; late reports from a replaced attempt are
   rejected. A local process lock prevents duplicate workers for one project.
 - Switching an active task first requests cancellation. The worker stops the process tree, preserves files and
-  its task record, then acknowledges the handoff. Only then may the replacement agent start. On lost connectivity
-  the worker stops editing before its lease can expire. An offline worker does not imply task completion.
+  its task record, then acknowledges the handoff. Only then may the replacement agent start. Lost connectivity, a
+  worker that quits or a server restart never stop an agent ("Agents outlive Retake" below). An offline worker does
+  not imply task completion.
 - Agent usage failures pause a task with an explanation and a Switch agent / Retry action. No silent change to
   billing method. Available structured token/cost reports are recorded as estimates; absent limits remain unknown.
 
@@ -54,8 +55,9 @@ Where a worker runs its agent is a user setting: `open_agents_in` in the user co
 `[[agents]]` entry, which wins (docs/config.md). Values: `"background"` (the default), `"herdr"`, `"tmux"`.
 `--profiles FILE` entries take `open_in` and `interactive` too.
 
-- `background`: as above. The agent's headless command (`command`) runs in the project folder with the prompt on
-  stdin, its output goes to `tasks/<task>/agent-<attempt>.log`, and its JSON stream gives usage and usage limits.
+- `background`: as above. The agent's headless command (`command`) runs detached in the project folder with the
+  prompt on stdin, its output goes to `tasks/<task>/agent-<attempt>.log`, and its JSON stream gives usage and usage
+  limits ("Agents outlive Retake").
 - `herdr` and `tmux`: the agent runs as a normal interactive session, which the person can watch and type into at any
   time. Its command is the profile's `interactive` argv: the built-in `claude` is `claude
   --dangerously-skip-permissions --disallowedTools=AskUserQuestion` and `codex` is `codex
@@ -83,8 +85,9 @@ Where a worker runs its agent is a user setting: `open_agents_in` in the user co
   ends before a report (the pane is closed, the agent quits) pauses the task: "The agent's session ended without a
   report". An agent that stops at a question or a usage limit in the terminal, without a report, leaves the task
   Working until it reports, its session ends, or someone pauses it.
-- Stopping a task before its report (pause, switch agent, lost connection, retake quitting) closes the agent's pane:
-  `herdr pane close` or `tmux kill-pane`. After the report it's left open.
+- Stopping a task before its report (pause, switch agent, its comments withdrawn) closes the agent's pane: `herdr
+  pane close` or `tmux kill-pane`. After the report it's left open. Retake quitting or restarting, or a lost
+  connection, never closes it ("Agents outlive Retake").
 - No usage is recorded in these modes: there's no JSON stream to read it from. Usage limits show in the session.
 - An agent that stops at a startup question in herdr (such as "trust this folder?", or Claude Code's one-time "accept
   bypass permissions mode?") makes `herdr agent start` answer `agent_not_ready`: the worker logs that the agent is
@@ -95,6 +98,66 @@ Where a worker runs its agent is a user setting: `open_agents_in` in the user co
   argument, so the agent reads it once the person has answered; the worker logs, once per session, that a new agent
   may stop at such a question. A missing `herdr` or `tmux` binary, or a herdr or tmux error, pauses the task with that
   error.
+
+## Agents outlive Retake
+
+An agent's work is files: its prompt, context and report in the task's folder, and the project it edits. Retake reads
+them; it doesn't hold the agent. Restarting or updating Retake never stops an agent.
+
+- **Quitting stops nothing.** SIGTERM, Ctrl+C, `--idle-exit`, a crash or SIGKILL of `retake open`, `retake worker` or
+  `retake connect` leaves every agent running: herdr and tmux panes stay open, background agents and chat turns keep
+  going. Only a person's action stops one: pause, switch agent, Stop in the chat, a task whose comments were all
+  withdrawn, or a retry that replaces the attempt. The worker tells these apart from its own shutdown explicitly.
+- **Detached processes.** A background agent and a chat turn's agent run in their own session and process group
+  (`setsid`, never a parent-death signal). Their stdin is the prompt's file, and their output goes to files, never
+  pipes: an attempt's stdout and stderr to `tasks/<task>/agent-<n>[-<k>].log`, a turn's stdout to
+  `chat/<turn>-<i>.out` and its stderr to `chat/<turn>-<i>.log`. The worker reads them from where it had got to: a
+  turn's words and tool lines as they come, an attempt's usage and usage limit from the end of its log.
+- **The record.** While an attempt runs, `tasks/<task>/run.json` (0600) says what a later worker needs to take it
+  back: task, attempt, lease, agent, mode (and pane), the report file that counts now, the round, the notes the agent
+  has had, the per-note changes and messages of its finished rounds, its `retake ask` secret, what to put back at the
+  end (an older target's checkout, the extensions' undo snapshots), and for a background agent its pid and start time
+  (Linux: the boot id and `/proc/<pid>/stat` start ticks; elsewhere `ps -o lstart=`), so a reused pid is never taken
+  for it. A turn's is `chat/turn.json`, with how far into its output the server has the words. A record goes once its
+  end reached the server.
+- **Taking work back.** A worker, before its first poll, reads its records: the newest attempt's `run.json`. A folder
+  from before records has none: then the newest task folder's newest prompt (`prompt-<n>[-<k>].md`), its context
+  (which holds the task, attempt and lease) and `view.json` make one, and it's taken back only when its agent is alive
+  or its report is there. The agent is alive when herdr's `agent get` finds it in its pane, tmux lists its pane not
+  dead, or its pid has the recorded start time. The poll carries `adopt: {"task", "attempt", "lease", "notes",
+  "alive"}` (`alive`: the agent is alive or its report is written). When the server gives the attempt back (below),
+  the worker carries on with it: the same attempt and report file, no new prompt or line, the lease renewed. An answer
+  that came meanwhile reaches a herdr or tmux session as a message, a background agent in its next round; `ask.json`
+  is written again (the worker listens on the port it had when it's free, so a background agent's `RETAKE_ASK_URL`
+  still works; `retake ask` falls back to `ask.json` when that URL doesn't answer). A report written while Retake was
+  down is read as if the worker had watched: the render, the version push, questions, Done. An agent that's gone with
+  no report pauses the task as when the worker watched it end ("The agent's session ended without a report", "Agent
+  exited without a completion report"). A record the server refuses goes, and its background agent is stopped (the
+  attempt isn't running any more: it was cancelled or retried); a herdr or tmux session is left open.
+- **Turns too.** A chat turn's record is taken back the same way (the poll's `chat` and `chat_lease`): the worker reads
+  its output on from where the server has it, and ends the turn when the process has (a turn that ended while Retake
+  was down just sends its last words and its end). A turn the server no longer has is stopped.
+- **One agent per video.** A new background attempt or turn first stops a background agent of an earlier record of the
+  video that is still running.
+- **The lease.** A worker renews its attempt's lease with every poll (each second). When it lapses (30 s without one)
+  the task stays `running` (or `stopping`) for a grace of 10 minutes, still Working on the page, whose progress line
+  says "Reconnecting to the agent" while the computer is offline. A worker that comes back in the grace takes the task
+  back with its lease, with nothing shown. After the grace the task pauses as before ("Worker disconnected; retry or
+  switch agent", with `lost` set). A chat turn's lease has the same grace; after it the turn ends with "The editing
+  computer went offline". Reports, questions and renders with a lapsed lease are taken within the grace.
+- **On the server**, a poll's `adopt` gives the attempt back (the poll answer's `task`, with its notes and questions,
+  as for a claim) when the task is this worker's and the same attempt, and either `running` or `stopping` with that
+  lease (renewed; "Reconnected to the agent" when it had lapsed), or `paused` and `lost` (or the older error "Worker
+  disconnected; retry or switch agent") with `alive`, nothing else running in the video, no chat turn running, and no
+  note to do that isn't in `notes`: then it's `running` again with a new lease, "Reconnected to the agent after a
+  restart". Otherwise the answer has no task, and that poll claims nothing else. A poll whose `task` and `lease`, or
+  `adopt`, or chat turn proves it owns a running attempt is let in even when the worker's previous session was seen
+  less than 30 s ago (a hosted worker's restart gets a new session).
+- **Start.** `retake open <folder>` starts, at once, the workers of the projects with work in flight (a `run.json`,
+  `chat/turn.json` or `ask.json` under `.retake/worker/`), without waiting for a page to open them.
+- **Rendering stays file-driven.** A restarted server lists what's on disk (a version the agent's task pushed, a
+  render's `state.json`), and a taken-back timeline task renders its source as before. Nothing else waits on the agent.
+- Hosted, the same: a restarted `retake worker` or `retake connect` takes its attempts and turns back.
 
 ## Permissions: agents never stop to ask
 
@@ -526,7 +589,8 @@ because a comment on the one before asked for changes.
   `config`, `task`, `notes` (the task's notes, plus every open note of every version as context), `questions` (the
   task's, with their answers), `versions` (how many versions the family has, drafts not counted) and, for a running
   attempt, `next` (the queued task of its target it may take in, "Comments on vN become edits in vN+1"). A poll may carry `told` (answers that
-  reached the agent) and `join` (notes of `next` given to the agent's session); a report may carry both. A poll also
+  reached the agent) and `join` (notes of `next` given to the agent's session); a report may carry both. A poll
+  may carry `adopt` instead of `task` ("Agents outlive Retake"). A poll also
   carries the chat turn the worker runs (`chat`, `chat_lease`) and its answer the turn it owns (`chat`): a turn and
   a task never run at once (spec/chat.md). In Local mode
   the in-process worker reaches these handlers without HTTP or a token.
@@ -572,7 +636,11 @@ submissions, Send by every recording role (a share link too) with no worker onli
 `/done` with and without `send`, a sent take queuing without a worker poll, drafts versus versions, a worker restart
 with unchanged source, profile `env` expansion, Local mode's in-process worker and `blocked` reasons, the exact herdr
 and tmux commands (fake binaries on `PATH` that log their argv), completion by report with no agent output, stop
-closing the pane, and two projects' tasks running at the same time. For "Comments on vN become edits in vN+1": comments on v7 make v8;
+closing the pane, and two projects' tasks running at the same time. For "Agents outlive Retake" (fake herdr, tmux and agent): a
+worker shut down mid-task leaves the pane and the process running; a new worker takes a live herdr task back without a
+new line; a report written while it was down is processed; a dead agent pauses the task; a detached background agent
+survives its worker and is taken back with its usage; a chat turn survives and keeps streaming; a person's stop still
+kills or closes; the lease's grace and `adopt` on the server; and no test leaves a process behind. For "Comments on vN become edits in vN+1": comments on v7 make v8;
 another comment on v7 after v8 is done updates v8 (still the same number of versions, the earlier media kept); a
 comment on v8 makes v9; one Send with comments on v7 and v8 updates v8 then makes v9, by the same agent, one after the
 other; a comment on v7 while v9 exists updates v8 and says `later`; a send of 3 notes is one task, one agent process

@@ -9,7 +9,9 @@ import (
 	"image"
 	"image/png"
 	"io"
+	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -117,6 +119,39 @@ func TestAskOutsideATask(t *testing.T) {
 	}
 	if code := w.run("ask", w.video, "1", "Which?", "--box", "0,0,1,1"); code != ExitUsage || !strings.Contains(w.stderr.String(), "inside a task") {
 		t.Fatalf("%d %s", code, w.stderr)
+	}
+}
+
+// TestAskFindsARestartedWorker: an agent that outlived its worker has the old worker's URL in its environment; when
+// that doesn't answer, retake ask goes where the project's ask.json says the worker is now (spec/automation.md,
+// "Agents outlive Retake").
+func TestAskFindsARestartedWorker(t *testing.T) {
+	w := newWorld(t)
+	dead, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gone := "http://" + dead.Addr().String()
+	_ = dead.Close()
+	var got string
+	now := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		got = r.Header.Get("Authorization")
+		_ = json.NewEncoder(rw).Encode(project.TaskQuestion{ID: 7, Note: 1, Text: "Which?"})
+	}))
+	defer now.Close()
+	folder := filepath.Join(t.TempDir(), "shop")
+	if err = os.MkdirAll(filepath.Join(folder, ".retake", "worker"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := json.Marshal(worker.AskEndpoint{URL: now.URL, Token: "the-secret"})
+	if err = os.WriteFile(filepath.Join(folder, ".retake", "worker", worker.AskFile), b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(folder)
+	w.env["RETAKE_ASK_URL"], w.env["RETAKE_ASK_TOKEN"] = gone, "the-secret"
+	if code := w.run("ask", "--at", "1", "Which?"); code != ExitOK || got != "Bearer the-secret" ||
+		!strings.Contains(w.stdout.String(), "(question 7)") {
+		t.Fatalf("%d %q %s %s", code, got, w.stdout, w.stderr)
 	}
 }
 

@@ -151,6 +151,8 @@ describe('the agent and its computer', () => {
     expect(s).toMatchObject({ working: true, batch: 2, next: 2 });
     expect(batchLine(s)).toBe('Agent working on 2 comments · 2 more coming');
     expect(batchLine({ ...s, batch: 1, next: 0 })).toBe('Agent working on 1 comment');
+    // The computer went away (Retake restarting, a laptop asleep): the agent works on, and Retake comes back to it.
+    expect(batchLine({ ...s, online: false })).toBe('Reconnecting to the agent');
     // Nothing runs: no line, however much waits (the comments say Working on their own).
     const waiting = agentStatus(automation({ tasks: [task('queued', { notes: [5, 6] })] }), 1001);
     expect(waiting).toMatchObject({ working: false, batch: 0, next: 0 });

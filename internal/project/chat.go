@@ -414,10 +414,11 @@ func (t *tx) endTurn(a *AutomationState, info string, now int64) error {
 	return nil
 }
 
-// reconcileChat ends a running turn whose worker's lease ran out.
+// reconcileChat ends a running turn whose worker's lease ran out, after the grace for its worker to come back and take
+// it back (spec/automation.md, "Agents outlive Retake").
 func (t *tx) reconcileChat(a *AutomationState, now int64) (bool, error) {
 	c := a.chatTurn()
-	if c == nil || c.State == ChatQueued || c.Until > now {
+	if c == nil || c.State == ChatQueued || !lapsed(c.Until, now) {
 		return false, nil
 	}
 	return true, t.endTurn(a, ChatOffline, now)
@@ -573,7 +574,7 @@ func (s *Store) ChatWorkOf(c ChatTurn) (ChatWork, error) {
 // chatAttempt checks that worker runs turn with lease, and returns it.
 func (a *AutomationState) chatAttempt(turn, worker, lease string, now int64) (*ChatTurn, error) {
 	c := a.chatTurn()
-	if c == nil || c.ID != turn || c.Worker != worker || c.Lease == "" || c.Lease != lease || c.Until <= now ||
+	if c == nil || c.ID != turn || c.Worker != worker || c.Lease == "" || c.Lease != lease || lapsed(c.Until, now) ||
 		c.State != ChatRunning && c.State != ChatStopping {
 		return nil, ErrStaleChat
 	}
