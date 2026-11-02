@@ -1,6 +1,46 @@
 /* Shared by the review page and the home: the status dots, and the look of Bits UI's menus and popovers (they render
    in a portal, outside any component's styles). Colours and fonts are tokens (theme/tokens.css). */
 @layer retake {
+  /* ---------------------------------------------------------------- scrollbars
+     Every scrolling part matches the page (spec/theme.md, "Scrollbars"): thin, no arrow buttons, a quiet thumb on a
+     transparent track. Chrome and Firefox take the standard properties; Safari on a computer (no scrollbar-color)
+     takes the same tokens through ::-webkit-scrollbar. Phones keep their own overlay scrollbars. */
+  @supports (scrollbar-color: auto) {
+    /* scrollbar-color is inherited (a part can set its own for its insides); scrollbar-width isn't. */
+    :root {
+      scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+    }
+    * {
+      scrollbar-width: thin;
+    }
+  }
+  @supports not (scrollbar-color: auto) {
+    @media (hover: hover) and (pointer: fine) {
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+        background: var(--scrollbar-track);
+      }
+      ::-webkit-scrollbar-track,
+      ::-webkit-scrollbar-corner {
+        background: var(--scrollbar-track);
+      }
+      ::-webkit-scrollbar-thumb {
+        border: 2px solid transparent;
+        border-radius: 8px;
+        background: var(--scrollbar-thumb) padding-box;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: var(--scrollbar-thumb-hover) padding-box;
+      }
+      ::-webkit-scrollbar-button {
+        display: none;
+        width: 0;
+        height: 0;
+      }
+    }
+  }
+
   /* ---------------------------------------------------------------- menus (⋯) */
   .menu {
     z-index: 120;

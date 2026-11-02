@@ -73,6 +73,11 @@
     --warn: #e2bd73;
     --change: #9ccfb3;
 
+    /* scrollbars (ui.css): thin, no arrows, a quiet thumb on no track */
+    --scrollbar-thumb: color-mix(in srgb, var(--overlay) 14%, transparent);
+    --scrollbar-thumb-hover: color-mix(in srgb, var(--overlay) 28%, transparent);
+    --scrollbar-track: transparent;
+
     /* drawn on the timeline's and the waveform's canvas (lib/theme.ts reads them) */
     --track: color-mix(in srgb, var(--overlay) 14%, transparent);
     --track-pending: color-mix(in srgb, var(--overlay) 5%, transparent);

@@ -72,13 +72,30 @@ Every colour of the page is a token. The ones you'll want first:
 | `--status-open`, `--status-working`, `--status-question`, `--status-done` | A comment's four states |
 | `--agent` | The agent's boxes and arrows on the video, and its questions |
 
-Hovers, hairlines and borders are `--overlay` (white by default) at a low opacity, so one line flips all of them for a
-light theme: `--overlay: #000`. Text over the video (the hint, the toast, the comments pill) uses `--scrim` and
-`--on-scrim`, which you can leave dark in a light theme. The full list, with every default, is in
+Hovers, hairlines, borders and scrollbars are `--overlay` (white by default) at a low opacity, so one line flips all
+of them for a light theme: `--overlay: #000`. Text over the video (the hint, the toast, the comments pill) uses
+`--scrim` and `--on-scrim`, which you can leave dark in a light theme. The full list, with every default, is in
 [spec/theme.md](../spec/theme.md#tokens).
 
 The pen colours (red, yellow, green, white) aren't tokens: the agent reads them as part of your review, so they're
 the same everywhere.
+
+### Scrollbars
+
+Every scrolling part (the document, the chat, the comments, the folder tree, the home, Settings) has a thin scrollbar
+with no arrow buttons and a transparent track, drawn from three tokens:
+
+```css
+:root {
+  --scrollbar-thumb: color-mix(in srgb, var(--overlay) 14%, transparent);        /* the default */
+  --scrollbar-thumb-hover: color-mix(in srgb, var(--overlay) 28%, transparent);  /* under the pointer */
+  --scrollbar-track: transparent;
+}
+```
+
+Chrome and Firefox use `scrollbar-color` (and shade the thumb on hover themselves); Safari on a computer uses the
+same tokens through `::-webkit-scrollbar`. Phones keep their own overlay scrollbars. For a single part, set
+`scrollbar-color` on it: `[data-part~='chat-thread'] { scrollbar-color: var(--accent) transparent; }`.
 
 ## Fonts and images
 

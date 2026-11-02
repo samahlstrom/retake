@@ -167,8 +167,6 @@
     :global(.retake-select-viewport) {
       min-height: 0;
       overflow-y: auto;
-      scrollbar-width: thin;
-      scrollbar-color: var(--faintest) transparent;
       overscroll-behavior: contain;
     }
     :global(.retake-select-option) {
