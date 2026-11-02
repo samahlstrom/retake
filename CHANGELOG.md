@@ -9,6 +9,9 @@ All notable changes are listed here. Versions follow semver once the first relea
   the list (it scrolls inside) and the comment box, so nothing is left empty; the speech bubble goes to To do instead
   of hiding them. The hint line over Record is gone there (the empty list says how to comment). The comments list
   scrolls again wherever it is longer than its space (desktop too). ⋯ and a comment's time are 40 px tall on a phone.
+  Portrait is compact so the list gets the height (three comments in view on an iPhone 15, the video's size as it
+  was): the 40 px row of controls sits just under the timeline's track, the comments header is one 44 px row, the box
+  and the cards are tighter.
 - Paused tasks: an older version's one-task-per-note paused tasks become one paused batch per target when the store
   opens, and paused tasks of a target merge like queued ones. Send (or Retry) resumes that batch with the new comments
   added, run by one agent; the paused comments count in Send (spec/automation.md, "Send resumes a paused batch").

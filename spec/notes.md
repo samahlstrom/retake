@@ -215,8 +215,11 @@ heads for (`v5`), so they are still there once the draft becomes that version.
 - **On a phone.** In portrait the comments always fill the space between the controls (under the video) and Record
   and Send: the header (with To do · Done in its row), the shown version's list, which scrolls inside that space, and
   the comment box at the bottom. Nothing between them is ever left empty, with no comments ("No comments yet" and how
-  to make one, which replaces the touch hint over Record) or with many. The speech bubble over the video (with the to-do
-  count) stays and goes to them: To do, scrolled to the top; it doesn't hide them. In landscape (no room beside the
+  to make one, which replaces the touch hint over Record) or with many. Portrait is compact so the list gets the height:
+  the controls row under the timeline is 40 px and sits just under the track, the comments header is one 44 px row,
+  the box 44 px, and the cards tight, so at least three one-line comments are in view on an iPhone 15 (393×659) without
+  touching the video's size. The speech bubble over the video (with the to-do count) stays and goes to them: To do,
+  scrolled to the top; it doesn't hide them. In landscape (no room beside the
   video) they are an overlay the bubble opens and closes, and on an extension's version a drawer over its page, as
   before. Every control there is at least 40 px, and nothing reaches past the screen's edges.
 - **Where a comment goes.** Comments on vN become edits in vN+1 (spec/automation.md): each comment's `target` is the

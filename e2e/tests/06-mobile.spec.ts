@@ -114,8 +114,9 @@ for (const o of [{ name: 'portrait', width: 390, height: 844 }, { name: 'landsca
         const el = p.page.locator(sel);
         await expect(el, sel).toBeVisible();
         const b = (await el.boundingBox())!;
-        expect(b.width, `${sel} width`).toBeGreaterThanOrEqual(44);
-        expect(b.height, `${sel} height`).toBeGreaterThanOrEqual(44);
+        // 40 px at least: portrait's row of controls under the timeline is compact (the comments get the height).
+        expect(b.width, `${sel} width`).toBeGreaterThanOrEqual(40);
+        expect(b.height, `${sel} height`).toBeGreaterThanOrEqual(40);
         expect(b.x, `${sel} left`).toBeGreaterThanOrEqual(0);
         expect(b.y, `${sel} top`).toBeGreaterThanOrEqual(0);
         expect(b.x + b.width, `${sel} right`).toBeLessThanOrEqual(o.width);

@@ -344,6 +344,11 @@
     bottom: 0;
     z-index: 4;
   }
+  html[data-layout='portrait'] #precord:not(.kind) {
+    padding-top: 8px;
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
+  }
+  /* The comments themselves are compact in portrait too (sidebar.css). */
   #pspace {
     grid-area: rec;
   }
@@ -353,10 +358,33 @@
   #pbar.recording {
     box-shadow: inset 0 2px 0 var(--record);
   }
+  /* Portrait is compact, so the comments under it get the height (three one-line comments on an iPhone 15): the
+     timeline keeps its 44 px for the thumb, and the row of controls tucks under the empty bottom of its canvas (the
+     track is in the middle, the pen marks just under it); the row's buttons are 40 px. */
   #pbar.portrait #timeline {
     flex: none;
-    height: 48px;
-    margin: 4px -6px 0;
+    height: 44px;
+    margin: 0 -6px -10px;
+  }
+  #pbar.portrait .prow {
+    position: relative; /* painted (and tapped) over the canvas's empty edge; no z-index, so the version list still
+                           opens over Record */
+    min-height: 40px;
+    pointer-events: none; /* only its controls take taps; the rest still scrubs */
+  }
+  #pbar.portrait .prow > :not(.grow) {
+    pointer-events: auto;
+  }
+  html[data-layout='portrait'] #pbar #play,
+  html[data-layout='portrait'] #pbar #pen,
+  html[data-layout='portrait'] #pbar #undo {
+    width: 40px;
+    min-width: 40px;
+    height: 40px;
+    min-height: 40px;
+  }
+  html[data-layout='portrait'] #pbar #verBtn {
+    min-height: 40px;
   }
   .prow {
     display: flex;

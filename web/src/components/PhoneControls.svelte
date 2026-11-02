@@ -1,6 +1,7 @@
 <script lang="ts">
   // The phone layout's controls (the desktop has the bar instead). The same parts, sized for a thumb (40 px and up):
-  //  - portrait, under the video: the timeline; play, time, the version, then the pen and undo (#pbar). At the bottom,
+  //  - portrait, under the video: the timeline; play, time, the version, then the pen and undo (#pbar), compact (a
+  //    40 px row just under the track) so the comments get the height. At the bottom,
   //    in the thumb zone: Record and Send (#precord), over them only where Send can't reach an agent one quiet line, and
   //    a viewer's "View only". The space between is the grid's `side` row (phone.css): the comments are always there,
   //    with the comment box at their bottom, so it is never empty.

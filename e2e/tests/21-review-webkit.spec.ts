@@ -4,7 +4,8 @@
 // with a drawing and no recording (spec/notes.md, "Typed comments on a video"); the comments' version menu;
 // recording (a stand-in microphone: the container has none), with nothing moving; the home's Settings. In portrait the
 // comments always fill the space between the controls and Record and Send (no dead space), with 0 comments and with 8
-// (the list scrolls inside it), and the speech bubble goes to them (spec/notes.md, "On a phone").
+// (the list scrolls inside it, with room for three one-line comments), and the speech bubble goes to them
+// (spec/notes.md, "On a phone").
 // Screenshots go to .retake-work/review2-shots/<what>-<device>.png. Under Chromium the file skips.
 import { devices, expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { copyFileSync, mkdirSync, writeFileSync } from 'node:fs';
@@ -224,6 +225,15 @@ test.describe('the review page on phones in WebKit', () => {
         const send = (await page.locator('#done').boundingBox())!;
         const list = await page.locator('#side .vp').evaluate((el) => ({ scroll: el.scrollHeight, client: el.clientHeight }));
         expect(list.scroll, `${device}: the list is longer than its row, so it scrolls`).toBeGreaterThan(list.client);
+        // Room for three one-line comments (the first is one), and three show, each with its words.
+        const fit = await page.evaluate(() => {
+          const l = document.querySelector('#side .list')!.getBoundingClientRect();
+          const one = document.querySelector('#side .item')!.getBoundingClientRect().height;
+          const words = [...document.querySelectorAll('#side .item .text')].map((e) => e.getBoundingClientRect());
+          return { list: l.height, one, shown: words.filter((w) => w.top >= l.top - 0.5 && w.top + 18 <= l.bottom).length };
+        });
+        expect(fit.list, `${device}: room for three one-line comments`).toBeGreaterThanOrEqual(3 * fit.one);
+        expect(fit.shown, `${device}: three comments show`).toBeGreaterThanOrEqual(3);
         await shot(page, 'comments-8', device);
         const last = page.locator('#side .item').last();
         await last.scrollIntoViewIfNeeded();

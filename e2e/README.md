@@ -153,7 +153,7 @@ WebKit build needs Ubuntu's libicu74, libxml2 and libflite1, and doesn't launch 
 - At 390x844 portrait and 844x390 landscape:
   - The page is in the phone layout and fits: no horizontal overflow, nothing scrolls.
   - Record, Send, undo, play, the version chip, the pen and (in its popover) the pen colors and the eraser are
-    visible, inside the viewport and at least 44 px. The timeline is at least 44 px tall and wide. The video is full
+    visible, inside the viewport and at least 40 px. The timeline is at least 44 px tall and wide. The video is full
     width (portrait) or nearly the full height (landscape).
   - Landscape: the touch hint shows until the first comment. Portrait: no hint over Record; the comments under the
     controls say how to comment ("No comments yet"). A drag without recording starts a typed comment (the video pauses,
@@ -254,7 +254,8 @@ and a plain video, on the iPhone 13 and iPhone 15:
 
 **`21-review-webkit`** (new only; WebKit only, `RETAKE_E2E_WEBKIT`): the same review page on the iPhone 13 and
 iPhone 15: the comments fill the space between the controls and Record and Send, with no comments and with 8 (the
-list scrolls inside it, Send doesn't move, the bubble goes to To do), screenshots `comments-0`, `comments-8` and
+list scrolls inside it, it has room for three one-line comments and shows three, Send doesn't move, the bubble goes
+to To do), screenshots `comments-0`, `comments-8` and
 `comments-8-scrolled`; every control at least 40 px and inside the screen and the visual viewport, nothing sideways;
 the pen's popover; a typed comment with a drawing, saved with its Save; the version menu; recording (a Web Audio stand-in for
 the microphone, and a stand-in recorder where WebKit has none), with Send not moving; and the home's Settings.

@@ -569,6 +569,34 @@
     padding: 14px 10px;
     margin: -14px -10px;
   }
+  /* A phone in portrait, under the video: compact, so three one-line comments show on an iPhone 15 between the
+     controls and Record. The header is one 44 px row, the box 44 px, the cards tighter; every target stays 40 px or
+     more (⋯ and the time reach past the first line). */
+  html[data-layout='portrait'] #side:not(.drawer) header {
+    height: 44px;
+  }
+  html[data-layout='portrait'] #side .compose {
+    padding-top: 4px;
+  }
+  html[data-layout='portrait'] #side .compose textarea {
+    min-height: 44px;
+    padding-top: 9px;
+    padding-bottom: 9px;
+  }
+  html[data-layout='portrait'] #side .item {
+    padding-top: 7px;
+    padding-bottom: 7px;
+  }
+  html[data-layout='portrait'] #side .line1 {
+    min-height: 22px;
+  }
+  html[data-layout='portrait'] #side .text {
+    margin-top: 1px;
+  }
+  html[data-layout='portrait'] #side .more {
+    margin-top: -9px;
+    margin-bottom: -9px;
+  }
 
   #side .empty {
     margin: 64px 24px;
