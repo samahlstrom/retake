@@ -198,7 +198,7 @@ test('a theme in ~/.config/retake/theme applies with no flag: tokens, parts, nam
   expect(css.headers.get('x-content-type-options')).toBe('nosniff');
   expect((await fetch(`${s.url}theme/fonts/NotoSerif-Regular.woff2`)).headers.get('content-type')).toBe('font/woff2');
   expect((await fetch(`${s.url}p/alpha/theme/logo.svg`)).headers.get('content-type')).toBe('image/svg+xml');
-  expect(s.logTail()).toContain('retake: theme ');
+  expect(readFileSync(s.log, 'utf8')).toContain('retake: theme ');
   const page = await newPage(browser);
   try {
     await expectBrand(page, s.url);
@@ -254,7 +254,7 @@ test('a broken theme never breaks the page; the server and retake theme check sa
     await page.context().close();
   }
   expect(pageErrors.slice(before)).toEqual([]);
-  expect(s.logTail()).toContain('retake: theme: theme.toml is ignored');
+  expect(readFileSync(s.log, 'utf8')).toContain('retake: theme: theme.toml is ignored');
   const check = spawnSync(RETAKE_BIN, ['theme', 'check', THEME], { encoding: 'utf8' });
   expect(check.status).toBe(1);
   expect(check.stdout).toContain('--gone-token isn\'t a token');
