@@ -469,6 +469,11 @@ export class Review {
   get kindDrawer(): boolean {
     return !!this.kindShown && this.layoutMode === 'portrait';
   }
+  /** A phone in portrait on a video: the comments always fill the space between the controls and Record (spec/notes.md,
+   * "On a phone"), so it is never empty; the speech bubble goes to them instead of hiding them. */
+  get commentsPinned(): boolean {
+    return this.layoutMode === 'portrait' && !this.kindShown;
+  }
 
   /** The anchor the version slot gives now, or null (none, or it failed). */
   anchorHere(): Anchor | null {
@@ -2189,7 +2194,7 @@ export class Review {
         content: true,
         everShown: n.everShown,
         open: n.open,
-        phoneOpen: n.phoneOpen,
+        phoneOpen: n.phoneOpen || this.commentsPinned,
         phone: this.phone,
       }),
       phone: this.phone,
@@ -2204,9 +2209,16 @@ export class Review {
     };
   }
 
-  /** N, the pill, or the column's ›. Nothing without the notes routes (so the remembered state isn't flipped blind). */
+  /** N, the pill, or the column's ›. Nothing without the notes routes (so the remembered state isn't flipped blind).
+   * Where the comments are pinned (a phone in portrait) it goes to them: To do, from the top. */
   toggleSidebar = (): void => {
-    if (this.notes.available) this.notes.toggle(this.phone);
+    if (!this.notes.available) return;
+    if (this.commentsPinned) {
+      this.showComments('todo');
+      if (typeof document !== 'undefined') document.querySelector('#side .vp')?.scrollTo?.({ top: 0 });
+      return;
+    }
+    this.notes.toggle(this.phone);
   };
 
   /** Seek and wait until the frame is there (or a short while). */

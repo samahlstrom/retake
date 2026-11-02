@@ -7,7 +7,8 @@
 // - recording: REC and the time, nothing in the bar moves, and the pen draws into the take;
 // - the comments' header: the version menu ("v6 → v7 · 1 to do") switches versions;
 // - Send says Send, never an agent; held, it lists the agents (two here) and the pick goes with that send; with one
-//   agent (a second server) holding it is a plain Send.
+//   agent (a second server) holding it is a plain Send;
+// - a list of 30 comments scrolls inside the comments column.
 // Screenshots (RETAKE_E2E_SHOTS, else .retake-work/review2-shots): idle, recording, the pen's popover, a typed comment
 // with a drawing, the version menu and the home's settings.
 import { expect, test, type Browser, type Page } from '@playwright/test';
@@ -294,6 +295,34 @@ test('Send held with one agent is a plain Send', async ({ browser }) => {
     await page.context().close();
     page = main;
     await one.stop();
+  }
+});
+
+test('a long list scrolls inside the comments column', async ({ browser }) => {
+  const { dir, config } = setup('comment-long', ['solo']);
+  const long = await startServer('comment-long', dir, PORTS.crash, [], { env: { XDG_CONFIG_HOME: config } });
+  const main = page;
+  try {
+    for (let i = 0; i < 30; i++) {
+      const r = await fetch(`${long.url}p/alpha/api/notes`, { method: 'POST', body: JSON.stringify({ version: 'v6', t: 1 + i, text: `Comment ${i + 1}` }) });
+      expect(r.status).toBe(201);
+    }
+    await openReview(browser, long.url);
+    await expect(page.locator('#side .item')).toHaveCount(30, { timeout: 10_000 });
+    const side = (await box('#side'))!;
+    const vp = await page.locator('#side .vp').evaluate((el) => ({ scroll: el.scrollHeight, client: el.clientHeight }));
+    expect(vp.client, 'the list is no taller than the column').toBeLessThan(side.height);
+    expect(vp.scroll, 'and scrolls').toBeGreaterThan(vp.client);
+    const last = page.locator('#side .item').last();
+    await last.scrollIntoViewIfNeeded();
+    await expect(last).toBeInViewport();
+    const lb = (await last.boundingBox())!;
+    expect(lb.y + lb.height, 'the last comment shows inside the column').toBeLessThanOrEqual(side.y + side.height + 0.5);
+    expect(pageErrors).toEqual([]);
+  } finally {
+    await page.context().close();
+    page = main;
+    await long.stop();
   }
 });
 

@@ -133,16 +133,23 @@ for (const o of [{ name: 'portrait', width: 390, height: 844 }, { name: 'landsca
       else expect(ink.height).toBeGreaterThan(0.8 * o.height);
     });
 
-    test('a touch hint until the first comment; a drag without recording starts a typed comment', async () => {
+    test('how to comment until the first comment; a drag without recording starts a typed comment', async () => {
+      // Landscape: a touch hint over the video. Portrait: the comments under the controls say it (they are always
+      // there), so there is no hint line over Record.
       const hint = p.page.locator('#hint');
-      await expect(hint).toHaveText('Draw on the video or type to comment · Record to talk');
-      await expect(hint).not.toHaveClass(/gone/);
+      if (o.name === 'portrait') {
+        await expect(hint).toHaveCount(0);
+        await expect(p.page.locator('#side .empty')).toHaveText(/^No comments yet\s*Draw on the video, type below, or tap Record and talk\.$/);
+      } else {
+        await expect(hint).toHaveText('Draw on the video or type to comment · Record to talk');
+        await expect(hint).not.toHaveClass(/gone/);
+      }
       await p.ui.touchDrag(loop(0.5, 0.5, 0.08));
       await sleep(300);
       const s = await p.ui.state();
       expect(s).toMatchObject({ take: null, strokes: 0, rec: false, toast: '', paused: true });
       expect(await p.page.evaluate(() => window.__review.draft?.lines)).toBe(1);
-      await expect(hint).toHaveClass(/gone/);
+      if (o.name === 'landscape') await expect(hint).toHaveClass(/gone/);
       // The drag neither scrolled nor zoomed the page.
       expect(await p.page.evaluate(() => [scrollX, scrollY, visualViewport?.scale ?? 1])).toEqual([0, 0, 1]);
       // Portrait opened the comments with the box at their bottom: Cancel drops the comment and its line. Landscape
@@ -159,7 +166,8 @@ for (const o of [{ name: 'portrait', width: 390, height: 844 }, { name: 'landsca
       await p.ui.waitFor(recording, 8000);
       await sleep(300);
       expect(await p.page.locator('#ink').boundingBox(), 'the video does not move when recording starts').toEqual(frame);
-      await expect(p.page.locator('#hint')).toHaveClass(/gone/);
+      if (o.name === 'landscape') await expect(p.page.locator('#hint')).toHaveClass(/gone/);
+      else await expect(p.page.locator('#hint')).toHaveCount(0);
       await expect(p.page.locator('#recLabel')).toHaveText(/^REC \d:\d\d$/);
       await expect(p.page.locator('#recKey')).toHaveText('S1');
       await p.ui.pen('green', true);

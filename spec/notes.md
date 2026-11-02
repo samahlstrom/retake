@@ -212,6 +212,13 @@ heads for (`v5`), so they are still there once the draft becomes that version.
   earlier version still has something to do, the menu's button has a small dot, and its title says what (`Open on
   earlier versions: v6 · 2, v3 · 91`). A single version shows its label without a menu. This replaced the version
   strip and the "Open on earlier versions" line; the bar's version picker stays.
+- **On a phone.** In portrait the comments always fill the space between the controls (under the video) and Record
+  and Send: the header (with To do · Done in its row), the shown version's list, which scrolls inside that space, and
+  the comment box at the bottom. Nothing between them is ever left empty, with no comments ("No comments yet" and how
+  to make one, which replaces the touch hint over Record) or with many. The speech bubble over the video (with the to-do
+  count) stays and goes to them: To do, scrolled to the top; it doesn't hide them. In landscape (no room beside the
+  video) they are an overlay the bubble opens and closes, and on an extension's version a drawer over its page, as
+  before. Every control there is at least 40 px, and nothing reaches past the screen's edges.
 - **Where a comment goes.** Comments on vN become edits in vN+1 (spec/automation.md): each comment's `target` is the
   version its edit goes in, made or updated in place (a comment on v7 goes into v8 even once v8 exists; one on v8
   makes v9), and `later` names a version after the target that exists already. The page says it in the same few

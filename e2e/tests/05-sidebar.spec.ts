@@ -485,22 +485,29 @@ test('a drawing comment shows its strokes over the still of its moment', async (
 });
 
 // ------------------------------------------------------------------ phone
-test('phone: the list sits under the controls behind a toggle', async () => {
+test('phone: the list always fills the space under the controls; the bubble goes to it', async () => {
   await page.setViewportSize(PHONE);
   await page.reload();
   await ui.waitFor(READY, 20_000);
   await ui.waitFor(() => window.__review.notes!.available, 8000);
-  expect(await sidebar()).toMatchObject({ phone: true, panel: false, toggle: true });
-  await expect(page.locator('#side')).toBeHidden();
-  await page.locator('#sideToggle').click();
-  await ui.waitFor(() => window.__review.sidebar!.panel, 3000);
-  // The phone layout (portrait): the list sits under the phone controls (#pbar), and Record stays on screen below it.
+  // The phone layout (portrait): the list sits under the phone controls (#pbar) down to Record, which stays on screen
+  // below it; nothing is left empty between them.
   expect(await page.evaluate(() => document.documentElement.dataset.layout)).toBe('portrait');
-  const side = await box('#side'), pbar = await box('#pbar'), rec = await box('#precord');
-  expect(side.y).toBeGreaterThanOrEqual(pbar.y + pbar.height - 1);
+  expect(await sidebar()).toMatchObject({ phone: true, panel: true, toggle: true });
+  await expect(page.locator('#side')).toBeVisible();
+  // (polled: the stage takes the video's shape once it has loaded)
+  await expect.poll(async () => {
+    const side = await box('#side'), pbar = await box('#pbar'), rec = await box('#precord');
+    return Math.max(Math.abs(side.y - pbar.y - pbar.height), Math.abs(rec.y - side.y - side.height));
+  }, { message: 'no gap above or below the comments' }).toBeLessThan(1.5);
+  const side = await box('#side'), rec = await box('#precord');
   expect(side.width).toBeCloseTo(PHONE.width, 0);
   expect(rec.y + rec.height).toBeLessThanOrEqual(PHONE.height + 1);
-  expect(rec.y).toBeGreaterThanOrEqual(side.y);
+  // The bubble doesn't hide it: it shows To do.
+  await page.locator('#side .tabs button', { hasText: 'Done' }).click();
+  await page.locator('#sideToggle').click();
+  expect(await sidebar()).toMatchObject({ panel: true });
+  await expect(page.locator('#side .tabs button', { hasText: 'To do' })).toHaveAttribute('aria-selected', 'true');
   await seek(4);
   await sleep(300);
   await shot('sidebar-newest-phone.png');

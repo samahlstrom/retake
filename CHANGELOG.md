@@ -4,6 +4,17 @@ All notable changes are listed here. Versions follow semver once the first relea
 
 ## Unreleased
 
+### Phones, paused tasks and recordings
+- Phone (portrait): the comments always fill the space between the controls and Record and Send, with To do · Done,
+  the list (it scrolls inside) and the comment box, so nothing is left empty; the speech bubble goes to To do instead
+  of hiding them. The hint line over Record is gone there (the empty list says how to comment). The comments list
+  scrolls again wherever it is longer than its space (desktop too). ⋯ and a comment's time are 40 px tall on a phone.
+- Paused tasks: an older version's one-task-per-note paused tasks become one paused batch per target when the store
+  opens, and paused tasks of a target merge like queued ones. Send (or Retry) resumes that batch with the new comments
+  added, run by one agent; the paused comments count in Send (spec/automation.md, "Send resumes a paused batch").
+- Version numbers have at most 4 digits (`_v9999`): OBS recordings (`2026-10-17 21-30-05.mp4`) and Twitch downloads
+  (`twitch_v2903906005_3480-4520.mp4`) are no longer shown as one video at a made-up version.
+
 ### Comment at any moment: draw, type or record
 - The pen no longer needs recording. Draw on the video or type in the box at the bottom of the comments ("Comment at
   0:18 · goes into v8…"): the video pauses, the lines go with that comment, Enter saves it as a note with its time,

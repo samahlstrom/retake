@@ -307,10 +307,13 @@
   html[data-phone] #app:has(> #stage.kind) #sideToggle {
     margin-right: 60px;
   }
+  /* On a video the comments are always here, filling the free row down to Record and Send (the list scrolls inside):
+     the current version's To do, To do · Done and the comment box. */
   html[data-layout='portrait'] #side {
     grid-area: side;
     width: auto;
     min-height: 0;
+    max-height: none;
     border-left: 0;
     border-top: 1px solid var(--line);
   }

@@ -144,8 +144,8 @@ checks. It runs against both servers.
 - Done saves `answer_to`, `closed` and the image (`images.json` and `img_01.png` when the server stores images), the
   take validates against the schema, and the page posts `/done`.
 - Job events show progress, then a failure with the server's hint. A `notes` event brings in the new note.
-- An earlier take's image shows near its time, dimmed and not resizable. On a phone, the list sits under the controls
-  behind a toggle.
+- An earlier take's image shows near its time, dimmed and not resizable. On a phone (portrait), the list always fills
+  the space between the controls and Record, and the bubble shows To do instead of hiding it.
 
 **`06-mobile`** (new only): the phone layout, in Chromium's mobile emulation (`isMobile`, `hasTouch`, a coarse
 pointer), driven by taps and real touch drags (CDP touch events). There is no WebKit project yet: Playwright's
@@ -155,7 +155,8 @@ WebKit build needs Ubuntu's libicu74, libxml2 and libflite1, and doesn't launch 
   - Record, Send, undo, play, the version chip, the pen and (in its popover) the pen colors and the eraser are
     visible, inside the viewport and at least 44 px. The timeline is at least 44 px tall and wide. The video is full
     width (portrait) or nearly the full height (landscape).
-  - The touch hint shows until the first comment. A drag without recording starts a typed comment (the video pauses,
+  - Landscape: the touch hint shows until the first comment. Portrait: no hint over Record; the comments under the
+    controls say how to comment ("No comments yet"). A drag without recording starts a typed comment (the video pauses,
     no take starts), and Cancel (portrait) or Esc drops it. Drags neither scroll nor zoom the page.
   - Tapping Record opens a segment without moving the video. The pen draws into the take in the color picked from
     its popover, and Undo removes the last stroke.
@@ -248,9 +249,12 @@ and a plain video, on the iPhone 13 and iPhone 15:
 - The comments' version menu says "v6 → v7" and the to-do count, and switches versions.
 - Send says Send (the count in its title); held with two agents it lists them, nothing is sent until one is picked,
   and the tasks run the picked agent ("Sent to v7."). With one agent (a second server) holding Send is a plain Send.
+- 30 comments (a third server): the list scrolls inside the comments column, down to the last one.
 - Screenshots of each state and of the home's Settings go to `.retake-work/review2-shots/` (`RETAKE_E2E_SHOTS`).
 
 **`21-review-webkit`** (new only; WebKit only, `RETAKE_E2E_WEBKIT`): the same review page on the iPhone 13 and
-iPhone 15: every control at least 40 px and inside the screen and the visual viewport, nothing sideways; the pen's
-popover; a typed comment with a drawing, saved with its Save; the version menu; recording (a Web Audio stand-in for
+iPhone 15: the comments fill the space between the controls and Record and Send, with no comments and with 8 (the
+list scrolls inside it, Send doesn't move, the bubble goes to To do), screenshots `comments-0`, `comments-8` and
+`comments-8-scrolled`; every control at least 40 px and inside the screen and the visual viewport, nothing sideways;
+the pen's popover; a typed comment with a drawing, saved with its Save; the version menu; recording (a Web Audio stand-in for
 the microphone, and a stand-in recorder where WebKit has none), with Send not moving; and the home's Settings.

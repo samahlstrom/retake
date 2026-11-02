@@ -179,17 +179,21 @@
     border-radius: 1px;
     background: var(--text);
   }
-  /* The list and the progress floating over its bottom. The scroll area fills it absolutely: WebKit doesn't give a
-     flex item's flex item a definite height, and the list would be 0 tall. */
+  /* The list and the progress floating over its bottom. The scroll area fills it absolutely (WebKit doesn't give a
+     flex item's flex item a definite height, and the list would be 0 tall), through a wrapper: Bits' ScrollArea sets
+     its own `position: relative` inline, so placed itself it grew to its content and nothing scrolled. */
   #side .list {
     position: relative;
     flex: 1;
     min-height: 0;
     overflow: hidden;
   }
-  #side .list > .scroll {
+  #side .list > .fill {
     position: absolute;
     inset: 0;
+  }
+  #side .fill > .scroll {
+    height: 100%;
   }
 
   #side .scroll {
@@ -317,6 +321,7 @@
     display: none;
   }
   html[data-phone] #side .empty {
+    margin: 0 16px;
     padding-top: 14px;
     padding-bottom: 14px;
   }
@@ -553,10 +558,16 @@
       opacity: 1;
     }
   }
+  /* A phone: ⋯ and a comment's time are 40 px tall to the thumb, without making the first line taller. */
   html[data-phone] #side .more {
     opacity: 1;
     width: 44px;
-    height: 36px;
+    height: 40px;
+    margin: -7px -8px -7px 0;
+  }
+  html[data-phone] #side .time.jump {
+    padding: 14px 10px;
+    margin: -14px -10px;
   }
 
   #side .empty {

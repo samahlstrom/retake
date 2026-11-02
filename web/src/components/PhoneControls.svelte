@@ -1,9 +1,9 @@
 <script lang="ts">
   // The phone layout's controls (the desktop has the bar instead). The same parts, sized for a thumb (40 px and up):
   //  - portrait, under the video: the timeline; play, time, the version, then the pen and undo (#pbar). At the bottom,
-  //    in the thumb zone: the hint (once), Record and Send (#precord), and over them, only where Send can't reach an
-  //    agent, one quiet line. The free space between is the grid's `side` row (phone.css), where the comments open,
-  //    with the comment box at their bottom.
+  //    in the thumb zone: Record and Send (#precord), over them only where Send can't reach an agent one quiet line, and
+  //    a viewer's "View only". The space between is the grid's `side` row (phone.css): the comments are always there,
+  //    with the comment box at their bottom, so it is never empty.
   //  - landscape, around the video (which fills the height): the pen and undo at the left edge, Send and a big round
   //    Record at the right edge, and a slim bar at the bottom with play, time, the timeline and the version.
   // A viewer's share link has no pen, undo, Record or Send; the hint says "View only". On an extension's kind of
@@ -92,7 +92,14 @@
     </div>
   </div>
   <div id="precord" data-part="bar" style:bottom="{lift}px" bind:offsetHeight={barHeight}>
-    {#if !review.kindShown}<Hint gone={review.hintGone} touch inline viewOnly={!review.canRecord} />{/if}
+    <!-- The comments above say how to comment (their empty line, the box's placeholder), so the hint is only for a
+         viewer ("View only") or where there are no comments to show. -->
+    {#if !review.kindShown && (!review.canRecord || !review.sidebar.panel)}<Hint
+        gone={review.hintGone}
+        touch
+        inline
+        viewOnly={!review.canRecord}
+      />{/if}
     {#if review.canRecord}
       <SendNotice {review} />
       <div class="prow">

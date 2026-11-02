@@ -44,6 +44,8 @@
   const setOpen = (v: boolean) => {
     if (v !== view.panel) review.toggleSidebar();
   };
+  /** A phone in portrait: the comments are always there, and the bubble goes to them (To do, from the top). */
+  const pinned = $derived(review.commentsPinned);
 
   let searching = $state(false);
   let input = $state<HTMLInputElement | null>(null);
@@ -101,7 +103,7 @@
                   {...props}
                   data-part="sidebar-toggle"
                   class={['compact', view.panel && 'open'].filter(Boolean).join(' ')}
-                  aria-label={`${view.panel ? 'Hide' : 'Show'} comments: ${pill}`}
+                  aria-label={pinned ? `Comments: ${pill}` : `${view.panel ? 'Hide' : 'Show'} comments: ${pill}`}
                   ><svg viewBox="0 0 24 24" aria-hidden="true"
                     ><path
                       d="M6 5h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-7l-4.5 3.5V17H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z"
@@ -116,7 +118,7 @@
               {/snippet}
             </Tooltip.Trigger>
             <Tooltip.Content class="sideTip" side="left" sideOffset={8}>
-              {view.panel ? 'Hide comments' : 'Show comments'} <b>N</b>
+              {pinned ? 'To do' : view.panel ? 'Hide comments' : 'Show comments'} <b>N</b>
             </Tooltip.Content>
           </Tooltip.Root>
         {/if}
@@ -230,38 +232,40 @@
             />
           {:else}
             <div class="list">
-              <ScrollArea.Root class="scroll" type="hover">
-                <ScrollArea.Viewport class="vp">
-                  {#if view.rows.length}
-                    <ol>
-                      {#each view.rows as row (row.key)}
-                        <SidebarItem {review} {row} active={row.key === view.active} />
-                      {/each}
-                    </ol>
-                  {:else if review.commentSearch.trim()}
-                    <p class="empty">No comments match “{review.commentSearch.trim()}”</p>
-                  {:else if review.commentFilter === 'done'}
-                    <p class="empty">Nothing done yet<span>Comments the agent finishes land here.</span></p>
-                  {:else if !job}
-                    <p class="empty">
-                      {review.versionRows.length ? 'All done' : 'No comments yet'}<span
-                        >{!review.canRecord
-                          ? 'Comments will show up here.'
-                          : review.kindShown
-                            ? review.touch
-                              ? 'Type one below, or tap Record and talk it out.'
-                              : 'Type one below, or press R and talk it out.'
-                            : review.touch
-                              ? 'Draw on the video, type below, or tap Record and talk.'
-                              : 'Draw on the video, type below, or press R and talk.'}</span
-                      >
-                    </p>
-                  {/if}
-                </ScrollArea.Viewport>
-                <ScrollArea.Scrollbar orientation="vertical" class="bar">
-                  <ScrollArea.Thumb class="thumb" />
-                </ScrollArea.Scrollbar>
-              </ScrollArea.Root>
+              <div class="fill">
+                <ScrollArea.Root class="scroll" type="hover">
+                  <ScrollArea.Viewport class="vp">
+                    {#if view.rows.length}
+                      <ol>
+                        {#each view.rows as row (row.key)}
+                          <SidebarItem {review} {row} active={row.key === view.active} />
+                        {/each}
+                      </ol>
+                    {:else if review.commentSearch.trim()}
+                      <p class="empty">No comments match “{review.commentSearch.trim()}”</p>
+                    {:else if review.commentFilter === 'done'}
+                      <p class="empty">Nothing done yet<span>Comments the agent finishes land here.</span></p>
+                    {:else if !job}
+                      <p class="empty">
+                        {review.versionRows.length ? 'All done' : 'No comments yet'}<span
+                          >{!review.canRecord
+                            ? 'Comments will show up here.'
+                            : review.kindShown
+                              ? review.touch
+                                ? 'Type one below, or tap Record and talk it out.'
+                                : 'Type one below, or press R and talk it out.'
+                              : review.touch
+                                ? 'Draw on the video, type below, or tap Record and talk.'
+                                : 'Draw on the video, type below, or press R and talk.'}</span
+                        >
+                      </p>
+                    {/if}
+                  </ScrollArea.Viewport>
+                  <ScrollArea.Scrollbar orientation="vertical" class="bar">
+                    <ScrollArea.Thumb class="thumb" />
+                  </ScrollArea.Scrollbar>
+                </ScrollArea.Root>
+              </div>
               <div class="strip" data-part="progress" aria-live="polite">
                 {#if notes.deleted.length}
                   <div class="deleted-comment" role="status">
