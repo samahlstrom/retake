@@ -307,6 +307,19 @@ Versioning). Classes and ids are not part of the API and can change in any relea
 | `nav-ext-video` | A video in that section (an idea: only an extension's version) | home |
 | `ext-slot` | Where an extension's UI mounts; `data-ext` is its id, `data-slot` the slot | home, review |
 | `comment-line` | The comment box at the bottom of the comments ("Comment at 0:18 · goes into v8…", or "Comment for the agent…" on an extension's version) | review |
+| `chat` | The chat with the agent, in place of the comments on a script (spec/chat.md) | review |
+| `chat-thread` | Its messages | review |
+| `chat-person` | A message you sent (your words, images, a voice message) | review |
+| `chat-agent` | The agent's words | review |
+| `chat-tool` | One quiet line for what the agent is doing (Editing the script) | review |
+| `chat-question` | The agent's question in the chat, with its choices | review |
+| `chat-info` | A quiet line from Retake in the chat (Stopped) | review |
+| `chat-voice` | A voice message on its way (Transcribing…) | review |
+| `chat-status` | The one quiet line under the chat (Working…, Building v1…) | review |
+| `chat-composer` | Ask the agent…: attach, the words, the mic and the send arrow | review |
+| `chat-send` | The chat's send arrow | review |
+| `chat-stop` | The chat's stop square while the agent replies | review |
+| `chat-pill` | On a phone, the bar's Ask the agent… pill that opens the chat | review |
 | `brand` | The name (and logo) at the top left of the home | home |
 | `logo` | The theme's logo inside `brand` | home |
 | `brand-name` | The name inside `brand` | home |

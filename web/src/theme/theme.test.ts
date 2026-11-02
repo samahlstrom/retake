@@ -30,8 +30,8 @@ const COLOUR_OK = new Set([TOKEN_FILE, 'src/lib/constants.ts', 'src/lib/theme.ts
 /** Files not themed yet (none: keep it that way). */
 const NOT_THEMED_YET = new Set<string>([]);
 /** Custom properties that aren't tokens but layout or live values: a stage's aspect ratio, the tree's width and indent,
- * Record's voice level, Bits UI's. */
-const INTERNAL_VAR = /^--(ar|nav-w|depth|indent|level|bits-[a-z-]+)$/;
+ * Record's voice level, the phone chat sheet's place above the keyboard, Bits UI's. */
+const INTERNAL_VAR = /^--(ar|nav-w|depth|indent|level|chat-top|chat-kb|bits-[a-z-]+)$/;
 
 const NAMED =
   'white|black|red|green|blue|yellow|orange|purple|pink|gr[ae]y|silver|navy|teal|maroon|olive|lime|aqua|fuchsia|gold|' +
