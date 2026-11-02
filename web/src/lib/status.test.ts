@@ -3,9 +3,11 @@ import type { AutomationState, EditingTask, EditingWorker } from './automation.s
 import {
   activeTask,
   agentStatus,
+  batchLine,
   commentStatus,
   managesAgent,
   pausedReason,
+  pendingNotes,
   sendButton,
   sendNotice,
   unsent,
@@ -134,6 +136,23 @@ describe('the agent and its computer', () => {
       1001,
     );
     expect(s).toMatchObject({ working: true });
+  });
+  it('a batch is one group: the comments the agent works on, and the ones on their way into the same version', () => {
+    const running = task('running', { notes: [1, 2, 3, 4], done: [1], dropped: [4], target: 'v7' });
+    expect(pendingNotes(running)).toEqual([2, 3]);
+    // Only the comments for the same version are on their way into it; the next version's wait their turn.
+    const later = task('queued', { id: 't3', notes: [7], target: 'v8' });
+    const s = agentStatus(
+      automation({ tasks: [running, task('queued', { id: 't2', notes: [5, 6], target: 'v7' }), later] }),
+      1001,
+    );
+    expect(s).toMatchObject({ working: true, batch: 2, next: 2 });
+    expect(batchLine(s)).toBe('Agent working on 2 comments · 2 more coming');
+    expect(batchLine({ ...s, batch: 1, next: 0 })).toBe('Agent working on 1 comment');
+    // Nothing runs: no line, however much waits (the comments say Working on their own).
+    const waiting = agentStatus(automation({ tasks: [task('queued', { notes: [5, 6] })] }), 1001);
+    expect(waiting).toMatchObject({ working: false, batch: 0, next: 0 });
+    expect(batchLine(waiting)).toBeNull();
   });
   it('reads local (C1) and the local blocked reason', () => {
     const s = agentStatus(automation({ local: true, blocked: 'Install Claude Code or Codex to edit' }), 1001);

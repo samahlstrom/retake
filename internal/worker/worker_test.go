@@ -3,10 +3,13 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -242,6 +245,13 @@ func TestCancellingAgentStopsItsChildBeforeHandoff(t *testing.T) {
 	}
 }
 
+func must[T any](v T, err error) T {
+	if err != nil {
+		panic(err)
+	}
+	return v
+}
+
 // TestAgentProcess is a deterministic stand-in for a provider, used by integration tests. It consumes the same
 // context/report contract as Claude and Codex without using a subscription or pretending to transcribe audio.
 func TestAgentProcess(t *testing.T) {
@@ -279,6 +289,45 @@ func TestAgentProcess(t *testing.T) {
 			}
 			return
 		}
+	case "batch": // a plain project's batch: logs its launch and notes, waits for $BATCH_DIR/go and $BATCH_PEERS launches
+		var c plainContext
+		if e = json.Unmarshal(b, &c); e != nil || len(c.Family) == 0 {
+			t.Fatal("plain context", e)
+		}
+		dir, cwd := os.Getenv("BATCH_DIR"), filepath.Base(must(os.Getwd()))
+		log, e := os.OpenFile(filepath.Join(dir, "launches"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+		if e != nil {
+			t.Fatal(e)
+		}
+		_, _ = fmt.Fprintf(log, "%s %v\n", cwd, c.Task.Notes)
+		_ = log.Close()
+		peers, _ := strconv.Atoi(os.Getenv("BATCH_PEERS"))
+		for deadline := time.Now().Add(60 * time.Second); ; time.Sleep(50 * time.Millisecond) {
+			got, _ := os.ReadFile(filepath.Join(dir, "launches"))
+			if _, e = os.Stat(filepath.Join(dir, "go")); e == nil && strings.Count(string(got), "\n") >= peers {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatal("the batch's gate never opened")
+			}
+		}
+		video, e := os.ReadFile(c.Family[len(c.Family)-1].Path)
+		if e == nil {
+			e = os.WriteFile(os.Getenv("RETAKE_OUTPUT"), video, 0o600)
+		}
+		if e != nil {
+			t.Fatal(e)
+		}
+		got, _ := os.ReadFile(filepath.Join(dir, "launches"))
+		round := strings.Count(string(got), cwd+" ")
+		report := agentResult{State: "completed", Message: "Round " + strconv.Itoa(round)}
+		if slices.Contains(c.Task.Notes, 1) {
+			report.Notes = map[string]string{"1": "Fixed note 1", "x": "not a note"}
+		}
+		if e = writeJSON(os.Getenv("RETAKE_REPORT"), report); e != nil {
+			t.Fatal(e)
+		}
+		return
 	case "plain-lazy": // a plain project's agent that says it's done without a video
 		if e = writeJSON(os.Getenv("RETAKE_REPORT"), agentResult{State: "completed", Message: "Done, I think"}); e != nil {
 			t.Fatal(e)

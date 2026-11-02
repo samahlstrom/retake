@@ -185,6 +185,26 @@ func NextVersionFile(fam []family.Version, ext string) (label, path string, err 
 	return fmt.Sprintf("v%d", top+1), versionPath(parent.Path, m, top+1, ext), nil
 }
 
+// VersionFile is where version n of the family is: its file when it has one (exists), else where it goes, named after
+// the newest version's file as NextVersionFile names one (spec/automation.md, "Comments on vN become edits in vN+1").
+func VersionFile(fam []family.Version, n int, ext string) (label, path string, exists bool, err error) {
+	label = fmt.Sprintf("v%d", n)
+	for _, v := range fam {
+		if strings.EqualFold(v.Label, label) {
+			return label, v.Path, true, nil
+		}
+	}
+	if len(fam) == 0 {
+		return "", "", false, errorf(CodeNotFound, "the project has no version to follow")
+	}
+	parent := fam[len(fam)-1]
+	m := nameRE.FindStringSubmatch(family.Stem(filepath.Base(parent.Path)))
+	if m == nil {
+		return "", "", false, errorf(CodeBadRequest, "%s has no _v<N> in its name", filepath.Base(parent.Path))
+	}
+	return label, versionPath(parent.Path, m, n, ext), false, nil
+}
+
 // FirstVersionFile is where the first cut of a video that has only an extension's version (v0) goes: v1, in a v1/
 // folder named after the video's folder (spec/ignition.md, "Start v1"), since v0/ already makes it use version
 // folders.

@@ -65,9 +65,11 @@ export interface Row {
   anchor?: Anchor | null;
   /** A typed comment on a video: its pen lines, to draw on the video and on its card. */
   strokes?: HistoryStroke[];
-  /** The version its edit goes into: a comment on v7 becomes an edit in v8 (the server's `into`, else the next
+  /** The version its edit goes into: a comment on v7 becomes an edit in v8 (the server's `target`, else the next
    * number). Null for a typed comment on an extension's document. */
   into: string | null;
+  /** A version after `into` that exists already (the server's `later`): the edit updates `into` in place. */
+  later: string | null;
 }
 
 /** The chip of a comment or question about a document: the heading it's under, else its file. */
@@ -182,11 +184,12 @@ export function toRow(item: NoteItem, newest: boolean, ctx: ViewContext): Row {
     anchor: item.anchor ?? null,
     strokes: item.kind === 'note' && item.strokes?.length ? typedStrokes(item) : undefined,
     into:
-      typeof item.into === 'string' && item.into
-        ? item.into
+      typeof item.target === 'string' && item.target
+        ? item.target
         : !!item.anchor || ((item.key ?? '').startsWith('doc/') && item.wants !== 'version')
           ? null
           : intoVersion(item.version || ctx.shown),
+    later: typeof item.later === 'string' && item.later ? item.later : null,
   };
 }
 

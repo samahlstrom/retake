@@ -141,12 +141,7 @@ func redactAutomation(a *project.AutomationState) {
 
 func (s *Server) workerRoute(w http.ResponseWriter, r *http.Request, p []string, st *project.Store) {
 	if is(p, "api", "worker", "poll") && r.Method == http.MethodPost {
-		var b struct {
-			Worker project.EditingWorker `json:"worker"`
-			Task   string                `json:"task"`
-			Lease  string                `json:"lease"`
-			Told   []int64               `json:"told"`
-		}
+		var b project.WorkPoll
 		if json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&b) != nil || !project.ValidWorkID(b.Worker.ID) || !project.ValidWorkID(b.Worker.Session) || len(b.Worker.Name) > 100 || len(b.Worker.Agents) > 16 {
 			s.fail(w, r, 400, "invalid worker")
 			return
@@ -167,11 +162,11 @@ func (s *Server) workerRoute(w http.ResponseWriter, r *http.Request, p []string,
 			s.storeFailed(w, r, err)
 			return
 		}
-		if len(b.Told) > 1000 {
+		if len(b.Told) > 1000 || len(b.Join) > 1000 {
 			s.fail(w, r, 400, "invalid worker")
 			return
 		}
-		t, err := st.PollWork(b.Worker, b.Task, b.Lease, b.Told...)
+		t, next, err := st.PollWorker(b)
 		if err != nil {
 			s.fail(w, r, 409, err.Error())
 			return
@@ -208,14 +203,22 @@ func (s *Server) workerRoute(w http.ResponseWriter, r *http.Request, p []string,
 			s.storeFailed(w, r, err)
 			return
 		}
-		disk, _ := s.diskVersions(&state)
+		disk, floor := s.diskVersions(&state)
 		versions := disk
 		for _, v := range state.Renders {
 			if !v.Draft {
 				versions++
 			}
 		}
-		s.json(w, r, 200, project.WorkAssignment{Task: t, Notes: notes, Config: state.Config, Versions: versions, Questions: questions})
+		from := ""
+		if t != nil && project.LabelNumber(t.Target) > 0 && project.LabelNumber(t.Target) < state.NextVersion(floor)-1 {
+			// An older version than the newest is updated from its own source, not the newest one's.
+			if v := state.Render(t.Target); v != nil && !v.Draft && v.Label == t.Target {
+				from = v.ID
+			}
+		}
+		s.json(w, r, 200, project.WorkAssignment{Task: t, Notes: notes, Config: state.Config, Versions: versions, Questions: questions,
+			Next: next, From: from})
 		return
 	}
 	// Every request after registration belongs to the live worker session. A token alone cannot impersonate
@@ -301,7 +304,8 @@ func (s *Server) workerRoute(w http.ResponseWriter, r *http.Request, p []string,
 		return
 	case is(p, "api", "worker", "report") && r.Method == http.MethodPost:
 		var b project.WorkReport
-		if json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&b) != nil || b.Worker != id {
+		// A batch's report may say what changed for each of its notes: up to 1000 of 4000 characters.
+		if json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<20)).Decode(&b) != nil || b.Worker != id || len(b.Join) > 1000 {
 			s.fail(w, r, 400, "invalid report")
 			return
 		}
@@ -324,9 +328,10 @@ func (s *Server) workerRoute(w http.ResponseWriter, r *http.Request, p []string,
 			}
 			stream := remoteStream(v)
 			err = st.EmitVersion(project.VersionEvent{Label: v.Label, Why: "push", Stream: &stream})
-		} else if err == nil && b.State == "completed" && b.VersionChecked && !s.opts.RemoteFiles {
-			// A plain project's new version file on this computer (no files report tells the pages): say it, so they
-			// follow it (a video with only v0 gets its first cut, say).
+		} else if err == nil && b.State == "completed" && b.VersionChecked {
+			// A plain project's new or updated version file: say it, so the pages follow it (a video with only v0 gets
+			// its first cut, say), and play its new media when it was updated in place (a files report only tells them
+			// about new labels).
 			err = st.EmitVersion(project.VersionEvent{Label: b.Version, Why: "push"})
 		}
 	case is(p, "api", "worker", "render") && r.Method == http.MethodPost:

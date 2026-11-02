@@ -34,6 +34,10 @@ type Item struct {
 	Anchor     *Anchor      `json:"anchor,omitempty"`   // typed comments: where in a document it points
 	Wants      string       `json:"wants,omitempty"`    // typed comments: "version" when it asks for a cut
 	Strokes    []Stroke     `json:"strokes,omitempty"`  // a typed comment on a video: its pen lines
+	// TargetVersion is the version the note's edit goes in, and Later the newest version after it that exists already
+	// (spec/automation.md, "Comments on vN become edits in vN+1"). The notes route sets them.
+	TargetVersion string `json:"target,omitempty"`
+	Later         string `json:"later,omitempty"`
 
 	imagesOf *Note // the note whose images this item shows
 }

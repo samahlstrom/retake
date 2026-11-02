@@ -140,39 +140,64 @@ func (r *runner) plainContext(a project.WorkAssignment, vs []family.Version, out
 	return c
 }
 
-// plainPrompt is the task prompt of a project without a timeline. newest is "" when the video has no cut yet (only
-// an extension's version, v0). extra is the extensions' section.
-func plainPrompt(contextPath, newest, output, next, reportPath, extra string) string {
-	from := fmt.Sprintf("starting from the version the notes were made on (the newest is %q)", newest)
-	if newest == "" {
-		from = "building the video's first cut from what the notes and the video's folder give you (it has no cut yet)"
+// plainPrompt is the task prompt of a project without a timeline. from is the video to start from ("" when the video
+// has no cut yet, only an extension's version, v0), updating says it is the task's target itself, and into says
+// where the result goes. extra is the extensions' section.
+func plainPrompt(contextPath, from string, updating bool, output, into, reportPath, extra string) string {
+	start := fmt.Sprintf("starting from %q, the version the notes were made on", from)
+	if updating {
+		start = fmt.Sprintf("starting from %q: the version these notes go in, which exists already with earlier changes to keep (comments on a version become edits in the next one)", from)
+	}
+	if from == "" {
+		start = "building the video's first cut from what the notes and the video's folder give you (it has no cut yet)"
 	}
 	return fmt.Sprintf(`You are editing a Retake video project in the current working directory. It has no edit timeline: its versions are finished video files.
 Read the project instructions, then the durable task context at %q: the notes, and under "family" every version with its path.
 Only the note IDs in task.notes are assigned (minus task.done, finished in an earlier attempt). Other notes are context: check them and prior events for conflicting or already-applied feedback. Each note names the version it was made on and its times. Saved annotated stills, when available, are note-<id>.png in this task directory. Attached reference images are note-<id>-<file>; their boxes and original video times are in the context. A note's "missing" says which of its files couldn't be given to you and what you have instead.
-Make the requested change with the tools you have (ffmpeg, for example), %s. Write the result as one video file to %q (H.264 and AAC in an MP4 play everywhere). Retake adds it to the project as the next version, %s. Never edit, move or delete the existing versions or anyone else's files.
+Make the requested change with the tools you have (ffmpeg, for example), %s. Write the result as one video file to %q (H.264 and AAC in an MP4 play everywhere). Retake puts it in the project as %s. Never edit, move or delete the existing versions or anyone else's files.
 The next agent may differ from you; leave useful context on disk. Do not delete or edit the worker's identity, lock, logs, context files or ask.json.
-`, contextPath, from, output, next) + extra + askRules(reportPath, "A completed report is only a request: Retake checks that the new video plays before resolving the comment. Do not run retake push or mark notes complete yourself.")
+`, contextPath, start, output, into) + extra + askRules(reportPath, "A completed report is only a request: Retake checks that the new video plays before resolving the comment. Do not run retake push or mark notes complete yourself.")
 }
 
-// pushPlain puts a plain task's result into the project as the next version, and returns its label: the agent's
-// video at output, moved to the next version's name, or else a version the agent added itself (not in before).
-// Without one, problem says why, as a sentence for the page.
-func (r *runner) pushPlain(output string, before []string) (label, problem string) {
+// plainTarget is where a plain task's video goes: its target's file, existing or not, else (a task from before
+// targets) the next version's (spec/automation.md, "Comments on vN become edits in vN+1").
+func (r *runner) plainTarget(target, ext string) (label, dest string, exists bool, err error) {
+	vs := r.onDisk(false)
+	n := project.LabelNumber(target)
+	switch {
+	case n == 0 && len(vs) == 0, n == 1 && len(vs) == 0:
+		label, dest = agent.FirstVersionFile(r.opts.Root, ext) // only v0 so far: v1
+		return label, dest, false, nil
+	case n == 0:
+		label, dest, err = agent.NextVersionFile(vs, ext)
+		return label, dest, false, err
+	}
+	return agent.VersionFile(vs, n, ext)
+}
+
+// pushPlain puts the agent's video in as the task's target: a new version, or in the place of the target when it
+// exists, its earlier file kept in .retake/worker/history/. It returns the label, or why it couldn't.
+func (r *runner) pushPlain(output, target string, before []string) (label, problem string) {
 	if st, err := os.Stat(output); err == nil && st.Mode().IsRegular() {
 		if !r.opts.Prober.Probe(output).HasDuration() {
 			return "", "The agent's video doesn't play: it has no duration."
 		}
-		var label, dest string
-		var err error
-		if vs := r.onDisk(false); len(vs) == 0 {
-			label, dest = agent.FirstVersionFile(r.opts.Root, filepath.Ext(output)) // only v0 so far: v1
-		} else if label, dest, err = agent.NextVersionFile(vs, filepath.Ext(output)); err != nil {
-			return "", "Couldn't name the next version: " + err.Error()
+		label, dest, exists, err := r.plainTarget(target, filepath.Ext(output))
+		if err != nil {
+			return "", "Couldn't name the version: " + err.Error()
+		}
+		if exists {
+			// Updated in place: the same label, the earlier file kept as its history.
+			if dest, err = r.keepHistory(label, dest, output); err != nil {
+				return "", fmt.Sprintf("Couldn't keep the earlier %s: %v", label, err)
+			}
 		}
 		if err = place(output, dest); err != nil {
 			return "", fmt.Sprintf("Couldn't add the agent's video as %s: %v", label, err)
 		}
+		r.famMu.Lock()
+		r.famAt = time.Time{} // look again: the file changed
+		r.famMu.Unlock()
 		for _, v := range r.onDisk(false) {
 			if v.Label == label {
 				return label, ""
@@ -182,7 +207,7 @@ func (r *runner) pushPlain(output string, before []string) (label, problem strin
 	}
 	var added *family.Version
 	for _, v := range r.onDisk(false) {
-		if !slices.Contains(before, v.Label) && (added == nil || v.N > added.N) {
+		if !slices.Contains(before, v.Label) && (added == nil || v.N > added.N) && (target == "" || v.Label == target) {
 			added = &v
 		}
 	}
@@ -190,6 +215,20 @@ func (r *runner) pushPlain(output string, before []string) (label, problem strin
 		return "", "The agent finished without writing a new version."
 	}
 	return added.Label, ""
+}
+
+// keepHistory moves version label's current file (dest) to .retake/worker/history/<label>-<unix ms><ext>, so the
+// agent's video can take its place, which it returns: the same path, with the new video's extension.
+func (r *runner) keepHistory(label, dest, output string) (string, error) {
+	dir := filepath.Join(r.dir, "history")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", err
+	}
+	kept := filepath.Join(dir, fmt.Sprintf("%s-%d%s", label, time.Now().UnixMilli(), filepath.Ext(dest)))
+	if err := os.Rename(dest, kept); err != nil {
+		return "", err
+	}
+	return strings.TrimSuffix(dest, filepath.Ext(dest)) + strings.ToLower(filepath.Ext(output)), nil
 }
 
 // place moves src to dest, a new file (its folder made as needed): a rename, else a copy.

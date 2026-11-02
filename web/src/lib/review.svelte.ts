@@ -82,6 +82,7 @@ import {
   agentStatus,
   commentStatus,
   managesAgent,
+  pendingNotes,
   sendButton,
   unsent,
   type AgentStatus,
@@ -332,7 +333,7 @@ export class Review {
       if (row.work) out[row.key] = live[row.work.id] ?? row.work;
       else if (row.kind === 'note') {
         // Queued since the notes were read (a sent take, just processed): the automation state knows first.
-        const t = all.findLast((t) => !!activeTask(t) && t.notes.includes(row.id));
+        const t = all.findLast((t) => !!activeTask(t) && pendingNotes(t).includes(row.id));
         if (t) out[row.key] = t;
       }
     }

@@ -13,6 +13,7 @@
   import VersionMenu from './VersionMenu.svelte';
   import CommentBox from './CommentBox.svelte';
   import ExtSlot from '../../ext/ExtSlot.svelte';
+  import { batchLine } from '../../lib/status';
   import './sidebar.css';
 
   let { review }: { review: Review } = $props();
@@ -38,6 +39,8 @@
   /** A phone: the header and To do · Done share one row (the list needs the height), unless an extension adds
    * tabs. */
   const oneRow = $derived(review.layoutMode !== 'desktop' && !review.extTabs.length && !review.kindDrawer);
+  /** "Agent working on 3 comments": the batch the agent works on, as one group. */
+  const batch = $derived(batchLine(review.agent));
   const setOpen = (v: boolean) => {
     if (v !== view.panel) review.toggleSidebar();
   };
@@ -288,6 +291,9 @@
                       ? 'Recording.'
                       : 'Recording. Comments appear here as you talk.'}
                   </div>
+                {:else if batch}
+                  <!-- The agent's batch, as one group: one line while it works (spec/automation.md, "Batches"). -->
+                  <div class="batch-line" role="status"><span class="pulse"></span>{batch}</div>
                 {/if}
               </div>
             </div>

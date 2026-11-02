@@ -637,6 +637,9 @@
   #side .recording-comment .pulse {
     background: var(--record);
   }
+  #side .batch-line .pulse {
+    background: var(--status-working);
+  }
   #side .deleted-comment {
     justify-content: space-between;
   }

@@ -378,11 +378,11 @@ func (s *Store) QuestionVisuals(id int64, url func(file string) string) (from, t
 
 func validTime(t *float64) bool { return t == nil || finite(*t) && *t >= 0 && *t <= 1e7 }
 
-// Pending is the task's notes it hasn't finished in an earlier attempt.
+// Pending is the task's notes it hasn't finished in an earlier attempt, nor dropped (spec/automation.md, "Batches").
 func (t *EditingTask) Pending() []int64 {
 	var out []int64
 	for _, id := range t.Notes {
-		if !slices.Contains(t.Done, id) {
+		if !slices.Contains(t.Done, id) && !slices.Contains(t.Dropped, id) {
 			out = append(out, id)
 		}
 	}
@@ -406,7 +406,10 @@ func Clock(t float64) string {
 	return fmt.Sprintf("%d:%02d", s/60, s%60)
 }
 
+// saveAutomation stores the state, with the tasks waiting in queued merged into one batch (spec/automation.md,
+// "Batches").
 func saveAutomation(t *tx, a AutomationState) error {
+	a.mergeQueued(t.s.Now().Unix())
 	b, err := json.Marshal(a)
 	if err != nil {
 		return err

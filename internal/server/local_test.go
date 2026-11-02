@@ -116,6 +116,16 @@ func TestSendAndFinishWithSendIgnoreTheAutoSendSwitch(t *testing.T) {
 	if err != nil || len(a.Submissions) != 1 || !a.Submissions[0].Send || a.Config.Enabled {
 		t.Fatalf("finish with send: %+v %v", a.Submissions, err)
 	}
+	// The take's processing ends (no transcriber here: it fails), so the batch doesn't wait for its notes.
+	jobs, err := st.Jobs(0)
+	if err != nil || len(jobs) == 0 {
+		t.Fatal(jobs, err)
+	}
+	for _, j := range jobs {
+		if _, err = st.Finish(j.ID, project.Fatal, "no transcriber", "", 1); err != nil {
+			t.Fatal(err)
+		}
+	}
 	// Send on a comment queues and runs with automation off.
 	if _, err = st.Sync(project.Run{Version: "v6", Comments: []project.Comment{{Key: "note", Text: "make it blue"}}}); err != nil {
 		t.Fatal(err)
@@ -178,7 +188,8 @@ func TestRendersAreDraftsUntilATaskCompletes(t *testing.T) {
 		}
 		return v
 	}
-	if _, err = st.Sync(project.Run{Version: "v6", Comments: []project.Comment{{Key: "note", Text: "make it blue"}}}); err != nil {
+	// A comment on the newest version: its edit makes the next one (comments on vN become edits in vN+1).
+	if _, err = st.Sync(project.Run{Version: fmt.Sprintf("v%d", disk), Comments: []project.Comment{{Key: "note", Text: "make it blue"}}}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = st.QueueFeedback([]int64{1}, ""); err != nil {

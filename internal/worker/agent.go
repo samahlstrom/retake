@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/samahlstrom/retake/internal/agent"
 	"github.com/samahlstrom/retake/internal/family"
 	"github.com/samahlstrom/retake/internal/project"
 )
@@ -42,7 +41,12 @@ func DefaultProfiles() []Profile {
 type agentResult struct {
 	State   string `json:"state"`
 	Message string `json:"message"`
+	// Notes is what changed for each note, by note id (spec/automation.md, "Batches"); optional.
+	Notes map[string]string `json:"notes,omitempty"`
 }
+
+// maxReport is the largest report file read: a batch's report may say what changed for each of its notes.
+const maxReport = 1 << 20
 
 // boundedLog retains a local capped diagnostic log and a short tail for provider telemetry.
 type boundedLog struct {
@@ -87,6 +91,8 @@ func (r *runner) execute(ctx context.Context, a project.WorkAssignment) outcome 
 	plain, output := r.timeline == "" && !doc, filepath.Join(dir, "output.mp4")
 	var before []string
 	var vs []family.Version
+	var from, into string // a plain task's video to start from, and where its result goes
+	updating := false
 	extra := r.extSection(a)
 	prompt := timelinePrompt(contextPath, r.timeline, reportPath, extra)
 	if doc {
@@ -94,38 +100,63 @@ func (r *runner) execute(ctx context.Context, a project.WorkAssignment) outcome 
 	}
 	if plain {
 		vs = r.onDisk(false)
-		var next string
 		if len(vs) == 0 {
 			if _, ok := r.kindVersion(); !ok {
 				return paused("The project has no version that plays")
 			}
-			next, _ = agent.FirstVersionFile(r.opts.Root, ".mp4") // a video with only v0 gets its first cut
-		} else {
-			var err error
-			if next, _, err = agent.NextVersionFile(vs, ".mp4"); err != nil {
-				return paused("Couldn't name the next version: " + err.Error())
+		}
+		// Comments on vN become edits in vN+1: the target, made or updated in place. The agent starts from the target
+		// when it exists (it has the earlier changes), else from the version the notes were made on.
+		label, dest, exists, err := r.plainTarget(t.Target, ".mp4")
+		if err != nil {
+			return paused("Couldn't name the version: " + err.Error())
+		}
+		updating = exists
+		rel := func(p string) string {
+			if rp, e := filepath.Rel(r.opts.Root, p); e == nil {
+				return rp
+			}
+			return p
+		}
+		into = fmt.Sprintf("%s (%s)", label, rel(dest))
+		switch {
+		case exists:
+			from = dest
+			into = fmt.Sprintf("%s, in place of %s (Retake keeps the earlier file)", label, rel(dest))
+		case len(vs) > 0:
+			from = newestPath(vs)
+			for _, v := range vs {
+				if project.LabelNumber(v.Label) == project.LabelNumber(label)-1 {
+					from = v.Path
+				}
 			}
 		}
 		for _, v := range vs {
 			before = append(before, v.Label)
 		}
 		_ = os.Remove(output) // an earlier attempt's: this attempt writes its own
-		newest := ""
-		if len(vs) > 0 {
-			newest = vs[len(vs)-1].Path
+		prompt = plainPrompt(contextPath, from, updating, output, into, reportPath, extra)
+	}
+	// A target older than the newest version starts from its own source; the newest one's comes back after.
+	if r.timeline != "" && !doc && a.From != "" {
+		restore, err := r.checkout(a.From)
+		if err != nil {
+			return paused("Couldn't start from that version's source: " + err.Error())
 		}
-		prompt = plainPrompt(contextPath, newest, output, next, reportPath, extra)
+		defer restore()
 	}
 	// The notes' stills and images: a missing one never stops the task (spec/automation.md, "A note's stills and
 	// images").
 	r.noteFiles(ctx, &a, dir)
-	var taskContext any = a
-	if plain {
-		taskContext = r.plainContext(a, vs, output)
+	writeContext := func(a project.WorkAssignment, path string) error {
+		if plain {
+			return writeJSON(path, r.plainContext(a, vs, output))
+		}
+		return writeJSON(path, a)
 	}
 	askEnv, fresh, endAsk := r.beginAsk(a)
 	defer endAsk()
-	if e := writeJSON(contextPath, taskContext); e != nil {
+	if e := writeContext(a, contextPath); e != nil {
 		return paused("Cannot save task context")
 	}
 	p := r.opts.Profiles[index]
@@ -138,92 +169,207 @@ func (r *runner) execute(ctx context.Context, a project.WorkAssignment) outcome 
 	if e := os.WriteFile(promptPath, []byte(prompt), 0o600); e != nil {
 		return paused("Cannot save the task prompt")
 	}
-	var usage *project.AgentUsage
-	// A copy of the extensions' files before the agent touches them, so a person can undo its edit of a document.
+	// A copy of the extensions' files before the agent touches them, so a person can undo its edit of a document: one
+	// edit per round, as each was one attempt before rounds.
 	finish := r.snapshot(t.ID)
-	defer finish()
-	if mode == OpenBackground {
+	defer func() { finish() }()
+	out := ""
+	if plain {
+		out = output
+	}
+	// Comments sent while the agent works join this run before its version is made: one working version per video
+	// (spec/automation.md, "Batches"). In herdr or tmux they're a message in the session; in the background, a
+	// follow-up round of the same agent once its run ends.
+	more := &addition{a: a, dir: dir, doc: doc, output: out, write: writeContext, k: 1,
+		full: func(contextPath, reportPath string) string {
+			switch {
+			case doc:
+				return docPrompt(contextPath, reportPath, extra)
+			case plain:
+				return plainPrompt(contextPath, from, updating, output, into, reportPath, extra)
+			}
+			return timelinePrompt(contextPath, r.timeline, reportPath, extra)
+		}}
+	var v *view
+	if mode != OpenBackground {
 		var stop *outcome
-		out := ""
-		if plain {
-			out = output
-		}
-		if usage, stop = r.background(ctx, p, prompt, dir, contextPath, reportPath, out, t.Attempt, askEnv); stop != nil {
+		if v, stop = r.openSession(ctx, mode, p, t, promptPath, fresh); stop != nil {
 			return *stop
 		}
-	} else if stop := r.interactive(ctx, mode, p, t, promptPath, reportPath, fresh); stop != nil {
-		return *stop
 	}
-	b, e := os.ReadFile(reportPath) //nolint:gosec // generated report path in this task's directory
-	if e != nil {
-		return paused("Agent exited without a completion report or question; working files are preserved")
+	var usage *project.AgentUsage
+	logName := fmt.Sprintf("agent-%d.log", t.Attempt)
+	roundNotes, changes, messages := t.Pending(), map[int64]string{}, []string{}
+	done := func(o outcome) outcome {
+		o.state, o.message, o.changes, o.usage = "completed", strings.Join(messages, " "), changes, usage
+		return o
 	}
-	var report agentResult
-	if len(b) > 64<<10 || json.Unmarshal(b, &report) != nil || strings.TrimSpace(report.Message) == "" {
-		return paused("Agent returned an invalid task report")
+	// nextRound gives the agent what arrived meanwhile, if anything: the notes it gets in the next round. With settle,
+	// a send the worker hasn't heard of yet gets one more poll to arrive.
+	nextRound := func(settle bool) []int64 {
+		for {
+			ids, next, err := r.nextRound(ctx, mode, v, more, &prompt, &contextPath, &reportPath, &logName)
+			if err != nil {
+				r.log("%s: can't give the agent the comments sent meanwhile: %v", filepath.Base(r.opts.Root), err)
+				return nil
+			}
+			if next {
+				finish()
+				finish = r.snapshot(t.ID)
+				return ids
+			}
+			if !settle {
+				return nil
+			}
+			settle = false
+			r.freshPoll(ctx)
+		}
 	}
-	if report.State == "question" {
-		return outcome{state: "question", message: report.Message, usage: usage}
-	}
-	if report.State != "completed" {
-		return paused("Agent report must be completed or question")
-	}
-	if r.allHeld(t) || doc {
-		// Every note waits on the agent's own questions: nothing is done yet, so there's no render or version to wait
-		// for. The server keeps the task for the answers.
-		return outcome{state: "completed", message: report.Message, usage: usage}
-	}
-	if plain {
-		// The video, not the agent's exit, completes the task: it must play, as the next version.
-		label, problem := r.pushPlain(output, before)
+rounds:
+	for {
+		if mode == OpenBackground {
+			u, stop := r.background(ctx, p, prompt, dir, contextPath, reportPath, out, logName, askEnv)
+			usage = addUsage(usage, u)
+			if stop != nil {
+				stop.usage = usage
+				return *stop
+			}
+		} else if stop := r.waitSession(ctx, mode, v, &reportPath, more); stop != nil {
+			return *stop
+		}
+		report, problem := readReport(reportPath)
 		if problem != "" {
 			return outcome{state: "paused", message: problem, usage: usage}
 		}
-		if r.opts.Handler == nil {
-			for e := r.sendFiles(ctx); e != nil; e = r.sendFiles(ctx) {
-				select {
-				case <-ctx.Done():
-					return outcome{state: "stopped"}
-				case <-time.After(time.Second):
-				}
+		if report.State == "question" {
+			return outcome{state: "question", message: report.Message, usage: usage}
+		}
+		if report.State != "completed" {
+			return outcome{state: "paused", message: "Agent report must be completed or question", usage: usage}
+		}
+		// What each note changed: the report's own entry, else the message of the round that did it.
+		for id, c := range noteChanges(report.Notes) {
+			changes[id] = c
+		}
+		for _, id := range roundNotes {
+			if _, ok := changes[id]; !ok {
+				changes[id] = report.Message
 			}
 		}
-		return outcome{state: "completed", message: report.Message, version: label, usage: usage}
-	}
-	r.mu.Lock()
-	r.finalTask = t.ID
-	r.mu.Unlock()
-	// The renderer runs throughout editing. Completion additionally requires a stable final revision belonging
-	// to this task, with its ENDLIST verified, not just a successful agent process exit.
-	tick := time.NewTicker(500 * time.Millisecond)
-	defer tick.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return outcome{state: "stopped"}
-		case <-tick.C:
+		messages = append(messages, report.Message)
+		if ids := nextRound(true); ids != nil {
+			roundNotes = ids
+			continue
+		}
+		if r.allHeld(r.withGiven(t)) || doc {
+			// Every note waits on the agent's own questions: nothing is done yet, so there's no render or version to
+			// wait for. The server keeps the task for the answers.
+			return done(outcome{})
+		}
+		if plain {
+			// The video, not the agent's exit, completes the task: it must play, as the next version.
+			label, problem := r.pushPlain(output, t.Target, before)
+			if problem != "" {
+				return outcome{state: "paused", message: problem, usage: usage}
+			}
+			if r.opts.Handler == nil {
+				for e := r.sendFiles(ctx); e != nil; e = r.sendFiles(ctx) {
+					select {
+					case <-ctx.Done():
+						return outcome{state: "stopped"}
+					case <-time.After(time.Second):
+					}
+				}
+			}
+			return done(outcome{version: label})
+		}
+		r.mu.Lock()
+		r.finalTask = t.ID
+		r.mu.Unlock()
+		// The renderer runs throughout editing. Completion additionally requires a stable final revision belonging
+		// to this task, with its ENDLIST verified, not just a successful agent process exit. Comments sent while it
+		// renders still go in this version: the agent gets another round.
+		tick := time.NewTicker(500 * time.Millisecond)
+		for {
+			select {
+			case <-ctx.Done():
+				tick.Stop()
+				return outcome{state: "stopped"}
+			case <-tick.C:
+			}
+			if ids := nextRound(false); ids != nil {
+				tick.Stop()
+				roundNotes = ids
+				continue rounds
+			}
 			source, _, e := fingerprint(r.opts.Root, r.timeline)
 			if e != nil {
+				tick.Stop()
 				return paused("Final source is not a valid timeline: " + e.Error())
 			}
 			r.mu.Lock()
-			v, renderErr := r.render, r.renderErr
+			rv, renderErr := r.render, r.renderErr
 			r.mu.Unlock()
-			if v.Task == t.ID && v.Source == source {
+			if rv.Task == t.ID && rv.Source == source {
 				if renderErr != "" {
+					tick.Stop()
 					return paused("Render failed: " + renderErr)
 				}
-				if v.Complete {
-					return outcome{state: "completed", message: report.Message, result: v.ID, usage: usage}
+				if rv.Complete {
+					tick.Stop()
+					return done(outcome{result: rv.ID})
 				}
 			}
 		}
 	}
 }
 
+// readReport reads the agent's report, or says in a sentence why there's none that counts.
+func readReport(path string) (agentResult, string) {
+	b, e := os.ReadFile(path) //nolint:gosec // generated report path in this task's directory
+	if e != nil {
+		return agentResult{}, "Agent exited without a completion report or question; working files are preserved"
+	}
+	var report agentResult
+	if len(b) > maxReport || json.Unmarshal(b, &report) != nil || strings.TrimSpace(report.Message) == "" {
+		return agentResult{}, "Agent returned an invalid task report"
+	}
+	return report, ""
+}
+
+// addUsage adds a round's usage to the attempt's so far.
+func addUsage(total, round *project.AgentUsage) *project.AgentUsage {
+	if round == nil {
+		return total
+	}
+	if total == nil {
+		clone := *round
+		return &clone
+	}
+	sum := project.AgentUsage{Input: total.Input + round.Input, Output: total.Output + round.Output}
+	if total.Cost != nil || round.Cost != nil {
+		c := 0.0
+		if total.Cost != nil {
+			c += *total.Cost
+		}
+		if round.Cost != nil {
+			c += *round.Cost
+		}
+		sum.Cost = &c
+	}
+	return &sum
+}
+
+func newestPath(vs []family.Version) string {
+	if len(vs) == 0 {
+		return ""
+	}
+	return vs[len(vs)-1].Path
+}
+
 // background runs p's headless command with the prompt on stdin until it exits. A non-nil outcome ends the task.
 // output, when set, is where a plain project's agent writes its video (RETAKE_OUTPUT).
-func (r *runner) background(ctx context.Context, p Profile, prompt, dir, contextPath, reportPath, output string, attempt int, askEnv []string) (*project.AgentUsage, *outcome) {
+func (r *runner) background(ctx context.Context, p Profile, prompt, dir, contextPath, reportPath, output, logName string, askEnv []string) (*project.AgentUsage, *outcome) {
 	cmd := exec.CommandContext(ctx, p.Command[0], p.Command[1:]...) //nolint:gosec // trusted local argv, never supplied by the host
 	cmd.Dir = r.opts.Root
 	cmd.Stdin = strings.NewReader(prompt)
@@ -235,7 +381,7 @@ func (r *runner) background(ctx context.Context, p Profile, prompt, dir, context
 	ownGroup(cmd)
 	cmd.Cancel = func() error { return stopGroup(cmd.Process) }
 	cmd.WaitDelay = 3 * time.Second
-	log, e := os.OpenFile(filepath.Join(dir, fmt.Sprintf("agent-%d.log", attempt)), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600) //nolint:gosec // generated name under a validated task ID
+	log, e := os.OpenFile(filepath.Join(dir, logName), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600) //nolint:gosec // generated name under a validated task ID
 	if e != nil {
 		return nil, &outcome{state: "paused", message: "Cannot open the local agent log"}
 	}
@@ -260,13 +406,11 @@ func (r *runner) background(ctx context.Context, p Profile, prompt, dir, context
 	return usage, nil
 }
 
-// interactive runs p's agent as a session in herdr or tmux and waits for its report. The session stays open after
-// the report; stopping before one closes its pane. A non-nil outcome ends the task. Interactive agents report no
-// usage: there is no JSON stream to read it from.
-func (r *runner) interactive(ctx context.Context, mode string, p Profile, t *project.EditingTask, promptPath, reportPath string, fresh []project.TaskQuestion) *outcome {
+// openSession opens p's agent as a session in herdr or tmux, with the task's line. A non-nil outcome ends the task.
+func (r *runner) openSession(ctx context.Context, mode string, p Profile, t *project.EditingTask, promptPath string, fresh []project.TaskQuestion) (*view, *outcome) {
 	v, e := r.newView(mode, p)
 	if e != nil {
-		return &outcome{state: "paused", message: e.Error()}
+		return nil, &outcome{state: "paused", message: e.Error()}
 	}
 	line := fmt.Sprintf("New Retake task for %s (task %s, attempt %d): follow the instructions in %s", v.name, t.ID, t.Attempt, promptPath)
 	if len(fresh) > 0 {
@@ -280,14 +424,22 @@ func (r *runner) interactive(ctx context.Context, mode string, p Profile, t *pro
 	if e = v.start(ctx, p, line); e != nil {
 		if ctx.Err() != nil {
 			v.stop()
-			return &outcome{state: "stopped", message: "Agent stopped"}
+			return nil, &outcome{state: "stopped", message: "Agent stopped"}
 		}
-		return &outcome{state: "paused", message: fmt.Sprintf("Couldn't open the agent in %s: %v", mode, e)}
+		return nil, &outcome{state: "paused", message: fmt.Sprintf("Couldn't open the agent in %s: %v", mode, e)}
 	}
 	r.log("%s: %s is working in %s (%s)", v.name, p.Name, mode, v.label())
+	return v, nil
+}
+
+// waitSession waits for the session's report. The session stays open after the report; stopping before one closes
+// its pane. A non-nil outcome ends the task. Interactive agents report no usage: there is no JSON stream to read it
+// from. Comments sent while it works (more) reach the session as one more message each time, and move the report to
+// a new file: *reportPath is the one that counts (spec/automation.md, "Batches").
+func (r *runner) waitSession(ctx context.Context, mode string, v *view, reportPath *string, more *addition) *outcome {
 	poll := time.NewTicker(viewPoll)
 	defer poll.Stop()
-	checked, misses, sayErr := time.Now(), 0, ""
+	checked, misses, sayErr, moreErr := time.Now(), 0, "", ""
 	for {
 		select {
 		case <-ctx.Done():
@@ -295,7 +447,7 @@ func (r *runner) interactive(ctx context.Context, mode string, p Profile, t *pro
 			return &outcome{state: "stopped", message: "Agent stopped"}
 		case <-poll.C:
 		}
-		if reported(reportPath) {
+		if reported(*reportPath) {
 			return nil
 		}
 		// An answer to the agent's question while it works: a new message in its session.
@@ -310,13 +462,23 @@ func (r *runner) interactive(ctx context.Context, mode string, p Profile, t *pro
 			r.tell(q.Answer.ID)
 			r.log("%s: gave the agent the answer to its question on #%d", v.name, q.Note)
 		}
+		// Comments sent while it works: one more message for the same task, with a new report file.
+		if next, ids, e := r.more(ctx, v, more, false); e != nil {
+			if e.Error() != moreErr { // tried again at the next look; said once
+				r.log("%s: can't give the agent the comments sent meanwhile in %s yet: %v", v.name, mode, e)
+				moreErr = e.Error()
+			}
+		} else if next != "" {
+			*reportPath = next
+			r.log("%s: gave the agent %d more comments (%s) in %s", v.name, len(ids), noteIDs(ids), mode)
+		}
 		if time.Since(checked) < viewCheck {
 			continue
 		}
 		checked = time.Now()
 		if v.alive(ctx) {
 			misses = 0
-		} else if misses++; misses >= 2 && ctx.Err() == nil && !reported(reportPath) {
+		} else if misses++; misses >= 2 && ctx.Err() == nil && !reported(*reportPath) {
 			return &outcome{state: "paused", message: "The agent's session ended without a report; working files are preserved"}
 		}
 	}
@@ -326,7 +488,7 @@ func (r *runner) interactive(ctx context.Context, mode string, p Profile, t *pro
 func reported(path string) bool {
 	b, e := os.ReadFile(path) //nolint:gosec // generated report path in this task's directory
 	var report agentResult
-	return e == nil && len(b) <= 64<<10 && json.Unmarshal(b, &report) == nil
+	return e == nil && len(b) <= maxReport && json.Unmarshal(b, &report) == nil
 }
 
 // docPrompt is the task prompt of a task whose notes are all typed comments on an extension's version: the

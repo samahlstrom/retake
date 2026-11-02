@@ -204,21 +204,23 @@ heads for (`v5`), so they are still there once the draft becomes that version.
   version for the strip and the line below. A switch shows the new version's comments at once, from the same answer.
 - **The comments header.** Two quiet rows over the list. The first: a comments icon (a speech bubble, no word), the
   shown version as a menu (`v8 ⌄`), then search and hide at the right. The second: a To do · Done toggle (each with
-  its count), then an extension's tabs. With two or more entries in the family (a second version, or a draft), the
-  version menu lists every version, newest first, each with its To do count (`v7  63 to do`; nothing when none),
-  the shown one checked; the agent's drafts of the next version are one entry, `v8 · drafting`, which shows the
-  newest listed draft; an extension's version comes first (`v0 · Script`). A pick shows that version, as the bar's
-  picker does (pinned unless it is the newest). While an earlier version still has something to do, the menu's
-  button has a small dot, and its title says what (`Open on earlier versions: v6 · 2, v3 · 91`). A single version
-  shows its label without a menu. This replaced the version strip and the "Open on earlier versions" line; the bar's
-  version picker stays.
-- **Where a comment goes.** A comment on vN becomes an edit in vN+1: a comment on v7 goes into v8 (even once v8
-  exists), and one on v8 makes v9 (spec/automation.md). The page says so in the same few words everywhere: the comment
-  box `Comment at 0:18 · goes into v8…`, the version menu `v7 → v8 · 3 to do`, a card's `→ v8` next to its status
-  until it's done, and after Send `Sent to v8.` An item's `into` names that version when the server gives it;
-  otherwise the page takes the next number (a draft's comments, `v8-draft2`, go into v9). A typed comment on an
-  extension's document has none.
-- **Send** counts and sends the shown version's open comments (spec/automation.md, "HTTP and UI"). An older version's
+  its count), then an extension's tabs (on a phone they share the first row). With two or more entries in the family
+  (a second version, or a draft), the version menu lists every version, newest first, each with where its comments go
+  and its To do count (`v7 → v8 · 63 to do`; nothing when none), the shown one checked; the agent's drafts of the next
+  version are one entry, `v8 · drafting`, which shows the newest listed draft; an extension's version comes first
+  (`v0 · Script`). A pick shows that version, as the bar's picker does (pinned unless it is the newest). While an
+  earlier version still has something to do, the menu's button has a small dot, and its title says what (`Open on
+  earlier versions: v6 · 2, v3 · 91`). A single version shows its label without a menu. This replaced the version
+  strip and the "Open on earlier versions" line; the bar's version picker stays.
+- **Where a comment goes.** Comments on vN become edits in vN+1 (spec/automation.md): each comment's `target` is the
+  version its edit goes in, made or updated in place (a comment on v7 goes into v8 even once v8 exists; one on v8
+  makes v9), and `later` names a version after the target that exists already. The page says it in the same few
+  words everywhere: the comment box `Comment at 0:18 · goes into v8…`, the version menu `v7 → v8 · 3 to do`, a
+  card's `→ v8` next to its status until it's done (its title adds "v9 is newer" with `later`), and after Send
+  `Sent to v8.` Without `target` (an older server) the page takes the next number (a draft's comments, `v8-draft2`,
+  go into v9). A typed comment on an extension's document has none.
+- **Send** counts and sends the shown version's open comments (spec/automation.md, "HTTP and UI"), never a task per
+  comment. An older version's
   open comments are sent from that version. The agent still gets every open comment of every version as context with
   each task (the poll answer's `notes`).
 

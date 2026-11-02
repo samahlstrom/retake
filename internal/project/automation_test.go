@@ -2,6 +2,7 @@ package project
 
 import (
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -234,8 +235,8 @@ func TestOnlyFinalSubmissionQueuesFeedbackAfterProcessing(t *testing.T) {
 		t.Fatal(e)
 	}
 	a, _ = s.Automation()
-	if len(a.Tasks) != 2 {
-		t.Fatalf("wanted one task per final note: %+v", a.Tasks)
+	if len(a.Tasks) != 1 || !slices.Equal(a.Tasks[0].Notes, []int64{1, 2}) {
+		t.Fatalf("wanted one batch of the final notes: %+v", a.Tasks)
 	}
 }
 
@@ -247,8 +248,9 @@ func TestWithdrawnFeedbackNeverStartsAndOfflineStateExpiresWithoutWorkerPolling(
 	if _, e := s.Sync(Run{Version: "v6", Comments: []Comment{{Key: "first", Take: take1, Retracted: true}, {Key: "second", Take: take1, Text: "trim the pause"}}}); e != nil {
 		t.Fatal(e)
 	}
+	// The retracted note drops out of the batch; the rest carries on.
 	j, e := s.PollWork(w, "", "")
-	if e != nil || j == nil || j.Notes[0] != 2 {
+	if e != nil || j == nil || !slices.Equal(j.Pending(), []int64{2}) || !slices.Equal(j.Dropped, []int64{1}) {
 		t.Fatal("retracted feedback was executed", j, e)
 	}
 	c.add(WorkerLease + time.Second)
@@ -256,7 +258,7 @@ func TestWithdrawnFeedbackNeverStartsAndOfflineStateExpiresWithoutWorkerPolling(
 		t.Fatal(e)
 	}
 	a, e := s.Automation()
-	if e != nil || a.Tasks[0].State != "cancelled" || a.Tasks[1].State != "paused" {
+	if e != nil || len(a.Tasks) != 1 || a.Tasks[0].State != "paused" {
 		t.Fatal(a, e)
 	}
 }
@@ -311,7 +313,7 @@ func TestSendRunsWithAutoSendOffAndFinishedReviewsWaitForSendOrAutoSend(t *testi
 	if e = s.ReadyFeedback(); e != nil {
 		t.Fatal(e)
 	}
-	if a, _ = s.Automation(); len(a.Tasks) != 2 {
+	if a, _ = s.Automation(); len(a.Tasks) != 1 || len(a.Tasks[0].Notes) != 2 {
 		t.Fatalf("sent review: %+v", a.Tasks)
 	}
 	j, e := s.PollWork(w, "", "")
@@ -347,7 +349,7 @@ func TestDraftLabelsAndPromotion(t *testing.T) {
 	if got := strings.Join(listed(), " "); got != "v4-draft2 v4-draft3" {
 		t.Fatalf("listed while working: %s", got)
 	}
-	a.promote(a.Render("r2"), 3)
+	a.promote(a.Render("r2"), 3, "")
 	if v := a.Render("v4-draft2"); v == nil || v.Label != "v4" || v.Alias != "v4-draft2" || v.Draft || v.N != 4 {
 		t.Fatalf("promoted: %+v", v)
 	}

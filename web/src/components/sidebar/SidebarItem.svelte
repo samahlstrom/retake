@@ -77,7 +77,8 @@
     {#if row.into && row.kind === 'note' && status.state !== 'done'}<span
         class="into"
         data-part="into"
-        title="Its edit goes into {row.into}">→ {row.into}</span
+        title="Its edit goes into {row.into}{row.later ? ` (${row.later} is newer: ${row.into} updates in place)` : ''}"
+        >→ {row.into}</span
       >{/if}
     <span class="grow"></span>
     <CommentMenu {review} {row} />

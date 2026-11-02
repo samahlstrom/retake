@@ -17,6 +17,8 @@ export interface EditingTask {
   id: string;
   notes: number[];
   version: string;
+  /** The version the task makes or updates: its comments' version + 1 (spec/automation.md). */
+  target?: string;
   state: string;
   agent: string;
   worker: string;
@@ -25,6 +27,9 @@ export interface EditingTask {
   error?: string;
   question?: string;
   result?: string;
+  /** Notes an earlier attempt finished while others waited on an answer, and notes withdrawn from the batch. */
+  done?: number[];
+  dropped?: number[];
   events: { at: number; agent?: string; text: string }[];
   usage?: { input_tokens?: number; output_tokens?: number; estimated_cost_usd?: number };
 }

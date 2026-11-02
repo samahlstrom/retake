@@ -520,11 +520,11 @@ describe('a comment on vN becomes an edit in vN+1', () => {
     expect(intoVersion('final')).toBeNull();
     expect(intoVersion(null)).toBeNull();
   });
-  it('each row knows it (the server’s `into` wins); a typed comment on a document has none', () => {
+  it('each row knows it (the server’s `target` wins, with `later`); a typed comment on a document has none', () => {
     const ctx = { versions, shown: 'v8' };
     expect(toRow(item({ version: 'v7' }), false, ctx).into).toBe('v8');
-    expect(toRow(item({ version: 'v7', into: 'v8' }), false, ctx).into).toBe('v8');
-    expect(toRow(item({ version: 'v7', into: 'v9' }), false, ctx).into).toBe('v9');
+    expect(toRow(item({ version: 'v7', target: 'v8', later: 'v9' }), false, ctx)).toMatchObject({ into: 'v8', later: 'v9' });
+    expect(toRow(item({ version: 'v7', target: 'v9' }), false, ctx)).toMatchObject({ into: 'v9', later: null });
     expect(toRow(item({}), false, ctx).into).toBe('v9'); // an untagged row is the shown version's
     const doc = item({ version: 'v0', key: 'doc/1', anchor: { file: 'v0/a.md', line: 1 } });
     expect(toRow(doc, false, { versions: [], shown: 'v0' }).into).toBeNull();

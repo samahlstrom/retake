@@ -1,7 +1,7 @@
 #!/bin/sh
 # A stand-in for an interactive Claude Code or Codex session in tests. It takes Retake's line as its last argument (and
 # later lines typed into its terminal), finds the report path in the prompt file the line names, and acts by
-# $FAKE_AGENT_MODE: question (asks "Blue or teal?"), edit (waits until $FAKE_BARRIER has two started-* files, makes
+# $FAKE_AGENT_MODE: question (asks "Blue or teal?"), batch (a plain project's batch; below), edit (waits until $FAKE_BARRIER has two started-* files, makes
 # the first shot blue and reports), hang (never reports), exit (quits without a report), or ask and ask-report (asks
 # with "$RETAKE_CLI ask", the test binary as retake; ask-report also reports at once; an "Answer to your question"
 # line then makes a plain project's next version, a copy of clip_v2.mp4, and reports). Like an interactive agent it
@@ -10,7 +10,7 @@ handle() {
 	case "$1" in
 	*"follow the instructions in "*)
 		prompt=${1##*follow the instructions in }
-		report=$(grep -o '"[^"]*/report-[0-9]*\.json"' "$prompt" | head -n 1 | tr -d '"')
+		report=$(grep -o '"[^"]*/report-[0-9-]*\.json"' "$prompt" | head -n 1 | tr -d '"')
 		output=$(grep -o '"[^"]*/output\.mp4"' "$prompt" | head -n 1 | tr -d '"')
 		printf '%s\n%s\n' "$report" "$output" >.fake-agent-task # a typed answer is a new process: it reads them here
 		;;
@@ -38,6 +38,31 @@ handle() {
 		;;
 	question)
 		printf '{"state":"question","message":"Blue or teal?"}' >"$report"
+		;;
+	batch)
+		# One batch in a plain project: the task's line logs a launch in $FAKE_BARRIER/launches, waits for
+		# $FAKE_BARRIER/go, makes the next version (a copy of *_v1.mp4) and reports to the newest report file it has
+		# been given. A "More comments" line only moves the report (the handling above), or reports at once when the
+		# work is done already.
+		case "$1" in
+		"More comments"*)
+			if [ -f .fake-agent-done ]; then
+				printf '{"state":"completed","message":"Did the batch and the comments added."}' >"$report"
+			fi
+			;;
+		*)
+			rm -f .fake-agent-done
+			echo "$1" >>"$FAKE_BARRIER/launches"
+			i=0
+			while [ ! -f "$FAKE_BARRIER/go" ] && [ "$i" -lt 600 ]; do
+				i=$((i + 1))
+				sleep 0.1
+			done
+			cp ./*_v1.mp4 "$(sed -n 2p .fake-agent-task)"
+			: >.fake-agent-done
+			printf '{"state":"completed","message":"Did the batch.","notes":{"1":"Fixed note 1"}}' >"$(sed -n 1p .fake-agent-task)"
+			;;
+		esac
 		;;
 	edit)
 		: >"$FAKE_BARRIER/started-${PWD##*/}"

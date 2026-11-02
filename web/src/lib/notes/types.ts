@@ -21,8 +21,10 @@ export interface NoteItem {
   anchor?: Anchor | null;
   /** "version": the typed comment asks for a cut. */
   wants?: string;
-  /** The version its edit goes into (`v8` for a comment on v7), when the server says. */
-  into?: string | null;
+  /** The version its edit goes into (`v8` for a comment on v7), and the newest version after it that exists already
+   * (spec/automation.md, "Comments on vN become edits in vN+1"). */
+  target?: string | null;
+  later?: string | null;
   /** A typed comment on a video: its pen lines, normalized 0–1 to the frame, each at its own time. */
   strokes?: { color: string; points: [number, number][]; t?: number }[] | null;
   work?: EditingTask;
@@ -57,6 +59,10 @@ export interface NoteItem {
   targets?: { id: string; kind: string; score: number }[] | null;
   /** The open question its task's agent asked about it from inside the task (`retake ask`), shown under it. */
   ask?: TaskAsk | null;
+  /** Comments on vN become edits in vN+1 (spec/automation.md): the version this note's edit goes in, made or updated
+   * in place, and the newest version after it that exists already (a comment on v7 while v9 exists: `later` v9). */
+  target?: string;
+  later?: string;
 }
 
 /** What an agent drew to ask (spec/automation.md, "Questions from inside a task"), normalized 0–1 to the frame. */

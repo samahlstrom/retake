@@ -478,6 +478,24 @@ func (s *Server) sidebar(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// Comments on vN become edits in vN+1 (spec/automation.md): each note's target, and the newest version after it
+	// that exists already (a comment on v7 while v9 exists goes in v8, which v9 doesn't have).
+	newest, newestN := "", 0
+	for _, fv := range s.Family() {
+		if n := project.LabelNumber(fv.Label); n > newestN {
+			newest, newestN = fv.Label, n
+		}
+	}
+	for i := range resp.Items {
+		item := &resp.Items[i]
+		if item.Kind != "note" {
+			continue
+		}
+		item.TargetVersion = item.Target()
+		if n := project.LabelNumber(item.TargetVersion); n > 0 && newestN > n {
+			item.Later = newest
+		}
+	}
 	if automation, e := st.Automation(); e == nil {
 		for i := range resp.Items {
 			item := &resp.Items[i]

@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"slices"
 	"testing"
 
@@ -130,5 +131,50 @@ func TestCommentsOnALeftDraftStayWithTheirVersion(t *testing.T) {
 	}
 	if got := texts("/api/notes?v=v6&scope=review"); got["said on the draft"] != "v6-draft2" {
 		t.Fatalf("review scope of v6: %v", got)
+	}
+}
+
+// Comments on vN become edits in vN+1 (spec/automation.md): each note says its target, and later when a version
+// after its target exists already (a comment on v5 while v7 exists goes in v6, which v7 doesn't have).
+func TestNotesSayTheirTargetVersion(t *testing.T) {
+	h, _ := startM2(t, Options{})
+	st, err := h.srv.store(true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	newest := 0
+	for _, v := range h.srv.Family() {
+		newest = max(newest, project.LabelNumber(v.Label))
+	}
+	if newest < 3 {
+		t.Fatalf("the fixture has versions up to v%d", newest)
+	}
+	old, top := fmt.Sprintf("v%d", newest-2), fmt.Sprintf("v%d", newest)
+	for _, v := range []string{old, top} {
+		if _, err = st.Sync(project.Run{Version: v, Comments: []project.Comment{{Key: "k" + v, T0: 1, T1: 2, Text: "on " + v}}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	r := h.get("/api/notes?v="+top+"&scope=video", nil)
+	var res struct {
+		Items []struct {
+			Text   string `json:"text"`
+			Target string `json:"target"`
+			Later  string `json:"later"`
+		} `json:"items"`
+	}
+	if err = json.Unmarshal(r.body, &res); err != nil || r.code != 200 {
+		t.Fatalf("%d %s", r.code, r.body)
+	}
+	got := map[string][2]string{}
+	for _, it := range res.Items {
+		got[it.Text] = [2]string{it.Target, it.Later}
+	}
+	want := map[string][2]string{
+		"on " + old: {fmt.Sprintf("v%d", newest-1), top},
+		"on " + top: {fmt.Sprintf("v%d", newest+1), ""},
+	}
+	if len(got) != 2 || got["on "+old] != want["on "+old] || got["on "+top] != want["on "+top] {
+		t.Fatalf("got %v, want %v", got, want)
 	}
 }
