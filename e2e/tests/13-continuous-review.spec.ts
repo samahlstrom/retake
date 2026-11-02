@@ -26,7 +26,7 @@ test.beforeEach(async ({ page }) => {
 test('opens the latest version with done feedback separate and lets an older cut stay selected', async ({ page }) => {
   await expect.poll(() => page.evaluate(() => window.__review.view.shown)).toBe('v6');
   await expect(page.locator('#verBtn')).toHaveText('v6⌄');
-  await expect(page.locator('#side header')).toContainText('Comments');
+  await expect(page.locator('#side header [data-part~="version-menu"]')).toHaveText('v6'); // a bubble, then the version
   await expect(page.locator('#side .item')).toHaveCount(1);
   await page.getByRole('tab', {name:'Done 1', exact:true}).click();
   await expect(page.locator('#side .item .status')).toHaveText('Done');

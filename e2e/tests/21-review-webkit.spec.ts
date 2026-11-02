@@ -21,8 +21,9 @@ const PHONES = ['iPhone 13', 'iPhone 15'] as const;
 const slug = (d: string) => d.toLowerCase().replace(/\s+/g, '');
 const errors: string[] = [];
 
-/** A microphone for the page: the container has none (and may have no recorder either). A quiet tone through Web
- * Audio as the MediaStream, and, only where the browser has no MediaRecorder, one that hands out small mp4 chunks. */
+/** A microphone for the page: the container has none, and its WebKit has no audio encoder to record with. A quiet
+ * tone through Web Audio as the MediaStream, and a recorder that hands out small mp4 chunks (this file checks the
+ * layout while recording; the Chromium specs and 06-mobile's mp4 test check real recordings). */
 function fakeMic(): void {
   const getUserMedia = async (): Promise<MediaStream> => {
     const ac = new AudioContext();
@@ -36,7 +37,7 @@ function fakeMic(): void {
   };
   if (navigator.mediaDevices) navigator.mediaDevices.getUserMedia = getUserMedia;
   else Object.defineProperty(navigator, 'mediaDevices', { value: { getUserMedia }, configurable: true });
-  if (typeof MediaRecorder === 'undefined') {
+  {
     type Handler = ((e: { data?: Blob }) => void) | null;
     class FakeRecorder {
       static isTypeSupported(m: string): boolean { return m.startsWith('audio/mp4'); }
@@ -46,14 +47,14 @@ function fakeMic(): void {
       onstop: Handler = null;
       onerror: Handler = null;
       ondataavailable: Handler = null;
-      #timer: ReturnType<typeof setInterval> | undefined;
+      timer: ReturnType<typeof setInterval> | undefined;
       start(ms = 1000): void {
         this.state = 'recording';
         setTimeout(() => this.onstart?.({}));
-        this.#timer = setInterval(() => this.ondataavailable?.({ data: new Blob([new Uint8Array(64)], { type: 'audio/mp4' }) }), ms);
+        this.timer = setInterval(() => this.ondataavailable?.({ data: new Blob([new Uint8Array(64)], { type: 'audio/mp4' }) }), ms);
       }
       stop(): void {
-        clearInterval(this.#timer);
+        clearInterval(this.timer);
         this.state = 'inactive';
         setTimeout(() => {
           this.ondataavailable?.({ data: new Blob([new Uint8Array(16)], { type: 'audio/mp4' }) });
@@ -68,7 +69,6 @@ function fakeMic(): void {
 async function phonePage(browser: Browser, device: (typeof PHONES)[number]): Promise<{ context: BrowserContext; page: Page }> {
   const { defaultBrowserType: _, ...d } = devices[device];
   const context = await browser.newContext(d);
-  await context.addInitScript(fakeMic);
   const page = await context.newPage();
   page.on('pageerror', (e) => errors.push(`${device}: ${e.name}: ${e.message}`));
   return { context, page };
@@ -210,9 +210,12 @@ test.describe('the review page on phones in WebKit', () => {
         await expect(list).toHaveCount(0);
 
         // Recording: REC and the time; Send doesn't move; the pen is a tap away.
+        await page.evaluate(fakeMic); // installed now: an init script's class fields don't survive the transpiler
         const send = (await page.locator('#done').boundingBox())!;
         await page.locator('#rec').tap();
-        await page.waitForFunction(() => !!window.__review.seg, null, { timeout: 10_000 });
+        await expect
+          .poll(() => page.evaluate(() => (window.__review.seg ? 'recording' : document.querySelector('#toast')?.textContent ?? '')), { timeout: 10_000 })
+          .toBe('recording');
         await expect(page.locator('#recLabel')).toHaveText(/^REC \d:\d\d$/);
         expect(await page.locator('#done').boundingBox()).toEqual(send);
         await fitsWidth(page, `${device}: recording`);
