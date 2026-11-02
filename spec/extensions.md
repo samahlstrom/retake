@@ -117,7 +117,8 @@ Being found never turns one on.
 - **Hosted** (`retake serve`): only what the admin allows, `--extensions ignition,…`, `RETAKE_EXTENSIONS` or
   `[server] extensions = [...]`, from the server's own install (bundled or `<data dir>/extensions/`). The page is
   never given code a connected computer sent. An allowed extension is on for every user, and each user can turn it off
-  for themselves in the account menu (`PUT /api/me/extensions` `{"ignition": false}`, kept in their account).
+  for themselves in the account menu (`PUT /api/me/extensions` `{"ignition": false}`, kept in their account;
+  `GET /api/me/extensions` gives `{"off": {"ignition": true}}`).
 - **The editing computer** in hosted mode uses its own enabled list for the parts that run there: its kind detection,
   agent instructions and tools, and a `runs_on = "machine"` server. Its worker reports them in each poll
   (`extensions: [{id, version, api}]`). An extension that the host allows but the computer doesn't have still shows
@@ -146,8 +147,10 @@ A kind is a version that isn't a video: a folder named `folder` inside a video's
   ideas). A `v0/` that holds a versioned video file (`clip_v0.mp4`) is a video version, as today; the kind never claims
   it. Two enabled kinds claiming `v0` is a load error for the second (by id).
 - **In the API**: `api/info` lists it like any version, `{"label": "v0", "kind": "ignition.doc", "path": "v0",
-  "name": "v0", "duration": null}`; `GET /api/home` gives a video whose only versions are of a kind
-  `"status": "no_cut"` and `"kind": "ignition.doc"`, and the page shows the kind's `status` on its chip. A connected
+  "name": "v0", "duration": null, "modified": <newest file change, Unix ms>}`; `GET /api/home` gives a video whose
+  only versions are of a kind `"status": "no_cut"` and `"kind": "ignition.doc"`, and the page shows the kind's
+  `status` on its chip. Every card also has `"kinds"` (the kinds of its versions) and `"changed"` (its newest change
+  in Unix ms: an edit of its kind's files, or its newest push), for the nav's "newest change first". A connected
   computer sends it in `POST /api/worker/files` as `{"label": "v0", "kind": "ignition.doc", "name": "v0"}`.
 - **Numbering** is unchanged: `v0` comes before every cut, the next cut of a video that has only `v0` is `v1`, and
   following latest, comparing (C) and the push rule never pick `v0`.
@@ -179,7 +182,9 @@ A kind is a version that isn't a video: a folder named `folder` inside a video's
 
 - `GET api/ext` (at the home and under a video, needs watch) lists the enabled extensions for this person: `{"api": 1,
   "extensions": [{id, name, version, base, module, style, nav, kinds, slots, files, server, machine}]}` (`base` is
-  `ext/<id>/`; `machine` is false when the video's editing computer lacks it).
+  `ext/<id>/`; `machine` is false when the video's editing computer lacks it). A kind is `{id, kind, folder, marker,
+  label, status, record}` with `id` the full id (`ignition.doc`) and `kind` the manifest's (`doc`); a slot's `kind` is
+  the full id too.
 - The page imports `ext/<id>/<module>?v=<version>` the first time one of its slots is shown, and never before. The
   module exports one function per slot it fills: `page`, `version`, `sidebarTab`, `reviewPanel`. Each is
   `(el: HTMLElement, ctx: Ctx) => void | (() => void)`, and the function it returns unmounts it.
@@ -228,6 +233,8 @@ interface Files {
   read(path: string): Promise<{ sha256: string; text(): Promise<string>; blob(): Promise<Blob> }>;
   write(path: string, data: string | Blob, o?: { ifMatch?: string }): Promise<FileInfo>;  // rejects {changed, sha256}
   remove(path: string, o?: { ifMatch?: string }): Promise<void>;
+  history(path?: string): Promise<Edit[]>;            // the agent edits that can be undone, newest first
+  undo(id: string, path: string): Promise<FileInfo>;   // rejects {changed, sha256}
   url(path: string): string;                           // for <img>, <audio>
   watch(cb: (changed: FileInfo[]) => void): () => void;
 }
@@ -238,6 +245,7 @@ interface Comments {
   answer(question: number, text: string): Promise<void>;
 }
 interface Anchor { file: string; line: number; heading?: string; quote?: string }
+interface Edit { id: string; path: string; at: number; task?: string; before: string; after: string }
 interface Player { time(): number; duration(): number; seek(t: number): void; onTime(cb: (t: number) => void): () => void }
 ```
 
@@ -261,15 +269,26 @@ All under a video (`/p/<name>/…`), relative to its folder:
 | DELETE | `api/ext/<id>/files/<path>` | `write` | Removes it (`If-Match` as above). 204 |
 | POST | `api/ext/<id>/watch?viewer=<id>` | `read` | A lease of 30 s (the page renews it every 10 s): while one is held its files are compared every 2 s and changes come as the `ext.files` event `{ext, files: [FileInfo + deleted?]}` |
 | POST | `api/ext/<id>/transcribe` `{"path"}` | `write` | 202 `{"job"}`: transcribes an owned audio file with the editing computer's `[transcribe]`, writes `<path without extension>.words.json` (`{model, words: [{w, s, e, p}]}`) and sends a `job` event `{id, kind: "transcribe-file", state}` |
+| GET | `api/ext/<id>/jobs/<job>` | `read` | `{id, kind: "transcribe-file", state, error?, hint?}`: a transcription's state, `queued`, `running`, `done` or `failed` (`hint` is the one-line fix, as for a take) |
+| GET | `api/ext/<id>/history[?path=]` | `read` | `{"edits": [Edit]}`, newest first: the agent edits of its owned files that can be undone (below) |
+| POST | `api/ext/<id>/history/undo` `{"id", "path"}` | `write` | Puts one file back as it was before that agent edit (removes it when the agent made it). 409 `{"error": "changed", "sha256"}` when the file changed since the edit. 200 with its FileInfo (`deleted` when removed) |
 | POST | `/api/ext/<id>/videos` (the home) `{project, name, files}` | `create` | Makes `<project>/<name>/` with the given owned files (UTF-8, 1 MiB in all) and answers 201 `{name, url}`; 409 when the folder exists |
 
 - Paths use `/`, are owned, have no `..` or hidden segments, and resolve inside the video's folder (`os.Root`); a
   symlink out of it is 404. Writes, deletes and the videos route are origin-checked like every POST.
+- **Agent edit history.** Before each agent attempt on a task of a video that has owned files, the worker copies them
+  (regular files up to 1 MiB each, 16 MiB in all) to `.retake/history/<stamp>-<random>/files/<path>`. When the
+  attempt ends it keeps only the files the agent changed, made or removed, and writes `edit.json`; an attempt that
+  changed nothing leaves no entry. Each changed file is one `Edit` `{id, path, at, task, before, after}` (`before` and
+  `after` are sha256, `""` when the file didn't exist). The newest 100 edits are kept. Undo needs the file to still be
+  `after`, then restores `before` and drops that entry, so undoing again goes one edit further back. The history is
+  core's, under `.retake/` (never a version, never in the video's own folders), so it isn't committed with the video;
+  git stays optional.
 - **Hosted.** The files are on the editing computer. The server asks the video's worker with the media relay
   (spec/automation.md), which gains ops: `ext.list`, `ext.read` (8 MiB chunks, as media), `ext.write` (the worker
   fetches the body from `GET /api/worker/media/<id>/body`), `ext.delete`, `ext.stat` and `ext.transcribe`. The
-  worker checks the same rules. The watch lease is passed to the worker, which compares the files and sends changes.
-  The host keeps nothing. The videos route goes to the computer that holds the project, through a new machine channel:
+  worker checks the same rules. While a watch lease is held, the server compares the files every 2 s through the
+  relay (`ext.list`) and sends the changes. The host keeps nothing. The videos route goes to the computer that holds the project, through a new machine channel:
   `GET /api/machine/requests` (a long poll like the media relay) and `POST /api/machine/requests/<id>`; `retake
   connect` writes the folder and registers the new video at once. Offline: 503 `{"error":"editing machine is
   offline"}`, and the page says "The editing computer is offline".
@@ -278,8 +297,8 @@ All under a video (`/p/<name>/…`), relative to its folder:
 
 The agent loop is the same one: a comment is Open, Working, Question or Done, Send sends it, one task runs per video.
 
-- **Typed comments.** `POST api/notes` `{"version": "v0", "text", "anchor"?, "wants"?}` (needs record) adds an open
-  note, key `doc/<n>`, only on a version of an extension's kind (a video's review stays voice and pen). `anchor` is
+- **Typed comments.** `POST api/notes` `{"version": "v0", "text", "anchor"?, "wants"?}` (needs record; 201 with its
+  item: `key`, `anchor`, `wants`, no times) adds an open note, key `doc/<n>`, only on a version of an extension's kind (a video's review stays voice and pen). `anchor` is
   `{file, line, heading?, quote?}`: an owned file, the line (from 1), the nearest heading above, and up to 200
   characters of the paragraph. Readers find it by heading, then quote, then line, so it survives edits. Notes built
   from takes never retract a `doc/` note.
@@ -300,7 +319,8 @@ The agent loop is the same one: a comment is Open, Working, Question or Done, Se
 - **The prompt.** Core's task part (`timelinePrompt` or `plainPrompt`), then `## From the <name> extension` with the
   context and the instructions, then core's rules, which start "Retake's rules (these win over anything above)": never
   wait for input, ask with `retake ask`, write the report. An extension's text is Markdown, capped as above, and
-  truncated with a warning when longer.
+  truncated with a warning when longer. A task whose notes are all typed comments that don't want a version gets a
+  short task part of its own (edit the documents, don't render or push), and the worker waits for no render.
 - **Tools.** `[[agent.tools]]` speak the asset plug-in tool protocol (`retake-plugin/0.1`, method `tool`,
   spec/assets.md): one process per call, a JSON request on stdin, a `result` or `error` line on stdout, 2 minutes at
   most. The request's `context` is `{video_folder, ext_dir, ext_data}`. `exec` paths starting with `./` are in the

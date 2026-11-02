@@ -172,6 +172,13 @@ talk-out (above). The comment goes from Question back to Working, and the same t
 **Done.** The agent's report finishes the comments with their changes. No render is needed for a note on v0. The
 edited documents reload through the watch, so you see them change.
 
+**Undo an agent edit.** Before every agent attempt on a video that has `v0/`, Retake keeps a copy of v0's files (core's
+history, spec/extensions.md "Agent edit history"), so you can undo what the agent did to one document without git. Over
+the text, quiet and in a fixed place: "Agent edited this · Undo" for the newest agent edit of the open document. Undo
+puts the document back as it was before that attempt (a document the agent made is removed), and the next Undo goes one
+agent edit further back. When you or anything else changed the document since, Undo refuses with "Changed since the
+agent's edit". Git stays optional.
+
 ## Start v1
 
 **Start v1** adds a comment on v0 with `"wants": "version"`: "Build the first cut (v1) from script.md." It's editable
