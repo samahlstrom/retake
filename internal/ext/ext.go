@@ -95,6 +95,8 @@ type Kind struct {
 	Label  string  `toml:"label" json:"label"`
 	Status string  `toml:"status" json:"status"`
 	Record bool    `toml:"record" json:"record"`
+	// Chat puts the agent chat in place of the comments column on this kind's version (spec/chat.md).
+	Chat bool `toml:"chat" json:"chat"`
 }
 
 // Markers is a kind's marker: a file name or a glob (*_v0.md), or a list of them; the kind's folder is the kind when

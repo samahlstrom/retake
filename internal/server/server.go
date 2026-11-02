@@ -493,6 +493,10 @@ func (s *Server) route(w http.ResponseWriter, r *http.Request, parts []string) {
 		s.mcpRoute(w, r)
 		return
 	}
+	if len(parts) >= 2 && parts[0] == "api" && parts[1] == "chat" {
+		s.chatRoute(w, r, parts)
+		return
+	}
 	if isExtRoute(parts) {
 		s.extRoute(w, r, parts)
 		return

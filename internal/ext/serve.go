@@ -129,6 +129,7 @@ type APIKind struct {
 	Label  string   `json:"label"`
 	Status string   `json:"status"`
 	Record bool     `json:"record"`
+	Chat   bool     `json:"chat"` // the agent chat replaces the comments on its version (spec/chat.md)
 }
 
 // APISlot is a slot in GET api/ext.
@@ -155,7 +156,7 @@ func (s *Set) APIList(machine func(id string) bool) any {
 			Machine: machine == nil || machine(e.ID)}
 		for _, k := range e.Kinds {
 			x.Kinds = append(x.Kinds, APIKind{ID: e.FullKind(k), Kind: k.ID, Folder: k.Folder, Marker: k.Marker,
-				Label: k.Label, Status: k.Status, Record: k.Record})
+				Label: k.Label, Status: k.Status, Record: k.Record, Chat: k.Chat})
 		}
 		for _, sl := range e.Slots {
 			if _, ok := Slots[sl.Slot]; !ok {

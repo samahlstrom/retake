@@ -132,6 +132,16 @@ func redactAutomation(a *project.AutomationState) {
 	for i := range a.Tasks {
 		a.Tasks[i].Lease = ""
 	}
+	if a.Chat != nil {
+		chat := *a.Chat
+		if chat.Turn != nil {
+			turn := *chat.Turn
+			turn.Lease = ""
+			chat.Turn = &turn
+		}
+		chat.Session = ""
+		a.Chat = &chat
+	}
 	for i := range a.Renders {
 		a.Renders[i].Manifest = nil
 		a.Renders[i].Source = ""
@@ -166,10 +176,19 @@ func (s *Server) workerRoute(w http.ResponseWriter, r *http.Request, p []string,
 			s.fail(w, r, 400, "invalid worker")
 			return
 		}
-		t, next, err := st.PollWorker(b)
+		t, next, turn, err := st.PollWorkerChat(b)
 		if err != nil {
 			s.fail(w, r, 409, err.Error())
 			return
+		}
+		var chat *project.ChatWork
+		if turn != nil {
+			cw, err := st.ChatWorkOf(*turn)
+			if err != nil {
+				s.storeFailed(w, r, err)
+				return
+			}
+			chat = &cw
 		}
 		var notes []project.WorkNote
 		var questions []project.TaskQuestion
@@ -218,7 +237,7 @@ func (s *Server) workerRoute(w http.ResponseWriter, r *http.Request, p []string,
 			}
 		}
 		s.json(w, r, 200, project.WorkAssignment{Task: t, Notes: notes, Config: state.Config, Versions: versions, Questions: questions,
-			Next: next, From: from})
+			Next: next, From: from, Chat: chat})
 		return
 	}
 	// Every request after registration belongs to the live worker session. A token alone cannot impersonate
@@ -232,6 +251,10 @@ func (s *Server) workerRoute(w http.ResponseWriter, r *http.Request, p []string,
 	machine := a.Worker(id)
 	if machine == nil || machine.Session != session || machine.Seen+int64(project.WorkerLease.Seconds()) <= st.Now().Unix() {
 		s.fail(w, r, 409, "worker must reconnect")
+		return
+	}
+	if len(p) >= 3 && p[2] == "chat" && r.Method == http.MethodPost {
+		s.workerChat(w, r, p, st, id) // the chat's turns (spec/chat.md)
 		return
 	}
 	switch {

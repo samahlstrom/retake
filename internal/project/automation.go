@@ -157,6 +157,8 @@ type AutomationState struct {
 	Renders     []LiveRender       `json:"renders"`
 	Files       []FileVersion      `json:"files,omitempty"`
 	Submissions []ReviewSubmission `json:"submissions,omitempty"`
+	// Chat is the video's chat with the agent: its turn and session (spec/chat.md). Its messages are the chat table.
+	Chat *ChatState `json:"chat,omitempty"`
 }
 
 // NewWorkID returns an unguessable identifier for an attempt or media revision.
@@ -234,8 +236,11 @@ func (s *Store) UpdateAutomation(fn func(*AutomationState) (bool, error)) error 
 }
 
 func (s *Store) reconcileWork(t *tx, a *AutomationState) (bool, error) {
-	changed := false
 	now := s.Now().Unix()
+	changed, err := t.reconcileChat(a, now)
+	if err != nil {
+		return changed, err
+	}
 	for i := range a.Tasks {
 		j := &a.Tasks[i]
 		if j.State == "completed" || j.State == "cancelled" {
@@ -921,6 +926,9 @@ type WorkPoll struct {
 	Lease  string        `json:"lease"`
 	Told   []int64       `json:"told,omitempty"`
 	Join   []int64       `json:"join,omitempty"`
+	// Chat and ChatLease are the chat turn the worker runs (spec/chat.md), which the poll renews.
+	Chat      string `json:"chat,omitempty"`
+	ChatLease string `json:"chat_lease,omitempty"`
 }
 
 // PollWork registers a heartbeat and renews or claims an exclusive task attempt. told is the answers to the active
@@ -934,11 +942,19 @@ func (s *Store) PollWork(w EditingWorker, active, lease string, told ...int64) (
 // the queued batch its live session may take (next), and moves the notes the worker says it gave the session (Join)
 // into the attempt's task (spec/automation.md, "Batches").
 func (s *Store) PollWorker(p WorkPoll) (task, next *EditingTask, err error) {
+	task, next, _, err = s.PollWorkerChat(p)
+	return task, next, err
+}
+
+// PollWorkerChat is PollWorker that also renews or claims the video's chat turn (spec/chat.md): one agent per video,
+// so a worker runs a task or a turn, never both, and a queued turn goes before queued tasks. chat is the turn the
+// worker owns after the poll (nil when its turn ended or isn't its own any more).
+func (s *Store) PollWorkerChat(p WorkPoll) (task, next *EditingTask, chat *ChatTurn, err error) {
 	w := p.Worker
 	var stale bool
 	hold, err := s.processing()
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	err = s.UpdateAutomation(func(a *AutomationState) (bool, error) {
 		now := s.Now().Unix()
@@ -959,6 +975,16 @@ func (s *Store) PollWorker(p WorkPoll) (task, next *EditingTask, err error) {
 			changed = true
 		} else {
 			*old = w
+		}
+		if p.Chat != "" {
+			// A running turn: renewed while it's still this worker's. Otherwise chat stays nil, and the worker stops it.
+			if c := a.chatTurn(); c != nil && c.ID == p.Chat && c.Lease == p.ChatLease && c.Lease != "" && c.Worker == w.ID &&
+				(c.State == ChatRunning || c.State == ChatStopping) {
+				c.Until = now + int64(WorkerLease.Seconds())
+				clone := *c
+				chat = &clone
+			}
+			return changed, nil
 		}
 		if p.Task != "" {
 			j := a.Task(p.Task)
@@ -983,6 +1009,16 @@ func (s *Store) PollWorker(p WorkPoll) (task, next *EditingTask, err error) {
 		}
 		if slices.ContainsFunc(a.Tasks, func(j EditingTask) bool { return j.State == "running" || j.State == "stopping" }) {
 			return changed, nil
+		}
+		if c := a.chatTurn(); c != nil {
+			if c.State != ChatQueued {
+				return changed, nil // the video's agent is replying in the chat
+			}
+			if c.claim(w, a.Config.Agent, now) {
+				clone := *c
+				chat = &clone
+				return true, nil
+			}
 		}
 		if hold {
 			return changed, nil // a sent take's notes join their tasks once processed, then they start
@@ -1024,9 +1060,9 @@ func (s *Store) PollWorker(p WorkPoll) (task, next *EditingTask, err error) {
 		err = errors.New("attempt no longer owns this task")
 	}
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	return task, next, nil
+	return task, next, chat, nil
 }
 
 // MaxSendWait is how long a queued batch waits at most for a sent take's processing.
@@ -1195,6 +1231,8 @@ type WorkAssignment struct {
 	// From is the render whose source a timeline task starts from, when its target is older than the newest version
 	// (a comment on v7 while v9 exists updates v8 from v8's own source).
 	From string `json:"from,omitempty"`
+	// Chat is the chat turn the worker owns (spec/chat.md): a new one to run, or the running one, with Stop.
+	Chat *ChatWork `json:"chat,omitempty"`
 }
 
 // ReportWork atomically updates task and note completion, preserving reviewer approval. A completed task's final
