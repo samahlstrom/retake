@@ -301,7 +301,7 @@ All under a video (`/p/<name>/…`), relative to its folder:
 The agent loop is the same one: a comment is Open, Working, Question or Done, Send sends it, one task runs per video.
 
 - **Typed comments.** `POST api/notes` `{"version": "v0", "text", "anchor"?, "wants"?}` (needs record; 201 with its
-  item: `key`, `anchor`, `wants`, no times) adds an open note, key `doc/<n>`, only on a version of an extension's kind (a video's review stays voice and pen). `anchor` is
+  item: `key`, `anchor`, `wants`, no times) adds an open note, key `doc/<n>`, on a version of an extension's kind. On a video version the same route takes a time and pen lines instead of an anchor (spec/notes.md, "Typed comments on a video"). `anchor` is
   `{file, line, heading?, quote?}`: an owned file, the line (from 1), the nearest heading above, and up to 200
   characters of the paragraph. Readers find it by heading, then quote, then line, so it survives edits. Notes built
   from takes never retract a `doc/` note.

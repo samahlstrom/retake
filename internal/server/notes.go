@@ -81,7 +81,8 @@ type jobRef struct {
 // (spec/automation.md); any other body, or none, leaves that to the automation config.
 func (s *Server) done(w http.ResponseWriter, r *http.Request, v family.Version, take, dir string, body []byte) {
 	var opts struct {
-		Send bool `json:"send"`
+		Send  bool   `json:"send"`
+		Agent string `json:"agent"` // this send's agent, when the selected worker offers it
 	}
 	_ = json.Unmarshal(body, &opts) // not JSON: as if absent
 	s.writeMu.Lock()
@@ -116,7 +117,7 @@ func (s *Server) done(w http.ResponseWriter, r *http.Request, v family.Version, 
 		refs[i] = jobRef{j.ID, j.Kind, j.State}
 		dependencies[i] = j.ID
 	}
-	if err := st.SubmitReview(v.Label, take, dependencies, opts.Send); err != nil {
+	if err := st.SubmitReview(v.Label, take, dependencies, opts.Send, offeredAgent(st, opts.Agent)); err != nil {
 		s.storeFailed(w, r, err)
 		return
 	}

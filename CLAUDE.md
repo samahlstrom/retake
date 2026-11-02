@@ -26,8 +26,10 @@ Toolchain versions are pinned in `mise.toml`, so run Go and node through mise: `
 - `examples/sample/run-quickstart.sh`: `docs/quickstart.md` end to end, without a person.
 
 ## Non-negotiables
-- **The review UX is sacred.** Pen only, minimal, R to record, and the pen does nothing unless recording. Milestone 1
-  matches the legacy player exactly.
+- **The review UX is sacred.** Minimal, and calm. Draw, type or record a comment at any moment: the pen and the
+  comment box work without recording. Recording adds your voice and still pins the strokes drawn meanwhile to the audio
+  timeline. R still toggles recording. Milestone 1 matched the legacy player exactly; this rule replaced its
+  pen-only-while-recording one (the owner's call).
 - **Nothing personal or licensed ships.** No /home/<user> paths, emails, tokens, footage or anyone's voice. No game
   art, commercial music, or fonts without open licenses. Test media is generated (ffmpeg) or CC0.
 - **Never modify or write into existing videos/renders outside this repo.** Tests make their own fixtures in a scratch

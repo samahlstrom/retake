@@ -33,6 +33,7 @@ type Item struct {
 	Key        string       `json:"key,omitempty"`      // notes: a typed comment's doc/<n>
 	Anchor     *Anchor      `json:"anchor,omitempty"`   // typed comments: where in a document it points
 	Wants      string       `json:"wants,omitempty"`    // typed comments: "version" when it asks for a cut
+	Strokes    []Stroke     `json:"strokes,omitempty"`  // a typed comment on a video: its pen lines
 
 	imagesOf *Note // the note whose images this item shows
 }
@@ -78,6 +79,9 @@ func ItemOf(n Note) Item {
 	}
 	if n.IsDoc() {
 		it.Key, it.Anchor, it.Wants = n.Key, n.Detail.Anchor, n.Detail.Wants
+		if n.Detail.Anchor == nil {
+			it.Strokes = n.Detail.Strokes // a typed comment on a video: its lines, for the video and its card
+		}
 	}
 	return it
 }

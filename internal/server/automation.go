@@ -92,8 +92,9 @@ func (s *Server) automationRoute(w http.ResponseWriter, r *http.Request, p []str
 			return true, nil
 		})
 	case is(p, "api", "automation", "tasks"):
-		// Reviewers may submit notes, but only owners choose executable profiles.
-		_, err = st.QueueFeedback(b.Notes, "")
+		// Anyone who sends may pick one of the agents the editing computer offers, for this send (spec/automation.md,
+		// "Choosing the agent for one send"); commands still come only from that computer's own profiles.
+		_, err = st.QueueFeedback(b.Notes, offeredAgent(st, b.Agent))
 	case len(p) == 5 && p[2] == "tasks":
 		agent := b.Agent
 		if !accessOf(r).role.Can(team.PermManage) {
@@ -738,4 +739,22 @@ func (s *Server) Busy() bool {
 	return err == nil && slices.ContainsFunc(a.Tasks, func(t project.EditingTask) bool {
 		return t.State == "running" || t.State == "stopping"
 	})
+}
+
+// offeredAgent is agent when the selected worker (or, before one is selected, any worker) offers it, else "": the
+// configured agent then runs (spec/automation.md, "Choosing the agent for one send").
+func offeredAgent(st *project.Store, agent string) string {
+	if agent == "" {
+		return ""
+	}
+	a, err := st.Automation()
+	if err != nil {
+		return ""
+	}
+	for _, w := range a.Workers {
+		if (a.Config.Worker == "" || w.ID == a.Config.Worker) && w.HasAgent(agent) {
+			return agent
+		}
+	}
+	return ""
 }

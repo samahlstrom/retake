@@ -117,51 +117,7 @@ const MaxDocNote = 4000
 // AddDocNote adds a typed comment on version (spec/extensions.md): an open note with the key doc/<n>, no take and no
 // times, and its anchor and wants in its detail.
 func (s *Store) AddDocNote(version, text, author string, anchor *Anchor, wants string) (Note, error) {
-	text = strings.TrimSpace(text)
-	switch {
-	case text == "" || utf8.RuneCountInString(text) > MaxDocNote:
-		return Note{}, fmt.Errorf("a comment is 1 to %d characters", MaxDocNote)
-	case wants != "" && wants != WantsVersion:
-		return Note{}, fmt.Errorf("wants is %q or nothing", WantsVersion)
-	}
-	if anchor != nil {
-		if err := anchor.Check(); err != nil {
-			return Note{}, err
-		}
-	}
-	detail, err := json.Marshal(Detail{Anchor: anchor, Wants: wants})
-	if err != nil {
-		return Note{}, err
-	}
-	var out Note
-	err = s.write(func(t *tx) error {
-		var n int64
-		if err := t.QueryRow(`SELECT COUNT(*) FROM notes WHERE key LIKE 'doc/%'`).Scan(&n); err != nil {
-			return err
-		}
-		now := s.stamp()
-		var id int64
-		for k := n + 1; ; k++ {
-			key := fmt.Sprintf("%s%d", DocKey, k)
-			var used int
-			if err := t.QueryRow(`SELECT COUNT(*) FROM notes WHERE key = ?`, key).Scan(&used); err != nil {
-				return err
-			}
-			if used > 0 {
-				continue
-			}
-			if err := t.QueryRow(`INSERT INTO notes (key, version, take, seg, t0, t1, text, author, status, detail, created,
-				updated) VALUES (?, ?, '', '', 0, 0, ?, ?, ?, ?, ?, ?) RETURNING id`, key, version, text, author,
-				string(StatusOpen), string(detail), now, now).Scan(&id); err != nil {
-				return err
-			}
-			break
-		}
-		t.emit(EventNotes, NotesEvent{Why: "add", Version: version, Notes: []int64{id}, Opened: []int64{id}})
-		out, err = noteByID(t, id)
-		return err
-	})
-	return out, err
+	return s.AddTyped(TypedNote{Version: version, Text: text, Author: author, Anchor: anchor, Wants: wants})
 }
 
 // Target is a timeline element under a note (spec/bridge.md, "Notes resolve to elements").

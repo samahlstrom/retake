@@ -419,8 +419,9 @@ its version files and runs the agent, and the agent makes the next version howev
   the project's worker itself (Local mode) and `false` on a hosted server, and, in Local mode only,
   `"blocked": "<why>"` while that worker can't run. Then `workers` may not list it. `sending` lists the takes
   finished with `"send": true` whose processing hasn't finished yet (and hasn't failed): `[{"version", "take"}]`.
-- `POST /api/automation/tasks` (submit feedback), `.../tasks/<id>/answer` and `.../tasks/<id>/retry`: any role that
-  can record. A retry's `agent` counts only from the owner. Switching, pausing and the config are owner actions.
+- `POST /api/automation/tasks` (submit feedback; an optional `agent` picks the agent for the tasks it makes, when the
+  selected worker offers it), `.../tasks/<id>/answer` and `.../tasks/<id>/retry`: any role that can record. A
+  retry's `agent` counts only from the owner. Switching, pausing and the config are owner actions.
 - `/api/worker/*`: Bearer agent token only, including local requests. Worker registration, polling/heartbeats,
   attempt reports, questions (`ask`), render registration/progress, version files (`files`), note artifacts and
   relay response endpoints. An attempt's `completed` report names a render (`result`) or, in a plain project, a version file
@@ -429,22 +430,29 @@ its version files and runs the agent, and the agent makes the next version howev
   task's, with their answers) and `versions` (how many versions the family has, drafts not counted). A poll may carry `told` (answers that reached the agent). In Local mode
   the in-process worker reaches these handlers without HTTP or a token.
 - Existing video URLs serve remote versions through the relay. Existing viewing permissions apply to all media.
-- The bar has one action for everyone who can record: Send (`Send N to agent`, N the shown version's open comments
-  no task owns and no `sending` take holds). It finishes the take in progress with `send: true` on its `/done` and
-  submits the shown version's other open comments. With no computer online it does the same: the comments show Working, "Waiting for the
-  editing computer", and start when one connects; the owner's press also opens the agent popover with the connect
-  command (`POST /api/connect`). In local mode, when the built-in worker can't edit (`blocked`), Send saves the take
-  without `send`, and the popover says what's missing (it doesn't open by itself). There is no other action.
-  Next to it, the agent's name with a dot (green: online) opens that popover. The owner chooses the agent, its
-  fallback ("Pause and ask me" by default) and the computer there; everyone else sees the agent, or the one line
-  "Waiting for the editing computer". Per-comment actions are in the card's ⋯ menu: send one, retry, history and
-  delete as the role allows; switch agent and pause for the owner; reopen for approvers. A question an agent asked
-  from inside its task (`retake ask`) shows under its comment, with a reply box that takes typed words or a tapped
-  choice (`…/answer` with `question`) or a recorded answer (`answer_to`), and as a marker on the timeline at its
-  moment, in the Question color; clicking the marker (or the question's time) seeks there and shows its visuals
-  ("What the page shows"). A report's question (the fallback) takes a typed answer (`…/answer`); a
-  question asked through the notes takes a recorded one (`answer_to`), in the same reply box. Comment cards show
-  current task state and result links regardless of which version is selected.
+- The bar has one action for everyone who can record: **Send**. It says just "Send", never an agent's name; how many
+  comments it sends (the shown version's open comments no task owns and no `sending` take holds) is in its tooltip
+  and its accessible name ("Send 3 comments to the agent"). It finishes the take in progress with `send: true` on its
+  `/done`, saves a pending typed comment (spec/notes.md, "Typed comments on a video"), and submits the shown
+  version's other open comments. With no computer online it does the same: the comments show Working, "Waiting for
+  the editing computer", and start when one connects. In local mode, when the built-in worker can't edit
+  (`blocked`), Send saves the take without `send`. There is no other action.
+- **Choosing the agent for one send.** Holding Send (about 500 ms, mouse or touch; a right-click too) opens a small
+  list of the agents the editing computer offers, when it offers more than one: the pick goes as `agent` on that
+  send's `/done` body and its `POST /api/automation/tasks` (any role that can record; the server takes it only when
+  the selected worker offers it, else the configured agent). With one agent, holding Send is a plain Send.
+- **No agent menu in the bar.** The agent, its fallback, where agents run and connecting a computer are in Settings
+  (the home's left nav, spec/home.md). Only where Send can't reach an agent does one quiet line say so, over the bar's
+  right end: "No editing computer connected · Settings" for the owner of a hosted project with no computer online,
+  "The editing computer is offline. Send still queues." for anyone else, and in local mode the `blocked` reason.
+- Per-comment actions are in the card's ⋯ menu: send one, retry, history and delete as the role allows; switch agent
+  and pause for the owner; reopen for approvers. A question an agent asked from inside its task (`retake ask`) shows
+  under its comment, with a reply box that takes typed words or a tapped choice (`…/answer` with `question`) or a
+  recorded answer (`answer_to`), and as a marker on the timeline at its moment, in the Question color; clicking the
+  marker (or the question's time) seeks there and shows its visuals ("What the page shows"). A report's question
+  (the fallback) takes a typed answer (`…/answer`); a question asked through the notes takes a recorded one
+  (`answer_to`), in the same reply box. Comment cards show current task state and result links regardless of which
+  version is selected.
 
 ## Required verification
 

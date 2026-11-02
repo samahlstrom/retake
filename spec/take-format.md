@@ -30,7 +30,8 @@ every take it produces against them, and so must any new writer.
 ## Rules
 
 - A take is append-only while open. Saving rewrites the JSON files atomically, and audio is appended by byte offset.
-- Nothing outside an R-on/R-off segment is recorded: no audio, and no strokes. The pen only works while recording.
+- Nothing outside an R-on/R-off segment is recorded in a take: no audio, and no strokes. Lines drawn while not
+  recording belong to a typed comment (spec/notes.md, "Typed comments on a video"), never to a take.
 - Nothing is ever deleted by the player.
 
 ## Erased lines (v1.2)

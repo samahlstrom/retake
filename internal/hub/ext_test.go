@@ -290,13 +290,13 @@ func TestVideoExtensionFiles(t *testing.T) {
 		t.Fatalf("delete: %d %s", r.code, r.body)
 	}
 
-	// A typed comment on v0, anchored; none on a video version.
+	// A typed comment on v0, anchored; on a video version one needs its time (spec/notes.md).
 	note := `{"version": "v0", "text": "Work this talk-out in", "anchor": {"file": "v0/jump-souls_v0.md", "line": 3, "heading": "Jump souls", "quote": "The trick."}}`
 	if r = x.do(http.MethodPost, "/p/jump-souls/api/notes", note); r.code != 201 {
 		t.Fatalf("typed comment: %d %s", r.code, r.body)
 	}
 	if r = x.do(http.MethodPost, "/p/alpha/api/notes", `{"version": "v2", "text": "x"}`); r.code != 400 {
-		t.Fatalf("a typed comment on a video: %d %s", r.code, r.body)
+		t.Fatalf("a typed comment on a video without its time: %d %s", r.code, r.body)
 	}
 	r = x.get("/p/jump-souls/api/notes?v=v0")
 	if !strings.Contains(r.body, `"key":"doc/1"`) || !strings.Contains(r.body, `"heading":"Jump souls"`) {

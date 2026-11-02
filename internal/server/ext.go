@@ -3,10 +3,12 @@ package server
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"mime"
 	"net/http"
 	"path"
@@ -19,6 +21,7 @@ import (
 	"github.com/samahlstrom/retake/internal/ext"
 	"github.com/samahlstrom/retake/internal/extwork"
 	"github.com/samahlstrom/retake/internal/family"
+	"github.com/samahlstrom/retake/internal/notes"
 	"github.com/samahlstrom/retake/internal/project"
 	"github.com/samahlstrom/retake/internal/relay"
 	"github.com/samahlstrom/retake/internal/team"
@@ -637,23 +640,74 @@ func (s *Server) machineHas(id string) bool {
 	return w != nil && slices.ContainsFunc(w.Extensions, func(x project.ExtRef) bool { return x.ID == id })
 }
 
-// --- typed comments: POST api/notes (spec/extensions.md, "Comments and questions on an extension's version").
+// --- typed comments: POST api/notes (spec/extensions.md, "Comments and questions on an extension's version", and
+// spec/notes.md, "Typed comments on a video").
 
-// addNote is POST api/notes: a typed comment on a version of an extension's kind.
+// addNote is POST api/notes: a typed comment, on a version of an extension's kind (anchored) or on a video (at a time,
+// with its pen lines and maybe a still of its moment).
 func (s *Server) addNote(w http.ResponseWriter, r *http.Request, body []byte) {
 	var b struct {
 		Version string          `json:"version"`
 		Text    string          `json:"text"`
 		Anchor  *project.Anchor `json:"anchor"`
 		Wants   string          `json:"wants"`
+		T       *float64        `json:"t"`
+		Strokes []struct {
+			Color  string       `json:"color"`
+			Points [][2]float64 `json:"points"`
+			T      float64      `json:"t"`
+		} `json:"strokes"`
+		Frame    *[2]float64 `json:"frame"`
+		Snapshot string      `json:"snapshot"`
 	}
 	if err := json.Unmarshal(body, &b); err != nil {
 		s.fail(w, r, http.StatusBadRequest, "bad json")
 		return
 	}
 	v, ok := s.version(b.Version)
-	if !ok || v.Kind == "" {
-		s.fail(w, r, http.StatusBadRequest, "typed comments go on an extension's version (v0); a video's review is voice and pen")
+	if !ok {
+		s.fail(w, r, http.StatusBadRequest, "no such version")
+		return
+	}
+	in := project.TypedNote{Version: v.Label, Text: b.Text, Author: s.authorOf(r), Anchor: b.Anchor, Wants: b.Wants}
+	if v.Kind == "" {
+		if b.T == nil {
+			s.fail(w, r, http.StatusBadRequest, "a comment on a video needs its time (t)")
+			return
+		}
+		if d := v.Duration; d != nil && *b.T > float64(*d)+1 {
+			s.fail(w, r, http.StatusBadRequest, "t is past the end of "+v.Label)
+			return
+		}
+		if len(b.Strokes) > project.MaxTypedStrokes {
+			s.fail(w, r, http.StatusBadRequest, fmt.Sprintf("a comment has at most %d lines", project.MaxTypedStrokes))
+			return
+		}
+		fw, fh := 1920.0, 1080.0
+		if f := b.Frame; f != nil && f[0] >= 1 && f[1] >= 1 && f[0] <= 1<<15 && f[1] <= 1<<15 {
+			fw, fh = f[0], f[1]
+		}
+		in.Video, in.At = true, *b.T
+		for i, st := range b.Strokes {
+			if len(st.Points) == 0 || len(st.Points) > maxTypedPoints {
+				s.fail(w, r, http.StatusBadRequest, fmt.Sprintf("line %d: 1 to %d points", i+1, maxTypedPoints))
+				return
+			}
+			_, g := notes.Describe(st.Points, fw, fh)
+			in.Strokes = append(in.Strokes, project.Stroke{Shape: g.Shape, Color: st.Color,
+				Box:    [4]float64{g.BBox[0], g.BBox[1], g.BBox[2] - g.BBox[0], g.BBox[3] - g.BBox[1]},
+				Points: project.FewerPoints(st.Points), T: math.Round(st.T*1e3) / 1e3})
+		}
+		if b.Snapshot != "" {
+			img, ext, err := stillOf(b.Snapshot)
+			if err != nil {
+				s.fail(w, r, http.StatusBadRequest, err.Error())
+				return
+			}
+			in.Snapshot, in.SnapshotExt = img, ext
+		}
+	} else if b.T != nil || len(b.Strokes) > 0 || b.Snapshot != "" {
+		s.fail(w, r, http.StatusBadRequest, "a comment on an extension's version has an anchor, not a time or lines")
 		return
 	}
 	st, err := s.store(true)
@@ -661,12 +715,42 @@ func (s *Server) addNote(w http.ResponseWriter, r *http.Request, body []byte) {
 		s.storeFailed(w, r, err)
 		return
 	}
-	n, err := st.AddDocNote(v.Label, b.Text, s.authorOf(r), b.Anchor, b.Wants)
+	n, err := st.AddTyped(in)
 	if err != nil {
 		s.fail(w, r, http.StatusBadRequest, err.Error())
 		return
 	}
 	s.json(w, r, http.StatusCreated, project.ItemOf(n))
+}
+
+// maxTypedPoints is the most points a typed comment's line may bring; it is kept with at most 64 (FewerPoints).
+const maxTypedPoints = 2000
+
+// stillOf reads a typed comment's still: a data:image/jpeg or data:image/png base64 URL whose bytes are that format.
+func stillOf(dataURL string) ([]byte, string, error) {
+	bad := errors.New("snapshot is a data:image/jpeg or data:image/png base64 URL")
+	head, data, ok := strings.Cut(dataURL, ",")
+	if !ok {
+		return nil, "", bad
+	}
+	var ext string
+	var magic []byte
+	switch head {
+	case "data:image/jpeg;base64":
+		ext, magic = ".jpg", []byte{0xff, 0xd8, 0xff}
+	case "data:image/png;base64":
+		ext, magic = ".png", []byte("\x89PNG\r\n\x1a\n")
+	default:
+		return nil, "", bad
+	}
+	if base64.StdEncoding.DecodedLen(len(data)) > project.MaxTypedSnapshot+3 {
+		return nil, "", fmt.Errorf("the still is over %d MiB", project.MaxTypedSnapshot>>20)
+	}
+	b, err := base64.StdEncoding.DecodeString(data)
+	if err != nil || !bytes.HasPrefix(b, magic) {
+		return nil, "", bad
+	}
+	return b, ext, nil
 }
 
 // kindVersion is the family's version of an extension kind on this computer's disk, when the video's folder has one.

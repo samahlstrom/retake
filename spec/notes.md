@@ -70,7 +70,8 @@ that aren't done (`{id, kind, state, attempts, error?, hint?, take?}`), so a pag
 - **On an older version:** that version's notes in their final state. Each has `status`, `text`, `t0`, `t1`, `by`, and
   then `change` and `answered_in` for answered ones, or the question text for asked ones.
 - **Item fields:** `{id, kind: "note"|"question", status, t0, t1, text, by, change?, answered_in?, question?, options?,
-  images?: [{url, box}], snapshot?, ask?}`. A note's `snapshot` is the URL of the still of its moment with its strokes
+  images?: [{url, box}], snapshot?, ask?, key?, strokes?}`. A typed comment (`doc/<n>`) has its `key`, and on a
+  video its pen lines as `strokes: [{color, points, t}]` ("Typed comments on a video"). A note's `snapshot` is the URL of the still of its moment with its strokes
   drawn on it (`GET /api/notes/<id>/snapshot?m=<file time>`), only when that file is in the project. A comment card
   draws its drawing's thumbnail over it, else over the first frame of the version it was left on (that version's
   poster), else on a plain dark box. For a question item, `id` is the thread id (what `answer_to` takes), `text` is the
@@ -87,7 +88,8 @@ that aren't done (`{id, kind, state, attempts, error?, hint?, take?}`), so a pag
 
 - **Images.** `images.json` holds `[{id, seg, version, flip, file, mime, session_t, video_t, box: [x, y, w, h]}]`.
   The box is normalized 0–1 to the frame. Files are named `img_01.png` (or `.jpg`, `.webp`, `.gif`) in the take
-  folder. An image can only be added while recording, like the pen. Z undoes the last stroke or image, whichever came
+  folder. An image can only be added while recording (the pen and a typed comment don't need it: "Typed comments
+  on a video" below). Z undoes the last stroke or image, whichever came
   last: an image's `id` comes from the same counter as stroke ids, so an `undo` event's `id` names either. The `/data`
   body carries the list as `images` (undone ones left out), and the server writes it to `images.json` like
   `strokes.json`. `/api/history` entries get `images: [{url, video_t, box}]`, where `url` is the `/api/takes/...` one.
@@ -108,7 +110,7 @@ that aren't done (`{id, kind, state, attempts, error?, hint?, take?}`), so a pag
 | Method | Path | Does |
 |---|---|---|
 | POST | `/api/session/<take>/image?v=&name=img_NN.ext` | Stores one image. Max 25 MiB. Content type is checked against the extension. Same origin and lock rules as `/audio`. |
-| POST | `/api/session/<take>/done?v=` | Marks the take closed and queues `transcribe` then `notes` jobs for it. Idempotent. An optional JSON body `{"send": true}` also sends the take's notes to the agent once those jobs finish (spec/automation.md, "Submission and comment state"); an empty or other body doesn't. |
+| POST | `/api/session/<take>/done?v=` | Marks the take closed and queues `transcribe` then `notes` jobs for it. Idempotent. An optional JSON body `{"send": true}` also sends the take's notes to the agent once those jobs finish (spec/automation.md, "Submission and comment state"), with `"agent"` the agent it goes to ("Choosing the agent for one send"); an empty or other body doesn't. |
 | GET | `/api/notes?v=<label>` | The sidebar items (above). |
 | POST | `/api/notes/<id>/reopen`, `/api/versions/<label>/approve` | Reviewer actions. Origin-checked. |
 | GET | `/api/events?since=<seq>` | Server-sent events: `notes` (the sidebar should refresh), `job` (`{id, kind, state, error?, hint?}`; a failed job's `hint` is a one-line fix, such as how to set up transcription), `version` (the family changed: `{why, label, parent?, path?, stream?, error?}`, where `why` is `push`, or for a streamed version `rendering`, `progress`, `stopped`, `complete` and `failed`, with its `stream` state; spec/bridge.md, "Streaming"). |
@@ -200,15 +202,16 @@ heads for (`v5`), so they are still there once the draft becomes that version.
   with their `version`, also those recorded on a draft the family no longer lists (an older draft, or a promoted
   draft's old label) while its version is listed (with `scope=review`, within the same version limit). The page keeps the shown version's for the list and the markers, and counts the rest per
   version for the strip and the line below. A switch shows the new version's comments at once, from the same answer.
-- **The version strip.** With two or more entries in the family (a second version, or a draft), the top of the
-  comments panel has one row of versions, oldest first: `v1 v2 … v7`, the shown one highlighted, each with its To do
-  count when it has one (`v3 91`). Drafts of the next version are one quiet entry, `v8 · drafting`, which shows the
-  newest listed draft. A click shows that version, as the picker does (pinned unless it is the newest). The row has a
-  fixed height; on a phone it scrolls sideways inside its own row. The bar's version picker stays, for compact
-  layouts and phones.
-- **Open on earlier versions.** On the latest version (or a draft ahead of it), one quiet line at the top of the list
-  says what is still to do on older versions, newest first: `Open on earlier versions: v6 · 2, v3 · 91`. Each part
-  shows that version. The line is not there when nothing earlier is to do. A single version has no strip and no line.
+- **The comments header.** Two quiet rows over the list. The first: a comments icon (a speech bubble, no word), the
+  shown version as a menu (`v8 ⌄`), then search and hide at the right. The second: a To do · Done toggle (each with
+  its count), then an extension's tabs. With two or more entries in the family (a second version, or a draft), the
+  version menu lists every version, newest first, each with its To do count (`v7  63 to do`; nothing when none),
+  the shown one checked; the agent's drafts of the next version are one entry, `v8 · drafting`, which shows the
+  newest listed draft; an extension's version comes first (`v0 · Script`). A pick shows that version, as the bar's
+  picker does (pinned unless it is the newest). While an earlier version still has something to do, the menu's
+  button has a small dot, and its title says what (`Open on earlier versions: v6 · 2, v3 · 91`). A single version
+  shows its label without a menu. This replaced the version strip and the "Open on earlier versions" line; the bar's
+  version picker stays.
 - **Send** counts and sends the shown version's open comments (spec/automation.md, "HTTP and UI"). An older version's
   open comments are sent from that version. The agent still gets every open comment of every version as context with
   each task (the poll answer's `notes`).
@@ -242,3 +245,33 @@ approve permission, check the origin, and emit notes events. A notes rebuild mus
 The original audio, drawings and video files are retained. Deletion removes the comment from the sidebar and
 comment markers; it does not undo an already-rendered video edit. Queued work for deleted feedback is cancelled,
 and running work is asked to stop. Restoring feedback does not automatically restart cancelled editing work.
+
+## Typed comments on a video
+
+Draw, type or record a comment at any moment. Recording adds your voice (a take, as above); a typed comment needs
+none.
+
+- **The comment box.** At the bottom of the comments column: `Comment at 0:18…`, the shown version's time. Focusing
+  it, typing in it, or drawing on the video while not recording pauses playback and starts a pending comment at that
+  moment. While it has no lines, its time follows the playhead (drag it freely); once it has lines, it is the first
+  line's time. Lines drawn while not recording (or while the box is in use without recording) belong to the pending
+  comment, never to a take; Z undoes its last one, the eraser removes them. Under the box, one quiet line says when
+  it is and how many drawings it has. Enter saves it (Shift+Enter is a new line), Ctrl+Enter (⌘+Enter) saves and
+  sends it, Esc cancels it with its lines. A comment may be a drawing alone. Send with a pending comment saves it
+  first, then sends.
+- **While recording** the pen draws into the take (pinned to the audio, as always); the box still takes words.
+- **`POST api/notes`** `{"version", "t", "text"?, "strokes"?, "frame"?, "snapshot"?}` (needs record, origin-checked)
+  adds it: an open note with the next `doc/<n>` key, `t0 = t1 = t`, its `strokes` in its detail (each
+  `{shape, color, box, points, t}`: the shape as the notes engine classifies it, `points` at most 64, evenly picked),
+  and `wants: "version"` (only a new video version finishes it, as for any video note). `t` is seconds on that
+  version (0 to its length plus a second). `text` is up to 4000 characters, and may be empty only with strokes.
+  `strokes` is at most 50 of `{color: red|yellow|green|white, points: [[x, y], …] (1 to 2000, each 0–1), t}`.
+  `frame` is `[w, h]`, the video's size, for the shape classifier (default 1920×1080). `snapshot` is an optional
+  `data:image/jpeg` or `data:image/png` URL of the frame at `t` with the lines drawn on it, at most 8 MiB decoded,
+  checked by its first bytes, kept as `.retake/typed/<key>.jpg` (or `.png`) in the project and served like any
+  snapshot. Without it the worker makes the still (spec/automation.md, "A note's stills and images"). 201 with its
+  item; 400 with the reason for anything invalid.
+- **After it is saved** it is a comment like any other: Open, then Working, Question and Done; Send sends it; its
+  card shows its words, its time and its drawing; its lines show on the video around its time; the ⋯ menu deletes
+  it. A notes rebuild never retracts it. The eraser leaves a saved typed comment's lines alone (delete the comment
+  instead).

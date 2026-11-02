@@ -168,7 +168,9 @@ normalized to it. The page has a single `<video>` element, and the test reads th
 
 New: on a phone the page has its own layout, with the same ids. `<html data-layout>` says which one is on
 (`desktop`, `portrait` or `landscape`). The phone layout's controls are `#play`, `#verBtn` (the version list), `#undo`
-(Z), the pen colors `.sw[data-color]`, `#rec` (R) and `#done` (Send). It has no flip button: C is a keyboard key.
+(Z), `#pen` (its popover holds the pen colors `.sw[data-color]` and `#eraser`), `#rec` (R) and `#done` (Send). It has
+no flip button: C is a keyboard key. The desktop bar has the same `#pen`, `#rec`, `#done` and `#keys` (?). The
+comment box is `[data-part~="comment-line"] textarea`.
 
 ## CLI (milestone 1)
 

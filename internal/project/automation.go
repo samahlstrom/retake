@@ -141,6 +141,7 @@ type ReviewSubmission struct {
 	After   []int64 `json:"after"`
 	Done    bool    `json:"done"`
 	Send    bool    `json:"send,omitempty"`
+	Agent   string  `json:"agent,omitempty"` // the agent this send picked ("" = the configured one)
 }
 
 // AutomationState is stored transactionally with the project's event log.
@@ -507,7 +508,11 @@ func (s *Store) QueueFeedback(ids []int64, agent string) ([]EditingTask, error) 
 // SubmitReview records the final processing dependencies; it does not queue incremental draft notes. send asks
 // for the notes to go to the agent once processed, whatever the automation config says; a take that was already
 // considered without it is considered again.
-func (s *Store) SubmitReview(version, take string, after []int64, send bool) error {
+func (s *Store) SubmitReview(version, take string, after []int64, send bool, agent ...string) error {
+	pick := ""
+	if len(agent) > 0 {
+		pick = agent[0]
+	}
 	return s.UpdateAutomation(func(a *AutomationState) (bool, error) {
 		for i := range a.Submissions {
 			sub := &a.Submissions[i]
@@ -516,13 +521,14 @@ func (s *Store) SubmitReview(version, take string, after []int64, send bool) err
 					sub.After = after
 				}
 				if send && !sub.Send {
-					sub.Send, sub.Done = true, false
+					sub.Send, sub.Done, sub.Agent = true, false, pick
 					return true, nil
 				}
 				return false, nil
 			}
 		}
-		a.Submissions = append(a.Submissions, ReviewSubmission{Version: version, Take: take, After: after, Send: send})
+		a.Submissions = append(a.Submissions, ReviewSubmission{Version: version, Take: take, After: after, Send: send,
+			Agent: pick})
 		return true, nil
 	})
 }
@@ -593,7 +599,7 @@ func (s *Store) ReadyFeedback() error {
 					ids = append(ids, n.ID)
 				}
 			}
-			if _, e = s.QueueFeedback(ids, ""); e != nil {
+			if _, e = s.QueueFeedback(ids, sub.Agent); e != nil {
 				return e
 			}
 		}
