@@ -70,25 +70,27 @@ func TestDocNotesCompleteWithoutARender(t *testing.T) {
 	if _, err := s.QueueFeedback([]int64{a.ID, b.ID}, ""); err != nil {
 		t.Fatal(err)
 	}
-	for range 2 {
-		j, err := s.PollWork(w, "", "")
-		if err != nil || j == nil {
-			t.Fatal(j, err)
-		}
-		if ok, _ := s.DocOnly(*j); !ok {
-			t.Fatal("a task of typed comments is doc-only")
-		}
-		if _, err := s.ReportWork(WorkReport{Worker: w.ID, Task: j.ID, Lease: j.Lease, State: "completed"}, 0); err == nil {
-			t.Fatal("a completion without a message")
-		}
-		if _, err := s.ReportWork(WorkReport{Worker: w.ID, Task: j.ID, Lease: j.Lease, State: "completed",
-			Message: "Outline and script written"}, 0); err != nil {
-			t.Fatal(err)
-		}
+	// One batch: one run, one report for both, with what changed for one of them.
+	j, err := s.PollWork(w, "", "")
+	if err != nil || j == nil || len(j.Notes) != 2 {
+		t.Fatal(j, err)
 	}
-	for _, id := range []int64{a.ID, b.ID} {
+	if ok, _ := s.DocOnly(*j); !ok {
+		t.Fatal("a task of typed comments is doc-only")
+	}
+	if _, err := s.ReportWork(WorkReport{Worker: w.ID, Task: j.ID, Lease: j.Lease, State: "completed"}, 0); err == nil {
+		t.Fatal("a completion without a message")
+	}
+	if _, err := s.ReportWork(WorkReport{Worker: w.ID, Task: j.ID, Lease: j.Lease, State: "completed",
+		Message: "Outline and script written", Notes: map[int64]string{a.ID: " Wrote the outline "}}, 0); err != nil {
+		t.Fatal(err)
+	}
+	if next, _ := s.PollWork(w, "", ""); next != nil {
+		t.Fatal("a second task:", next)
+	}
+	for id, change := range map[int64]string{a.ID: "Wrote the outline", b.ID: "Outline and script written"} {
 		n, _ := s.Note(id)
-		if n.Status != StatusAnswered || n.AnsweredIn != "v0" || n.Change != "Outline and script written" {
+		if n.Status != StatusAnswered || n.AnsweredIn != "v0" || n.Change != change {
 			t.Fatalf("%+v", n)
 		}
 	}

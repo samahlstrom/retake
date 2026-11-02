@@ -75,6 +75,10 @@ func openFile(path, root string, ms []string) (*Store, error) {
 			_ = db.Close()
 			return nil, fmt.Errorf("project store %s: making its paths relative: %w", path, err)
 		}
+		if err := s.batchQueued(); err != nil {
+			_ = db.Close()
+			return nil, fmt.Errorf("project store %s: batching its queued tasks: %w", path, err)
+		}
 	}
 	return s, nil
 }
@@ -95,6 +99,10 @@ func OpenPostgres(ctx context.Context, dsn, schema, root string) (*Store, error)
 	if err := s.relocatePaths(); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("project store (schema %s): making its paths relative: %w", schema, err)
+	}
+	if err := s.batchQueued(); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("project store (schema %s): batching its queued tasks: %w", schema, err)
 	}
 	return s, nil
 }

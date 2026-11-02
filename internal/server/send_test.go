@@ -154,7 +154,7 @@ func TestEveryRecordingRoleSendsWithNoComputerOnline(t *testing.T) {
 		}
 	}
 
-	// The notes are made, and they queue for the agent with no computer to poll.
+	// The notes are made, and they queue for the agent with no computer to poll: one batch, however many sent.
 	close(notes.gate)
 	st, err := h.srv.store(false)
 	if err != nil {
@@ -162,7 +162,7 @@ func TestEveryRecordingRoleSendsWithNoComputerOnline(t *testing.T) {
 	}
 	waitFor(t, "the sent notes to queue", func() bool {
 		a, e := st.Automation()
-		return e == nil && len(a.Tasks) == len(senders)
+		return e == nil && len(a.Tasks) == 1 && len(a.Tasks[0].Notes) == len(senders)
 	})
 	ns, err := st.Notes(project.NoteFilter{})
 	if err != nil || len(ns) != len(senders) {
@@ -204,7 +204,7 @@ func TestEveryRecordingRoleSendsWithNoComputerOnline(t *testing.T) {
 	if r := h.as(senders[0], "POST", "/api/automation/tasks", fmt.Sprintf(`{"notes":[%d]}`, ns[0].ID)); r.code != 200 {
 		t.Fatalf("send again: %d %s", r.code, r.body)
 	}
-	if a, _ = st.Automation(); len(a.Tasks) != len(senders) {
+	if a, _ = st.Automation(); len(a.Tasks) != 1 || len(a.Tasks[0].Notes) != len(senders) {
 		t.Fatalf("a queued note was queued twice: %+v", a.Tasks)
 	}
 

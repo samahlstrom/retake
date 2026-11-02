@@ -387,7 +387,7 @@ Sending is asking the agent for a batch of edits on one video, never a task per 
   takes only typed comments that way.
 - **A Send's take goes in the same batch.** A queued batch doesn't start while a take sent with `send: true` is still
   being processed (one of its jobs queued or running): the take's notes join it once processed, then it starts. A
-  failed job ends the wait.
+  failed job ends the wait, and so does an hour since the job was queued (a stuck job never holds the agent back).
 - **Older stores.** Opening a project's store merges the tasks waiting in `queued` (not running) into one batch, as
   above, so the one task per note an older version queued becomes one task.
 - **Withdrawn notes.** A note of a batch that is retracted or answered outside it is dropped from the batch (`dropped`,

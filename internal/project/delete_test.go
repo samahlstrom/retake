@@ -53,13 +53,16 @@ func TestDeleteSurvivesRebuildAndRestoresPreviousState(t *testing.T) {
 
 func TestDeletingFeedbackCancelsQueuedWorkAndStopsRunningWork(t *testing.T) {
 	s, _, worker := automationFixture(t)
-	tasks, err := s.QueueFeedback([]int64{1, 2}, "")
-	if err != nil {
+	if _, err := s.QueueFeedback([]int64{1}, ""); err != nil {
 		t.Fatal(err)
 	}
 	running, err := s.PollWork(worker, "", "")
 	if err != nil || running == nil {
 		t.Fatal(running, err)
+	}
+	queued, err := s.QueueFeedback([]int64{2}, "") // the next batch
+	if err != nil || len(queued) != 1 || queued[0].ID == running.ID {
+		t.Fatal(queued, err)
 	}
 	if err = s.DeleteNote(1); err != nil {
 		t.Fatal(err)
@@ -68,14 +71,14 @@ func TestDeletingFeedbackCancelsQueuedWorkAndStopsRunningWork(t *testing.T) {
 		t.Fatal(err)
 	}
 	a, _ := s.Automation()
-	if a.Task(running.ID).State != "stopping" || !a.Task(running.ID).Stop || a.Task(tasks[1].ID).State != "cancelled" {
+	if a.Task(running.ID).State != "stopping" || !a.Task(running.ID).Stop || a.Task(queued[0].ID).State != "cancelled" {
 		t.Fatal(a.Tasks)
 	}
 	if err = s.RestoreNote(2); err != nil {
 		t.Fatal(err)
 	}
 	a, _ = s.Automation()
-	if a.Task(tasks[1].ID).State != "cancelled" {
+	if a.Task(queued[0].ID).State != "cancelled" {
 		t.Fatal("undo restarted queued work")
 	}
 }
