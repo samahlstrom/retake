@@ -31,11 +31,13 @@ A folder of finished videos with no timeline (`clip_v1.mp4`, `clip_v2.mp4`) work
 however it can (ffmpeg, say) and writes one video file, and Retake adds it as the next version (`clip_v3.mp4`, next
 to the others). The comment turns Done once that video plays.
 
-- A send never makes a version. While the agent works on a video there is one working version (say `v8`), and
-  everything you send meanwhile goes into it, even a comment you go back and make on `v7`: in herdr or tmux as a new
-  message in its session, in the background as a follow-up round of the same agent once its run ends. `v8` is made
-  when the agent has nothing left (every comment Done, or a Question waiting for you); your next send after that
-  starts `v9`. Never a version per comment, and never two agents on one video.
+- **Comments on vN become edits in vN+1.** Comment on `v7` and the agent makes `v8`. Comment on `v7` again, while
+  `v8` is being made or after it's done, and the agent edits `v8`: it updates in place, still `v8`. Comment on `v8`
+  and you get `v9`. Pressing Send never makes a version by itself. If you comment on `v7` when `v9` already exists,
+  the change still goes into `v8`, and the comment says that `v9` was made before it.
+- One agent per video. Everything you send goes to it, one target version at a time (a Send with comments on `v7` and
+  `v8` updates `v8`, then makes `v9`). Comments for the version it's working on join its work: in herdr or tmux as a
+  new message in its session, in the background as a follow-up round of the same agent once its run ends.
 - The comments show Working together, and each one still turns Done (or Question, when the agent asks about it) on
   its own.
 - Each video (project) has its own agent. Different videos edit at the same time, so ten videos with work means ten

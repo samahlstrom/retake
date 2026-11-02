@@ -35,8 +35,8 @@ upload or an inbound connection to the worker. This is an addition to the existi
   first video without an upload. Sending feedback (below) always reaches the selected worker, and anyone who can
   record a review sends. `config.enabled` is kept for older pages: it sends finished reviews that weren't sent, it
   is off until set, and turning it off doesn't stop a running task. The page no longer shows it.
-- There is at most one editing task running in a project. A send is a batch, and a send never makes a version: the
-  running task takes what is sent meanwhile, and makes one version when it has nothing left ("Batches" below). Task state, assignments, attempts, questions, answers
+- There is at most one editing task running in a project. Comments on vN become edits in vN+1: a task is the batch of
+  comments of one target version, which it makes or updates in place ("Comments on vN become edits in vN+1" below). Task state, assignments, attempts, questions, answers
   and results survive server restart. A lease identifies each attempt; late reports from a replaced attempt are
   rejected. A local process lock prevents duplicate workers for one project.
 - Switching an active task first requests cancellation. The worker stops the process tree, preserves files and
@@ -71,8 +71,8 @@ Where a worker runs its agent is a user setting: `open_agents_in` in the user co
   `New Retake task for <project> (task <id>, attempt <n>): follow the instructions in <prompt file>`. In herdr the
   agent is started with `herdr agent start` and gets the line with `herdr agent prompt`; in tmux the line is the
   command's last argument, or typed into a session that's still running (`send-keys -l`, then Enter).
-- Comments sent while the agent works join its run here, as a new message in the same session, and go in the same
-  version ("Batches" below): `More comments for Retake task <id> (attempt <n>): follow the instructions in <prompt
+- Comments sent while the agent works, for the same target version, join its run here as a new message in the same
+  session ("Comments on vN become edits in vN+1" below): `More comments for Retake task <id> (attempt <n>): follow the instructions in <prompt
   file>`.
 - The session stays open after the report, so the person can scroll back and keep talking. The project's next task
   reuses it while it's there and runs the same agent: the line goes into the running agent, or the agent starts again
@@ -232,7 +232,7 @@ the person), or has one that wasn't told to an agent yet.
 - A completed report without a render or version while a note isn't held (the agent was told an answer just before
   it reported) queues the task again rather than failing it.
 - Withdrawn feedback: a note of a task that is Question stays in it. A note that was answered outside the task (not
-  in its `done`) or retracted drops out of the batch ("Batches" below); only a batch with none of its notes left is
+  in its `done`) or retracted drops out of the task ("Comments on vN become edits in vN+1" below); only a task with none of its notes left is
   cancelled, or stopped while it runs.
 - The report's `question` state stays as the fallback: the task waits in `question` with the report's message,
   answered with a typed `…/answer` without `question`.
@@ -337,83 +337,105 @@ its version files and runs the agent, and the agent makes the next version howev
 
 - The worker needs no `retake-edit`, and renders nothing. A worker without any agent (in any project) still
   connects and relays the project's video, so it plays on the server as in `retake open`; it never takes a task.
-- A task's prompt says the project has no timeline and names its newest version; the task context lists every
-  version under `family`, each with its path relative to the project. The prompt asks the agent to make the change
-  with the tools it has (ffmpeg, say), starting from the version the notes were made on, and to write the result as
-  one video file to `$RETAKE_OUTPUT` (`.retake/worker/tasks/<id>/output.mp4`). It never edits or deletes the
-  existing versions.
-- When the agent reports `completed`, the worker pushes the result as the next version, by the rule of
-  `version_push` (spec/notes.md): named after the newest version with the next `v<N>`, in a sibling `v<N>/` folder
-  when the family uses version folders. A video the agent wrote as that next version itself counts as well. The
-  version must probe with a duration; otherwise the task pauses ("The agent's video doesn't play"). Without a
-  result the task pauses too ("The agent finished without writing a new version").
+- A task's prompt says the project has no timeline and names the file to start from: the task's target when it
+  exists, else the version its notes were made on ("Comments on vN become edits in vN+1"); the task context lists
+  every version under `family`, each with its path relative to the project. The prompt asks the agent to make the
+  change with the tools it has (ffmpeg, say), and to write the result as one video file to `$RETAKE_OUTPUT`
+  (`.retake/worker/tasks/<id>/output.mp4`). It never edits or deletes the existing versions.
+- When the agent reports `completed`, the worker puts the result in as the task's target: a new version named by the
+  rule of `version_push` (spec/notes.md), after the newest version with that `v<N>`, in a sibling `v<N>/` folder when
+  the family uses version folders; or, when the target exists, in its place, the earlier file moved to
+  `.retake/worker/history/<label>-<unix ms><ext>`. A video the agent wrote as a target that didn't exist counts as
+  well. The version must probe with a duration; otherwise the task pauses ("The agent's video doesn't play"). Without
+  a result the task pauses too ("The agent finished without writing a new version").
 - Then the worker sends its files (hosted), and reports `completed` with `"version": "<label>"` instead of a render.
-  The server takes it once that label is a version file of its family that isn't a render: the task's notes become
-  Done, answered in that version, with the agent's message as the change. Questions work as for timeline projects.
+  The server takes it once that label is the task's target and a version file of its family that isn't a render: the
+  task's notes become Done, answered in that version, with the agent's message as the change. Questions work as for timeline projects.
 - The agent doesn't run `retake push`: the worker's push puts the file into the project folder, and the server only
   gets its metadata.
 
-## Batches: a send never makes a version; one working version per video
+## Comments on vN become edits in vN+1
 
-Sending asks the video's agent for edits. A send is not a version: while the agent works on a video there is one
-working version (`v8`, its drafts `v8-draft1`, ...), and everything sent meanwhile goes into it, whatever version the
-comment was made on (`v7`, or a draft of `v8`). Never a task per comment, a version per send, or a second agent.
+That is the whole rule, for the person and for the agent. A send never makes a version by itself; versions exist
+because a comment on the one before asked for changes.
 
-- **A send is a batch.** `POST /api/automation/tasks` with N notes queues one task (a batch) holding all of them, and a
-  sent take's notes, once processed, join it. The agent gets the whole batch in its context (`task.notes`).
-- **One working version per video.** At most one task runs in a project (one video). Notes sent while it runs join
-  it, before its version is made:
+- **The target.** A comment's target is the version after the one it was made on: a comment on `v7` targets `v8`, one
+  on `v8` targets `v9`. A comment on a draft (`v8-draft2`) targets the version that draft is heading for (`v8`). A typed
+  comment on an extension's version (spec/extensions.md) that doesn't want a version is finished in its own version,
+  as before; one that wants a version targets the next (`v0` → `v1`). The notes API gives each comment its `target`,
+  and `later` when a version after its target already exists (below); a task carries its `target`.
+- **Made or updated.** When the target doesn't exist yet, the agent makes it. When it exists, the agent edits it, and
+  it updates in place: the list still says `v8`, not a new label. A comment on `v7` goes into `v8` while `v8` is being
+  made and after it is done, so commenting again on `v7` never makes `v9`; a comment on `v8` makes (or updates)
+  `v9`. The earlier media of an updated version is kept as its history: a timeline project's earlier render of `v8`
+  becomes a draft of `v8` (`v8-draft<K>`, playable by URL, not listed), and a plain project's earlier `clip_v8.mp4` is
+  moved to `.retake/worker/history/` before the new one takes its place.
+- **Where the agent starts.** From the target when it exists (it already has the earlier changes), else from the
+  version the comment was made on. In a timeline project that is the current source when the target is the newest
+  version or the next one. A target older than the newest version (below) starts from the target's own source (its
+  render's `source.json`), and the worker puts the newest version's source back once that task ends.
+- **A version after the target exists already** (rare: a comment on `v7` while `v9` exists). It still goes into `v8`,
+  as the rule says; `v9` isn't touched or remade. The comment's `later` says so (`"later": "v9"`), so the page can tell
+  the person that `v9` was made before this change.
+- **One agent per video.** At most one task runs in a project (one video). A task is a batch: the comments of one
+  target. A Send with comments on `v7` and on `v8` is two tasks, `v8` then `v9`, done one after the other by the same
+  agent. Sends queue to that agent: the queued tasks run in the order of their targets (lowest first), and at most one
+  task per target waits in `queued`: notes sent for a target that has one join it.
+- **Sent while a task runs, for its target.** Notes for the running task's target join it, before its version is made
+  or updated:
   - In herdr or tmux, as a new message in the live session, while it works or after its report.
   - In the background (where a running agent can't be given anything), as a follow-up round once its run ends: the
     worker runs the same agent again, in the same task and attempt, on the same working files (the source and drafts,
     or a plain project's `output.mp4`), with the new notes, and with any answers to its questions that came meanwhile.
-  - The version is made only when the agent has nothing left: its last report is in, and no note waits that it could
-    take. Every note of the task is then Done, or Question (it asked and waits for the person). So a completed task
-    makes exactly one version (its final draft is promoted, or a plain project's video pushed), however many sends
-    joined it. The next send after that starts the next version (`v9`).
+  - The version is made (or updated) when the agent has nothing left for that target: its last report is in, and no
+    note for it waits. Every note of the task is then Done, or Question (it asked and waits for the person). A completed
+    task makes or updates exactly one version, its target, however many sends joined it. Notes for another target wait
+    in their own queued task.
   - A task that ends without a version (stopped, paused, every note waiting on a question) leaves the notes sent
-    meanwhile in the video's queued batch, which runs next. A note answered after its task made its version goes in
-    the task's next run, with anything else waiting, and that run makes the next version.
-- **How notes join a run.** While an attempt is running and not stopping, the poll answer has `next`: the video's
-  queued batch (`{"id", "notes"}`), when it has never run (`attempt` 0). The worker gives its notes to the agent: it
-  saves their stills and images as for an attempt, writes `context-<n>-<k>.json` (the attempt's context with every
+    meanwhile in their queued task, which runs next. A note answered after its task's version was made goes in the
+    task's next run, which updates the same target.
+- **How notes join a run.** While an attempt is running and not stopping, the poll answer has `next`: the queued task
+  of the same target (`{"id", "notes"}`), when it has never run (`attempt` 0). The worker gives its notes to the agent:
+  it saves their stills and images as for an attempt, writes `context-<n>-<k>.json` (the attempt's context with every
   note of the task in `task.notes`, and the questions with their answers) and `prompt-<n>-<k>.md` (`k` counts the
   rounds, from 2) with a new report file `report-<n>-<k>.json`, which replaces the earlier one: the worker waits for
   that file only, so a report written before the agent read the new notes never finishes the run without them.
   - herdr or tmux: the session gets `More comments for Retake task <id> (attempt <n>): follow the instructions in
     <prompt file>` (`Answers for Retake task …` when it's only answers, after a report).
   - background: the prompt is the whole task prompt, after a few lines saying what is new and that the earlier notes'
-    changes are on disk to keep (a plain project's next video starts from `output.mp4`); the agent's log is
+    changes are on disk to keep (a plain project's video continues from `output.mp4`); the agent's log is
     `agent-<n>-<k>.log`.
   - Before it makes the version, the worker waits for one more poll (3 s at most), so a send from just before the run
     ended joins it too.
   - The worker then says `join: [ids]` in its next poll (and in its report, which counts them before it decides). The
-    server moves those notes from the queued batch to the running task, with an event `Added #4, #5 in the agent's
-    session`, and drops the queued batch once it is empty. A note that is no longer in a queued batch is skipped. A task
-    of only typed comments (spec/extensions.md) takes only typed comments that way, so a report alone still finishes it.
+    server moves those notes from the queued task to the running one, with an event `Added #4, #5 in the agent's
+    session`, and drops the queued task once it is empty. A note that is no longer in a queued task of that target is
+    skipped. A task of only typed comments (spec/extensions.md) takes only typed comments that way, so a report alone
+    still finishes it.
 - **Per comment.** Each note still ends on its own: Done from the completed report, Question from `retake ask`. A
   report may say what changed for each note: `{"state": "completed", "message": "summary", "notes": {"12": "Cut the
   intro to 3 s"}}` (keys are note ids; at most 1000, each at most 4000 characters). A note's `change` is its entry
   (the latest round's, when several say one), else the message of the round that did it.
-- **One queued batch.** At most one task waits in `queued` per project: notes sent while one is queued join it,
-  whatever version they're on. Whenever a second task would wait in `queued` (a send, a retry, an answer that queues a
-  task again, a switch, a fallback), the queued tasks become one: the oldest keeps its id, agent and history and takes
-  the others' notes, questions (`asked`), told answers and done notes, with an event `Joined task <id>: #4, #5`; the
-  others are removed. A retry or switch that names an agent sets the batch's agent. Per-comment actions (send one,
-  retry) add to the batch the same way. Different projects still run at the same time ("Watching the agents").
-- **A Send's take goes in the same batch.** A queued batch doesn't start while a take sent with `send: true` is still
-  being processed (one of its jobs queued or running): the take's notes join it once processed, then it starts. A
-  failed job ends the wait, and so does an hour since the job was queued (a stuck job never holds the agent back).
-- **Older stores.** Opening a project's store merges the tasks waiting in `queued` (not running) into one batch, as
-  above, so the one task per note an older version queued becomes one task.
-- **Withdrawn notes.** A note of a batch that is retracted or answered outside it is dropped from the batch (`dropped`,
-  with an event); the rest carry on. A batch with no notes left is cancelled, or stopped while it runs.
+- **Merging queued tasks.** Whenever a second task of a target would wait in `queued` (a send, a retry, an answer that
+  queues a task again, a switch, a fallback), they become one: the oldest keeps its id, agent and history and takes the
+  others' notes, questions (`asked`), told answers and done notes, with an event `Joined task <id>: #4, #5`; the others
+  are removed. A retry or switch that names an agent sets that task's agent. Per-comment actions (send one, retry) add
+  to their target's task the same way. Different projects still run at the same time ("Watching the agents").
+- **A Send's take goes with it.** A queued task doesn't start while a take sent with `send: true` is still being
+  processed (one of its jobs queued or running): the take's notes join their targets' tasks once processed, then they
+  start. A failed job ends the wait, and so does an hour since the job was queued (a stuck job never holds the agent
+  back).
+- **Older stores.** Opening a project's store gives each unfinished task without a target the target of its first
+  note, and merges the tasks waiting in `queued` (not running) per target, as above, so the one task per note an older
+  version queued becomes one task per target.
+- **Withdrawn notes.** A note of a task that is retracted or answered outside it is dropped from the task (`dropped`,
+  with an event); the rest carry on. A task with no notes left is cancelled, or stopped while it runs.
 
 ## Submission and comment state
 
 - Recording and incremental transcription do not launch editing. Send closes the take (`/done` with
   `"send": true`) and queues its processing. Once the final notes job succeeds, the take's open notes join the
-  project's queued batch ("Batches"): right away, in the process that ran the job, whether or not a worker is connected. A `/done`
+  queued task of their target ("Comments on vN become edits in vN+1"): right away, in the process that ran the job, whether or not a worker is connected. A `/done`
   without `send` (an older page) queues them only when `config.enabled` is on. Each finished take is considered
   once: if neither applies, its notes stay Open until someone sends them, and turning `enabled` on later doesn't
   sweep up old reviews. Finishing again with `"send": true` sends a take that was already processed. Send also
@@ -450,12 +472,13 @@ comment was made on (`v7`, or a draft of `v8`). Never a task per comment, a vers
   answer's `versions` is 0), so an empty project gets its first video; plain saves render nothing. Each render's
   `state.json` stays in `.retake/worker/renders/<id>/`, and on start the worker takes the newest complete one as
   its last render, so a restart with unchanged source renders and registers nothing.
-- Versions versus drafts. A new label `v<N>` is created only when a task completes, for its verified final render,
-  or for that first render of an empty project. Every other render is a draft, labelled `v<N>-draft<K>`, where
-  `v<N>` is the version it is heading for and `K` counts that version's drafts. Completion promotes the task's
-  final draft to `v<N>`: same media, new label, and the old draft label keeps resolving to it. The family lists
-  each version, plus the newest draft and the newest complete draft while they're ahead of the newest version, so
-  following latest keeps showing the agent's work live. Older drafts aren't listed but stay playable by URL, and
+- Versions versus drafts. A label `v<N>` is created or updated only when a task completes, for its verified final
+  render, or for that first render of an empty project. Every other render is a draft, labelled `v<N>-draft<K>`, where
+  `v<N>` is the version it is heading for (the task's target) and `K` counts that version's drafts. Completion
+  promotes the task's final draft to its target `v<N>`: same media, new label, and the old draft label keeps resolving
+  to it; when `v<N>` existed, its earlier render becomes the draft `v<N>-draft<K>`. The family lists each version,
+  plus, per version number, the newest draft and the newest complete draft while they're ahead of the newest version
+  or their task is unfinished, so following latest keeps showing the agent's work live. Older drafts aren't listed but stay playable by URL, and
   takes recorded on them still save.
 - The host registers each immutable render revision in the video family as above. Pending/progressive render
   metadata reaches browsers through the existing events API. Following latest switches to the new revision once
@@ -488,7 +511,7 @@ comment was made on (`v7`, or a draft of `v8`). Never a task per comment, a vers
   (`version`). The poll answer has
   `config`, `task`, `notes` (the task's notes, plus every open note of every version as context), `questions` (the
   task's, with their answers), `versions` (how many versions the family has, drafts not counted) and, for a running
-  attempt, `next` (the queued batch it may give a live session, "Batches"). A poll may carry `told` (answers that
+  attempt, `next` (the queued task of its target it may take in, "Comments on vN become edits in vN+1"). A poll may carry `told` (answers that
   reached the agent) and `join` (notes of `next` given to the agent's session); a report may carry both. In Local mode
   the in-process worker reaches these handlers without HTTP or a token.
 - Existing video URLs serve remote versions through the relay. Existing viewing permissions apply to all media.
@@ -500,10 +523,10 @@ comment was made on (`v7`, or a draft of `v8`). Never a task per comment, a vers
   without `send`, and the popover says what's missing (it doesn't open by itself). There is no other action.
   Next to it, the agent's name with a dot (green: online) opens that popover. The owner chooses the agent, its
   fallback ("Pause and ask me" by default) and the computer there; everyone else sees the agent, or the one line
-  "Waiting for the editing computer". A batch shows as one group: its comments are Working together, and the comments
+  "Waiting for the editing computer". A task shows as one group: its comments are Working together, and the comments
   column's progress line says `Agent working on 3 comments` while it runs (`· 2 more coming` while notes sent
-  meanwhile wait to join it). Per-comment actions are in the card's ⋯ menu: send
-  one, retry, history and delete as the role allows (send one and retry add to the video's batch, as any send); switch agent and pause for the owner; reopen for approvers. A question an agent asked
+  meanwhile for its target wait to join it). Each comment's `target` (and `later`) comes from the notes API. Per-comment actions are in the card's ⋯ menu: send
+  one, retry, history and delete as the role allows (send one and retry add to their target's task, as any send); switch agent and pause for the owner; reopen for approvers. A question an agent asked
   from inside its task (`retake ask`) shows under its comment, with a reply box that takes typed words or a tapped
   choice (`…/answer` with `question`) or a recorded answer (`answer_to`), and as a marker on the timeline at its
   moment, in the Question color; clicking the marker (or the question's time) seeks there and shows its visuals
@@ -521,12 +544,15 @@ submissions, Send by every recording role (a share link too) with no worker onli
 `/done` with and without `send`, a sent take queuing without a worker poll, drafts versus versions, a worker restart
 with unchanged source, profile `env` expansion, Local mode's in-process worker and `blocked` reasons, the exact herdr
 and tmux commands (fake binaries on `PATH` that log their argv), completion by report with no agent output, stop
-closing the pane, and two projects' tasks running at the same time. For batches: a send of 3 notes is one task, one agent process (a
-fake agent counting its launches) and one new version; 20 sent, then 1 more mid-run, is one task and one version with
-all 21 (a follow-up round of the same agent in the background; a message in the same session in herdr and tmux, fake
-binaries); 5 queued single-note tasks of an older store become one batch when it opens; a retry and a send while a
-batch is queued join it; a withdrawn note drops out of its batch; a queued batch waits for a sent take still being
-processed; two videos' batches run at the same time; and an e2e test where Send with several comments yields one
+closing the pane, and two projects' tasks running at the same time. For "Comments on vN become edits in vN+1": comments on v7 make v8;
+another comment on v7 after v8 is done updates v8 (still the same number of versions, the earlier media kept); a
+comment on v8 makes v9; one Send with comments on v7 and v8 updates v8 then makes v9, by the same agent, one after the
+other; a comment on v7 while v9 exists updates v8 and says `later`; a send of 3 notes is one task, one agent process
+(a fake agent counting its launches) and one version; 20 sent, then 1 more mid-run for the same target, is one task
+and one version with all 21 (a follow-up round of the same agent in the background; a message in the same session in
+herdr and tmux, fake binaries); 5 queued single-note tasks of an older store become one task when it opens; a retry
+and a send while a task is queued join it; a withdrawn note drops out of its task; a queued task waits for a sent take
+still being processed; two videos run at the same time; and an e2e test where Send with several comments yields one
 version. For `retake ask`: the built-in profiles' argv, the
 CLI's parsing and validation of visuals, their persistence and the hosted relay of their images, a fake agent that
 asks mid-task and then completes (Local mode and hosted), a wrong or stale secret refused, an answer reaching a herdr

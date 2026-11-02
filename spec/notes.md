@@ -209,9 +209,9 @@ heads for (`v5`), so they are still there once the draft becomes that version.
 - **Open on earlier versions.** On the latest version (or a draft ahead of it), one quiet line at the top of the list
   says what is still to do on older versions, newest first: `Open on earlier versions: v6 · 2, v3 · 91`. Each part
   shows that version. The line is not there when nothing earlier is to do. A single version has no strip and no line.
-- **Send** counts and sends the shown version's open comments (spec/automation.md, "HTTP and UI") as one batch, never
-  a task per comment. A send never makes a version: while the agent works on the video, what is sent joins its one
-  working version (spec/automation.md, "Batches"). An older version's
+- **Send** counts and sends the shown version's open comments (spec/automation.md, "HTTP and UI"), never a task per
+  comment. Comments on vN become edits in vN+1 (spec/automation.md): each comment's `target` is the version its edit
+  goes in, made or updated in place, and `later` names a version after the target that exists already. An older version's
   open comments are sent from that version. The agent still gets every open comment of every version as context with
   each task (the poll answer's `notes`).
 
