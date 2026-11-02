@@ -5,15 +5,16 @@
 // - New idea opens the one document, typing saves, and an outside edit shows. Headings are drawn larger than the text,
 //   their #s hidden off the caret's line; a task's box ticks `[ ]` to `[x]` in the file; a pasted image is kept in
 //   v0/images/ and shows.
-// - A talk-out lands in the document as a plain paragraph and adds a To do; a comment typed in the comments column
-//   adds one too (the core line, anchored by the slot).
-// - Send runs an agent that writes the outline and the script into the document and asks about "Cold open" with two
-//   pictures; its place shows it in the document; the question shows in the document too, and a tap there (or in the
-//   comments column) answers it; Done; ⋯ undoes the agent's edit.
-// - Start v1 from ⋯ runs an agent that writes a video and cuts/v1.json; v1 opens, with `v0 · Doc` first.
+// - The comments column is the chat with the agent (spec/chat.md). A voice message (R) is saved, transcribed and sent;
+//   the agent (a fake that prints Claude Code's stream-json) writes the outline and the script into the document while
+//   the page shows it, with one quiet line per tool, and asks "Which opening?" with two pictures; a tap answers it and
+//   the agent writes it in; ⋯ undoes the agent's edit; a link typed in the chat goes in alone on its line.
+// - Send makes the video: with no cut yet the agent builds v1 from the script ("Building v1…"); v1 opens, with
+//   `v0 · Doc` first; back on the script, Send is dimmed with "Nothing changed since the last Send".
 // - A multi-file v0 from before (idea.md, outline.md, script.md) becomes one document and the old files stay.
 // On phones (390×844 and 430×932) nothing is wider than the screen, the text is at least 17 px and the controls are
-// thumb-sized. Screenshots go to .retake-work/scripts-shots/ (<engine>-<what>-<size>.png).
+// thumb-sized; the bar holds the chat's pill and Send, the pill opens the chat sheet with its composer focused, and
+// tapping the document never raises the keyboard until ⋯ → Type in the script. Screenshots go to .retake-work/scripts-shots/ (<engine>-<what>-<size>.png).
 import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -72,10 +73,9 @@ async function shot(page: Page, name: string, size?: Size): Promise<void> {
 
 /** The editor's text (CodeMirror's contenteditable). */
 const text = (page: Page) => page.locator('[data-ext="scripts"] [data-part="scripts-text"]');
-type Hook = { scripts: { text(): string; caret(): number } };
+type Hook = { scripts: { text(): string } };
 /** The document as the editor holds it (the file's text), through the editor's test hook. */
 const value = (page: Page) => text(page).evaluate((el) => (el as unknown as Hook).scripts.text());
-const caretAt = (page: Page) => text(page).evaluate((el) => (el as unknown as Hook).scripts.caret());
 /** The editor shows this text (or text matching it). */
 async function shows(page: Page, want: string | RegExp, timeout = 10_000): Promise<void> {
   const poll = expect.poll(() => value(page).catch(() => ''), { timeout });
@@ -211,96 +211,83 @@ async function type(page: Page, folder: string, words: string): Promise<void> {
   await expect(page.locator('[data-part="scripts-not-saved"], [data-part="scripts-outside"]')).toHaveCount(0);
 }
 
-/** A talk-out: Esc leaves the text, R talks, R stops; the words land as a plain paragraph and a To do asks the agent
- * to work them in. */
-async function talkOut(page: Page, folder: string): Promise<void> {
+/** The chat's thread, its messages and its composer (spec/chat.md). */
+const chat = (page: Page) => page.locator('#side [data-part="chat"]');
+const composer = (page: Page) => page.locator('#side [data-part="chat-composer"] textarea');
+/** The agent's question in the chat. */
+const question = (page: Page) => chat(page).locator('[data-part="chat-question"]').last();
+
+/** A voice message: Esc leaves the text, R talks, R stops; the words are sent to the chat (not into the document), and
+ * the agent shapes the document and asks which opening, with two pictures. */
+async function voiceMessage(page: Page, folder: string): Promise<void> {
+  const before = read(docOf(folder));
   await text(page).click();
   await page.keyboard.press('Control+End');
   await page.keyboard.press('Escape');
   await page.keyboard.press('r');
-  await expect(page.locator('#rec')).toHaveClass(/on|rec/, { timeout: 10_000 });
+  await expect(page.locator('[data-part="chat-composer"] .mic')).toHaveClass(/on/, { timeout: 10_000 });
   await page.waitForTimeout(2500);
   await page.keyboard.press('r');
-  await shows(page, new RegExp(`\\n\\n${WORDS}\\n$`), 30_000);
-  expect(await value(page)).not.toMatch(/<!--|transcribing/);
-  await expect(page.locator('#side .item', { hasText: 'Work this talk-out into the document.' })).toBeVisible({
-    timeout: 10_000,
-  });
+  const mine = chat(page).locator('[data-part="chat-person"]', { hasText: WORDS });
+  await expect(mine).toBeVisible({ timeout: 30_000 });
+  await expect(mine.locator('svg.voice')).toHaveCount(1);
   const voice = readdirSync(join(folder, 'v0', 'voice'));
   expect(voice.some((f) => f.endsWith('.webm'))).toBe(true);
-  const sidecar = voice.find((f) => f.endsWith('.md'));
-  expect(read(join(folder, 'v0', 'voice', sidecar ?? 'none'))).toMatch(/^Audio: \d{8}-\d{6}\.webm\nInserted: yes\n\n/);
-  await expect.poll(() => read(docOf(folder))).toContain(`\n\n${WORDS}\n`);
+  expect(voice.some((f) => f.endsWith('.words.json'))).toBe(true);
+  await asked(page, folder, before);
 }
 
-/** The comments column's line: typing in it never records (R is a letter there), Enter adds a To do at the heading
- * above the document's caret. */
-async function typedComment(page: Page, heading: string): Promise<void> {
-  await line(page).click();
-  await page.keyboard.type('Keep it under a minute, really');
+/** The agent's answer to a first message: it writes the outline and the script while the page shows them, says what it
+ * does in quiet lines (never raw JSON), and asks which opening with two pictures to tap. */
+async function asked(page: Page, folder: string, before: string): Promise<void> {
+  const q = question(page);
+  await expect(q).toContainText('Which opening?', { timeout: 60_000 });
+  await expect(q.locator('.choice')).toHaveCount(2);
+  await expect
+    .poll(() => q.locator('img').evaluateAll((im) => im.map((i) => (i as HTMLImageElement).naturalWidth)))
+    .toEqual([320, 320]);
+  await expect(chat(page).locator('[data-part="chat-agent"]', { hasText: 'Which opening do you want?' })).toBeVisible({
+    timeout: 20_000,
+  });
+  await expect(chat(page).locator('[data-part="chat-tool"]', { hasText: 'Editing the doc' })).toHaveCount(1);
+  expect(await chat(page).innerText()).not.toMatch(/"type"|stream_event|tool_use/);
+  const doc = read(docOf(folder));
+  expect(doc).toContain('## Outline');
+  expect(doc).toContain('## Script\n\n### Cold open');
+  expect(doc.startsWith(before.trimEnd())).toBe(true); // the person's words stay
+  await shows(page, /### Cold open/);
+  // Nothing went to To do: a script has no comments, only the chat.
+  await expect(page.locator('#side [data-part="tabs"]')).toHaveCount(0);
+}
+
+/** Typed in the chat: Enter sends; the agent puts the link alone on its own line. */
+async function chatLink(page: Page, folder: string): Promise<void> {
+  await composer(page).click();
+  await page.keyboard.type('Pull in https://example.org/clip please');
+  // Typing is the composer's: the r in the words never records.
   expect(await page.evaluate(() => window.__review?.seg ?? null)).toBeNull();
   await page.keyboard.press('Enter');
-  const item = page.locator('#side .item', { hasText: 'Keep it under a minute, really' });
-  await expect(item).toBeVisible({ timeout: 10_000 });
-  await expect(item.locator('.time.anchor')).toHaveText(heading);
-  await expect(line(page)).toHaveValue('');
+  await expect(composer(page)).toHaveValue('');
+  await expect(chat(page).locator('[data-part="chat-tool"]', { hasText: 'Reading example.org/…' })).toBeVisible({
+    timeout: 30_000,
+  });
+  await expect.poll(() => read(docOf(folder)), { timeout: 30_000 }).toMatch(/\n\nhttps:\/\/example\.org\/clip\n$/);
+  await expect(chat(page).locator('[data-part="chat-agent"]').last()).toContainText('Added the link');
 }
 
 /** ⋯ and one of its items. */
-async function menu(page: Page, item: 'scripts-start-v1' | 'scripts-undo'): Promise<void> {
+async function menu(page: Page, item: 'scripts-type' | 'scripts-undo'): Promise<void> {
   await more(page).click();
   await page.locator(`[data-part~="scripts-menu"] [data-part="${item}"]`).click();
 }
 
-/** The agent's question under the talk-out's comment. */
-const question = (page: Page) =>
-  page
-    .locator('#side .item', { hasText: 'Work this talk-out into the document.' })
-    .locator('[data-part="question-card"]');
-
-/** Send: the agent writes the outline and the script into the document and asks which opening. */
-async function send(page: Page, folder: string): Promise<void> {
-  await page.locator('#done').click();
-  const card = question(page);
-  await expect(card).toContainText('Which opening?', { timeout: 60_000 });
-  await expect(card.locator('.choice')).toHaveCount(2);
-  const doc = read(docOf(folder));
-  expect(doc).toContain('## Outline');
-  expect(doc).toContain('## Script\n\n### Cold open');
-  expect(doc).toContain(WORDS); // the person's words stay
-  await shows(page, /### Cold open/);
-  // The question shows in the document too, under its heading, with its two pictures.
-  const inline = page.locator('[data-ext="scripts"] [data-part="scripts-question"]');
-  await expect(inline).toContainText('Which opening?', { timeout: 10_000 });
-  await expect(inline.locator('[data-part="scripts-choice"]')).toHaveCount(2);
-  await expect
-    .poll(() => inline.locator('img').evaluateAll((im) => im.map((i) => (i as HTMLImageElement).naturalWidth)))
-    .toEqual([320, 320]);
-  // The question's place shows it in the document, caret on it.
-  await card.locator('.ask-time', { hasText: 'Cold open' }).click();
-  await expect.poll(async () => (await caretAt(page)) === (await value(page)).indexOf('### Cold open')).toBe(true);
-}
-
-/** A tap answers it (in the comments column, or in the document); the agent writes the answer in, and the comment is
- * Done (no render). */
-async function answer(page: Page, folder: string, inDoc = false): Promise<void> {
-  const inline = page.locator('[data-ext="scripts"] [data-part="scripts-question"]');
-  const choice = inDoc
-    ? inline.locator('[data-part="scripts-choice"]', { hasText: 'Start on the jump' })
-    : question(page).locator('.choice', { hasText: 'Start on the jump' });
-  await choice.click();
-  await expect(inline).toHaveCount(0, { timeout: 20_000 });
+/** A tap on a choice answers it in the chat; the agent writes the answer in. */
+async function answer(page: Page, folder: string): Promise<void> {
+  await question(page).locator('.choice', { hasText: 'Start on the jump' }).click();
+  await expect(chat(page).locator('[data-part="chat-person"]', { hasText: 'Start on the jump' })).toBeVisible();
   await expect.poll(() => read(docOf(folder)), { timeout: 60_000 }).toContain('[Start on the jump.]');
-  await expect
-    .poll(
-      async () => {
-        const r = await page.request.get(new URL('api/notes?v=v0', page.url()).href);
-        const items = ((await r.json()) as { items: { text: string; status: string }[] }).items;
-        return items.find((i) => i.text.startsWith('Work this talk-out'))?.status;
-      },
-      { timeout: 30_000 },
-    )
-    .toBe('answered');
+  await expect(question(page).locator('.choice.picked')).toHaveText('Start on the jump');
+  await expect(question(page).locator('.choice').first()).toBeDisabled();
 }
 
 /** ⋯ → Undo the agent's edit: the document as it was before the agent's newest edit. */
@@ -311,14 +298,24 @@ async function undo(page: Page, folder: string): Promise<void> {
   await shows(page, /\[The jump\.\]/);
 }
 
-/** ⋯ → Start v1: the agent's video becomes v1/<folder>_v1.mp4, and the page goes there. */
-async function startV1(page: Page, folder: string): Promise<void> {
-  await expect(more(page)).toBeVisible({ timeout: 10_000 });
-  await menu(page, 'scripts-start-v1');
+/** Send: "I like it, make the video". With no cut, the agent builds v1 from the script and the page goes there; back
+ * on the script, Send is dimmed with its reason until the script changes. */
+async function sendBuildsV1(page: Page, folder: string): Promise<void> {
+  const send = page.locator('#done');
+  await expect(send).toHaveAttribute('title', 'Make the video from the script', { timeout: 10_000 });
+  await send.click();
+  await expect(page.locator('[data-part="chat-status"]')).toContainText(/Building v1/, { timeout: 10_000 });
   const name = folder.split('/').pop();
   await expect.poll(() => existsSync(join(folder, 'v1', `${name}_v1.mp4`)), { timeout: 90_000 }).toBe(true);
   expect(read(join(folder, 'v0', 'cuts', 'v1.json'))).toContain('Cold open');
   await page.waitForFunction(() => window.__review?.view?.shown === 'v1', null, { timeout: 60_000 });
+  await page.locator('#verBtn').click();
+  await page.locator('#verList [data-ver="v0"]').click();
+  await expect(text(page)).toBeVisible({ timeout: 20_000 });
+  await expect(send).toHaveAttribute('aria-disabled', 'true', { timeout: 10_000 });
+  await expect(send).toHaveAttribute('title', 'Nothing changed since the last Send');
+  await send.click({ force: true }); // never a silent no-op: it says why
+  await expect(page.locator('#toast')).toHaveText('Nothing changed since the last Send');
 }
 
 test.describe('locally', () => {
@@ -394,26 +391,17 @@ test.describe('locally', () => {
     }
   });
 
-  test('a talk-out lands in the document as a plain paragraph and adds a To do', async ({ browser }) => {
-    const { context, page } = await newPage(browser);
-    try {
-      await page.goto(videoUrl());
-      await expect(text(page)).toBeVisible({ timeout: 20_000 });
-      await talkOut(page, idea());
-    } finally {
-      await context.close();
-    }
-  });
-
-  test('Send: the agent shapes the document, asks about Cold open; a tap answers; ⋯ undoes; a typed comment', async ({
+  test('the chat: a voice message, the agent shapes the document and asks; a tap answers; ⋯ undoes; a link', async ({
     browser,
   }) => {
     const { context, page } = await newPage(browser);
     try {
       await page.goto(videoUrl());
       await expect(text(page)).toBeVisible({ timeout: 20_000 });
-      await send(page, idea());
-      await shot(page, 'editor-question');
+      await expect(chat(page)).toBeVisible();
+      await expect(page.locator('#rec')).toHaveCount(0); // the chat's mic records (and R)
+      await voiceMessage(page, idea());
+      await shot(page, 'chat-question');
 
       // The same on phones, while the question is open: the document, the drawer with the question, the ⋯ menu.
       for (const size of PHONES) {
@@ -423,34 +411,46 @@ test.describe('locally', () => {
           await p.goto(videoUrl());
           await shows(p, /### Cold open/, 20_000);
           await expect(p.locator('#sideToggle')).toBeVisible();
-          await expect(p.locator('[data-ext="scripts"] [data-part="scripts-question"] img')).toHaveCount(2);
+          await expect(p.locator('#precord [data-part="chat-pill"]')).toBeVisible();
           await noOverflow(p, `the document at ${size.width}`);
           await phoneSized(p);
           await preview(p, 'Jump souls');
-          await shot(p, 'editor', size);
-          await p.locator('#sideToggle').click();
-          const card = question(p);
-          await expect(card).toContainText('Which opening?');
+          // Reading: a tap on the text never raises the keyboard (the agent edits; ⋯ → Type in the script to type).
+          await text(p).tap();
+          expect(await p.evaluate(() => !!document.activeElement?.closest('[contenteditable="true"]'))).toBe(false);
+          await shot(p, 'chat-closed', size);
+          // The pill opens the chat sheet with its composer focused.
+          await p.locator('[data-part="chat-pill"] .ask').tap();
+          await expect(p.locator('#side.drawer.chatting')).toBeVisible();
+          await expect.poll(() => p.evaluate(() => document.activeElement?.getAttribute('aria-label'))).toBe(
+            'Ask the agent',
+          );
+          const q = question(p);
+          await expect(q).toContainText('Which opening?');
           await expect(p.locator('#side.drawer [data-part~="version-menu"]')).toBeVisible();
-          await noOverflow(p, `the comments drawer at ${size.width}`);
-          await shot(p, 'drawer-question', size);
-          // Its place closes the drawer and shows it in the document.
-          await card.locator('.ask-time').click();
-          await expect(card).toBeHidden();
+          // The pictures are stacked on a phone.
+          const pics = await q.locator('.choice').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().x));
+          expect(Math.abs(pics[0]! - pics[1]!)).toBeLessThan(1);
+          await noOverflow(p, `the chat sheet at ${size.width}`);
+          await shot(p, 'chat-open', size);
+          await p.locator('#side.drawer .icon.hide').tap();
+          await expect(p.locator('#side.drawer')).toBeHidden();
           await more(p).click();
           await expect(p.locator('[data-part~="scripts-menu"]')).toBeVisible();
-          await expect(p.locator('[data-part="scripts-start-v1"]')).toBeVisible();
+          await expect(p.locator('[data-part="scripts-type"]')).toBeVisible();
           await noOverflow(p, `the ⋯ menu at ${size.width}`);
           await shot(p, 'menu', size);
+          await p.locator('[data-part="scripts-type"]').click();
+          await expect(text(p).locator('.cm-content')).toHaveAttribute('contenteditable', 'true');
         } finally {
           await phone.context.close();
         }
       }
 
-      await answer(page, idea(), true);
+      await answer(page, idea());
       await undo(page, idea());
-      // A comment typed in the comments column points where the caret is (the question's place put it there).
-      await typedComment(page, 'Cold open');
+      await chatLink(page, idea());
+      await shot(page, 'chat');
       await paste(page, idea());
       await shot(page, 'editor-image');
     } finally {
@@ -458,12 +458,18 @@ test.describe('locally', () => {
     }
   });
 
-  test('Start v1 from ⋯ builds the first cut; v1 opens, with v0 · Doc first', async ({ browser }) => {
+  test('Send builds the first cut; v1 opens, with v0 · Doc first; then Send says nothing changed', async ({
+    browser,
+  }) => {
     const { context, page } = await newPage(browser);
     try {
       await page.goto(videoUrl());
       await expect(text(page)).toBeVisible({ timeout: 20_000 });
-      await startV1(page, idea());
+      await sendBuildsV1(page, idea());
+      await shot(page, 'sent');
+      await page.locator('#verBtn').click();
+      await page.locator('#verList [data-ver="v1"]').click();
+      await page.waitForFunction(() => window.__review?.view?.shown === 'v1', null, { timeout: 20_000 });
       // The comments' version menu lists v0 · Doc first, then v1.
       await page.locator('#side [data-part~="version-menu"]').click();
       const versions = page.locator('[data-part~="version-menu-list"] [data-version]');
@@ -497,6 +503,7 @@ test.describe('locally', () => {
       await expect(text(p)).toBeVisible({ timeout: 20_000 });
       await p.locator('#sideToggle').click();
       await expect(p.locator('#side.drawer [data-part~="version-menu"]')).toHaveText('v0 · Doc');
+      await expect(p.locator('#side.drawer [data-part="chat"]')).toBeVisible();
       await p.locator('#side.drawer [data-part~="version-menu"]').click();
       await expect(p.locator('[data-part~="version-menu-list"] [data-version="v1"]')).toBeVisible();
       await noOverflow(p, 'the drawer on v0 with v1');
@@ -560,7 +567,7 @@ test.describe('hosted', () => {
     expect(pageErrors).toEqual([]);
   });
 
-  test('the same through retake connect: New idea, typing, a talk-out, Send, a question, undo, Start v1, an old v0', async ({
+  test('the same through retake connect: New idea, typing, a voice message, the chat, a question, undo, Send, an old v0', async ({
     browser,
   }) => {
     test.setTimeout(300_000);
@@ -590,14 +597,15 @@ test.describe('hosted', () => {
       expect(read(docOf(idea()))).toBe('# Jump souls\n\n');
       expect(existsSync(join(DATA, 'projects', 'deadlock-jump-souls', 'v0'))).toBe(false);
       await type(page, idea(), 'Hosted, the files stay on the computer.');
-      await talkOut(page, idea());
-      // The audio went to the computer and was transcribed there; the server keeps none of it.
-      expect(readdirSync(join(idea(), 'v0', 'voice')).some((f) => f.endsWith('.words.json'))).toBe(true);
-      await send(page, idea());
+      // The voice message's audio goes to the computer and is transcribed there; the agent runs there too.
+      await voiceMessage(page, idea());
       await answer(page, idea());
       await undo(page, idea());
+      await chatLink(page, idea());
       await paste(page, idea());
-      await startV1(page, idea());
+      await sendBuildsV1(page, idea());
+      // The chat is kept on the server, the documents and the audio on the computer.
+      expect(existsSync(join(DATA, 'projects', 'deadlock-jump-souls', 'v0'))).toBe(false);
 
       // A v0 from before, migrated on the computer.
       const old = join(dir, 'deadlock', 'old-idea');
