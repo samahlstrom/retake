@@ -154,7 +154,9 @@ func (r *runner) serveAsk(w http.ResponseWriter, req *http.Request) {
 	body.Task, body.Lease, body.Frame = active.ID, active.Lease, nil
 	ctx, cancel := context.WithTimeout(req.Context(), 2*time.Minute)
 	defer cancel()
-	body.Frame = r.frameOf(ctx, active, body)
+	if body.Anchor == nil {
+		body.Frame = r.frameOf(ctx, active, body) // a question about a document has no frame
+	}
 	var q project.TaskQuestion
 	if err := r.askServer(ctx, body, &q); err != nil {
 		var he *httpError
@@ -175,7 +177,7 @@ func (r *runner) serveAsk(w http.ResponseWriter, req *http.Request) {
 		r.ask.questions = append(r.ask.questions, q)
 	}
 	r.mu.Unlock()
-	r.log("%s: the agent asked about #%d at %s: %s", filepath.Base(r.opts.Root), q.Note, project.Clock(q.At), q.Text)
+	r.log("%s: the agent asked about #%d %s: %s", filepath.Base(r.opts.Root), q.Note, where(q), q.Text)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(q)
 }
@@ -266,7 +268,18 @@ func (r *runner) allHeld(t *project.EditingTask) bool {
 // answerLine is how an answer reaches an agent in herdr or tmux: one line, whitespace folded.
 func answerLine(q project.TaskQuestion) string {
 	text := strings.Join(strings.Fields(q.Answer.Text), " ")
-	return fmt.Sprintf("Answer to your question on note %d at %s: %s", q.Note, project.Clock(q.At), text)
+	return fmt.Sprintf("Answer to your question on note %d %s: %s", q.Note, where(q), text)
+}
+
+// where is a question's place: "at 1:23" in the video, or "at v0/script.md "Cold open"" in a document.
+func where(q project.TaskQuestion) string {
+	if a := q.Anchor; a != nil {
+		if a.Heading != "" {
+			return fmt.Sprintf("at %s %q", a.File, a.Heading)
+		}
+		return fmt.Sprintf("at %s line %d", a.File, a.Line)
+	}
+	return "at " + project.Clock(q.At)
 }
 
 // askCommand is how the prompt names retake: "retake" when that is this program on PATH, else its full path.

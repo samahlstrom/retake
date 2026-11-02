@@ -71,7 +71,7 @@ func fileVersions(vs []family.Version) []project.FileVersion {
 
 // sendFiles tells the server the project's version files as they are now.
 func (r *runner) sendFiles(ctx context.Context) error {
-	files := fileVersions(r.onDisk(false))
+	files := append(r.kindFiles(), fileVersions(r.onDisk(false))...)
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	err := r.call(ctx, "/api/worker/files", map[string]any{"files": files}, nil)
@@ -89,7 +89,7 @@ func (r *runner) filesLoop(ctx context.Context) {
 	tick := time.NewTicker(2 * time.Second)
 	defer tick.Stop()
 	for {
-		files := fileVersions(r.onDisk(false))
+		files := append(r.kindFiles(), fileVersions(r.onDisk(false))...)
 		r.famMu.Lock()
 		due := r.sentAt.IsZero() || !slices.Equal(files, r.sent) || time.Since(r.sentAt) > time.Minute
 		r.famMu.Unlock()
@@ -140,14 +140,19 @@ func (r *runner) plainContext(a project.WorkAssignment, vs []family.Version, out
 	return c
 }
 
-// plainPrompt is the task prompt of a project without a timeline.
-func plainPrompt(contextPath, newest, output, next, reportPath string) string {
+// plainPrompt is the task prompt of a project without a timeline. newest is "" when the video has no cut yet (only
+// an extension's version, v0). extra is the extensions' section.
+func plainPrompt(contextPath, newest, output, next, reportPath, extra string) string {
+	from := fmt.Sprintf("starting from the version the notes were made on (the newest is %q)", newest)
+	if newest == "" {
+		from = "building the video's first cut from what the notes and the video's folder give you (it has no cut yet)"
+	}
 	return fmt.Sprintf(`You are editing a Retake video project in the current working directory. It has no edit timeline: its versions are finished video files.
 Read the project instructions, then the durable task context at %q: the notes, and under "family" every version with its path.
 Only the note IDs in task.notes are assigned (minus task.done, finished in an earlier attempt). Other notes are context: check them and prior events for conflicting or already-applied feedback. Each note names the version it was made on and its times. Saved annotated stills, when available, are note-<id>.png in this task directory. Attached reference images are note-<id>-<file>; their boxes and original video times are in the context. A note's "missing" says which of its files couldn't be given to you and what you have instead.
-Make the requested change with the tools you have (ffmpeg, for example), starting from the version the notes were made on (the newest is %q). Write the result as one video file to %q (H.264 and AAC in an MP4 play everywhere). Retake adds it to the project as the next version, %s. Never edit, move or delete the existing versions or anyone else's files.
+Make the requested change with the tools you have (ffmpeg, for example), %s. Write the result as one video file to %q (H.264 and AAC in an MP4 play everywhere). Retake adds it to the project as the next version, %s. Never edit, move or delete the existing versions or anyone else's files.
 The next agent may differ from you; leave useful context on disk. Do not delete or edit the worker's identity, lock, logs, context files or ask.json.
-`, contextPath, newest, output, next) + askRules(reportPath, "A completed report is only a request: Retake checks that the new video plays before resolving the comment. Do not run retake push or mark notes complete yourself.")
+`, contextPath, from, output, next) + extra + askRules(reportPath, "A completed report is only a request: Retake checks that the new video plays before resolving the comment. Do not run retake push or mark notes complete yourself.")
 }
 
 // pushPlain puts a plain task's result into the project as the next version, and returns its label: the agent's
@@ -158,8 +163,11 @@ func (r *runner) pushPlain(output string, before []string) (label, problem strin
 		if !r.opts.Prober.Probe(output).HasDuration() {
 			return "", "The agent's video doesn't play: it has no duration."
 		}
-		label, dest, err := agent.NextVersionFile(r.onDisk(false), filepath.Ext(output))
-		if err != nil {
+		var label, dest string
+		var err error
+		if vs := r.onDisk(false); len(vs) == 0 {
+			label, dest = agent.FirstVersionFile(r.opts.Root, filepath.Ext(output)) // only v0 so far: v1
+		} else if label, dest, err = agent.NextVersionFile(vs, filepath.Ext(output)); err != nil {
 			return "", "Couldn't name the next version: " + err.Error()
 		}
 		if err = place(output, dest); err != nil {

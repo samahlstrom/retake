@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/samahlstrom/retake/internal/ext"
 	"github.com/samahlstrom/retake/internal/family"
 	"github.com/samahlstrom/retake/internal/home"
 	"github.com/samahlstrom/retake/internal/jobs"
@@ -25,6 +26,7 @@ import (
 	"github.com/samahlstrom/retake/internal/team"
 	"github.com/samahlstrom/retake/internal/theme"
 	"github.com/samahlstrom/retake/internal/thumb"
+	"github.com/samahlstrom/retake/internal/transcribe"
 	"github.com/samahlstrom/retake/internal/ui"
 )
 
@@ -61,6 +63,10 @@ type FolderOptions struct {
 	Project func(name string, o *server.Options)
 	// LocalWorker is each project's server.Options.LocalWorker: its editing worker, in this process.
 	LocalWorker func(ctx context.Context, root string, h http.Handler, blocked func(string))
+	// Exts are the extensions in effect (spec/extensions.md): their kinds are found by the scan, and their files,
+	// list and routes are served at the home and under every video. FileTranscriber transcribes owned audio files.
+	Exts            *ext.Set
+	FileTranscriber func() (transcribe.Transcriber, error)
 }
 
 // Folder serves a folder of projects.
@@ -143,7 +149,7 @@ func (f *Folder) rescan(force bool) []home.Found {
 	}
 	first := f.scanned.IsZero()
 	f.mu.Unlock()
-	scan := home.ScanDir(f.opts.Dir) // outside the lock: a big folder takes a moment
+	scan := home.ScanDir(f.opts.Dir, f.opts.Exts.KindAt) // outside the lock: a big folder takes a moment
 	if f.opts.Verbose || scan.Capped && first {
 		capped := ""
 		if scan.Capped {
@@ -183,7 +189,8 @@ func (f *Folder) projectOf(fd home.Found) *folderProject {
 	o := server.Options{Video: fd.Anchor, Root: fd.Root, Port: f.opts.Port, UI: f.opts.UI, Author: f.opts.Author,
 		Prober: f.opts.Prober, Jobs: f.opts.Jobs, Version: f.opts.Version, Log: f.opts.Log, Verbose: f.opts.Verbose,
 		EventPoll: f.opts.EventPoll, External: true, BasePath: "/p/" + fd.Name, FollowNewest: true,
-		Thumbs: f.opts.Thumbs, LocalWorker: f.opts.LocalWorker}
+		Thumbs: f.opts.Thumbs, LocalWorker: f.opts.LocalWorker, Exts: f.opts.Exts, FindAnchor: home.Anchor,
+		FileTranscriber: f.opts.FileTranscriber}
 	if f.opts.Project != nil {
 		f.opts.Project(fd.Name, &o)
 	}
@@ -425,6 +432,9 @@ func (f *Folder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/api/workspace" && r.Method == http.MethodPost {
 		perm = team.PermManage
 	}
+	if isHomeExt(parts) && !get {
+		perm = team.PermRecord // the extension's own role is checked inside
+	}
 	role, _, scope, ok := f.identify(w, r, shared, nil, perm, page)
 	if !ok {
 		return
@@ -439,6 +449,8 @@ func (f *Folder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.saveWorkspace(w, r)
 	case len(parts) == 2 && parts[0] == "api" && parts[1] == "ping" && get:
 		writeJSON(w, r, http.StatusOK, map[string]bool{"ok": true})
+	case isHomeExt(parts):
+		f.homeExt(w, r, role, parts)
 	case len(parts) == 1 && parts[0] == "favicon.ico" && get:
 		w.Header().Set("Cache-Control", "no-store")
 		w.WriteHeader(http.StatusNoContent)

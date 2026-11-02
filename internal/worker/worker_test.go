@@ -61,7 +61,7 @@ func TestMediaReadsRangesButNeverSymlinksOrSource(t *testing.T) {
 	}
 	write(filepath.Join(render, "seg_00000.m4s"), "0123456789")
 	r := &runner{opts: Options{Root: root, Prober: fakeProber{}}, dir: dir}
-	m := r.readMedia(relay.Request{Render: "revision", File: "seg_00000.m4s", Range: "bytes=2-5"})
+	m := r.readMedia(context.Background(), relay.Request{Render: "revision", File: "seg_00000.m4s", Range: "bytes=2-5"})
 	if m.Status != 206 || m.Range != "bytes 2-5/10" || m.Length != 4 || body(t, m) != "2345" {
 		t.Fatal(m.Status, m.Range, m.Length)
 	}
@@ -82,20 +82,20 @@ func TestMediaReadsRangesButNeverSymlinksOrSource(t *testing.T) {
 	if e := os.Symlink(filepath.Join(root, "v2"), filepath.Join(root, "v2", "sub.mp4")); e != nil {
 		t.Fatal(e)
 	}
-	m = r.readMedia(relay.Request{Version: "v1", Range: "bytes=8-"})
+	m = r.readMedia(context.Background(), relay.Request{Version: "v1", Range: "bytes=8-"})
 	if m.Status != 206 || m.Range != "bytes 8-16/17" || body(t, m) != "one bytes" || m.Modified == 0 {
 		t.Fatal(m.Status, m.Range, m.Modified)
 	}
-	if m = r.readMedia(relay.Request{Version: "v1", File: "clip_v1.mp4"}); m.Status != 200 || body(t, m) != "version one bytes" {
+	if m = r.readMedia(context.Background(), relay.Request{Version: "v1", File: "clip_v1.mp4"}); m.Status != 200 || body(t, m) != "version one bytes" {
 		t.Fatal("the version by its name", m.Status)
 	}
-	if m = r.readMedia(relay.Request{Version: "v1", File: "clip_v1.mp4", Head: true}); m.Status != 200 || m.Length != 17 || m.Body != nil {
+	if m = r.readMedia(context.Background(), relay.Request{Version: "v1", File: "clip_v1.mp4", Head: true}); m.Status != 200 || m.Length != 17 || m.Body != nil {
 		t.Fatal("HEAD", m.Status, m.Length)
 	}
-	if m = r.readMedia(relay.Request{Version: "v2", File: "seg_000.m4s"}); m.Status != 200 || body(t, m) != "segment zero" {
+	if m = r.readMedia(context.Background(), relay.Request{Version: "v2", File: "seg_000.m4s"}); m.Status != 200 || body(t, m) != "segment zero" {
 		t.Fatal("a segment beside the playlist", m.Status)
 	}
-	if m = r.readMedia(relay.Request{Version: "v1", Range: "bytes=17-"}); m.Status != 416 || m.Range != "bytes */17" {
+	if m = r.readMedia(context.Background(), relay.Request{Version: "v1", Range: "bytes=17-"}); m.Status != 416 || m.Range != "bytes */17" {
 		t.Fatal("past the end", m.Status, m.Range)
 	}
 	for _, req := range []relay.Request{
@@ -112,7 +112,7 @@ func TestMediaReadsRangesButNeverSymlinksOrSource(t *testing.T) {
 		{Version: "v3", File: "clip_v3.mp4"},          // no such version
 		{Version: "../v1"}, {Version: "timeline"}, {}, // not versions
 	} {
-		if got := r.readMedia(req); got.Status != 404 {
+		if got := r.readMedia(context.Background(), req); got.Status != 404 {
 			body(t, got)
 			t.Fatal("unsafe read", req, got.Status)
 		}
@@ -258,6 +258,9 @@ func TestAgentProcess(t *testing.T) {
 		t.Fatal(e)
 	}
 	mode := os.Args[len(os.Args)-1]
+	if docAgent(t, mode, assignment) {
+		return
+	}
 	switch mode {
 	case "child":
 		for {

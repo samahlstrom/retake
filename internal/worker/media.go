@@ -33,8 +33,12 @@ func missing() media { return media{Response: relay.Response{Status: http.Status
 // readMedia opens what a relay request asks for (spec/automation.md, "What a worker reads"): a retained render's
 // flat media file, with traversal and symlink containment enforced by os.Root, or a version file of the project's
 // current family, or a regular media file beside a playlist version. Anything else is 404.
-func (r *runner) readMedia(request relay.Request) media {
+func (r *runner) readMedia(ctx context.Context, request relay.Request) media {
 	switch {
+	case strings.HasPrefix(request.Op, "ext."):
+		return r.extAnswer(ctx, request)
+	case request.Op != "":
+		return missing()
 	case request.Render != "":
 		return readRender(r.dir, request)
 	case request.Version != "":
@@ -199,7 +203,7 @@ func (r *runner) mediaLoop(ctx context.Context) {
 
 // answer sends one relay request's answer, its body streamed from the file.
 func (r *runner) answer(ctx context.Context, client *http.Client, request relay.Request) {
-	m := r.readMedia(request)
+	m := r.readMedia(ctx, request)
 	defer m.close()
 	ctx, cancel := context.WithTimeout(ctx, relay.Hold)
 	defer cancel()
@@ -227,6 +231,9 @@ func (r *runner) answer(ctx context.Context, client *http.Client, request relay.
 	req.Header.Set("Content-Type", m.Type)
 	if m.Range != "" {
 		req.Header.Set("Content-Range", m.Range)
+	}
+	if m.ETag != "" {
+		req.Header.Set("X-Media-ETag", m.ETag)
 	}
 	resp, e := client.Do(req)
 	if e == nil {

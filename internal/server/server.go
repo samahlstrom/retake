@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/samahlstrom/retake/internal/bridge"
+	"github.com/samahlstrom/retake/internal/ext"
 	"github.com/samahlstrom/retake/internal/family"
 	"github.com/samahlstrom/retake/internal/jobs"
 	"github.com/samahlstrom/retake/internal/jsonx"
@@ -32,6 +33,7 @@ import (
 	"github.com/samahlstrom/retake/internal/stream"
 	"github.com/samahlstrom/retake/internal/team"
 	"github.com/samahlstrom/retake/internal/thumb"
+	"github.com/samahlstrom/retake/internal/transcribe"
 	"github.com/samahlstrom/retake/internal/ui"
 )
 
@@ -132,6 +134,18 @@ type Options struct {
 	// viewer doesn't cost the worker's upload again (spec/automation.md, "The server's cache"). nil caches nothing.
 	MediaCache *relay.Cache
 	CacheScope string
+
+	// Extensions (spec/extensions.md). Exts are the ones in effect (a request granted with GrantExts may carry its
+	// person's own); their kinds are found in the video's folder. FindAnchor finds the video a family is detected
+	// from when the Server was made without one (a video that had only an extension's version, v0, gets its first
+	// cut). FileTranscriber transcribes owned audio files. RemoteFiles says the folder is on a connected computer
+	// (the team server): owned files go through its worker's relay. ExtWatchEvery is how often a watch compares the
+	// files; 0 = 2 s.
+	Exts            *ext.Set
+	FindAnchor      func(root string) string
+	FileTranscriber func() (transcribe.Transcriber, error)
+	RemoteFiles     bool
+	ExtWatchEvery   time.Duration
 }
 
 // Server serves one version family.
@@ -165,6 +179,9 @@ type Server struct {
 	ownStreams bool
 
 	inproc localWorker // Options.LocalWorker's state
+
+	anchor atomic.Pointer[string] // the video the family is detected from: Options.Video, or what FindAnchor found
+	extState
 }
 
 // New returns a Server and scans the family once.
@@ -283,8 +300,11 @@ func (s *Server) stopStreams() { s.quitOnce.Do(func() { close(s.quit) }) }
 // Rescan detects the family again and returns it. Only GET /api/info rescans; other routes use the last scan.
 func (s *Server) Rescan() []family.Version {
 	f := []family.Version{}
-	if s.opts.Video != "" {
-		f = family.Detect(s.opts.Video, s.opts.Explicit, s.opts.Prober)
+	if video := s.video(); video != "" {
+		f = family.Detect(video, s.opts.Explicit, s.opts.Prober)
+	}
+	if kv, ok := s.kindVersion(); ok {
+		f = family.WithKind(f, kv) // an extension's version (v0) comes before every cut
 	}
 	f = s.remoteFamily(f)
 	if s.opts.FollowNewest && len(f) > 0 {
@@ -294,6 +314,24 @@ func (s *Server) Rescan() []family.Version {
 	}
 	s.fam.Store(&f)
 	return f
+}
+
+// video is the video the family is detected from: the opened one, else the one FindAnchor finds once there is one.
+func (s *Server) video() string {
+	if s.opts.Video != "" {
+		return s.opts.Video
+	}
+	if p := s.anchor.Load(); p != nil && *p != "" {
+		return *p
+	}
+	if s.opts.FindAnchor == nil {
+		return ""
+	}
+	a := s.opts.FindAnchor(s.root)
+	if a != "" {
+		s.anchor.Store(&a)
+	}
+	return a
 }
 
 // Family returns the last scanned family.
@@ -307,7 +345,7 @@ func (s *Server) Current() family.Version {
 		}
 	}
 	// Detect always keeps the opened file; this is only reached if it vanished from a hand-built family.
-	return family.Version{Label: "current", Path: s.opts.Video, Name: filepath.Base(s.opts.Video), Current: true}
+	return family.Version{Label: "current", Path: s.video(), Name: filepath.Base(s.video()), Current: true}
 }
 
 // version finds a version by label; an empty label means the current one.
@@ -453,6 +491,10 @@ func (s *Server) route(w http.ResponseWriter, r *http.Request, parts []string) {
 	}
 	if len(parts) == 1 && parts[0] == "mcp" {
 		s.mcpRoute(w, r)
+		return
+	}
+	if isExtRoute(parts) {
+		s.extRoute(w, r, parts)
 		return
 	}
 	switch r.Method {
@@ -676,6 +718,10 @@ func (s *Server) post(w http.ResponseWriter, r *http.Request, parts []string) {
 	}
 	if len(parts) == 2 && parts[0] == "api" && parts[1] == "erase" {
 		s.erase(w, r, body)
+		return
+	}
+	if is(parts, "api", "notes") {
+		s.addNote(w, r, body)
 		return
 	}
 	if len(parts) == 4 && parts[0] == "api" && parts[1] == "notes" && parts[3] == "reopen" {

@@ -356,7 +356,8 @@ func (s *Server) sidebar(w http.ResponseWriter, r *http.Request) {
 	if scope := query(r, "scope"); scope == "video" || scope == "review" {
 		resp.Scope = scope
 	}
-	resp.Newest = len(fam) == 0 || fam[len(fam)-1].Label == v.Label
+	// An extension's version (v0) shows its comments as an older version does: To do and Done, never only new ones.
+	resp.Newest = (len(fam) == 0 || fam[len(fam)-1].Label == v.Label) && v.Kind == ""
 	st, err := s.store(false)
 	if errors.Is(err, project.ErrNoProject) {
 		s.json(w, r, http.StatusOK, resp)

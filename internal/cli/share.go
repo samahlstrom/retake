@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/samahlstrom/retake/internal/config"
+	"github.com/samahlstrom/retake/internal/ext"
 	"github.com/samahlstrom/retake/internal/family"
 	"github.com/samahlstrom/retake/internal/hub"
 	"github.com/samahlstrom/retake/internal/project"
@@ -137,6 +138,7 @@ func newToken(st *project.Store, role team.Role, label string, ttl time.Duration
 type shareArgs struct {
 	role, expires, label, tunnel, host, bin, port, theme string
 	funnel, noQR, asJSON, verbose                        bool
+	exts                                                 []string // --ext: extension folders for this run
 }
 
 func shareCmd(ctx context.Context, args []string, env Env) int {
@@ -153,6 +155,7 @@ func shareCmd(ctx context.Context, args []string, env Env) int {
 		bools: map[string]*bool{"--funnel": &a.funnel, "--no-qr": &a.noQR, "--json": &a.asJSON, "--verbose": &a.verbose},
 		values: map[string]*string{"--role": &a.role, "--expires": &a.expires, "--label": &a.label,
 			"--tunnel": &a.tunnel, "--host": &a.host, "--tunnel-bin": &a.bin, "--port": &a.port, "--theme": &a.theme},
+		multi: map[string]*[]string{"--ext": &a.exts},
 	}
 	pos, help, err := f.parse(args)
 	if help {
@@ -309,13 +312,13 @@ func (s *share) server(cfg config.Config, port *int) error {
 		Close() error
 	}
 	dir, named := localThemeDir(s.env, s.a.theme)
-	page := withTheme(s.env, ui.Embedded(), dir, named)
+	page := withTheme(s.env, ext.Page(ui.Embedded()), dir, named)
 	if s.folder {
 		srv = newFolder(s.env, cfg, sets, hub.FolderOptions{Dir: s.video, Port: s.port, UI: page,
-			Verbose: s.a.verbose})
+			Verbose: s.a.verbose, Exts: localExts(s.env, cfg, s.a.exts, s.video)})
 	} else {
 		srv = newServer(s.env, cfg, sets, server.Options{Video: s.video, Port: s.port, UI: page,
-			Verbose: s.a.verbose})
+			Verbose: s.a.verbose, Exts: localExts(s.env, cfg, s.a.exts, "")})
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	s.srvDone = make(chan struct{})

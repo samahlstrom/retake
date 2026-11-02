@@ -20,8 +20,11 @@ import (
 
 	"github.com/samahlstrom/retake/internal/bridge"
 	"github.com/samahlstrom/retake/internal/config"
+	"github.com/samahlstrom/retake/internal/ext"
 	"github.com/samahlstrom/retake/internal/home"
+	"github.com/samahlstrom/retake/internal/hub"
 	"github.com/samahlstrom/retake/internal/thumb"
+	"github.com/samahlstrom/retake/internal/transcribe"
 	"github.com/samahlstrom/retake/internal/worker"
 )
 
@@ -88,8 +91,9 @@ func serverURL(raw string) (string, error) {
 
 func connectCmd(ctx context.Context, args []string, env Env) int {
 	var token, folder, name, profiles string
+	var extDirs []string
 	f := flags{values: map[string]*string{"--token": &token, "--folder": &folder, "--name": &name,
-		"--profiles": &profiles}}
+		"--profiles": &profiles}, multi: map[string]*[]string{"--ext": &extDirs}}
 	pos, help, err := f.parse(args)
 	if help {
 		_, _ = io.WriteString(env.Stdout, usage)
@@ -139,7 +143,8 @@ func connectCmd(ctx context.Context, args []string, env Env) int {
 	if !isDir(c.Folder) {
 		return usageError(env, "connect", fmt.Errorf("no such folder: %s", c.Folder))
 	}
-	ps := agentProfiles(env, loadConfig(env))
+	cfg := loadConfig(env)
+	ps := agentProfiles(env, cfg)
 	if profiles != "" {
 		ps = nil // --profiles replaces the configured and found agents
 		b, e := os.ReadFile(absPath(profiles, env.Getenv))
@@ -153,7 +158,9 @@ func connectCmd(ctx context.Context, args []string, env Env) int {
 	if name == "" {
 		name, _ = os.Hostname()
 	}
+	// This computer's own extensions: their kinds, files, agent instructions and new videos (spec/extensions.md).
 	cn := &connector{c: c, env: env, name: name, profiles: ps, editor: editorOf(env),
+		exts: localExts(env, cfg, extDirs, c.Folder), transcriber: fileTranscriber(cfg), kick: make(chan struct{}, 1),
 		http: &http.Client{Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse // never carry the token to another address or a sign-in page
 		}}}
@@ -182,6 +189,10 @@ type connector struct {
 	profiles []worker.Profile
 	editor   bridge.Editor
 	http     *http.Client
+
+	exts        *ext.Set
+	transcriber func() (transcribe.Transcriber, error)
+	kick        chan struct{} // look at the folder now (a new video was made)
 
 	logMu sync.Mutex
 }
@@ -217,7 +228,7 @@ func (cn *connector) do(ctx context.Context, method, path, ctype string, body []
 		}
 		return fmt.Errorf("%s answered %d", cn.c.URL, resp.StatusCode)
 	}
-	if out != nil {
+	if out != nil && len(b) > 0 { // a 204 (the machine channel's keep-alive) has no body
 		return json.Unmarshal(b, out)
 	}
 	return nil
@@ -249,8 +260,8 @@ type connectProject struct {
 // connectProjects finds the folder's videos as retake open <folder> does (the same scan of its tree, spec/home.md),
 // plus the projects with a native timeline and no version yet, so their workers can render the first one
 // (spec/automation.md).
-func connectProjects(dir string) []connectProject {
-	scan := home.ScanDir(dir)
+func connectProjects(dir string, kinds ...home.KindAt) []connectProject {
+	scan := home.ScanDir(dir, kinds...)
 	out := make([]connectProject, 0, len(scan.Videos)+len(scan.Empty))
 	for _, f := range scan.Videos {
 		_, err := bridge.FindTimeline(f.Root)
@@ -303,9 +314,12 @@ func (cn *connector) run(ctx context.Context) {
 			<-rw.done
 		}
 	}()
+	reqDone := make(chan struct{})
+	go func() { defer close(reqDone); cn.requests(ctx) }()
+	defer func() { <-reqDone }()
 	for {
 		seen := map[string]bool{}
-		for _, p := range connectProjects(cn.c.Folder) {
+		for _, p := range connectProjects(cn.c.Folder, cn.exts.KindAt) {
 			seen[p.Name] = true
 			rw := workers[p.Name]
 			if rw != nil && rw.root != p.Root { // another folder has the name now
@@ -356,8 +370,71 @@ func (cn *connector) run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-time.After(every):
+		case <-cn.kick:
 		}
 	}
+}
+
+// requests answers the server's machine channel (spec/extensions.md, "Files it owns"): a new video's folder for an
+// extension, written here and put on the server at once.
+func (cn *connector) requests(ctx context.Context) {
+	for ctx.Err() == nil {
+		var req struct {
+			ID string `json:"id"`
+			Op string `json:"op"`
+			hub.NewVideo
+			Ext string `json:"ext"`
+		}
+		pctx, cancel := context.WithTimeout(ctx, 40*time.Second)
+		err := cn.do(pctx, http.MethodGet, "/api/machine/requests", "", nil, &req)
+		cancel()
+		if err != nil || req.ID == "" {
+			if err != nil {
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(2 * time.Second):
+				}
+			}
+			continue
+		}
+		reply := map[string]any{"status": http.StatusBadRequest, "error": "unknown request " + req.Op}
+		if req.Op == "create" {
+			reply = cn.create(ctx, req.Ext, req.NewVideo)
+		}
+		body, _ := json.Marshal(reply)
+		rctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+		if err := cn.do(rctx, http.MethodPost, "/api/machine/requests/"+req.ID, "application/json", body, nil); err != nil {
+			cn.printf("couldn't answer the server: %v", err)
+		}
+		cancel()
+	}
+}
+
+// create makes a new video's folder with an extension's first files, and registers it right away.
+func (cn *connector) create(ctx context.Context, id string, nv hub.NewVideo) map[string]any {
+	root, err := hub.WriteVideo(cn.c.Folder, cn.exts.Get(id), nv)
+	switch {
+	case errors.Is(err, os.ErrExist):
+		return map[string]any{"status": http.StatusConflict, "error": "that folder exists"}
+	case err != nil:
+		return map[string]any{"status": http.StatusBadRequest, "error": err.Error()}
+	}
+	for _, p := range connectProjects(cn.c.Folder, cn.exts.KindAt) {
+		if p.Root != root {
+			continue
+		}
+		if err := cn.register(ctx, p); err != nil {
+			return map[string]any{"status": http.StatusBadGateway, "error": "made it, but couldn't add it: " + err.Error()}
+		}
+		select {
+		case cn.kick <- struct{}{}: // its worker starts now, not at the next look
+		default:
+		}
+		cn.printf("%s: new, on %s/p/%s/", p.Name, cn.c.URL, p.Name)
+		return map[string]any{"status": http.StatusCreated, "name": p.Name}
+	}
+	return map[string]any{"status": http.StatusInternalServerError, "error": "the new folder isn't found as a video"}
 }
 
 // register puts a project on the server: its name and title, and its newest version's first frame as the poster.
@@ -391,7 +468,8 @@ func (cn *connector) start(ctx context.Context, p connectProject) *running {
 	go func() {
 		defer close(rw.done)
 		rw.err = worker.Run(wctx, worker.Options{URL: cn.c.URL + "/p/" + p.Name, Token: cn.c.Token, Root: p.Root,
-			Name: cn.name, Profiles: slices.Clone(cn.profiles), Editor: cn.editor, Log: log})
+			Name: cn.name, Profiles: slices.Clone(cn.profiles), Editor: cn.editor, Log: log, Exts: cn.exts,
+			Transcriber: cn.transcriber})
 	}()
 	return rw
 }

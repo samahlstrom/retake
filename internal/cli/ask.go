@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -28,6 +29,8 @@ type taskAsk struct {
 	px, asJSON                  bool
 	boxes, arrows, images, opts []string
 	draw                        string
+	// A place in a document (spec/extensions.md, "Questions with a text anchor"): --file, --line, --heading, --quote.
+	file, line, heading, quote string
 }
 
 // parseClock reads a time: seconds (83, 83.5) or m:ss / h:mm:ss (1:23, 1:02:03.5).
@@ -133,6 +136,33 @@ func (a taskAsk) request(text string, getenv func(string) string) (project.WorkA
 	}
 	if (q.From == nil) != (q.To == nil) || q.From != nil && *q.From >= *q.To {
 		return q, errors.New("give a range as --from and --to, from before to")
+	}
+	if a.file != "" || a.line != "" || a.heading != "" || a.quote != "" {
+		if a.file == "" {
+			return q, errors.New("--line, --heading and --quote go with --file, the document the question is about")
+		}
+		placed := slices.ContainsFunc(a.images, func(s string) bool {
+			i := strings.LastIndex(s, "@")
+			_, err := numbers(s[i+1:], 4, "--image")
+			return i >= 0 && err == nil
+		})
+		if a.at != "" || a.from != "" || a.to != "" || len(a.boxes)+len(a.arrows) > 0 || a.draw != "" || a.px || placed {
+			return q, errors.New("a question about a document (--file) has no moment or frame: --at, --from, --to, " +
+				"--box, --arrow, --draw, --px and placed images are refused")
+		}
+		an := project.Anchor{File: strings.TrimPrefix(filepath.ToSlash(a.file), "./"), Line: 1,
+			Heading: strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(a.heading), "#")), Quote: strings.TrimSpace(a.quote)}
+		if a.line != "" {
+			n, err := strconv.Atoi(strings.TrimSpace(a.line))
+			if err != nil {
+				return q, fmt.Errorf("--line %q is not a line number", a.line)
+			}
+			an.Line = n
+		}
+		if err := an.Check(); err != nil {
+			return q, err
+		}
+		q.Anchor = &an
 	}
 	if len(a.boxes) > project.MaxAgentBoxes || len(a.arrows) > project.MaxAgentArrows ||
 		len(a.images) > project.MaxAgentImages || len(a.opts) > project.MaxAgentOptions {
@@ -309,6 +339,10 @@ func askInTask(ctx context.Context, a taskAsk, text string, env Env) int {
 		_ = printJSON(env.Stdout, out)
 		return ExitOK
 	}
-	_, _ = fmt.Fprintf(env.Stdout, "asked about #%d at %s (question %d): %s\n", out.Note, project.Clock(out.At), out.ID, out.Text)
+	where := "at " + project.Clock(out.At)
+	if out.Anchor != nil {
+		where = "in " + out.Anchor.File
+	}
+	_, _ = fmt.Fprintf(env.Stdout, "asked about #%d %s (question %d): %s\n", out.Note, where, out.ID, out.Text)
 	return ExitOK
 }

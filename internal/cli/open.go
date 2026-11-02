@@ -16,6 +16,7 @@ import (
 
 	"github.com/samahlstrom/retake/internal/app"
 	"github.com/samahlstrom/retake/internal/config"
+	"github.com/samahlstrom/retake/internal/ext"
 	"github.com/samahlstrom/retake/internal/family"
 	"github.com/samahlstrom/retake/internal/jsonx"
 	"github.com/samahlstrom/retake/internal/probe"
@@ -33,6 +34,7 @@ type openArgs struct {
 	uiDir    string
 	theme    string // --theme: the theme folder, or none (spec/theme.md)
 	allow    []string
+	exts     []string // --ext: extension folders, on for this run (spec/extensions.md)
 	verbose  bool
 	help     bool
 }
@@ -119,6 +121,15 @@ func parseOpen(args []string) (openArgs, error) {
 				return a, errors.New("--theme needs a folder, or none")
 			}
 			a.theme = v
+		case "--ext":
+			v, err := value()
+			if err != nil {
+				return a, err
+			}
+			if strings.TrimSpace(v) == "" {
+				return a, errors.New("--ext needs an extension folder")
+			}
+			a.exts = append(a.exts, v)
 		case "--allow-host":
 			v, err := value()
 			if err != nil {
@@ -251,7 +262,8 @@ func openCmd(ctx context.Context, args []string, env Env) int {
 		return ExitUsage
 	}
 	tdir, named := a.themeDir(env)
-	page = withTheme(env, page, tdir, named)
+	exts := localExts(env, cfg, a.exts, "")
+	page = withTheme(env, ext.Page(page), tdir, named)
 
 	tries := env.PortTries
 	if tries <= 0 {
@@ -264,7 +276,7 @@ func openCmd(ctx context.Context, args []string, env Env) int {
 	}
 	port := ln.Addr().(*net.TCPAddr).Port
 	srv := newServer(env, cfg, st, server.Options{Video: video, Explicit: explicit, Port: port, UI: page,
-		IdleExit: idleDuration(st.IdleExit), Verbose: a.verbose, AllowHosts: a.allow})
+		IdleExit: idleDuration(st.IdleExit), Verbose: a.verbose, AllowHosts: a.allow, Exts: exts})
 
 	url := fmt.Sprintf("http://127.0.0.1:%d/", port)
 	printStartup(env.Stdout, srv, video, url, st.IdleExit)
@@ -313,7 +325,8 @@ func newServer(env Env, cfg config.Config, st config.Settings, o server.Options)
 	o.Jobs = &engines
 	o.CheckEvery, o.Clock, o.Log, o.Version = env.CheckEvery, env.Clock, env.Stderr, Version()
 	o.Editor = editorOf(env)
-	o.LocalWorker = localWorker(env, cfg) // Send works with nothing else to run
+	o.LocalWorker = localWorker(env, cfg, o.Exts) // Send works with nothing else to run
+	o.FileTranscriber = fileTranscriber(cfg)
 	return server.New(o)
 }
 

@@ -123,14 +123,15 @@ func (p *proj) makeServerLocked(allowEmpty bool) *server.Server {
 	anchor := Anchor(p.root)
 	if anchor == "" && !allowEmpty {
 		a, err := p.store.Automation()
-		if err != nil || len(a.Renders) == 0 {
+		if err != nil || len(a.Renders) == 0 && len(a.Files) == 0 { // a connected computer's v0 counts
 			return nil
 		}
 	}
 	o := p.h.opts
 	so := server.Options{Video: anchor, Root: p.root, Store: p.store, External: true, BasePath: p.base,
 		FollowNewest: true, UI: o.UI, Prober: o.Prober, Jobs: o.Jobs, Version: o.Version, Log: o.Log,
-		Verbose: o.Verbose, EventPoll: o.EventPoll, MCPFiles: p.uploadFile, MediaCache: p.h.cache, CacheScope: p.row.Name}
+		Verbose: o.Verbose, EventPoll: o.EventPoll, MCPFiles: p.uploadFile, MediaCache: p.h.cache, CacheScope: p.row.Name,
+		Exts: o.Exts, RemoteFiles: true}
 	if p.pub != nil {
 		so.Media = p.pub.serve
 	}
@@ -235,7 +236,7 @@ func (h *Hub) projectRoute(w http.ResponseWriter, r *http.Request, ri reqInfo, n
 	r2 := r.Clone(r.Context())
 	r2.URL.Path = rest
 	r2.URL.RawPath = ""
-	r2 = server.Grant(r2, who.role, who.author)
+	r2 = server.GrantExts(server.Grant(r2, who.role, who.author), h.extsFor(who.user))
 	sw := &statusWriter{ResponseWriter: w}
 	srv.ServeHTTP(sw, r2)
 	if p.pub != nil && r.Method == http.MethodPost && sw.status() < 300 && len(parts) == 4 && parts[1] == "session" {

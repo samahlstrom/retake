@@ -35,6 +35,10 @@ func (h *Hub) apiRoute(w http.ResponseWriter, r *http.Request, ri reqInfo, parts
 	get, post, del := r.Method == http.MethodGet || r.Method == http.MethodHead, r.Method == http.MethodPost,
 		r.Method == http.MethodDelete
 	switch {
+	case len(parts) >= 1 && parts[0] == "ext":
+		h.homeExt(w, r, s, append([]string{"api"}, parts...))
+	case len(parts) == 2 && parts[0] == "me" && parts[1] == "extensions" && (get || r.Method == http.MethodPut):
+		h.meExtensions(w, r, s)
 	case len(parts) == 1 && parts[0] == "me" && get:
 		ps, err := h.st.Accounts.ProjectsOf(s.user)
 		if err != nil {

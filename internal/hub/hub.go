@@ -17,6 +17,7 @@ import (
 
 	"github.com/samahlstrom/retake/internal/accounts"
 	"github.com/samahlstrom/retake/internal/blob"
+	"github.com/samahlstrom/retake/internal/ext"
 	"github.com/samahlstrom/retake/internal/family"
 	"github.com/samahlstrom/retake/internal/jobs"
 	"github.com/samahlstrom/retake/internal/jsonx"
@@ -50,6 +51,9 @@ type Options struct {
 	// Theme is the host's theme folder (spec/theme.md), for the server's own pages (sign-in, setup): its name, logo
 	// and theme.css. "" = none. The review page and the home get it through UI (theme.Page).
 	Theme string
+	// Exts are the extensions the admin allows (spec/extensions.md, "Turning them on"): on for everyone, each person
+	// can turn one off for themselves.
+	Exts *ext.Set
 }
 
 // Hub is a running team server.
@@ -72,6 +76,9 @@ type Hub struct {
 	wg     sync.WaitGroup
 
 	cache *relay.Cache // nil without RelayCache
+
+	machines   machineChannel // requests for the connected computers themselves (a new video's folder)
+	createWait time.Duration  // how long a new video waits for its worker to report it; 0 = 15 s (tests shorten it)
 
 	mu        sync.Mutex
 	projects  map[string]*slot
@@ -338,6 +345,17 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.setupRoute(w, r, ri, parts[1:])
 	case parts[0] == "assets" || parts[0] == "theme":
 		h.static(w, r, parts)
+	case parts[0] == "ext":
+		s, err := h.session(w, r)
+		if err != nil {
+			h.storeFailed(w, r, err)
+			return
+		}
+		if s == nil {
+			h.fail(w, r, http.StatusUnauthorized, "sign in required")
+			return
+		}
+		h.homeExt(w, r, s, parts)
 	case len(parts) == 1 && parts[0] == "signout":
 		h.signout(w, r, ri)
 	case parts[0] == "api":

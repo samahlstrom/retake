@@ -80,10 +80,16 @@ func (h *Hub) connectRoute(w http.ResponseWriter, r *http.Request, ri reqInfo, s
 
 // machine checks a request's machine token under the rate limit, answering a refused one itself.
 func (h *Hub) machine(w http.ResponseWriter, r *http.Request, ri reqInfo, tok string, page bool) bool {
+	_, ok := h.machineToken(w, r, ri, tok, page)
+	return ok
+}
+
+// machineToken is machine with the token's row.
+func (h *Hub) machineToken(w http.ResponseWriter, r *http.Request, ri reqInfo, tok string, page bool) (accounts.MachineToken, bool) {
 	if h.limited(w, r, ri, h.tokenFails, page) {
-		return false
+		return accounts.MachineToken{}, false
 	}
-	_, err := h.st.Accounts.CheckMachineToken(tok)
+	m, err := h.st.Accounts.CheckMachineToken(tok)
 	if errors.Is(err, accounts.ErrBadMachine) {
 		h.tokenFails.Fail(ri.client, h.opts.Now())
 		w.Header().Set("WWW-Authenticate", `Bearer error="invalid_token"`)
@@ -92,13 +98,13 @@ func (h *Hub) machine(w http.ResponseWriter, r *http.Request, ri reqInfo, tok st
 		} else {
 			h.fail(w, r, http.StatusUnauthorized, "bad token")
 		}
-		return false
+		return accounts.MachineToken{}, false
 	}
 	if err != nil {
 		h.storeFailed(w, r, err)
-		return false
+		return accounts.MachineToken{}, false
 	}
-	return true
+	return m, true
 }
 
 // machineRoute is /api/machine/...: the routes retake connect uses, with a machine token.
@@ -109,14 +115,17 @@ func (h *Hub) machineRoute(w http.ResponseWriter, r *http.Request, ri reqInfo, r
 		h.fail(w, r, http.StatusUnauthorized, "machine token required")
 		return
 	}
-	if !h.machine(w, r, ri, tok, false) {
+	m, ok := h.machineToken(w, r, ri, tok, false)
+	if !ok {
 		return
 	}
 	switch {
 	case len(rest) == 0 && (r.Method == http.MethodGet || r.Method == http.MethodHead):
 		h.json(w, r, http.StatusOK, map[string]any{"ok": true, "url": strings.TrimSuffix(h.baseURL(ri), "/")})
+	case len(rest) >= 1 && rest[0] == "requests":
+		h.machineRequests(w, r, m, rest)
 	case len(rest) == 1 && rest[0] == "projects" && r.Method == http.MethodPost:
-		h.registerProject(w, r, ri)
+		h.registerProject(w, r, ri, m)
 	case len(rest) == 3 && rest[0] == "projects" && rest[2] == "poster" && r.Method == http.MethodPut:
 		h.putPoster(w, r, rest[1])
 	default:
@@ -128,7 +137,7 @@ func (h *Hub) machineRoute(w http.ResponseWriter, r *http.Request, ri reqInfo, r
 const maxTitle = 200
 
 // registerProject is POST /api/machine/projects: it makes the project when it doesn't exist.
-func (h *Hub) registerProject(w http.ResponseWriter, r *http.Request, ri reqInfo) {
+func (h *Hub) registerProject(w http.ResponseWriter, r *http.Request, ri reqInfo, m accounts.MachineToken) {
 	var req struct {
 		Name  string `json:"name"`
 		Title string `json:"title"`
@@ -185,6 +194,9 @@ func (h *Hub) registerProject(w http.ResponseWriter, r *http.Request, ri reqInfo
 	if err != nil {
 		h.storeFailed(w, r, err)
 		return
+	}
+	if place {
+		h.machines.placed(m.ID, path, proj) // where a new video of this project is made (the machine channel)
 	}
 	code := http.StatusOK
 	if created {

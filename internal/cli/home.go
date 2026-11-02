@@ -13,6 +13,7 @@ import (
 
 	"github.com/samahlstrom/retake/internal/app"
 	"github.com/samahlstrom/retake/internal/config"
+	"github.com/samahlstrom/retake/internal/ext"
 	"github.com/samahlstrom/retake/internal/family"
 	"github.com/samahlstrom/retake/internal/home"
 	"github.com/samahlstrom/retake/internal/hub"
@@ -31,7 +32,8 @@ func openFolder(ctx context.Context, a openArgs, env Env, cfg config.Config, st 
 		return ExitUsage
 	}
 	tdir, named := a.themeDir(env)
-	page = withTheme(env, page, tdir, named)
+	exts := localExts(env, cfg, a.exts, dir)
+	page = withTheme(env, ext.Page(page), tdir, named) // the extensions' styles come before the theme's
 	tries := env.PortTries
 	if tries <= 0 {
 		tries = config.PortTries
@@ -43,7 +45,7 @@ func openFolder(ctx context.Context, a openArgs, env Env, cfg config.Config, st 
 	}
 	port := ln.Addr().(*net.TCPAddr).Port
 	f := newFolder(env, cfg, st, hub.FolderOptions{Dir: dir, Port: port, UI: page, IdleExit: idleDuration(st.IdleExit),
-		Verbose: a.verbose, AllowHosts: a.allow})
+		Verbose: a.verbose, AllowHosts: a.allow, Exts: exts})
 	url := fmt.Sprintf("http://127.0.0.1:%d/", port)
 	printFolderStartup(env.Stdout, f, url, st.IdleExit)
 	if st.OpenBrowser {
@@ -90,7 +92,8 @@ func newFolder(env Env, cfg config.Config, st config.Settings, o hub.FolderOptio
 	}
 	o.Jobs = &engines
 	o.CheckEvery, o.Log, o.Version = env.CheckEvery, env.Stderr, Version()
-	o.LocalWorker = localWorker(env, cfg) // each project's editing worker runs in this process
+	o.LocalWorker = localWorker(env, cfg, o.Exts) // each project's editing worker runs in this process
+	o.FileTranscriber = fileTranscriber(cfg)
 	if env.Clock != nil {
 		o.Now = env.Clock.Now
 	}

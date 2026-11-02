@@ -96,6 +96,9 @@ func (s *Server) classify(r *http.Request) (shared, ok bool) {
 
 // permFor is what a route needs (spec/team.md's route table).
 func permFor(method string, parts []string) team.Perm {
+	if isExtRoute(parts) {
+		return extPermFor(method, parts)
+	}
 	if len(parts) >= 2 && parts[0] == "api" && parts[1] == "worker" {
 		return team.PermAgent
 	}
@@ -325,7 +328,7 @@ func (s *Server) mcpHandler() (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
-	p := &agent.Project{Video: s.opts.Video, Root: s.root, Store: st, Prober: s.opts.Prober, Editor: s.opts.Editor}
+	p := &agent.Project{Video: s.video(), Root: s.root, Store: st, Prober: s.opts.Prober, Editor: s.opts.Editor}
 	s.mcpH = mcp.HTTPHandlerWith(p, s.opts.Version, mcp.Options{Root: s.root, MaxWait: mcp.RemoteWait,
 		Files: s.opts.MCPFiles})
 	return s.mcpH, nil

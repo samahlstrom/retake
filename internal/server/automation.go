@@ -156,6 +156,12 @@ func (s *Server) workerRoute(w http.ResponseWriter, r *http.Request, p []string,
 				return
 			}
 		}
+		if len(b.Worker.Extensions) > 32 || slices.ContainsFunc(b.Worker.Extensions, func(x project.ExtRef) bool {
+			return !validExtID(x.ID) || len(x.Version) > 64 || x.API < 0 || x.API > 1000
+		}) {
+			s.fail(w, r, 400, "invalid extension list")
+			return
+		}
 		if err := st.ReadyFeedback(); err != nil {
 			s.storeFailed(w, r, err)
 			return
@@ -426,9 +432,22 @@ func (s *Server) workerRoute(w http.ResponseWriter, r *http.Request, p []string,
 		}
 		s.json(w, r, 200, request)
 		return
+	case len(p) == 5 && p[2] == "media" && p[4] == "body" && r.Method == http.MethodGet:
+		// The body of an ext.write the worker took (spec/extensions.md, "Files it owns").
+		body, ok := s.mediaRelay.Body(id, p[3])
+		if !ok {
+			s.fail(w, r, 404, "no such request")
+			return
+		}
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(body) //nolint:gosec // an owned file's bytes for the worker, as octet-stream with nosniff
+		return
 	case len(p) == 4 && p[2] == "media" && r.Method == http.MethodPost:
 		status, e := strconv.Atoi(r.Header.Get("X-Media-Status"))
-		if e != nil || status != 200 && status != 206 && status != 404 && status != 416 && status != 503 {
+		if e != nil || !slices.Contains([]int{200, 201, 202, 204, 206, 400, 404, 409, 413, 416, 503}, status) {
 			s.fail(w, r, 400, "invalid media status")
 			return
 		}
@@ -441,7 +460,8 @@ func (s *Server) workerRoute(w http.ResponseWriter, r *http.Request, p []string,
 		// The body streams through to the browser: this request stays open until it has been read.
 		body := http.MaxBytesReader(w, r.Body, relay.Chunk)
 		done, ok := s.mediaRelay.Reply(id, p[3], relay.Response{Status: status, Type: r.Header.Get("Content-Type"),
-			Range: r.Header.Get("Content-Range"), Length: length, Modified: modified, Body: body})
+			Range: r.Header.Get("Content-Range"), Length: length, Modified: modified, Body: body,
+			ETag: r.Header.Get("X-Media-ETag")})
 		if !ok {
 			s.fail(w, r, 410, "request expired")
 			return
@@ -469,6 +489,14 @@ func validFiles(fs []project.FileVersion) bool {
 	}
 	seen := map[string]bool{}
 	for _, f := range fs {
+		if f.Kind != "" {
+			// An extension's version: v0, named after its folder, with its kind and nothing to play.
+			if f.Label != "v0" || f.N != 0 || f.Name != "v0" || !validKind(f.Kind) || seen[f.Label] || f.Modified < 0 {
+				return false
+			}
+			seen[f.Label] = true
+			continue
+		}
 		n, err := strconv.Atoi(strings.TrimPrefix(f.Label, "v"))
 		ok := err == nil && n == f.N && n >= 0 && f.Label == "v"+strconv.Itoa(n) && !seen[f.Label] &&
 			plainName(f.Name) && len(f.Name) <= 255 && family.IsVideo(f.Name) && f.Size >= 0 && f.Modified >= 0 &&
@@ -478,6 +506,24 @@ func validFiles(fs []project.FileVersion) bool {
 			return false
 		}
 		seen[f.Label] = true
+	}
+	return true
+}
+
+// validKind checks an extension kind's id: <ext>.<kind>, each lower-case letters, digits and -.
+func validKind(k string) bool {
+	e, kind, ok := strings.Cut(k, ".")
+	return ok && len(k) <= 65 && validExtID(e) && validExtID(kind)
+}
+
+func validExtID(s string) bool {
+	if s == "" || len(s) > 32 || s[0] < 'a' || s[0] > 'z' {
+		return false
+	}
+	for _, c := range s {
+		if (c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '-' {
+			return false
+		}
 	}
 	return true
 }
@@ -557,6 +603,11 @@ func (s *Server) remoteVersion(v project.LiveRender) family.Version {
 // fileVersion is a connected computer's version file as a version of the family. Its takes live on the host, under
 // .retake/remote/<label>/.
 func (s *Server) fileVersion(fv project.FileVersion) family.Version {
+	if fv.Kind != "" {
+		// An extension's version (v0): a folder on that computer, nothing to play.
+		return family.Version{Label: fv.Label, N: fv.N, Name: fv.Name, Kind: fv.Kind, Relay: true,
+			Modified: fv.Modified, Path: filepath.Join(s.root, ".retake", "remote", fv.Label)}
+	}
 	v := family.Version{Label: fv.Label, N: fv.N, Name: fv.Name, FPS: jsonx.Float(fv.FPS), Relay: true,
 		Path: filepath.Join(s.root, ".retake", "remote", fv.Label, fv.Name)}
 	d := jsonx.Float(fv.Duration)
@@ -610,7 +661,7 @@ func (s *Server) writeRemoteManifest(label string, m *bridge.Manifest) error {
 // diskVersions counts the family's versions that aren't relayed renders, and their highest number.
 func (s *Server) diskVersions(a *project.AutomationState) (count, floor int) {
 	for _, v := range s.Family() {
-		if a.Render(v.Label) == nil {
+		if a.Render(v.Label) == nil && v.Kind == "" { // an extension's version (v0) isn't a cut
 			count++
 			floor = max(floor, v.N)
 		}

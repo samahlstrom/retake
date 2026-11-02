@@ -13,6 +13,7 @@ import (
 	"github.com/samahlstrom/retake/internal/app"
 	"github.com/samahlstrom/retake/internal/blob"
 	"github.com/samahlstrom/retake/internal/config"
+	"github.com/samahlstrom/retake/internal/ext"
 	"github.com/samahlstrom/retake/internal/hub"
 	"github.com/samahlstrom/retake/internal/probe"
 	"github.com/samahlstrom/retake/internal/theme"
@@ -186,9 +187,10 @@ func linkBase(s serverSettings, st *hub.Stores) string {
 
 func serveCmd(ctx context.Context, args []string, env Env) int {
 	var sf serverFlags
-	var themeFlag string
-	f := flags{values: map[string]*string{"--ui-dir": &sf.uiDir, "--theme": &themeFlag},
-		bools: map[string]*bool{"--verbose": &sf.verbose}}
+	var themeFlag, extFlag string
+	var extDirs []string
+	f := flags{values: map[string]*string{"--ui-dir": &sf.uiDir, "--theme": &themeFlag, "--extensions": &extFlag},
+		bools: map[string]*bool{"--verbose": &sf.verbose}, multi: map[string]*[]string{"--ext": &extDirs}}
 	sf.add(&f)
 	pos, help, err := f.parse(args)
 	if help {
@@ -223,7 +225,10 @@ func serveCmd(ctx context.Context, args []string, env Env) int {
 	}
 	// The look is the host's: <data dir>/theme, outside the image, so an update never changes it (spec/theme.md).
 	tdir, named := themeDir(env, themeFlag, theme.HostedDir(s.Data))
-	page = withTheme(env, page, tdir, named)
+	page = withTheme(env, ext.Page(page), tdir, named)
+	// The extensions the admin allows (spec/extensions.md, "Turning them on"): on for everyone.
+	exts := hostedExts(env, s.Data, extDirs, allowedExts(extFlag, env.Getenv("RETAKE_EXTENSIONS"),
+		cfg.Server.Extensions))
 	st, err := openStores(ctx, s, true)
 	if err != nil {
 		_, _ = fmt.Fprintf(env.Stderr, "retake serve: %v\n", err)
@@ -243,7 +248,7 @@ func serveCmd(ctx context.Context, args []string, env Env) int {
 		engines = env.Engines(cfg)
 	}
 	o := hub.Options{Stores: st, PublicURL: s.PublicURL, Proxies: s.Proxies, UI: page, Jobs: &engines, Prober: prober,
-		Version: Version(), Log: env.Stderr, Verbose: sf.verbose, RelayCache: s.RelayCache, Theme: tdir}
+		Version: Version(), Log: env.Stderr, Verbose: sf.verbose, RelayCache: s.RelayCache, Theme: tdir, Exts: exts}
 	if mail != nil {
 		o.Mailer = mail
 	}
@@ -303,4 +308,22 @@ func printServeStartup(env Env, st *hub.Stores, s serverSettings, pub hub.Public
 		_, _ = fmt.Fprintln(env.Stderr, "retake: the public URL is plain http, so cookies aren't Secure and can be "+
 			"read on the network. Put retake behind TLS (deploy/README.md).")
 	}
+}
+
+// allowedExts is the server's allowed extensions: --extensions, else RETAKE_EXTENSIONS, else [server] extensions
+// (comma-separated ids in the first two).
+func allowedExts(flag, env string, cfg []string) []string {
+	for _, v := range []string{flag, env} {
+		if strings.TrimSpace(v) == "" {
+			continue
+		}
+		var out []string
+		for id := range strings.SplitSeq(v, ",") {
+			if id = strings.TrimSpace(id); id != "" {
+				out = append(out, id)
+			}
+		}
+		return out
+	}
+	return cfg
 }

@@ -52,8 +52,8 @@ func (s *Server) attachAsks(st *project.Store, v family.Version, items []project
 			continue
 		}
 		ask := &project.ItemAsk{ID: open.ID, Task: j.ID, T: open.At, From: open.From, To: open.To, Version: open.Version,
-			Text: open.Text, Visuals: open.Visuals}
-		if open.Version != v.Label {
+			Text: open.Text, Visuals: open.Visuals, Anchor: open.Anchor}
+		if open.Version != v.Label && open.Anchor == nil {
 			if origin, ok := s.version(open.Version); ok {
 				if from, to := s.manifestOf(origin), s.manifestOf(v); from != nil && to != nil {
 					tm := bridge.BuildTimeMap(origin.Label, v.Label, from, to)

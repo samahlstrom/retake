@@ -82,24 +82,39 @@ func (r *runner) execute(ctx context.Context, a project.WorkAssignment) outcome 
 	reportPath := filepath.Join(dir, fmt.Sprintf("report-%d.json", t.Attempt))
 	contextPath := filepath.Join(dir, fmt.Sprintf("context-%d.json", t.Attempt))
 	// A plain project's agent writes its video to output; the worker pushes it as the next version.
-	plain, output := r.timeline == "", filepath.Join(dir, "output.mp4")
+	// A task of only typed comments on an extension's version (v0's documents) renders and pushes nothing.
+	doc := docOnly(a)
+	plain, output := r.timeline == "" && !doc, filepath.Join(dir, "output.mp4")
 	var before []string
 	var vs []family.Version
-	prompt := timelinePrompt(contextPath, r.timeline, reportPath)
+	extra := r.extSection(a)
+	prompt := timelinePrompt(contextPath, r.timeline, reportPath, extra)
+	if doc {
+		prompt = docPrompt(contextPath, reportPath, extra)
+	}
 	if plain {
 		vs = r.onDisk(false)
+		var next string
 		if len(vs) == 0 {
-			return paused("The project has no version that plays")
-		}
-		next, _, err := agent.NextVersionFile(vs, ".mp4")
-		if err != nil {
-			return paused("Couldn't name the next version: " + err.Error())
+			if _, ok := r.kindVersion(); !ok {
+				return paused("The project has no version that plays")
+			}
+			next, _ = agent.FirstVersionFile(r.opts.Root, ".mp4") // a video with only v0 gets its first cut
+		} else {
+			var err error
+			if next, _, err = agent.NextVersionFile(vs, ".mp4"); err != nil {
+				return paused("Couldn't name the next version: " + err.Error())
+			}
 		}
 		for _, v := range vs {
 			before = append(before, v.Label)
 		}
 		_ = os.Remove(output) // an earlier attempt's: this attempt writes its own
-		prompt = plainPrompt(contextPath, vs[len(vs)-1].Path, output, next, reportPath)
+		newest := ""
+		if len(vs) > 0 {
+			newest = vs[len(vs)-1].Path
+		}
+		prompt = plainPrompt(contextPath, newest, output, next, reportPath, extra)
 	}
 	// The notes' stills and images: a missing one never stops the task (spec/automation.md, "A note's stills and
 	// images").
@@ -124,6 +139,9 @@ func (r *runner) execute(ctx context.Context, a project.WorkAssignment) outcome 
 		return paused("Cannot save the task prompt")
 	}
 	var usage *project.AgentUsage
+	// A copy of the extensions' files before the agent touches them, so a person can undo its edit of a document.
+	finish := r.snapshot(t.ID)
+	defer finish()
 	if mode == OpenBackground {
 		var stop *outcome
 		out := ""
@@ -150,7 +168,7 @@ func (r *runner) execute(ctx context.Context, a project.WorkAssignment) outcome 
 	if report.State != "completed" {
 		return paused("Agent report must be completed or question")
 	}
-	if r.allHeld(t) {
+	if r.allHeld(t) || doc {
 		// Every note waits on the agent's own questions: nothing is done yet, so there's no render or version to wait
 		// for. The server keeps the task for the answers.
 		return outcome{state: "completed", message: report.Message, usage: usage}
@@ -311,15 +329,25 @@ func reported(path string) bool {
 	return e == nil && len(b) <= 64<<10 && json.Unmarshal(b, &report) == nil
 }
 
-// timelinePrompt is the task prompt of a project with a native timeline.
-func timelinePrompt(contextPath, timeline, reportPath string) string {
+// docPrompt is the task prompt of a task whose notes are all typed comments on an extension's version: the
+// extension's section says what to do with its documents.
+func docPrompt(contextPath, reportPath, extra string) string {
+	return fmt.Sprintf(`You are working on the documents of a Retake video in the current working directory (its folder).
+Read the project instructions, then the durable task context at %q. Only the note IDs in task.notes are assigned (minus task.done, finished in an earlier attempt); each is a typed comment, and its "anchor" says which file and place it is about. Other notes are context.
+Make the requested changes to the files the notes are about, as the section below says. Don't render, push or change any video version. Preserve other people's work.
+The next agent may differ from you; leave useful context on disk. Do not delete or edit the worker's identity, lock, logs, context files, ask.json or anything under .retake/.
+`, contextPath) + extra + askRules(reportPath, "A completed report finishes these comments with your message as their change.")
+}
+
+// timelinePrompt is the task prompt of a project with a native timeline. extra is the extensions' section.
+func timelinePrompt(contextPath, timeline, reportPath, extra string) string {
 	return fmt.Sprintf(`You are editing a native Retake video project in the current working directory.
 Read the project instructions, then the durable task context at %q. The native timeline is %q.
 Only the note IDs in task.notes are assigned (minus task.done, finished in an earlier attempt). Other notes are context: check them and prior events for conflicting or already-applied feedback. Original note versions, timing, strokes and targets must be respected. Saved annotated stills, when available, are note-<id>.png in this task directory. Attached reference images are note-<id>-<file>; their boxes and original video times are in the context. A note's "missing" says which of its files couldn't be given to you and what you have instead.
 Original local video revisions are retained in .retake/worker/renders/: each state.json gives its label (a draft such as v4-draft2 until a task completes it as v4), source.json is its timeline snapshot, and index.m3u8 is its video. Inspect the original frame there when needed; do not assume an old comment's time refers to the current source.
 Make the requested source edits in this project. Preserve all existing working changes, media and other people's work. Retake automatically renders valid saved source changes and streams them to reviewers. Do not run retake push or mark notes complete yourself.
 The next agent may differ from you; leave source changes and useful context on disk. Do not delete or edit the worker's identity, lock, logs, context files, ask.json or render output.
-`, contextPath, timeline) + askRules(reportPath, "A completed report is only a request: Retake waits for a checked playable render before resolving the comment.")
+`, contextPath, timeline) + extra + askRules(reportPath, "A completed report is only a request: Retake waits for a checked playable render before resolving the comment.")
 }
 
 func (r *runner) fetchArtifact(ctx context.Context, path, destination string) error {

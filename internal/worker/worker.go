@@ -17,9 +17,12 @@ import (
 	"time"
 
 	"github.com/samahlstrom/retake/internal/bridge"
+	"github.com/samahlstrom/retake/internal/ext"
+	"github.com/samahlstrom/retake/internal/extwork"
 	"github.com/samahlstrom/retake/internal/family"
 	"github.com/samahlstrom/retake/internal/probe"
 	"github.com/samahlstrom/retake/internal/project"
+	"github.com/samahlstrom/retake/internal/transcribe"
 )
 
 // Profile is a trusted local executable and argument vector. Retake never executes a server-supplied command. Env
@@ -50,6 +53,10 @@ type Options struct {
 	// Still makes the still of a question's moment (retake ask); nil = FFmpegStill. NoStill turns it off.
 	Still   Still
 	NoStill bool
+	// Exts are this computer's extensions in effect (spec/extensions.md): their kinds, owned files, agent
+	// instructions and history. Transcriber transcribes owned audio files (a talk-out); nil: none is set up.
+	Exts        *ext.Set
+	Transcriber func() (transcribe.Transcriber, error)
 }
 
 // Errors that say why a project can't be edited here (Reason turns them into a sentence for the page).
@@ -74,6 +81,7 @@ type runner struct {
 	warned                map[string]bool // profiles already logged as having no interactive command
 	ask                   askState        // questions from inside a task (ask.go)
 	life                  context.Context // the worker's whole run: its question endpoint lives this long
+	extJobs               *extwork.Jobs   // transcriptions of owned audio files, for the relay's ext.transcribe
 
 	famMu  sync.Mutex
 	fam    []family.Version // the project's versions at famAt (family)
@@ -166,7 +174,8 @@ func Run(ctx context.Context, o Options) error {
 	if o.Still == nil && !o.NoStill {
 		o.Still = FFmpegStill
 	}
-	r := &runner{opts: o, dir: filepath.Join(o.Root, ".retake", "worker")}
+	r := &runner{opts: o, dir: filepath.Join(o.Root, ".retake", "worker"),
+		extJobs: &extwork.Jobs{Transcriber: o.Transcriber}}
 	// A project without a timeline is a plain one (spec/automation.md, "Plain projects"): no renderer.
 	r.timeline, e = bridge.FindTimeline(o.Root)
 	if errors.Is(e, bridge.ErrNoTimeline) {
@@ -204,6 +213,7 @@ func Run(ctx context.Context, o Options) error {
 		o.Name, _ = os.Hostname()
 	}
 	r.identity = project.EditingWorker{ID: id, Name: o.Name, Session: session}
+	r.identity.Extensions = r.extRefs()
 	seen := map[string]bool{}
 	for _, p := range o.Profiles {
 		if !project.ValidWorkID(p.ID) || len(p.Command) == 0 || seen[p.ID] ||

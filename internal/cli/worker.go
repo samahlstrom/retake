@@ -10,6 +10,7 @@ import (
 	"os"
 
 	"github.com/samahlstrom/retake/internal/config"
+	"github.com/samahlstrom/retake/internal/ext"
 	"github.com/samahlstrom/retake/internal/project"
 	"github.com/samahlstrom/retake/internal/worker"
 )
@@ -52,7 +53,9 @@ func workerCmd(ctx context.Context, args []string, env Env) int {
 		}
 		ps = openAgentsIn(ps, cfg)
 	}
-	err = worker.Run(ctx, worker.Options{URL: r.URL, Token: r.Token, Root: absPath(root, env.Getenv), Name: name, Profiles: ps, Editor: editorOf(env), Log: env.Stderr})
+	err = worker.Run(ctx, worker.Options{URL: r.URL, Token: r.Token, Root: absPath(root, env.Getenv), Name: name,
+		Profiles: ps, Editor: editorOf(env), Log: env.Stderr, Exts: localExts(env, cfg, nil, ""),
+		Transcriber: fileTranscriber(cfg)})
 	if err != nil {
 		_, _ = fmt.Fprintf(env.Stderr, "retake worker: %v\n", err)
 		return ExitError
@@ -89,9 +92,10 @@ func openAgentsIn(ps []worker.Profile, cfg config.Config) []worker.Profile {
 
 // localWorker is server.Options.LocalWorker for retake open and share: each project they serve gets its editing
 // worker in this process, named after the machine (spec/automation.md, "Local mode").
-func localWorker(env Env, cfg config.Config) func(context.Context, string, http.Handler, func(string)) {
+func localWorker(env Env, cfg config.Config, exts *ext.Set) func(context.Context, string, http.Handler, func(string)) {
 	return func(ctx context.Context, root string, h http.Handler, blocked func(string)) {
-		worker.Local(ctx, worker.Options{Root: root, Editor: editorOf(env), Log: env.Stderr},
+		worker.Local(ctx, worker.Options{Root: root, Editor: editorOf(env), Log: env.Stderr, Exts: exts,
+			Transcriber: fileTranscriber(cfg)},
 			func() []worker.Profile { return agentProfiles(env, cfg) }, h, blocked)
 	}
 }
