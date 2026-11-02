@@ -299,6 +299,11 @@ Versioning). Classes and ids are not part of the API and can change in any relea
 | `nav-video` | A video in the tree | home |
 | `nav-grip` | The handle that resizes the tree | home |
 | `nav-toggle` | ☰, which shows and hides the tree | home |
+| `nav-ext` | An extension's section under the folder tree (spec/extensions.md) | home |
+| `nav-ext-title` | Its header row's title, which opens the extension's page | home |
+| `nav-ext-action` | Its + (the extension's action, such as New idea) | home |
+| `nav-ext-video` | A video in that section (an idea: only an extension's version) | home |
+| `ext-slot` | Where an extension's UI mounts; `data-ext` is its id, `data-slot` the slot | home, review |
 | `brand` | The name (and logo) at the top left of the home | home |
 | `logo` | The theme's logo inside `brand` | home |
 | `brand-name` | The name inside `brand` | home |

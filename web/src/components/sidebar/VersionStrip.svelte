@@ -1,6 +1,7 @@
 <script lang="ts">
   // The versions over the comments, oldest first: the one on screen highlighted, each with what's still to do on it
-  // ("v3 91"), the agent's drafts of the next one as one quiet "v8 · drafting". A click shows that version, like the
+  // ("v3 91"), the agent's drafts of the next one as one quiet "v8 · drafting", an extension's version first
+  // ("v0 · Script"). A click shows that version, like the
   // picker in the bar. Not there for a single version. One row of a fixed height: it scrolls sideways (a phone, or many
   // versions), never wraps, so nothing under it moves.
   import type { Review } from '../../lib/review.svelte';
@@ -30,9 +31,9 @@
         class:on={e.on}
         class:drafting={e.drafting}
         aria-current={e.on ? 'true' : undefined}
-        title={e.drafting ? `${e.version}: the agent's draft` : e.todo ? `${e.version}: ${e.todo} to do` : e.version}
+        title={e.drafting ? `${e.version}: the agent's draft` : e.todo ? `${e.name}: ${e.todo} to do` : e.name}
         onclick={() => review.pickVersion(e.label)}
-        >{e.version}{#if e.drafting}<span class="dr"> · drafting</span>{/if}{#if e.todo}<span class="n">{e.todo}</span
+        >{e.name}{#if e.drafting}<span class="dr"> · drafting</span>{/if}{#if e.todo}<span class="n">{e.todo}</span
           >{/if}</button
       >
     {/each}

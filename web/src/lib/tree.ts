@@ -59,7 +59,22 @@ export function ancestors(path: string): string[] {
 export const within = (path: string, place: string): boolean =>
   !place || path === place || path.startsWith(`${place}/`);
 
-/** The selection in a URL hash: "#/a/b%20c" is "a/b c"; anything else is the top. */
+/** An extension's page in the home's hash (spec/extensions.md, "Nav section"): "#ext/<id>/<route>" is that
+ * extension's page at that route ("" for its start); anything else is null. Folder hashes start with "#/", so the
+ * two never meet. */
+export function parseExtHash(hash: string): { id: string; route: string } | null {
+  const m = /^#?ext\/([a-z][a-z0-9-]{0,31})(?:\/(.*))?$/.exec(hash);
+  if (!m) return null;
+  let route = m[2] ?? '';
+  try {
+    route = decodeURIComponent(route);
+  } catch {
+    /* keep it as it is */
+  }
+  return { id: m[1]!, route };
+}
+
+/** The selection in a URL hash: "#/a/b%20c" is "a/b c"; anything else (an extension's page too) is the top. */
 export function parseHash(hash: string): string {
   const h = hash.replace(/^#/, '');
   if (!h.startsWith('/')) return '';

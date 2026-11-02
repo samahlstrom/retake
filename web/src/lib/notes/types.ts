@@ -4,8 +4,23 @@ import type { EditingTask } from '../automation.svelte';
 
 export type NoteStatus = 'open' | 'question' | 'answered' | 'accepted' | 'retracted';
 
+/** Where a typed comment (or an agent's question) points in an extension's document (spec/extensions.md, "Comments
+ * and questions on an extension's version"): an owned file, its line (from 1), the nearest heading above, a quote. */
+export interface Anchor {
+  file: string;
+  line: number;
+  heading?: string;
+  quote?: string;
+}
+
 /** One sidebar item from GET /api/notes. For a question, `id` is the thread id (what `answer_to` takes). */
 export interface NoteItem {
+  /** The note's key: `doc/<n>` for a typed comment on an extension's version. */
+  key?: string;
+  /** A typed comment's place in a document. */
+  anchor?: Anchor | null;
+  /** "version": the typed comment asks for a cut. */
+  wants?: string;
   work?: EditingTask;
   version?: string;
   take?: string;
@@ -57,6 +72,8 @@ export interface AgentVisuals {
 export interface TaskAsk {
   id: number;
   task: string;
+  /** A question about a place in a document has `anchor` in place of the times and the visuals on the frame. */
+  anchor?: Anchor | null;
   t: number;
   from?: number | null;
   to?: number | null;

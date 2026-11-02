@@ -175,6 +175,42 @@ describe('Notes', () => {
     expect(onVersion).toHaveBeenCalledTimes(4);
   });
 
+  it("passes the page's events to extensions (ctx.on), ext.files too; an extension's job stays off the line", async () => {
+    const { notes } = setup();
+    await notes.load('v8');
+    const es = FakeES.all[0]!;
+    const got: [string, unknown][] = [];
+    const offs = ['notes', 'job', 'version', 'automation', 'ext.files'].map((name) =>
+      notes.on(name, (d) => got.push([name, d])),
+    );
+    es.emit('notes', { version: 'v8' }, '1');
+    es.emit('automation', undefined, '2');
+    es.emit('version', { why: 'push', label: 'v9' }, '3');
+    es.emit('ext.files', { ext: 'ignition', files: [{ path: 'v0/script.md', sha256: 'x' }] }, '4');
+    es.emit('ext.files', { bad: true }, '5');
+    es.emit('job', { id: 'j1', kind: 'transcribe-file', state: 'running' }, '6');
+    expect(got).toEqual([
+      ['notes', { version: 'v8' }],
+      ['automation', {}],
+      ['version', { why: 'push', label: 'v9' }],
+      ['ext.files', { ext: 'ignition', files: [{ path: 'v0/script.md', sha256: 'x' }] }],
+      ['job', { id: 'j1', kind: 'transcribe-file', state: 'running' }],
+    ]);
+    expect(notes.job).toBeNull(); // a talk-out's transcription isn't "Transcribing your take…"
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const offBug = notes.on('notes', () => {
+      throw new Error('extension bug');
+    });
+    expect(() => es.emit('notes', {}, '7')).not.toThrow();
+    expect(err).toHaveBeenCalledTimes(1);
+    expect(got).toHaveLength(6); // the others still heard it
+    offBug();
+    err.mockRestore();
+    for (const off of offs) off();
+    es.emit('notes', {}, '8');
+    expect(got).toHaveLength(6);
+  });
+
   it('reconnects from the last event after the stream closes, and catches up when it reopens', async () => {
     const { notes, srv, timers } = setup();
     await notes.load('v8');

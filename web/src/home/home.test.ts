@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Home, NAV_MAX, NAV_MIN, NAV_WIDTH } from './home.svelte';
+import type { ExtInfo } from '../ext/loader';
 
 const answer = (status: number, body: unknown): Response =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -181,5 +182,55 @@ describe('the folder tree', () => {
     expect(home.hidden).toBe(false);
     home.select('item-shop');
     expect(home.drawer).toBe(false);
+  });
+});
+
+describe("an extension's page on the home", () => {
+  const ext = (id: string): ExtInfo => ({
+    id,
+    name: id,
+    version: '1.0.0',
+    base: `ext/${id}/`,
+    module: `ui/${id}.js`,
+    style: '',
+    nav: { title: id, icon: '', list: '', action: null },
+    kinds: [],
+    slots: [{ slot: 'page', kind: '', title: '', when: 'always' }],
+    machine: true,
+  });
+
+  it('opens from #ext/<id>/<route>, tells the page of a new route, and a folder goes back to the cards', async () => {
+    const home = new Home({ storage: null, fetch: (async () => answer(200, body)) as unknown as typeof fetch });
+    await home.refresh();
+    home.exts = [ext('ignition'), ext('hello')];
+    home.phone = true;
+    home.drawer = true;
+    home.route('#ext/ignition/');
+    expect(home.ext).toEqual({ id: 'ignition', route: '' });
+    expect(home.extOpen?.id).toBe('ignition');
+    expect(home.drawer).toBe(false); // the phone's drawer closes, as for a folder
+    const host = home.extHost;
+    expect(host.where).toBe('home');
+    expect(host.homeRoot).toBe('');
+    expect(host.role).toBe('owner');
+    const routes: string[] = [];
+    const off = host.onRoute!((r) => routes.push(r));
+    home.route('#ext/ignition/new');
+    expect(host.route!()).toBe('new');
+    expect(routes).toEqual(['new']);
+    home.route('#ext/hello/'); // another extension: its own slot, not a route of this one
+    expect(routes).toEqual(['new']);
+    expect(home.extOpen?.id).toBe('hello');
+    off();
+    home.route('#ext/gone/');
+    expect(home.extOpen).toBeNull(); // not on here: the page says so
+    home.select('item-shop');
+    expect(home.ext).toBeNull();
+    home.route('#ext/ignition/');
+    home.route('#/2026-10-19');
+    expect(home.ext).toBeNull();
+    expect(home.selected).toBe('2026-10-19');
+    home.toast.say('Created');
+    expect(home.toast.msg).toBe('Created');
   });
 });

@@ -129,6 +129,10 @@ import { addVoice, drawWave, levelDb, newAcc, newVad, pushBars, vadStep, type Wa
 import { palette } from './theme';
 import { brandOf, reviewTitle } from './brand';
 import { clamp, fmt, isoLocal, now, r3, stamp } from './util';
+import { ExtLoader, type ExtInfo } from '../ext/loader';
+import type { Host } from '../ext/ctx';
+import type { Player, Recorded, Role as ExtRole, SlotName } from '../ext/retake-ext';
+import { kindRecords, openingVersion, sidebarTabs, versionName, versionSlot, type ExtTab } from '../ext/kinds';
 
 export interface Elements {
   stage: HTMLElement;
@@ -182,6 +186,24 @@ export interface ReviewHook {
 
 /** How often a page whose video's computer is offline looks again. */
 const OFFLINE_RETRY_MS = 5000;
+
+/** The page's role as an extension's ctx names it: the owner when the server has no roles (local). */
+const extRole = (r: Role | null): ExtRole =>
+  r === 'reviewer' || r === 'approver' || r === 'viewer' ? r : r === 'agent' ? 'viewer' : 'owner';
+
+/** Where typing goes, so the player's keys don't: text fields (any editable element) and open menus or dialogs. */
+const TEXT = 'input, textarea, select, [contenteditable]:not([contenteditable=false])';
+const TYPING = `${TEXT}, [role=combobox], [role=listbox], [role=option], [role=menu], [role=menuitem], [role=menuitemradio], [role=dialog]`;
+/** On an extension's version there is no video: these are the keys core still handles. */
+const KIND_KEYS = new Set<Action>(['toggleRec', 'escape', 'notes', 'help', 'next', 'save']);
+
+/** The review page's deep link (ctx.navigate from another page): `?v=<label>&t=<seconds>`. */
+function deepLink(): { v: string | null; t: number } {
+  if (typeof location === 'undefined') return { v: null, t: 0 };
+  const q = new URLSearchParams(location.search);
+  const t = Number(q.get('t'));
+  return { v: q.get('v') || null, t: isFinite(t) && t > 0 ? t : 0 };
+}
 
 const FATAL = (name: string) =>
   `This file won't play in the browser. Make an H.264 copy first: ffmpeg -i "${name}" -c:v libx264 -crf 18 -c:a aac review.mp4`;
@@ -330,6 +352,7 @@ export class Review {
       this.versions,
       this.shown,
       todoByVersion(this.rows, (row) => this.statusOf(row).state !== 'done', this.shown),
+      (v) => versionName(this.exts, v),
     ),
   );
   /** "Open on earlier versions: v6 · 2, v3 · 91", on the latest version. */
@@ -375,6 +398,186 @@ export class Review {
   homeCtx: { home: string; project: string } | null = null;
   /** This page load's id for the unwatch call. */
   readonly viewer = viewerId();
+  /** This video's card in its home (its name, path and project); null outside one. */
+  homeMe = $state.raw<Card | null>(null);
+
+  // ---------------------------------------------------------------- extensions (spec/extensions.md)
+  /** GET api/ext once; an extension's module is imported the first time one of its slots shows. */
+  readonly extLoader = new ExtLoader();
+  /** The extensions on for this person. */
+  exts = $state.raw<ExtInfo[]>([]);
+  /** GET api/ext answered (until then a kind's version shows nothing, not "isn't on here"). */
+  extsLoaded = $state(false);
+  /** The comments column's extension tab on screen (`<id>/<slot>`), or null: the comments. */
+  sideTab = $state<string | null>(null);
+  /** The versions that are videos: following latest and comparing (C) only ever land on these, never on an
+   * extension's kind of version (v0). */
+  get cuts(): Version[] {
+    return this.versions.filter((v) => !v.kind);
+  }
+  /** The extension kind of the version on screen (`ignition.doc`): no video, its extension's slot shows it. */
+  get kindShown(): string | null {
+    return this.shownVersion()?.kind ?? null;
+  }
+  /** The extension whose `version` slot shows the version on screen. */
+  get versionExt(): ExtInfo | null {
+    return versionSlot(this.exts, this.kindShown);
+  }
+  /** Record and R work here: always on a video; on a kind's version when the kind says `record`. */
+  get recordHere(): boolean {
+    return !this.kindShown || kindRecords(this.exts, this.kindShown);
+  }
+  /** How a version reads: `v0 · Script` for an extension's kind, else its label. */
+  nameOf = (label: string | null): string => {
+    const v = byLabel(this.versions, label);
+    return v ? versionName(this.exts, v) : (label ?? '');
+  };
+  /** The comments column's tabs after To do · Done (sidebar tabs and review panels, on video versions). */
+  readonly extTabs: ExtTab[] = $derived(
+    sidebarTabs(this.exts, this.versions, { kind: this.kindShown, phone: this.phone }),
+  );
+  get extTab(): ExtTab | null {
+    return this.extTabs.find((t) => t.key === this.sideTab) ?? null;
+  }
+  /** To do or Done: the comments again (an extension's tab closes). */
+  showComments = (filter: 'todo' | 'done'): void => {
+    this.sideTab = null;
+    this.commentFilter = filter;
+  };
+  /** What a sidebar tab or a review panel gets as `ctx.player`. Seeking does nothing while recording. */
+  readonly #player: Player = {
+    time: () => this.video?.currentTime ?? 0,
+    duration: () => this.mediaDuration(),
+    seek: (t: number) => {
+      if (!this.seg && !this.starting && !this.kindShown && isFinite(t)) this.seekTo(t);
+    },
+    onTime: (cb: (t: number) => void) => {
+      this.#timeSubs.add(cb);
+      return () => void this.#timeSubs.delete(cb);
+    },
+  };
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- one per slot name, made once
+  readonly #hosts = new Map<SlotName, Host>();
+  /** What a slot of this page gives its extension's ctx (one per slot name, so a slot remounts only when it should). */
+  extHost(slot: SlotName): Host {
+    let h = this.#hosts.get(slot);
+    if (!h) {
+      h = this.#makeHost();
+      this.#hosts.set(slot, h);
+    }
+    return h;
+  }
+  #makeHost(): Host {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    const r = this;
+    return {
+      where: 'video',
+      get homeRoot() {
+        return r.homeCtx?.home ?? '/';
+      },
+      get video() {
+        const me = r.homeMe;
+        return {
+          name: r.homeCtx?.project ?? r.info.name,
+          title: me ? videoName(me) : r.info.name,
+          path: me?.path ?? '',
+          project: me?.project ?? '',
+        };
+      },
+      get version() {
+        const kind = r.kindShown;
+        return r.shown ? { label: r.shown, ...(kind ? { kind } : {}) } : undefined;
+      },
+      get role() {
+        return extRole(r.role);
+      },
+      viewer: r.viewer,
+      toast: (text) => r.toast.say(text, 4000),
+      events: (name, cb) => r.notes.on(name, cb),
+      onRecorded: (cb) => {
+        r.#recorded.add(cb);
+        return () => void r.#recorded.delete(cb);
+      },
+      recording: () => !!r.seg || r.starting,
+      onRecording: (cb) => {
+        r.#recordingSubs.add(cb);
+        return () => void r.#recordingSubs.delete(cb);
+      },
+      player: () => (r.kindShown ? undefined : r.#player),
+      show: (label, t) => void r.navigateTo(label, t),
+      selectComment: (id) => r.selectComment(id),
+    };
+  }
+
+  /** ctx.navigate within this video: another version (as the picker does), and/or a time on a video. */
+  async navigateTo(label: string | undefined, t: number | undefined): Promise<void> {
+    if (label && label !== this.shown && byLabel(this.versions, label)) {
+      this.verOpen = false;
+      this.followLatest = !byLabel(this.versions, label)?.kind && label === this.cuts.at(-1)?.label;
+      await this.setBase(label);
+    }
+    if (t !== undefined && !this.kindShown && !this.seg && !this.starting) this.seekTo(t);
+  }
+
+  /** ctx.selectComment: the comments column shows that comment (by its note id, or its question's thread id),
+   * scrolled into view and selected; on a video it also goes to its moment. */
+  selectComment = (id: number): void => {
+    const rows = this.versionRows;
+    const row =
+      rows.find((x) => x.kind === 'note' && (x.id === id || x.ask?.id === id)) ?? rows.find((x) => x.id === id);
+    if (!row) return;
+    this.sideTab = null;
+    this.commentSearch = '';
+    this.commentFilter = this.statusOf(row).state === 'done' ? 'done' : 'todo';
+    if (!this.sidebar.panel) this.toggleSidebar();
+    if (row.ask) this.selectedAsk = row.ask.id;
+    if (this.kindShown) this.activeRow = row.key;
+    else this.jumpToComment(row);
+    if (typeof requestAnimationFrame === 'function')
+      requestAnimationFrame(() =>
+        document.querySelector(`#side [data-key="${CSS.escape(row.key)}"]`)?.scrollIntoView({ block: 'nearest' }),
+      );
+  };
+
+  /** The talk-out (R on a kind's version) is over: its audio goes to the extension's `ctx.onRecorded`. */
+  #deliverTalk(a: Recorded): void {
+    if (!this.#recorded.size) {
+      this.toast.say('Nothing kept that recording: the version’s extension isn’t listening', 5000);
+      return;
+    }
+    for (const cb of [...this.#recorded]) {
+      try {
+        cb(a);
+      } catch (err) {
+        console.error('retake: an extension failed to take a recording:', err);
+      }
+    }
+  }
+
+  /** Every frame: recording on/off and the playhead go to the extensions that listen. */
+  #tellExtensions(vt: number): void {
+    const on = !!this.seg;
+    if (on !== this.#wasRecording) {
+      this.#wasRecording = on;
+      for (const cb of [...this.#recordingSubs]) {
+        try {
+          cb(on);
+        } catch (err) {
+          console.error('retake: an extension failed on a recording change:', err);
+        }
+      }
+    }
+    if (this.#timeSubs.size && vt !== this.#lastTime && !this.kindShown) {
+      this.#lastTime = vt;
+      for (const cb of [...this.#timeSubs]) {
+        try {
+          cb(vt);
+        } catch (err) {
+          console.error('retake: an extension failed on a time update:', err);
+        }
+      }
+    }
+  }
   get homeHref(): string {
     return this.homeCtx?.home ?? '/';
   }
@@ -448,6 +651,17 @@ export class Review {
   /** Takes started on this page: the saver owns their uploads, so recovery leaves them alone. */
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- bookkeeping, nothing renders it
   readonly #ownTakes = new Set<string>();
+  /** The extension slots' `ctx.onRecorded`, `onRecording` and `player.onTime` callbacks. */
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- bookkeeping, nothing renders it
+  readonly #recorded = new Set<(a: Recorded) => void>();
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- bookkeeping, nothing renders it
+  readonly #recordingSubs = new Set<(on: boolean) => void>();
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- bookkeeping, nothing renders it
+  readonly #timeSubs = new Set<(t: number) => void>();
+  #wasRecording = false;
+  #lastTime = -1;
+  /** When the talk-out in progress started (a kind's version records audio only, for its extension). */
+  #talkStarted = '';
   /** Closed takes (Done, or a version step) whose last save failed: autosave keeps trying them. */
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- bookkeeping, nothing renders it
   readonly #unsaved = new Set<Take>();
@@ -815,14 +1029,107 @@ export class Review {
     this.mic = null;
   }
 
-  /** R on. `answerTo`: the question thread this segment answers (Answer in the sidebar). */
+  /** R on. `answerTo`: the question thread this segment answers (Answer in the sidebar). The comments show To do,
+   * so new comments show (an extension's tab or panel closes). On an extension's kind of version (v0) it records
+   * audio only, for that extension, and only when the kind says `record`. */
   startRec = (answerTo: number | null = null): Promise<void> => {
     if (this.seg || this.starting || this.switching || this.finishing) return Promise.resolve();
+    if (!this.recordHere) return Promise.resolve();
+    this.showComments('todo');
     this.#recordingIntent = true;
     this.#recordingStart = now();
-    this.#startOperation = this.#beginClip(answerTo);
+    this.#startOperation = this.kindShown ? this.#beginTalk() : this.#beginClip(answerTo);
     return this.#startOperation;
   };
+
+  /** A talk-out on an extension's version: R and Record as on a video (REC, the timer, the red edge, the level), but
+   * no take and no pen. When it stops, its audio goes to the extension (`ctx.onRecorded`). */
+  async #beginTalk(): Promise<void> {
+    if (!this.canRecord) {
+      this.toast.say(VIEW_ONLY, 2600);
+      this.#recordingIntent = false;
+      return;
+    }
+    this.starting = true;
+    this.dismissHint();
+    try {
+      if (this.mic) void this.mic.ac.resume();
+      if (!this.mic && !(await this.openMic())) {
+        this.#recordingIntent = false;
+        return;
+      }
+      const mic = this.mic as Mic;
+      const mime = pickMime((m) => MediaRecorder.isTypeSupported(m));
+      const rec = new MediaRecorder(mic.stream, mime ? { mimeType: mime, audioBitsPerSecond: 64000 } : {});
+      const chunks: Blob[] = [];
+      rec.ondataavailable = (e) => {
+        if (e.data && e.data.size) chunks.push(e.data);
+      };
+      await new Promise((res, rej) => {
+        rec.onstart = res;
+        rec.onerror = (ev) => rej((ev as Event & { error?: unknown }).error);
+        rec.start(1000);
+      });
+      // eslint-disable-next-line svelte/prefer-svelte-reactivity -- a timestamp, not state
+      this.#talkStarted = isoLocal(new Date());
+      const s = {
+        n: 1,
+        id: 'R',
+        talk: true,
+        rec,
+        mime: recorderMime(rec.mimeType, mime),
+        version: this.shown,
+        flip: false,
+        file: '',
+        chunks,
+        uploaded: 0,
+        p0: now(),
+        p1: null,
+        v0: 0,
+        v1: null,
+        vmin: 0,
+        vmax: 0,
+        size: 0,
+        stored: 0,
+        persisted: Promise.resolve(),
+      } satisfies Segment;
+      this.seg = s;
+      this.#keepAwake(true);
+      this.bars = [];
+      this.recElapsed = fmt(now() - this.#recordingStart, false);
+      if (!this.#recordingIntent) {
+        this.seg = null;
+        this.#keepAwake(false);
+        await this.#finishTalk(s);
+      }
+    } catch (err) {
+      this.#recordingIntent = false;
+      this.toast.say('Could not start recording: ' + ((err as Error)?.message || err), 6000);
+    } finally {
+      this.starting = false;
+    }
+  }
+
+  /** Stops a talk-out: its recorder's last chunk, then the audio to the extension, and the mic closes. */
+  #finishTalk(s: Segment): Promise<unknown> {
+    if (s.stopped) return s.stopped;
+    s.p1 = now();
+    const started = this.#talkStarted;
+    s.stopped = new Promise((res) => {
+      s.rec.onstop = res;
+    }).then(() => {
+      if (!this.seg) this.closeMic();
+      const type = s.mime || s.rec.mimeType || 'audio/webm';
+      this.#deliverTalk({
+        blob: new Blob(s.chunks, { type }),
+        type,
+        duration: Math.max(0, (s.p1 ?? now()) - s.p0),
+        started,
+      });
+    });
+    s.rec.stop();
+    return s.stopped;
+  }
 
   async #beginClip(answerTo: number | null): Promise<void> {
     const previous = this.seg;
@@ -897,7 +1204,8 @@ export class Review {
     const s = this.seg;
     this.seg = null;
     this.#keepAwake(false);
-    return Promise.all([s ? this.#finishClip(this.take, s) : Promise.resolve(), this.#startOperation]);
+    const finish = !s ? Promise.resolve() : s.talk ? this.#finishTalk(s) : this.#finishClip(this.take, s);
+    return Promise.all([finish, this.#startOperation]);
   };
 
   #finishClip(t: Take, s: Segment): Promise<unknown> {
@@ -951,6 +1259,7 @@ export class Review {
       this.#silenceSeconds = this.vad.active ? 0 : this.#silenceSeconds + dt;
       const age = now() - s.p0;
       if (
+        !s.talk &&
         this.#recordingIntent &&
         !this.starting &&
         !this.drawing &&
@@ -963,7 +1272,7 @@ export class Review {
       this.vad.active = false;
       this.acc = newAcc();
     }
-    if (this.vad.active && this.mediaDuration()) {
+    if (this.vad.active && !s?.talk && this.mediaDuration()) {
       this.take.bins = grow(this.take.bins, this.nBins());
       addVoice(this.take.bins, dt, vt, this.prevVT, !video.paused, video.seeking);
       if (s) {
@@ -1055,6 +1364,7 @@ export class Review {
     this.hist.bins = grow(this.hist.bins, this.nBins());
   }
   onVideoError = (): void => {
+    if (this.kindShown) return; // nothing plays there (its slot shows it)
     const v = this.shownVersion();
     if (v?.relay) {
       if (!this.switching) void this.#checkOffline(v); // a switch that fails checks its own version
@@ -1154,7 +1464,7 @@ export class Review {
         this.#eraseAt(e);
         return;
       }
-      if (!s) {
+      if (!s || s.talk) {
         if (!this.drawHintShown) {
           this.toast.say(!this.canRecord ? VIEW_ONLY : this.touch ? HINT_DRAW_TOUCH : HINT_DRAW, 2600);
           this.drawHintShown = true;
@@ -1337,7 +1647,7 @@ export class Review {
 
   /** An image file was dropped or pasted at `at` (normalized; null = where the pointer was, else the center). */
   addImage = async (file: Blob, at: Point | null): Promise<TakeImage | null> => {
-    const s = this.seg,
+    const s = this.seg?.talk ? null : this.seg,
       t = this.take;
     const refusal = this.canRecord ? refuseImage(file, !!s) : VIEW_ONLY;
     if (refusal || !s) {
@@ -1407,6 +1717,14 @@ export class Review {
   /** Files dragged over the page: never let the browser open them (the take would be lost); copy onto the video. */
   onDragOver = (e: DragEvent): void => {
     const dt = e.dataTransfer;
+    if (this.kindShown) {
+      // The extension's slot takes what it wants (it prevents the default); anywhere else nothing opens the file.
+      if (dt && !e.defaultPrevented && dt.types.includes('Files')) {
+        e.preventDefault();
+        dt.dropEffect = 'none';
+      }
+      return;
+    }
     if (!dt || !dragMayHoldImage(dt.types)) return;
     e.preventDefault();
     dt.dropEffect = this.#overStage(e) ? 'copy' : 'none';
@@ -1414,6 +1732,10 @@ export class Review {
 
   onDrop = (e: DragEvent): void => {
     const dt = e.dataTransfer;
+    if (this.kindShown) {
+      if (dt?.types.includes('Files')) e.preventDefault(); // never opens the file over the page
+      return;
+    }
     if (!dt || !dragMayHoldImage(dt.types)) return;
     e.preventDefault();
     if (!this.#overStage(e)) return;
@@ -1444,6 +1766,7 @@ export class Review {
 
   /** Ctrl/Cmd+V with an image on the clipboard. */
   onPaste = (e: ClipboardEvent): void => {
+    if (this.kindShown) return; // the extension's text takes it
     const file = firstImageFile(e.clipboardData);
     if (!file) return;
     e.preventDefault();
@@ -1453,6 +1776,11 @@ export class Review {
   /** The agent questions to show at playhead `vt`: in their range, or selected. Playing out of a selected one's range
    * lets it go. Assigned only when something changed. */
   #updateAsks(vt: number): void {
+    if (this.kindShown) {
+      if (this.shownAsks.length) this.shownAsks = [];
+      this.#askSig = '';
+      return;
+    }
     const out: { row: Row; pulse: number }[] = [];
     const playing = !this.video.paused;
     for (const row of this.versionRows) {
@@ -1474,6 +1802,10 @@ export class Review {
   /** Click a question's marker or time: go to its moment and keep its visuals on the video. */
   selectAsk = (row: Row): void => {
     if (!row.ask) return;
+    if (row.ask.anchor || this.kindShown) {
+      this.selectedAsk = row.ask.id; // a question about a document: no moment to go to
+      return;
+    }
     this.video.pause();
     this.selectedAsk = row.ask.id;
     this.jumpTo(row.ask.t);
@@ -1700,7 +2032,8 @@ export class Review {
 
   async followCurrent(): Promise<void> {
     while (this.followLatest && !this.finishing && !this.seg && !this.starting && !this.switching) {
-      const current = [...this.versions]
+      const current = this.versions
+        .filter((v) => !v.kind) // never an extension's version (v0)
         .reverse()
         .find(
           (v) => v.stream?.state !== 'stopped' && (!incomplete(v) || (renderedEnd(v) ?? 0) > this.video.currentTime),
@@ -1788,13 +2121,27 @@ export class Review {
     const video = this.video,
       v = byLabel(this.versions, label);
     if (!v || this.switching) return false;
+    if (v.kind) {
+      // An extension's version (spec/extensions.md, "Version kinds"): nothing to play, its slot shows it.
+      if (!video.paused) video.pause();
+      this.#landNote = null;
+      this.#posterOnly = null;
+      this.offline = false;
+      this.freezeShown = false;
+      this.#source.clear();
+      this.paused = true;
+      this.shown = label;
+      void this.notes.load(label);
+      this.#afterStream();
+      return true;
+    }
     this.switching = true;
     this.#landNote = null;
     // On a stream's poster (nothing rendered yet) the moment and the play state are the ones it waits with.
     const wait = this.#posterOnly;
     const from = wait ? wait.t : video.currentTime;
     this.frozenT = from;
-    const segs = await this.maps.get(this.shown, label);
+    const segs = this.kindShown ? null : await this.maps.get(this.shown, label); // from a kind's version: no map
     const wasPlaying = wait ? wait.play : !video.paused,
       land = landing(v, from, segs);
     if ('refuse' in land) {
@@ -1898,10 +2245,11 @@ export class Review {
 
   /** Fetches the time maps from the version on screen to the ones C, [ and ] go to next, so they're here in time. */
   #prefetchMaps(): void {
+    if (this.kindShown) return;
     for (const label of [
-      neighbor(this.versions, this.shown, -1)?.label,
-      neighbor(this.versions, this.shown, 1)?.label,
-      flipTarget(this.versions, this.base, this.flipped)?.label,
+      neighbor(this.cuts, this.shown, -1)?.label,
+      neighbor(this.cuts, this.shown, 1)?.label,
+      flipTarget(this.cuts, this.base, this.flipped)?.label,
     ]) {
       if (label) this.maps.peek(this.shown, label);
     }
@@ -1910,7 +2258,7 @@ export class Review {
   /** C: flip between the base and its partner (the next newer version, else the previous one). */
   flip = async (): Promise<void> => {
     if (this.switching) return;
-    const target = flipTarget(this.versions, this.base, this.flipped);
+    const target = flipTarget(this.cuts, this.base, this.flipped);
     if (!target) {
       this.toast.say('Only one version');
       return;
@@ -1919,7 +2267,7 @@ export class Review {
     this.flipped = !this.flipped;
     this.logEv('version', { shown: this.shown, base: this.base, flip: this.flipped });
     const note = this.#landNote;
-    this.toast.say(note ?? flipToast(this.versions, this.base, target, this.flipped), note ? 3200 : 1200);
+    this.toast.say(note ?? flipToast(this.cuts, this.base, target, this.flipped), note ? 3200 : 1200);
   };
 
   /** Make `label` the base: stops any recording; the next R starts a fresh take on that version. */
@@ -1929,7 +2277,8 @@ export class Review {
     if (!v) return;
     // A quick check before a recording is stopped for nothing, with the map if it's here already (it's fetched ahead,
     // see #prefetchMaps): showVersion, which starts the switch at once, has the last word.
-    const land = landing(v, this.video.currentTime, this.maps.peek(this.shown, label));
+    const land =
+      v.kind || this.kindShown ? { t: 0 } : landing(v, this.video.currentTime, this.maps.peek(this.shown, label));
     if ('refuse' in land) {
       this.toast.say(land.refuse, 2600);
       return;
@@ -1946,6 +2295,7 @@ export class Review {
     this.base = label;
     this.flipped = false;
     this.newTake();
+    if (v.kind) return; // an extension's version: no drawings to load, nothing to say
     void this.loadHistory(label);
     const note = this.#landNote;
     this.toast.say(note ?? 'Video updated', note ? 3200 : 1400);
@@ -2130,6 +2480,7 @@ export class Review {
       if (!r.ok) return;
       const h = normalizeHome(await r.json());
       const me = h.projects.find((c) => c.name === ctx.project);
+      this.homeMe = me ?? null;
       const titleOf = (path: string) => (path ? (findNode(h.tree, path)?.title ?? path.split('/').pop()!) : h.title);
       // The next one to review: from the same project first, then any.
       const mine = me ? h.projects.filter((c) => c.project === me.project) : [];
@@ -2244,19 +2595,23 @@ export class Review {
     }
   }
 
-  /** window keydown, capture phase: the player's keys work whatever has focus. */
+  /** window keydown, capture phase: the player's keys work whatever has focus, an extension's slot too, except in a
+   * text field. On an extension's version (no video) only R, Esc and the page's own keys are core's: Esc in its text
+   * leaves the text (then R talks), and the video's keys go to the page as plain keys. */
   onKeydown = (e: KeyboardEvent): void => {
     const target = e.target as Element | null;
-    if (
-      target?.closest?.(
-        'input, textarea, select, [contenteditable=true], [role=combobox], [role=listbox], [role=option], [role=menu], [role=menuitem], [role=menuitemradio], [role=dialog]',
-      ) &&
-      !((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's')
-    )
+    if (target?.closest?.(TYPING) && !((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's')) {
+      if (e.key === 'Escape' && this.kindShown && target.closest(TEXT)) (target as HTMLElement).blur?.();
       return;
+    }
     if (target?.closest?.('.comment-marker, .drawing-marker') && e.key === ' ') return;
     const r = keyAction(e);
     if (!r) return;
+    if (this.kindShown) {
+      const key = { key: e.key, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey, repeat: false };
+      const act = r.act ?? keyAction(key)?.act;
+      if (!act || !KIND_KEYS.has(act)) return; // no video here: a plain key of the page
+    }
     e.preventDefault();
     // Escape also reaches an open menu or popover (Bits UI closes them on it), wherever the focus is.
     if (r.stop && e.key !== 'Escape') e.stopPropagation();
@@ -2381,12 +2736,13 @@ export class Review {
     this.#updateCards(vt);
     this.#updateAsks(vt);
     const rows = this.versionRows,
-      act = activeKey(rows, vt);
+      act = this.kindShown ? this.activeRow : activeKey(rows, vt);
     if (act !== this.activeRow) this.activeRow = act;
+    this.#tellExtensions(vt);
     if (!this.notes.everShown && this.notes.available && (this.rows.length || this.notes.job))
       this.notes.everShown = true;
     if (this.touch)
-      this.flipBlocked = flipRefusal(this.versions, this.base, this.flipped, vt, (label, t) =>
+      this.flipBlocked = flipRefusal(this.cuts, this.base, this.flipped, vt, (label, t) =>
         mapTime(this.maps.peek(this.shown, label), t),
       );
     this.curText = fmt(vt);
@@ -2429,6 +2785,10 @@ export class Review {
     // In a home, the first frame the home showed is the poster while the video loads (spec/home.md).
     this.homeCtx = homeContext(location.pathname);
     if (this.homeCtx) video.poster = 'api/poster';
+    void this.extLoader.list().then((list) => {
+      this.exts = list;
+      this.extsLoaded = true;
+    });
 
     try {
       this.info = (await (await fetch('api/info')).json()) as Info;
@@ -2442,20 +2802,40 @@ export class Review {
     this.versions = this.info.versions || [];
     // Streams already there when the page opens show their chip; only ones pushed later are announced.
     for (const v of newlyStreamed(this.versions, this.#seenStreams)) this.#seenStreams.add(v.label);
-    this.base = this.shown =
-      [...this.versions].reverse().find((v) => !incomplete(v) || (renderedEnd(v) ?? 0) > 0)?.label ||
-      this.info.label ||
-      null;
-    if (this.base) this.#watched.add(this.base);
+    // The newest cut that plays, as always; a video with only an extension's version opens on it; a deep link
+    // (`?v=<label>&t=<seconds>`, ctx.navigate) opens where it says.
+    const link = deepLink();
+    this.base = this.shown = openingVersion(
+      this.versions.map((v) => ({
+        label: v.label,
+        kind: v.kind,
+        playable: !incomplete(v) || (renderedEnd(v) ?? 0) > 0,
+      })),
+      this.info.label,
+      link.v,
+    );
+    // Linked to an older cut (or v0 next to cuts): the page stays there.
+    if (link.v === this.base && this.cuts.length && this.base !== this.cuts.at(-1)?.label) this.followLatest = false;
+    const curV = byLabel(this.versions, this.base);
+    if (this.base && !curV?.kind) this.#watched.add(this.base);
     this.take.version = this.base;
     if (this.base === this.info.label) this.addHistory(this.info.history);
-    else if (this.base) void this.loadHistory(this.base);
-    const curV = byLabel(this.versions, this.base);
+    else if (this.base && !curV?.kind) void this.loadHistory(this.base);
     const cur = curV ?? (this.base ? { label: this.base, name: this.info.name } : null);
-    this.#setPoster(curV);
-    if (curV && incomplete(curV) && (renderedEnd(curV) ?? 0) <= 0) {
-      this.#posterOnly = { label: curV.label, t: 0, play: false }; // opened on a stream with nothing rendered yet
-    } else this.#source.load(cur).catch(() => {}); // a failure shows the fatal message (video error event)
+    if (curV?.kind) {
+      video.removeAttribute('poster'); // an extension's version: nothing to play, its slot shows it
+    } else {
+      this.#setPoster(curV);
+      if (curV && incomplete(curV) && (renderedEnd(curV) ?? 0) <= 0) {
+        this.#posterOnly = { label: curV.label, t: 0, play: false }; // opened on a stream with nothing rendered yet
+      } else
+        this.#source
+          .load(cur)
+          .then(() => {
+            if (link.t && this.shown === cur?.label) this.seekTo(link.t);
+          })
+          .catch(() => {}); // a failure shows the fatal message (video error event)
+    }
     // Watch the stream on screen while the page is visible; say so at once when it's hidden or closed.
     document.addEventListener('visibilitychange', () => this.watcher.visibility(document.visibilityState !== 'hidden'));
     addEventListener('pageshow', (e) => {

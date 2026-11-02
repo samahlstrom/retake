@@ -1,7 +1,8 @@
 // The home screen's data (spec/home.md): GET /api/home's cards, their status words, and where the review page goes
 // next. Shared by the home page (home/) and the review page's "All videos" and "Next video".
 
-export type Status = 'to_review' | 'reviewed' | 'being_edited';
+/** `no_cut`: the video's only versions are an extension's kind (an idea: spec/extensions.md, "Version kinds"). */
+export type Status = 'to_review' | 'reviewed' | 'being_edited' | 'no_cut';
 
 /** A version's streaming state, when the streaming side reports one. */
 export interface Stream {
@@ -33,6 +34,12 @@ export interface Card {
   questions: number;
   stream: Stream | null;
   thumb: string;
+  /** With `status: "no_cut"`: the extension kind of its only version (`ignition.doc`). */
+  kind?: string;
+  /** The extension kinds among its versions. */
+  kinds?: string[];
+  /** Unix milliseconds of its newest owned-file change or version. */
+  changed?: number;
 }
 
 /** A folder of the home's tree (spec/home.md): one that organizes, or a project with its videos. */
@@ -87,6 +94,7 @@ export const STATUS_TEXT: Record<Status, string> = {
   to_review: 'To review',
   reviewed: 'Reviewed',
   being_edited: 'Being edited',
+  no_cut: 'No cut yet',
 };
 
 export const NO_MORE = 'No more videos to review';
@@ -159,6 +167,11 @@ export function normalizeHome(body: unknown): HomeResponse {
       questions: num(c.questions),
       stream: s && str(s.state) ? { state: str(s.state), done: num(s.done), total: num(s.total) } : null,
       thumb: str(c.thumb),
+      ...(str(c.kind) ? { kind: str(c.kind) } : {}),
+      ...(Array.isArray(c.kinds)
+        ? { kinds: (c.kinds as unknown[]).filter((k): k is string => typeof k === 'string') }
+        : {}),
+      ...(typeof c.changed === 'number' && isFinite(c.changed) ? { changed: c.changed } : {}),
     });
   }
   const title = str(b.title);

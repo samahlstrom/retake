@@ -209,6 +209,12 @@
     aspect-ratio: var(--ar, 16 / 9);
     min-height: 0;
   }
+  /* An extension's version (no video): its slot takes most of the page, the controls and Record stay below. */
+  html[data-layout='portrait'] #stage.kind {
+    aspect-ratio: auto;
+    height: 58vh;
+    height: 58dvh;
+  }
   html[data-layout='portrait'] #side {
     grid-area: side;
     width: auto;

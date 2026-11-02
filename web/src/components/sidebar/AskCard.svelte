@@ -58,7 +58,11 @@
   {/if}
   <p class="ask-text">
     <span class="agent-chip">Agent</span>
-    <button class="ask-time" title="Go to {ask.time}" onclick={() => review.selectAsk(row)}>{ask.time}</button>
+    {#if ask.anchor}
+      <button class="ask-time" title={ask.anchor.file} onclick={() => review.selectAsk(row)}>{ask.time}</button>
+    {:else}
+      <button class="ask-time" title="Go to {ask.time}" onclick={() => review.selectAsk(row)}>{ask.time}</button>
+    {/if}
     <span>{ask.text}</span>
   </p>
   {#if images.length}
@@ -90,7 +94,7 @@
   {#if review.canRecord}
     <ReplyBox
       onsend={(text) => review.answerAsk(row, text)}
-      onmic={() => review.answer(ask.id, ask.t)}
+      onmic={review.kindShown || ask.anchor ? undefined : () => review.answer(ask.id, ask.t)}
       {recording}
       busy={review.automation.busy}
     />

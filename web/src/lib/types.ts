@@ -24,6 +24,9 @@ export interface Version {
   /** It plays from the editing computer through the server's relay (spec/automation.md), so only while that computer
    * is online. */
   relay?: boolean;
+  /** An extension's kind of version (`ignition.doc`, spec/extensions.md "Version kinds"): not a video. Its
+   * extension's `version` slot shows it, and following latest and comparing never land on it. */
+  kind?: string;
 }
 
 /** A streamed version's state: pending (nothing renders it), rendering, or complete; units published of all, and the
@@ -154,6 +157,8 @@ export interface Segment {
   id: string;
   /** The question thread this segment answers (Answer in the sidebar). */
   answer_to?: number;
+  /** A talk-out on an extension's version: audio only, for the extension; no take, no pen. */
+  talk?: boolean;
   rec: MediaRecorder;
   mime: string;
   version: string | null;

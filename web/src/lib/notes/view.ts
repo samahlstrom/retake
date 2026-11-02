@@ -6,7 +6,7 @@
 import { fmt } from '../util';
 import { draftOf } from '../versions';
 import type { Box, Version } from '../types';
-import type { NoteItem, NotesResponse, TaskAsk } from './types';
+import type { Anchor, NoteItem, NotesResponse, TaskAsk } from './types';
 import type { EditingTask } from '../automation.svelte';
 
 /** ✓ answered (or accepted), ? asked, • open. */
@@ -58,9 +58,16 @@ export interface Row {
   /** Carried over from the parent version: what became of its moment ("unchanged", "answered, check it", "context
    * changed"), with the version it came from. */
   carried: string | null;
-  /** The agent's open question from inside its task, with its time as m:ss. */
+  /** The agent's open question from inside its task, with its time as m:ss (or, about a document, its place). */
   ask: (TaskAsk & { time: string }) | null;
+  /** A typed comment on an extension's version: it has no moment, its chip says where in the document it is. */
+  typed?: boolean;
+  anchor?: Anchor | null;
 }
+
+/** The chip of a comment or question about a document: the heading it's under, else its file. */
+export const anchorText = (a: Anchor | null | undefined): string =>
+  a ? a.heading?.trim() || a.file.split('/').pop() || a.file : '';
 
 /** The picture under a comment's drawing thumbnail, so its strokes sit on what they were drawn over: the still of
  * its moment (the note's snapshot), else the first frame of the version it was left on (a streamed version's
@@ -161,7 +168,12 @@ export function toRow(item: NoteItem, newest: boolean, ctx: ViewContext): Row {
     images: item.images ?? [],
     snapshot: item.kind === 'note' ? item.snapshot || null : null,
     carried: carriedText(item),
-    ask: item.kind === 'note' && item.ask && mark === 'question' ? { ...item.ask, time: fmt(item.ask.t, false) } : null,
+    ask:
+      item.kind === 'note' && item.ask && mark === 'question'
+        ? { ...item.ask, time: item.ask.anchor ? anchorText(item.ask.anchor) : fmt(item.ask.t, false) }
+        : null,
+    typed: !!item.anchor || (item.key ?? '').startsWith('doc/'),
+    anchor: item.anchor ?? null,
   };
 }
 
@@ -227,8 +239,12 @@ export function historyLabels(rows: readonly Row[], label: string): string[] {
 
 /** One entry of the version strip at the top of the comments panel. */
 export interface VersionEntry {
-  /** The version, `v5`: its key and what it reads. */
+  /** The version, `v5`: its key. */
   version: string;
+  /** What it reads: `v5`, or for an extension's kind of version `v0 · Script`. */
+  name: string;
+  /** An extension's kind of version (`ignition.doc`): it isn't a video. */
+  kind?: string;
   /** What a click shows: the version itself, or the newest listed draft heading for it. */
   label: string;
   /** Only drafts of it so far: it reads `v5 · drafting`. */
@@ -239,34 +255,51 @@ export interface VersionEntry {
   on: boolean;
 }
 
-/** The version strip: the family's versions oldest first, a version's drafts folded into one entry. Empty with fewer
- * than two entries (a single version has no strip). */
+/** The version strip: the family's versions oldest first, a version's drafts folded into one entry; an extension's
+ * kind of version (`v0`) first, read as `name` names it (`v0 · Script`). Empty with fewer than two entries (a single
+ * version has no strip). */
 export function versionStrip(
-  family: readonly { label: string }[],
+  family: readonly { label: string; kind?: string }[],
   shown: string | null,
   todo: ReadonlyMap<string, number>,
+  name: (v: { label: string; kind?: string }) => string = (v) => v.label,
 ): VersionEntry[] {
   const out: VersionEntry[] = [];
   const on = shown ? versionOf(shown) : null;
-  for (const { label } of family) {
+  const ordered = [...family.filter((v) => v.kind), ...family.filter((v) => !v.kind)];
+  for (const v of ordered) {
+    const { label } = v;
+    if (v.kind) {
+      out.push({
+        version: label,
+        name: name(v),
+        kind: v.kind,
+        label,
+        drafting: false,
+        todo: todo.get(label) ?? 0,
+        on: label === shown,
+      });
+      continue;
+    }
     const version = versionOf(label),
       draft = label !== version;
     const e = out.find((x) => x.version === version);
-    if (!e) out.push({ version, label, drafting: draft, todo: todo.get(version) ?? 0, on: version === on });
+    if (!e)
+      out.push({ version, name: version, label, drafting: draft, todo: todo.get(version) ?? 0, on: version === on });
     else if (!draft) Object.assign(e, { label, drafting: false });
     else if (e.drafting) e.label = label; // the family lists drafts oldest first: the newest wins
   }
   return out.length < 2 ? [] : out;
 }
 
-/** "Open on earlier versions": on the latest version (or a draft ahead of it), the older versions with comments still
- * to do, newest first. Nothing anywhere else, or when nothing earlier is to do. */
+/** "Open on earlier versions": on the latest version (or a draft ahead of it), the older cuts with comments still to
+ * do, newest first. Nothing anywhere else, or when nothing earlier is to do. */
 export function earlierOpen(strip: readonly VersionEntry[]): VersionEntry[] {
   const i = strip.findIndex((e) => e.on);
-  if (i < 0 || strip.slice(i + 1).some((e) => !e.drafting)) return [];
+  if (i < 0 || strip[i]!.kind || strip.slice(i + 1).some((e) => !e.drafting)) return [];
   return strip
     .slice(0, i)
-    .filter((e) => e.todo > 0)
+    .filter((e) => e.todo > 0 && !e.kind) // an extension's version (v0's script) isn't an earlier cut
     .reverse();
 }
 

@@ -2,8 +2,12 @@
 // it comes back into view (a tab switched back, or Back from a review); and the folder tree's selection, opened
 // folders and column, kept in the URL hash and localStorage.
 import { SvelteSet } from 'svelte/reactivity';
-import { normalizeHome, type Card, type HomeResponse, type TreeNode } from '../lib/home';
-import { ancestors, findNode, hashOf, navKey, parseHash, videosUnder } from '../lib/tree';
+import { normalizeHome, viewerId, type Card, type HomeResponse, type TreeNode } from '../lib/home';
+import { ancestors, findNode, hashOf, navKey, parseExtHash, parseHash, videosUnder } from '../lib/tree';
+import { Toast } from '../lib/toast.svelte';
+import { ExtLoader, type ExtInfo } from '../ext/loader';
+import type { Host } from '../ext/ctx';
+import type { Role as ExtRole } from '../ext/retake-ext';
 
 export const REFRESH_MS = 15_000;
 
@@ -34,6 +38,8 @@ interface Saved {
 
 export interface HomeDeps {
   fetch?: typeof fetch;
+  /** GET api/ext (tests pass a stand-in). */
+  loader?: ExtLoader;
   /** localStorage, or null where there is none (tests pass a stand-in). */
   storage?: Pick<Storage, 'getItem' | 'setItem'> | null;
   /** The home's path, for the storage key (default: this page's). */
@@ -77,6 +83,23 @@ export class Home {
   drawer = $state(false);
   /** Thumbnails that failed to load: their card shows the empty frame. */
   readonly broken = new SvelteSet<string>();
+  /** The extensions on for this person (GET api/ext): their nav sections, and their page in the main area. */
+  exts = $state.raw<ExtInfo[]>([]);
+  /** GET api/ext answered. */
+  extsLoaded = $state(false);
+  /** An extension's page is open (`#ext/<id>/<route>`), in place of the video cards. */
+  ext = $state.raw<{ id: string; route: string } | null>(null);
+  /** A short message (an extension's ctx.toast). */
+  readonly toast = new Toast();
+  readonly loader: ExtLoader;
+  /** The page slot's host (one, so the slot remounts only for another extension). */
+  readonly extHost: Host;
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- bookkeeping, nothing renders it
+  readonly #routeSubs = new Set<(route: string) => void>();
+  /** The extension whose page is open, once api/ext says it's on. */
+  get extOpen(): ExtInfo | null {
+    return this.ext ? (this.exts.find((e) => e.id === this.ext!.id) ?? null) : null;
+  }
 
   get tree(): TreeNode {
     return this.res.tree;
@@ -113,7 +136,7 @@ export class Home {
     if (e.persisted) void this.refresh();
   };
   #hashchange = () => {
-    this.select(parseHash(location.hash), false);
+    this.route(location.hash);
   };
   #phone = () => {
     this.phone = !!this.#media?.matches;
@@ -124,6 +147,8 @@ export class Home {
     this.#fetch = deps.fetch ?? ((...a) => fetch(...a));
     this.#storage = deps.storage === undefined ? defaultStorage() : deps.storage;
     this.#key = navKey(deps.path ?? (typeof location === 'undefined' ? '/' : location.pathname));
+    this.loader = deps.loader ?? new ExtLoader({ fetch: this.#fetch });
+    this.extHost = this.#makeHost();
     this.#load();
     // Known before the first paint, so a phone never shows the desktop column for a moment.
     this.phone = typeof matchMedia === 'function' && matchMedia(PHONE_QUERY).matches;
@@ -187,7 +212,7 @@ export class Home {
       }
       this.res = normalizeHome(await r.json());
       this.error = '';
-      if (this.selected && !findNode(this.res.tree, this.selected)) this.select(''); // gone: the top
+      if (this.selected && !findNode(this.res.tree, this.selected)) this.select('', !this.ext); // gone: the top
     } catch {
       this.error = 'Review server not reachable';
     } finally {
@@ -202,6 +227,7 @@ export class Home {
   /** Selects a folder or project ("" for the top) and opens it and the folders above it. The URL hash follows
    * (replaced, so Back doesn't step through selections). */
   select(path: string, writeHash = true): void {
+    if (writeHash) this.ext = null; // a folder in the tree: the cards again
     this.selected = path;
     if (path) this.topOpen = true;
     for (const p of [...ancestors(path), path]) if (p) this.expanded.add(p);
@@ -211,6 +237,43 @@ export class Home {
     }
     if (this.phone) this.drawer = false;
     this.#save();
+  }
+
+  /** Follows the URL hash: an extension's page (`#ext/<id>/<route>`), else a folder's selection. */
+  route(hash: string): void {
+    const e = parseExtHash(hash);
+    if (!e) {
+      this.ext = null;
+      this.select(parseHash(hash), false);
+      return;
+    }
+    const same = this.ext?.id === e.id;
+    this.ext = e;
+    if (this.phone) this.drawer = false;
+    if (same) for (const cb of [...this.#routeSubs]) cb(e.route);
+  }
+
+  /** What the page slot's ctx gets: the home's root is this page's, its toast, the hash for routes. */
+  #makeHost(): Host {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    const h = this;
+    const viewer = viewerId();
+    return {
+      where: 'home',
+      homeRoot: '',
+      get role(): ExtRole {
+        const r = h.res.role;
+        return r === 'viewer' || r === 'reviewer' || r === 'approver' ? r : 'owner';
+      },
+      viewer,
+      route: () => h.ext?.route ?? '',
+      onRoute: (cb) => {
+        h.#routeSubs.add(cb);
+        return () => void h.#routeSubs.delete(cb);
+      },
+      toast: (text) => h.toast.say(text, 4000),
+      fetch: this.#fetch,
+    };
   }
 
   /** Opens or closes a folder or project. */
@@ -245,8 +308,12 @@ export class Home {
   /** Load now, then keep the cards fresh while the page is on screen. A hash in the URL wins over the remembered
    * selection. */
   start(): void {
-    if (location.hash) this.select(parseHash(location.hash), false);
+    if (location.hash) this.route(location.hash);
     else this.select(this.selected); // remembered now, so a review's back link comes back here
+    void this.loader.list().then((list) => {
+      this.exts = list;
+      this.extsLoaded = true;
+    });
     this.#media = typeof matchMedia === 'function' ? matchMedia(PHONE_QUERY) : null;
     this.#phone();
     this.#media?.addEventListener('change', this.#phone);

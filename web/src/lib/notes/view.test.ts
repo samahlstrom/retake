@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { NoteItem, NotesResponse } from './types';
 import {
   activeKey,
+  anchorText,
   earlierOpen,
   emptyText,
   forVersion,
@@ -15,6 +16,7 @@ import {
   sketchFrame,
   todoByVersion,
   toggleLabel,
+  toRow,
   versionOf,
   versionStrip,
   visible,
@@ -418,12 +420,60 @@ describe('comments belong to the version they were made on', () => {
     const withDrafts = [...family, { label: 'v8-draft2' }, { label: 'v8-draft3' }];
     const strip = versionStrip(withDrafts, 'v8-draft2', new Map([['v8', 1]]));
     expect(strip).toHaveLength(8);
-    expect(strip.at(-1)).toEqual({ version: 'v8', label: 'v8-draft3', drafting: true, todo: 1, on: true });
+    expect(strip.at(-1)).toEqual({ version: 'v8', name: 'v8', label: 'v8-draft3', drafting: true, todo: 1, on: true });
     // A single version and its draft: that's two, so there is a strip.
     expect(versionStrip([{ label: 'v1' }, { label: 'v2-draft1' }], 'v1', new Map()).map((e) => e.version)).toEqual([
       'v1',
       'v2',
     ]);
+  });
+
+  it("an extension's kind of version comes first, as `v0 · Script`, and is never an earlier cut", () => {
+    const name = (v: { label: string; kind?: string }) => (v.kind ? `${v.label} · Script` : v.label);
+    const fam = [{ label: 'v1' }, { label: 'v0', kind: 'ignition.doc' }, { label: 'v2' }];
+    const counts = new Map([
+      ['v0', 2],
+      ['v1', 1],
+    ]);
+    const strip = versionStrip(fam, 'v2', counts, name);
+    expect(strip.map((e) => [e.version, e.name, e.todo, e.on, e.kind])).toEqual([
+      ['v0', 'v0 · Script', 2, false, 'ignition.doc'],
+      ['v1', 'v1', 1, false, undefined],
+      ['v2', 'v2', 0, true, undefined],
+    ]);
+    expect(earlierOpen(strip).map((e) => e.version)).toEqual(['v1']); // v0's script isn't an earlier cut
+    const onV0 = versionStrip(fam, 'v0', counts, name);
+    expect(onV0.find((e) => e.on)?.version).toBe('v0');
+    expect(earlierOpen(onV0)).toEqual([]);
+    // v0 alone: a single version, no strip; without a namer it reads its label.
+    expect(versionStrip([{ label: 'v0', kind: 'ignition.doc' }], 'v0', counts, name)).toEqual([]);
+    expect(versionStrip(fam, 'v2', counts)[0]!.name).toBe('v0');
+  });
+
+  it("a typed comment (an extension version's) has no moment: its anchor, and a question about a document its place", () => {
+    const anchor = { file: 'v0/script.md', line: 12, heading: 'Cold open', quote: 'So the idea' };
+    const [typed, keyed, plain] = [
+      toRow(item({ id: 1, version: 'v0', t0: 0, t1: 0, anchor, key: 'doc/1' }), false, { versions: [], shown: 'v0' }),
+      toRow(item({ id: 2, version: 'v0', t0: 0, t1: 0, key: 'doc/2' }), false, { versions: [], shown: 'v0' }),
+      toRow(item({ id: 3 }), false, { versions: [], shown: 'v8' }),
+    ];
+    expect([typed.typed, typed.anchor]).toEqual([true, anchor]);
+    expect([keyed.typed, keyed.anchor]).toEqual([true, null]);
+    expect(plain.typed).toBe(false);
+    expect(anchorText(anchor)).toBe('Cold open');
+    expect(anchorText({ file: 'v0/outline.md', line: 1 })).toBe('outline.md');
+    expect(anchorText(null)).toBe('');
+    const asked = toRow(
+      item({
+        id: 4,
+        status: 'question',
+        work: { id: 't1', state: 'question' } as Row['work'],
+        ask: { id: 40, task: 't1', t: 0, version: 'v0', text: 'Which opening?', anchor },
+      }),
+      false,
+      { versions: [], shown: 'v0' },
+    );
+    expect(asked.ask).toMatchObject({ id: 40, time: 'Cold open', anchor });
   });
 
   it('"Open on earlier versions" on the latest version (or its draft) only, newest first', () => {

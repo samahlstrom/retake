@@ -1,0 +1,39 @@
+{
+  "api": 1,
+  "doc": "The extension API's page side (spec/extensions.md, \"The page API\"): its slots and the export each one calls, the members of ctx and of what it returns, and its events. The types are web/src/ext/retake-ext.d.ts. A renamed or removed name goes under deprecated in a major release; web/src/ext/ctx.test.ts keeps this file equal to what ctx.ts builds.",
+  "slots": {
+    "page": "page",
+    "version": "version",
+    "sidebar-tab": "sidebarTab",
+    "review-panel": "reviewPanel"
+  },
+  "ctx": [
+    "api",
+    "slot",
+    "ext",
+    "role",
+    "route",
+    "onRoute",
+    "video",
+    "version",
+    "home",
+    "files",
+    "comments",
+    "createVideo",
+    "transcribe",
+    "onRecorded",
+    "recording",
+    "onRecording",
+    "selectComment",
+    "player",
+    "on",
+    "navigate",
+    "toast",
+    "fetch"
+  ],
+  "files": ["list", "read", "write", "remove", "url", "watch", "history", "undo"],
+  "comments": ["list", "add", "send", "answer"],
+  "player": ["time", "duration", "seek", "onTime"],
+  "events": ["notes", "job", "version", "automation", "files"],
+  "deprecated": {}
+}

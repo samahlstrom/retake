@@ -60,7 +60,12 @@ describe('home', () => {
   });
 
   it('names the statuses and the streaming state', () => {
-    expect(STATUS_TEXT).toEqual({ to_review: 'To review', reviewed: 'Reviewed', being_edited: 'Being edited' });
+    expect(STATUS_TEXT).toEqual({
+      to_review: 'To review',
+      reviewed: 'Reviewed',
+      being_edited: 'Being edited',
+      no_cut: 'No cut yet',
+    });
     expect(streamText(null)).toBeNull();
     expect(streamText({ state: 'pending', done: 0, total: 0 })).toBe('Not rendered yet');
     expect(streamText({ state: 'rendering', done: 3, total: 12 })).toBe('Rendering 3/12');
@@ -156,6 +161,33 @@ describe('home', () => {
     expect(viewerId(() => 0.9999)).toBe('zzzzzzzzzzzz');
     expect(unwatchUrl('v3', 'abc')).toBe('api/versions/v3/unwatch?viewer=abc');
     expect(unwatchUrl('a b', 'x&y')).toBe('api/versions/a%20b/unwatch?viewer=x%26y');
+  });
+});
+
+describe("an extension's kind on the home", () => {
+  it('keeps a no_cut card, its kind, its kinds and when it changed', () => {
+    const h = normalizeHome({
+      projects: [
+        {
+          name: 'idea',
+          status: 'no_cut',
+          kind: 'ignition.doc',
+          version: 'v0',
+          kinds: ['ignition.doc', 3],
+          changed: 17,
+        },
+        { name: 'cut', status: 'to_review', kinds: ['ignition.doc'], changed: 'soon' },
+        { name: 'old' },
+      ],
+    });
+    expect(h.projects.map((c) => [c.status, c.kind, c.kinds, c.changed])).toEqual([
+      ['no_cut', 'ignition.doc', ['ignition.doc'], 17],
+      ['to_review', undefined, ['ignition.doc'], undefined],
+      ['to_review', undefined, undefined, undefined],
+    ]);
+    expect(cardStatus(h.projects[0]!)).toEqual({ text: 'No cut yet', tone: 'no_cut' });
+    expect(toReview(h.projects)).toBe(2); // an idea isn't to review
+    expect(nextToReview(h.projects, null)?.name).toBe('cut');
   });
 });
 

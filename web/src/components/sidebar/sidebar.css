@@ -13,6 +13,17 @@
     background: var(--surface-raised);
     border-left: 1px solid var(--line);
   }
+  /* A review panel (an extension's): the column widens to half the page, never over the video. */
+  #side.wide {
+    width: max(var(--sidebar-width), 50vw);
+  }
+  /* An extension's sidebar tab or review panel, in place of the list. */
+  #side .side-slot {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+  }
   #side header {
     flex: none;
     display: flex;
@@ -196,6 +207,19 @@
     color: var(--text-strong);
     text-decoration: underline;
     text-underline-offset: 3px;
+  }
+  /* A typed comment's place in a document (its heading, else its file): words, not a time, and not a link. */
+  #side .time.anchor {
+    max-width: 180px;
+    overflow: hidden;
+    color: var(--text-4);
+    font: 500 12px var(--font-ui);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  #side .time.anchor:hover {
+    color: var(--text-4);
+    text-decoration: none;
   }
   #side .status {
     display: inline-flex;

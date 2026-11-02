@@ -13,6 +13,9 @@ export const doneUrl = (take: string, version: string | null): string =>
 export const eventsUrl = (since: number | null): string =>
   since == null ? 'api/events' : `api/events?since=${enc(String(since))}`;
 
+/** Job kinds that are an extension's, not the comments': they never show on the progress line. */
+const EXT_JOBS = new Set(['transcribe-file']);
+
 /** localStorage key of the desktop sidebar's open/closed state. */
 export const SIDEBAR_KEY = 'retake.sidebar';
 /** Retry a closed event stream this long after it closed, at most EVENTS_TRIES times in a row before it ever opened. */
@@ -93,8 +96,34 @@ export class Notes {
   #since: number | null = null;
   #everOpened = false;
   #tries = 0;
+  /** Listeners of the page's events (extensions' `ctx.on`), by event name. */
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- bookkeeping, nothing renders it
+  readonly #listeners = new Map<string, Set<(data: unknown) => void>>();
 
   constructor(private readonly deps: NotesDeps = {}) {}
+
+  /** Listen to an event of GET api/events (`notes`, `job`, `version`, `automation`, `ext.files`) with its data. A
+   * listener that throws is logged; the page's own handling goes on. */
+  on = (name: string, cb: (data: unknown) => void): (() => void) => {
+    let set = this.#listeners.get(name);
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- bookkeeping, nothing renders it
+    if (!set) this.#listeners.set(name, (set = new Set()));
+    const s = set;
+    s.add(cb);
+    return () => {
+      s.delete(cb);
+    };
+  };
+
+  #emit(name: string, data: unknown): void {
+    for (const cb of [...(this.#listeners.get(name) ?? [])]) {
+      try {
+        cb(data);
+      } catch (err) {
+        console.error(`retake: a ${name} event listener failed:`, err);
+      }
+    }
+  }
 
   #fetch(url: string, init?: RequestInit): Promise<Response> {
     return (this.deps.fetch ?? fetch)(url, init);
@@ -144,7 +173,7 @@ export class Notes {
       if (req !== this.#req) return;
       this.res = normalize(body, label);
       this.deps.onLoad?.(label);
-      if (Array.isArray(body?.jobs)) this.jobs = body.jobs;
+      if (Array.isArray(body?.jobs)) this.jobs = body.jobs.filter((j) => !EXT_JOBS.has(j?.kind));
       if (!this.available) {
         this.available = true;
         this.connect();
@@ -156,7 +185,8 @@ export class Notes {
 
   refresh = (): Promise<void> => this.load(this.#label);
 
-  /** Listen to GET /api/events: `notes` refetches, `job` updates the progress line, `version` reloads the family. */
+  /** Listen to GET /api/events: `notes` refetches, `job` updates the progress line, `version` reloads the family.
+   * Each event also goes to the listeners of `on` (extensions), and so does `ext.files`. */
   connect(): void {
     if (this.#es) return;
     const make =
@@ -176,20 +206,32 @@ export class Notes {
     es.addEventListener('notes', (e) => {
       seen(e);
       void this.refresh();
+      this.#emit('notes', parse<unknown>(e.data) ?? {});
     });
     es.addEventListener('job', (e) => {
       seen(e);
       const j = parse<Job>(e.data);
-      if (j && j.id != null && typeof j.kind === 'string') this.onJob(j);
+      if (j && j.id != null && typeof j.kind === 'string') {
+        this.onJob(j);
+        this.#emit('job', j);
+      }
     });
     es.addEventListener('automation', (e) => {
       seen(e);
       this.deps.onAutomation?.();
+      this.#emit('automation', parse<unknown>(e.data) ?? {});
     });
     es.addEventListener('version', (e) => {
       seen(e);
       const d = parse<VersionEvent>(e.data);
       this.deps.onVersion?.(d && typeof d === 'object' ? d : {});
+      this.#emit('version', d && typeof d === 'object' ? d : {});
+    });
+    // An extension's owned files changed (while a page holds its watch lease): only its listeners care.
+    es.addEventListener('ext.files', (e) => {
+      seen(e);
+      const d = parse<{ ext?: unknown; files?: unknown }>(e.data);
+      if (d && typeof d.ext === 'string' && Array.isArray(d.files)) this.#emit('ext.files', d);
     });
     es.onerror = () => {
       if (es.readyState !== 2) return; // CONNECTING: the browser retries by itself
@@ -206,6 +248,7 @@ export class Notes {
   }
 
   onJob(j: Job): void {
+    if (EXT_JOBS.has(j.kind)) return; // an extension's (a talk-out's transcription): it shows its own progress
     this.jobs = applyJob(this.jobs, j);
     if (j.kind === 'notes' && j.state === 'done') void this.refresh();
   }

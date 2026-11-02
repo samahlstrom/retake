@@ -7,6 +7,7 @@ import {
   findNode,
   hashOf,
   navKey,
+  parseExtHash,
   parseHash,
   rememberedPlace,
   rows,
@@ -146,6 +147,17 @@ describe('the folder tree', () => {
     expect(parseHash('#item-shop')).toBe(''); // not ours
     expect(parseHash('#//a//b/')).toBe('a/b');
     expect(parseHash('#/%E0%A4%A')).toBe('%E0%A4%A');
+  });
+
+  it("knows an extension's page in the hash: #ext/<id>/<route>, never a folder", () => {
+    expect(parseExtHash('#ext/ignition/')).toEqual({ id: 'ignition', route: '' });
+    expect(parseExtHash('#ext/ignition')).toEqual({ id: 'ignition', route: '' });
+    expect(parseExtHash('#ext/ignition/new')).toEqual({ id: 'ignition', route: 'new' });
+    expect(parseExtHash('#ext/ignition/idea/a%20b')).toEqual({ id: 'ignition', route: 'idea/a b' });
+    expect(parseExtHash('ext/hello-2/x')).toEqual({ id: 'hello-2', route: 'x' });
+    for (const h of ['', '#/', '#/ext/ignition', '#ext/', '#ext/Bad/x', '#extra/x', '#/deadlock'])
+      expect(parseExtHash(h), h).toBeNull();
+    expect(parseHash('#ext/ignition/new')).toBe(''); // the folder selection stays the top
   });
 
   it("sends a review's back link to where the reviewer was, when the video is there, else to its project", () => {

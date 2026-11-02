@@ -5,7 +5,8 @@
   //    the grid's `side` row (phone.css), where the comments open.
   //  - landscape, around the video (which fills the height): the pen colors and undo at the left edge, Send and a big
   //    round Record at the right edge, and a slim bar at the bottom with play, time, the timeline, version and agent.
-  // A viewer's share link has no pen, undo, Record or Send; the hint says "View only".
+  // A viewer's share link has no pen, undo, Record or Send; the hint says "View only". On an extension's kind of
+  // version (v0) there is no video: no timeline, play, time, pens or undo; Record only when the kind records.
   import type { Review } from '../lib/review.svelte';
   import VersionPicker from './VersionPicker.svelte';
   import AgentStatus from './AgentStatus.svelte';
@@ -28,15 +29,17 @@
 
 {#if review.layoutMode === 'portrait'}
   <div id="pbar" data-part="bar" class="portrait" class:recording={!!review.seg}>
-    <Timeline {review} />
+    {#if !review.kindShown}<Timeline {review} />{/if}
     <div class="prow">
-      <PlayButton paused={review.paused} onclick={review.togglePlay} />
-      {@render time()}
+      {#if !review.kindShown}
+        <PlayButton paused={review.paused} onclick={review.togglePlay} />
+        {@render time()}
+      {/if}
       <VersionPicker {review} />
       <span class="grow"></span>
       {#if review.canRecord && review.agent.available}<AgentStatus {review} />{/if}
     </div>
-    {#if review.canRecord}
+    {#if review.canRecord && !review.kindShown}
       <div class="prow">
         <PenColors
           color={review.penColor}
@@ -50,17 +53,17 @@
     {/if}
   </div>
   <div id="precord" data-part="bar">
-    <Hint gone={review.hintGone} touch inline viewOnly={!review.canRecord} />
+    {#if !review.kindShown}<Hint gone={review.hintGone} touch inline viewOnly={!review.canRecord} />{/if}
     {#if review.canRecord}
       <div class="prow">
-        <PhoneRecord {review} />
+        {#if review.recordHere}<PhoneRecord {review} />{/if}
         <SendButton {review} />
       </div>
     {/if}
   </div>
 {:else}
   <div id="pleft" data-part="bar">
-    {#if review.canRecord}
+    {#if review.canRecord && !review.kindShown}
       <PenColors
         color={review.penColor}
         onpick={review.setColor}
@@ -74,13 +77,17 @@
     {#if review.canRecord}
       <SendButton {review} />
       <span class="grow"></span>
-      <PhoneRecord {review} round />
+      {#if review.recordHere}<PhoneRecord {review} round />{/if}
     {/if}
   </div>
   <div id="pbar" data-part="bar" class="landscape" class:recording={!!review.seg}>
-    <PlayButton paused={review.paused} onclick={review.togglePlay} />
-    {@render time()}
-    <Timeline {review} />
+    {#if review.kindShown}
+      <span class="grow"></span>
+    {:else}
+      <PlayButton paused={review.paused} onclick={review.togglePlay} />
+      {@render time()}
+      <Timeline {review} />
+    {/if}
     <VersionPicker {review} />
     {#if review.canRecord && review.agent.available}<AgentStatus {review} compact />{/if}
   </div>

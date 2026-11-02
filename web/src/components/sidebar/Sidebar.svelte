@@ -3,13 +3,15 @@
   // each), two tabs, To do and Done, and a search behind its icon. Each version shows its own comments only; the latest
   // says in one quiet line what's still open on earlier ones. Progress (recording, transcribing, an undo after a
   // delete) floats at the bottom of the column, so nothing in the list moves. N or the › hides it (remembered); a
-  // quiet pill over the video brings it back.
+  // quiet pill over the video brings it back. Extensions add tabs after To do · Done (spec/extensions.md, "UI slots"):
+  // a sidebar tab shows its slot in place of the list; a review panel widens the column to half the page.
   import { Collapsible, ScrollArea, Tooltip } from 'bits-ui';
   import { tick } from 'svelte';
   import type { Review } from '../../lib/review.svelte';
   import SidebarItem from './SidebarItem.svelte';
   import VersionStrip from './VersionStrip.svelte';
   import EarlierOpen from './EarlierOpen.svelte';
+  import ExtSlot from '../../ext/ExtSlot.svelte';
   import './sidebar.css';
 
   let { review }: { review: Review } = $props();
@@ -17,6 +19,7 @@
   const notes = $derived(review.notes);
   const view = $derived(review.sidebar);
   const job = $derived(notes.job);
+  const tab = $derived(review.extTab);
   const pill = $derived(
     job && !view.rows.length
       ? job.text
@@ -64,7 +67,12 @@
             </Tooltip.Content>
           </Tooltip.Root>
         {/if}
-        <Collapsible.Content id="side" data-part="sidebar" aria-label="Comments">
+        <Collapsible.Content
+          id="side"
+          data-part="sidebar"
+          aria-label="Comments"
+          class={tab?.slot === 'review-panel' ? 'wide' : undefined}
+        >
           <header>
             {#if searching}
               <input
@@ -133,68 +141,90 @@
           <div class="tabs" data-part="tabs" role="tablist" aria-label="Comments">
             <button
               role="tab"
-              aria-selected={review.commentFilter === 'todo'}
-              class:on={review.commentFilter === 'todo'}
-              onclick={() => (review.commentFilter = 'todo')}>To do <b>{review.todoCount}</b></button
+              aria-selected={!tab && review.commentFilter === 'todo'}
+              class:on={!tab && review.commentFilter === 'todo'}
+              onclick={() => review.showComments('todo')}>To do <b>{review.todoCount}</b></button
             >
             <button
               role="tab"
-              aria-selected={review.commentFilter === 'done'}
-              class:on={review.commentFilter === 'done'}
-              onclick={() => (review.commentFilter = 'done')}>Done <b>{review.doneCount}</b></button
+              aria-selected={!tab && review.commentFilter === 'done'}
+              class:on={!tab && review.commentFilter === 'done'}
+              onclick={() => review.showComments('done')}>Done <b>{review.doneCount}</b></button
             >
+            {#each review.extTabs as t (t.key)}
+              <button
+                role="tab"
+                data-ext-tab={t.key}
+                aria-selected={tab?.key === t.key}
+                class:on={tab?.key === t.key}
+                onclick={() => (review.sideTab = t.key)}>{t.title}</button
+              >
+            {/each}
           </div>
-          <EarlierOpen {review} />
-          <ScrollArea.Root class="scroll" type="hover">
-            <ScrollArea.Viewport class="vp">
-              {#if view.rows.length}
-                <ol>
-                  {#each view.rows as row (row.key)}
-                    <SidebarItem {review} {row} active={row.key === view.active} />
-                  {/each}
-                </ol>
-              {:else if review.commentSearch.trim()}
-                <p class="empty">No comments match “{review.commentSearch.trim()}”</p>
-              {:else if review.commentFilter === 'done'}
-                <p class="empty">Nothing done yet<span>Comments the agent finishes land here.</span></p>
-              {:else if !job}
-                <p class="empty">
-                  {review.versionRows.length ? 'All done' : 'No comments yet'}<span
-                    >{review.canRecord
-                      ? review.touch
-                        ? 'Tap ● and talk to leave one at this moment.'
-                        : 'Press R and talk to leave one at this moment.'
-                      : 'Comments will show up here.'}</span
+          {#if tab}
+            <ExtSlot
+              ext={tab.ext}
+              slot={tab.slot}
+              host={review.extHost(tab.slot)}
+              loader={review.extLoader}
+              key={review.shown ?? ''}
+              class="side-slot"
+            />
+          {:else}
+            <EarlierOpen {review} />
+            <ScrollArea.Root class="scroll" type="hover">
+              <ScrollArea.Viewport class="vp">
+                {#if view.rows.length}
+                  <ol>
+                    {#each view.rows as row (row.key)}
+                      <SidebarItem {review} {row} active={row.key === view.active} />
+                    {/each}
+                  </ol>
+                {:else if review.commentSearch.trim()}
+                  <p class="empty">No comments match “{review.commentSearch.trim()}”</p>
+                {:else if review.commentFilter === 'done'}
+                  <p class="empty">Nothing done yet<span>Comments the agent finishes land here.</span></p>
+                {:else if !job}
+                  <p class="empty">
+                    {review.versionRows.length ? 'All done' : 'No comments yet'}<span
+                      >{review.canRecord
+                        ? review.touch
+                          ? 'Tap ● and talk to leave one at this moment.'
+                          : 'Press R and talk to leave one at this moment.'
+                        : 'Comments will show up here.'}</span
+                    >
+                  </p>
+                {/if}
+              </ScrollArea.Viewport>
+              <ScrollArea.Scrollbar orientation="vertical" class="bar">
+                <ScrollArea.Thumb class="thumb" />
+              </ScrollArea.Scrollbar>
+            </ScrollArea.Root>
+            <div class="strip" data-part="progress" aria-live="polite">
+              {#if notes.deleted.length}
+                <div class="deleted-comment" role="status">
+                  <span
+                    >{notes.deleted.length === 1 ? 'Comment deleted' : `${notes.deleted.length} comments deleted`}</span
+                  ><button onclick={notes.undoDelete}>Undo</button>
+                </div>
+              {:else if notes.deleteError}
+                <p class="delete-error" role="alert">{notes.deleteError}</p>
+              {:else if job}
+                <button class="job" class:err={job.error} title={job.error ? 'Dismiss' : ''} onclick={notes.dismissJob}>
+                  <span class="pulse"></span>
+                  <span class="jt"
+                    >{job.text}{#if job.hint}<span class="hint">{job.hint}</span>{/if}</span
                   >
-                </p>
+                </button>
+              {:else if review.seg}
+                <div class="recording-comment">
+                  <span class="pulse"></span>{review.seg.talk
+                    ? 'Recording.'
+                    : 'Recording. Comments appear here as you talk.'}
+                </div>
               {/if}
-            </ScrollArea.Viewport>
-            <ScrollArea.Scrollbar orientation="vertical" class="bar">
-              <ScrollArea.Thumb class="thumb" />
-            </ScrollArea.Scrollbar>
-          </ScrollArea.Root>
-          <div class="strip" data-part="progress" aria-live="polite">
-            {#if notes.deleted.length}
-              <div class="deleted-comment" role="status">
-                <span
-                  >{notes.deleted.length === 1 ? 'Comment deleted' : `${notes.deleted.length} comments deleted`}</span
-                ><button onclick={notes.undoDelete}>Undo</button>
-              </div>
-            {:else if notes.deleteError}
-              <p class="delete-error" role="alert">{notes.deleteError}</p>
-            {:else if job}
-              <button class="job" class:err={job.error} title={job.error ? 'Dismiss' : ''} onclick={notes.dismissJob}>
-                <span class="pulse"></span>
-                <span class="jt"
-                  >{job.text}{#if job.hint}<span class="hint">{job.hint}</span>{/if}</span
-                >
-              </button>
-            {:else if review.seg}
-              <div class="recording-comment">
-                <span class="pulse"></span>Recording. Comments appear here as you talk.
-              </div>
-            {/if}
-          </div>
+            </div>
+          {/if}
         </Collapsible.Content>
       {/snippet}
     </Collapsible.Root>

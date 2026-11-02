@@ -3,7 +3,7 @@
   // agent has the reply box under it; a paused one says why once, with Retry; a Working one waiting for its computer
   // says so. Everything else is in its ⋯.
   import type { Review } from '../../lib/review.svelte';
-  import { sketchFrame, type Row } from '../../lib/notes/view';
+  import { anchorText, sketchFrame, type Row } from '../../lib/notes/view';
   import { STATE_TEXT } from '../../lib/status';
   import { verName } from '../../lib/versions';
   import CommentMenu from './CommentMenu.svelte';
@@ -60,7 +60,12 @@
     {#if review.manyAuthors && row.kind === 'note'}<span class="who"
         ><span class="avatar" aria-hidden="true">{row.by.slice(0, 1).toUpperCase()}</span>{row.by}</span
       >{/if}
-    <button class="time jump" title="Go to {row.time}" onclick={() => review.jumpToComment(row)}>{row.time}</button>
+    {#if row.typed}
+      <!-- A typed comment on an extension's version has no moment: where in the document it is, if anywhere. -->
+      {#if row.anchor}<span class="time anchor" title={row.anchor.file}>{anchorText(row.anchor)}</span>{/if}
+    {:else}
+      <button class="time jump" title="Go to {row.time}" onclick={() => review.jumpToComment(row)}>{row.time}</button>
+    {/if}
     <span class="status {status.state}" data-part="status"
       ><span class="dot" aria-hidden="true"></span>{STATE_TEXT[status.state]}</span
     >

@@ -2,12 +2,23 @@
   // The left column of the home (spec/home.md): a filter, and the folder tree under the opened folder's row (which
   // shows every video): folders and projects with a chevron, a project's videos under it, one status dot each. A name selects (the main area shows its
   // videos), a chevron opens or closes, a video opens its review. Desktop: a column with a resize handle. Phone: a
-  // drawer that ☰ opens. Arrow keys move through the rows.
+  // drawer that ☰ opens. Arrow keys move through the rows. Under the tree, one section per extension with a nav
+  // (spec/extensions.md, "Nav section"): its row opens its page, its + its action, and its rows (Ignition's ideas)
+  // open their videos. Rows have the tree's height; an extension's icon sits where a status dot would.
   import { tick } from 'svelte';
   import { DOT_TEXT, rows, topDot, videosUnder, type Row } from '../lib/tree';
+  import { videoName, type Card } from '../lib/home';
+  import { cardExt, extHash, iconUrl, kindStatus, navSections } from '../ext/kinds';
   import { NAV_WIDTH, type Home } from './home.svelte';
 
   let { home }: { home: Home } = $props();
+  const sections = $derived(navSections(home.exts, home.res.projects));
+  /** A video whose only version is an extension's (an idea): that extension's icon, in place of the dot, and its
+   * kind's word ("Idea"). */
+  const iconOf = (c: Card | undefined): { src: string; label: string } | null => {
+    const ext = c ? cardExt(home.exts, c) : null;
+    return c && ext ? { src: iconUrl(ext), label: kindStatus(home.exts, c) ?? ext.name } : null;
+  };
 
   const ALL = '';
   /** The top row is open (a filter always opens it). */
@@ -22,7 +33,7 @@
   });
   let tree = $state<HTMLElement>();
 
-  const selectedKey = $derived(home.node.path);
+  const selectedKey = $derived(home.ext ? null : home.node.path);
 
   function focusRow(key: string) {
     focusKey = key;
@@ -111,6 +122,16 @@
   }
 </script>
 
+{#snippet icon(src: string, label: string)}
+  <span
+    class="ext-icon"
+    class:plain={!src}
+    style:mask-image={src ? `url("${src}")` : undefined}
+    role="img"
+    aria-label={label}
+  ></span>
+{/snippet}
+
 {#snippet dot(d: Row['dot'])}
   <span
     class="sdot {d}"
@@ -137,7 +158,13 @@
       bind:value={home.filter}
     />
   </div>
-  <div class="rows" role="tree" aria-label={home.tree.title || 'Folders'} bind:this={tree}>
+  <div
+    class="rows"
+    class:fit={sections.length > 0}
+    role="tree"
+    aria-label={home.tree.title || 'Folders'}
+    bind:this={tree}
+  >
     <div
       class="row toprow"
       class:project={home.tree.project}
@@ -194,7 +221,9 @@
           onfocus={() => (focusKey = row.key)}
           ><span class="chev" aria-hidden="true"></span><span class="label">{row.title}</span><span class="ver"
             >{row.card.version}</span
-          >{@render dot(row.dot)}</a
+          >{#if iconOf(row.card)}{@const ic = iconOf(row.card)!}{@render icon(ic.src, ic.label)}{:else}{@render dot(
+              row.dot,
+            )}{/if}</a
         >
       {:else}
         <div
@@ -238,6 +267,29 @@
       {/if}
     {/each}
   </div>
+  {#each sections as sec (sec.ext.id)}
+    <div class="ext-nav" data-part="nav-ext" data-ext={sec.ext.id} role="group" aria-label={sec.title}>
+      <div class="row ext-head" class:selected={home.ext?.id === sec.ext.id}>
+        <a class="ext-open" data-part="nav-ext-title" href={extHash(sec.ext.id)}
+          ><span class="chev" aria-hidden="true"></span><span class="label">{sec.title}</span></a
+        >{#if sec.action}<a
+            class="ext-action"
+            data-part="nav-ext-action"
+            href={extHash(sec.ext.id, sec.action.route)}
+            title={sec.action.title}
+            aria-label={sec.action.title}
+            ><svg viewBox="0 0 16 16" aria-hidden="true"
+              ><path d="M8 3.5v9M3.5 8h9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /></svg
+            ></a
+          >{/if}{@render icon(sec.icon, sec.title)}
+      </div>
+      {#each sec.rows as c (c.name)}
+        <a class="row video" href={c.url} data-name={c.name} data-part="nav-ext-video" style:--depth={1}
+          ><span class="chev" aria-hidden="true"></span><span class="label">{videoName(c)}</span></a
+        >
+      {/each}
+    </div>
+  {/each}
   {#if home.loaded && home.filter.trim() && !list.length}
     <p class="none-found">Nothing matches “{home.filter.trim()}”.</p>
   {/if}
@@ -304,6 +356,77 @@
       overflow-y: auto;
       scrollbar-gutter: stable;
       padding: 2px 6px 24px;
+    }
+    /* With extension sections under it, the tree takes what it needs and they follow it. */
+    .rows.fit {
+      flex: 0 1 auto;
+      padding-bottom: 8px;
+    }
+    .ext-nav {
+      flex: 0 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+      scrollbar-gutter: stable;
+      padding: 8px 6px 24px;
+      border-top: 1px solid var(--line);
+    }
+    .ext-head {
+      padding-right: 8px;
+      color: var(--text-3);
+      font-weight: 550;
+    }
+    .ext-open {
+      display: flex;
+      flex: 1;
+      min-width: 0;
+      align-items: center;
+      align-self: stretch;
+      color: inherit;
+      text-decoration: none;
+      outline: none;
+    }
+    .ext-open:focus-visible,
+    .ext-action:focus-visible {
+      box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--voice) 70%, transparent);
+      border-radius: var(--radius-sm);
+    }
+    /* The section's action: a + glyph, no box. */
+    .ext-action {
+      flex: none;
+      display: grid;
+      place-items: center;
+      width: 22px;
+      height: 22px;
+      border-radius: var(--radius-sm);
+      color: var(--faint);
+      outline: none;
+    }
+    .ext-action:hover {
+      color: var(--text);
+      background: color-mix(in srgb, var(--overlay) 6%, transparent);
+    }
+    .ext-action svg {
+      width: 14px;
+      height: 14px;
+    }
+    /* An extension's icon, in the status dot's slot (7 px and its 8 px margin): the theme's colour, from a mask. */
+    .ext-icon {
+      flex: none;
+      width: 13px;
+      height: 13px;
+      margin-left: 2px;
+      background: currentColor;
+      mask: center / contain no-repeat;
+      opacity: 0.8;
+    }
+    .ext-icon.plain {
+      width: 7px;
+      height: 7px;
+      margin: 0 3px 0 5px;
+      border: 1.5px solid currentColor;
+      border-radius: 50%;
+      background: transparent;
+      mask: none;
     }
     .row {
       --indent: calc(8px + var(--depth, 0) * 14px);

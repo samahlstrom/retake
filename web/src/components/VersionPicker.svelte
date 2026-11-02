@@ -4,7 +4,8 @@
   // (outside click and Escape close it) with the legacy CSS placement, 12px above the button, centered.
   // A streamed version that isn't complete (spec/bridge.md, "Streaming") has a chip in the list ("pending",
   // "rendering 12/50"), and the button has a dot while it's on screen (drawn over the border, so nothing moves).
-  // The agent's drafts (`v5-draft2`, contract C4) read "v5" with a quiet "draft" tag: they aren't versions yet.
+  // The agent's drafts (`v5-draft2`, contract C4) read "v5" with a quiet "draft" tag: they aren't versions yet. An
+  // extension's kind of version comes first, named `v0 · Script` (spec/extensions.md, "Version kinds").
   import { Popover } from 'bits-ui';
   import type { Review } from '../lib/review.svelte';
   import { byLabel, draftOf, incomplete, latestVersion, streamChip } from '../lib/versions';
@@ -13,7 +14,7 @@
   let { review }: { review: Review } = $props();
 
   const title = $derived(`Review ${review.shown}. Choose a version to see its feedback and completed changes.`);
-  const newestFirst = $derived([...review.versions].reverse());
+  const newestFirst = $derived([...review.versions.filter((v) => v.kind), ...[...review.cuts].reverse()]);
   const latest = $derived(latestVersion(review.versions)?.label);
   const shownStreaming = $derived(incomplete(byLabel(review.versions, review.shown)));
   const shownDraft = $derived(draftOf(review.shown));
@@ -27,7 +28,7 @@
       data-part="version-picker"
       class={[review.flipped && 'flipped', shownStreaming && 'rendering'].filter(Boolean).join(' ')}
       {title}
-      >{shownDraft ?? review.shown ?? ''}{#if shownDraft}<span class="draft">draft</span>{/if}<span
+      >{shownDraft ?? review.nameOf(review.shown)}{#if shownDraft}<span class="draft">draft</span>{/if}<span
         class="version-chevron">⌄</span
       ></Popover.Trigger
     >
@@ -46,11 +47,11 @@
           class={[v.label === review.base && 'on', draft && 'is-draft'].filter(Boolean).join(' ')}
           onclick={() => review.pickVersion(v.label)}
           ><span
-            >{draft ?? v.label}{v.label === review.base ? ' ✓' : ''}{v.label === latest
+            >{draft ?? review.nameOf(v.label)}{v.label === review.base ? ' ✓' : ''}{v.label === latest
               ? ' · Latest'
               : ''}{#if draft}<span class="draft">draft</span>{/if}{#if chip}<span class="stream">{chip}</span
               >{/if}</span
-          ><span class="d">{fmt(v.duration || 0, false)}</span></button
+          ><span class="d">{v.kind ? '' : fmt(v.duration || 0, false)}</span></button
         >
       {/each}
     </Popover.ContentStatic>
