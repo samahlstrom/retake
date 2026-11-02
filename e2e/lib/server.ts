@@ -106,7 +106,7 @@ async function startProcess(name: string, cmd: string, args: string[], port: num
 }
 
 /** Starts a process that serves nothing itself (`retake connect`), logged and stopped like a server. */
-export function startDaemon(name: string, cmd: string, args: string[]): Server {
+export function startDaemon(name: string, cmd: string, args: string[], env: Record<string, string> = {}): Server {
   mkdirSync(LOGS, { recursive: true });
   mkdirSync(PIDS, { recursive: true });
   const log = join(LOGS, `${name}.log`);
@@ -114,7 +114,7 @@ export function startDaemon(name: string, cmd: string, args: string[]): Server {
   const proc = spawn(cmd, args, {
     detached: true,
     stdio: ['ignore', fd, fd],
-    env: { ...process.env, XDG_CONFIG_HOME: CONFIG_HOME },
+    env: { ...process.env, XDG_CONFIG_HOME: CONFIG_HOME, ...env },
   });
   closeSync(fd);
   if (proc.pid) writeFileSync(join(PIDS, `${name}.pid`), String(proc.pid));
