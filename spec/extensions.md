@@ -225,7 +225,8 @@ interface Ctx {
   onRecorded(cb: (a: { blob: Blob; type: string; duration: number; started: string }) => void): () => void;
   onAnchor(fn: () => Anchor | null): () => void;       // version slot: where the comments column's typed comment points
   player?: Player;                                     // sidebar-tab and review-panel on a video version
-  on(event: 'notes' | 'job' | 'version' | 'automation' | 'files', cb: (data: unknown) => void): () => void;
+  on(event: 'notes' | 'job' | 'version' | 'automation' | 'files' | 'reveal', cb: (data: unknown) => void): () => void;
+  // 'reveal' {anchor}: the person clicked a comment's or question's place (version slot: show it)
   navigate(to: { video?: string; version?: string; t?: number; route?: string }): void;
   toast(text: string): void;
   fetch(path: string, init?: RequestInit): Promise<Response>;   // its server: ext/<id>/api/<path>

@@ -119,8 +119,8 @@ preview, no rich text.
   version it also has a line to type a comment: "Comment for the agent…"; Enter adds it to To do, anchored to the
   heading above the caret (`ctx.onAnchor`, below), Ctrl+Enter (⌘+Enter) adds and sends.
 - **Questions.** A question the agent asked about a heading or line shows in the comments column, as on a video, with
-  the place it's about ("Cold open"). Clicking its place scrolls the document there and puts the caret on it. The
-  document itself gets no marks.
+  the place it's about ("Cold open"). Clicking its place scrolls the document there and puts the caret on it (core
+  sends the slot `ctx.on('reveal')` with the anchor). The document itself gets no marks.
 - **Keys.** Typing goes to the text. Esc leaves the text, and then R talks, as on a video. The Record button always
   works. The page's other review keys do nothing here.
 - **A phone** shows the document from the top of the screen to the bottom bar, which holds just Record and Send (the
