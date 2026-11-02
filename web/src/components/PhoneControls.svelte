@@ -21,7 +21,35 @@
   import Hint from './Hint.svelte';
 
   let { review }: { review: Review } = $props();
+
+  // Portrait: Record and Send are fixed to the bottom (phone.css), with a spacer of their height in the grid. `lift`
+  // raises them over whatever the browser lays over the page's bottom edge (the visual viewport ends above the layout
+  // one); while a text field has the focus that's the on-screen keyboard, and the bar stays put behind it.
+  let barHeight = $state(0);
+  let lift = $state(0);
+  const EDITABLE = 'input, textarea, select, [contenteditable]:not([contenteditable=false])';
+  $effect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const measure = () => {
+      if ((document.activeElement as Element | null)?.closest?.(EDITABLE)) return;
+      lift = Math.max(0, Math.round(innerHeight - (vv.offsetTop + vv.height)));
+    };
+    measure();
+    vv.addEventListener('resize', measure);
+    vv.addEventListener('scroll', measure);
+    document.addEventListener('focusout', measure);
+    return () => {
+      vv.removeEventListener('resize', measure);
+      vv.removeEventListener('scroll', measure);
+      document.removeEventListener('focusout', measure);
+    };
+  });
 </script>
+
+{#snippet space()}
+  <div id="pspace" aria-hidden="true" style:height="{barHeight + lift}px"></div>
+{/snippet}
 
 {#snippet time()}
   <div id="time" data-part="time">
@@ -30,7 +58,14 @@
 {/snippet}
 
 {#if review.layoutMode === 'portrait' && review.kindShown}
-  <div id="precord" data-part="bar" class="kind" class:recording={!!review.seg}>
+  <div
+    id="precord"
+    data-part="bar"
+    class="kind"
+    class:recording={!!review.seg}
+    style:bottom="{lift}px"
+    bind:offsetHeight={barHeight}
+  >
     {#if review.canRecord}
       <div class="prow">
         {#if review.recordHere}<PhoneRecord {review} />{/if}
@@ -38,6 +73,7 @@
       </div>
     {/if}
   </div>
+  {@render space()}
 {:else if review.layoutMode === 'portrait'}
   <div id="pbar" data-part="bar" class="portrait" class:recording={!!review.seg}>
     {#if !review.kindShown}<Timeline {review} />{/if}
@@ -63,7 +99,7 @@
       </div>
     {/if}
   </div>
-  <div id="precord" data-part="bar">
+  <div id="precord" data-part="bar" style:bottom="{lift}px" bind:offsetHeight={barHeight}>
     {#if !review.kindShown}<Hint gone={review.hintGone} touch inline viewOnly={!review.canRecord} />{/if}
     {#if review.canRecord}
       <div class="prow">
@@ -72,6 +108,7 @@
       </div>
     {/if}
   </div>
+  {@render space()}
 {:else}
   <div id="pleft" data-part="bar">
     {#if review.canRecord && !review.kindShown}

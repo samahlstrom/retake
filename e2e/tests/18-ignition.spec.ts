@@ -1,11 +1,15 @@
 // Ignition (spec/ignition.md), turned on with `retake ext enable ignition`, with a fake transcriber (a command engine
 // that prints fixed words) and a fake agent (e2e/lib/ignition.ts). v0 is one document, v0/<video>_v0.md, in one plain
-// editor. Locally (`retake open <folder>`) and hosted (`retake serve --extensions ignition` and `retake connect`):
-// - New idea opens the one document, typing saves, and an outside edit shows.
+// editor: CodeMirror drawing its Markdown as a live preview. Locally (`retake open <folder>`) and hosted (`retake serve
+// --extensions ignition` and `retake connect`):
+// - New idea opens the one document, typing saves, and an outside edit shows. Headings are drawn larger than the text,
+//   their #s hidden off the caret's line; a task's box ticks `[ ]` to `[x]` in the file; a pasted image is kept in
+//   v0/images/ and shows.
 // - A talk-out lands in the document as a plain paragraph and adds a To do; a comment typed in the comments column
 //   adds one too (the core line, anchored by the slot).
-// - Send runs an agent that writes the outline and the script into the document and asks about "Cold open"; its place
-//   shows it in the document; a tap answers it; Done; ⋯ undoes the agent's edit.
+// - Send runs an agent that writes the outline and the script into the document and asks about "Cold open" with two
+//   pictures; its place shows it in the document; the question shows in the document too, and a tap there (or in the
+//   comments column) answers it; Done; ⋯ undoes the agent's edit.
 // - Start v1 from ⋯ runs an agent that writes a video and cuts/v1.json; v1 opens, with `v0 · Doc` first.
 // - A multi-file v0 from before (idea.md, outline.md, script.md) becomes one document and the old files stay.
 // On phones (390×844 and 430×932) nothing is wider than the screen, the text is at least 17 px and the controls are
@@ -66,7 +70,17 @@ async function shot(page: Page, name: string, size?: Size): Promise<void> {
   await page.screenshot({ path: join(SHOTS, `${ENGINE}-${name}-${size ? size.width : 'desktop'}.png`) });
 }
 
+/** The editor's text (CodeMirror's contenteditable). */
 const text = (page: Page) => page.locator('[data-ext="ignition"] [data-part="ignition-text"]');
+type Hook = { ignition: { text(): string; caret(): number } };
+/** The document as the editor holds it (the file's text), through the editor's test hook. */
+const value = (page: Page) => text(page).evaluate((el) => (el as unknown as Hook).ignition.text());
+const caretAt = (page: Page) => text(page).evaluate((el) => (el as unknown as Hook).ignition.caret());
+/** The editor shows this text (or text matching it). */
+async function shows(page: Page, want: string | RegExp, timeout = 10_000): Promise<void> {
+  const poll = expect.poll(() => value(page).catch(() => ''), { timeout });
+  await (typeof want === 'string' ? poll.toBe(want) : poll.toMatch(want));
+}
 const more = (page: Page) => page.locator('[data-part~="ignition-more"]');
 const line = (page: Page) => page.locator('#side [data-part="comment-line"] textarea');
 const read = (file: string) => (existsSync(file) ? readFileSync(file, 'utf8') : '');
@@ -94,7 +108,10 @@ async function noOverflow(page: Page, where: string): Promise<void> {
         if (pb.right <= w + 1 && pb.left >= -1) clipped = true;
         break;
       }
-      if (!clipped) bad.push(`${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : ''}.${[...el.classList].join('.')} ${Math.round(b.left)}..${Math.round(b.right)}`);
+      if (!clipped)
+        bad.push(
+          `${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : ''}.${[...el.classList].join('.')} ${Math.round(b.left)}..${Math.round(b.right)}`,
+        );
     }
     return bad.slice(0, 8);
   });
@@ -119,6 +136,53 @@ async function phoneSized(page: Page): Promise<void> {
   expect(bar.y + bar.height).toBeLessThanOrEqual(page.viewportSize()!.height + 1);
 }
 
+/** The live preview: the title (and every heading) larger than the text, its # hidden off the caret's line. */
+async function preview(page: Page, title: string): Promise<void> {
+  const ed = page.locator('[data-ext="ignition"] .cm-content');
+  const h1 = ed.locator('.cm-line.ig-h1').first();
+  const body = ed.locator('.cm-line:not(.ig-h):not(.ig-li)', { hasText: /\w/ }).first();
+  const size = (l: typeof h1) => l.evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+  await expect(h1).toHaveText(title);
+  expect(await size(h1)).toBeGreaterThan((await size(body)) * 1.4);
+  for (const h of await ed.locator('.cm-line.ig-h').all()) expect(await h.textContent()).not.toMatch(/^#/);
+}
+
+/** A task's box ticks the file's `[ ]` to `[x]`, and nothing else in it. */
+async function tick(page: Page, folder: string, task: string): Promise<void> {
+  const before = read(docOf(folder));
+  const box = page.locator('[data-ext="ignition"] [data-part="ignition-task"]').first();
+  await expect(box).toHaveAttribute('aria-checked', 'false');
+  await box.click();
+  await expect.poll(() => read(docOf(folder))).toBe(before.replace(`- [ ] ${task}`, `- [x] ${task}`));
+  await expect(box).toHaveAttribute('aria-checked', 'true');
+}
+
+/** A pasted image (a PNG drawn in the page) is kept in v0/images/ and shows in the document. */
+async function paste(page: Page, folder: string): Promise<void> {
+  await text(page).click();
+  await page.keyboard.press('Control+End');
+  await text(page).evaluate(async (el) => {
+    const c = document.createElement('canvas');
+    c.width = 200;
+    c.height = 100;
+    const g = c.getContext('2d')!;
+    g.fillStyle = 'teal';
+    g.fillRect(0, 0, 200, 100);
+    const blob = await new Promise<Blob>((r) => c.toBlob((b) => r(b!), 'image/png'));
+    const data = new DataTransfer();
+    data.items.add(new File([blob], 'Shop front.png', { type: 'image/png' }));
+    el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+  });
+  const doc = () => read(docOf(folder));
+  await expect.poll(doc, { timeout: 10_000 }).toMatch(/\n\n!\[\]\(images\/shop-front-\d{8}-\d{6}\.png\)\n$/);
+  const name = /images\/(shop-front-[\d-]+\.png)/.exec(doc())![1]!;
+  expect(existsSync(join(folder, 'v0', 'images', name))).toBe(true);
+  // Off the caret's line it's the picture (Esc leaves the text, so every line is drawn).
+  await page.keyboard.press('Escape');
+  const img = page.locator('[data-ext="ignition"] [data-part="ignition-image"] img').last();
+  await expect.poll(() => img.evaluate((i) => (i as HTMLImageElement).naturalWidth), { timeout: 10_000 }).toBe(200);
+}
+
 /** New idea from the home: the form at #ext/ignition/new, Create, and the new video's page on its one document. */
 async function newIdea(page: Page, home: string, title: string): Promise<void> {
   await page.goto(`${home}#ext/ignition/new`);
@@ -131,7 +195,7 @@ async function newIdea(page: Page, home: string, title: string): Promise<void> {
   await form.locator('[data-part="ignition-create"]').click();
   await page.waitForURL(/\/p\/deadlock-jump-souls\//, { timeout: 30_000 });
   await expect(text(page)).toBeVisible({ timeout: 20_000 });
-  await expect(text(page)).toHaveValue(`# ${title}\n\n`);
+  await shows(page, `# ${title}\n\n`);
   // One plain editor: no tabs, no ask box.
   await expect(page.locator('[data-part="ignition-tab"], [data-part="ignition-ask"]')).toHaveCount(0);
 }
@@ -141,6 +205,8 @@ async function type(page: Page, folder: string, words: string): Promise<void> {
   await text(page).click();
   await page.keyboard.press('Control+End');
   await page.keyboard.type(words);
+  // Typing is the text's: the r in the words never records.
+  expect(await page.evaluate(() => window.__review?.seg ?? null)).toBeNull();
   await expect.poll(() => read(docOf(folder)), { timeout: 10_000 }).toContain(words);
   await expect(page.locator('[data-part="ignition-not-saved"], [data-part="ignition-outside"]')).toHaveCount(0);
 }
@@ -155,8 +221,8 @@ async function talkOut(page: Page, folder: string): Promise<void> {
   await expect(page.locator('#rec')).toHaveClass(/on|rec/, { timeout: 10_000 });
   await page.waitForTimeout(2500);
   await page.keyboard.press('r');
-  await expect(text(page)).toHaveValue(new RegExp(`\\n\\n${WORDS}\\n$`), { timeout: 30_000 });
-  await expect(text(page)).not.toHaveValue(/<!--|transcribing/);
+  await shows(page, new RegExp(`\\n\\n${WORDS}\\n$`), 30_000);
+  expect(await value(page)).not.toMatch(/<!--|transcribing/);
   await expect(page.locator('#side .item', { hasText: 'Work this talk-out into the document.' })).toBeVisible({
     timeout: 10_000,
   });
@@ -188,7 +254,9 @@ async function menu(page: Page, item: 'ignition-start-v1' | 'ignition-undo'): Pr
 
 /** The agent's question under the talk-out's comment. */
 const question = (page: Page) =>
-  page.locator('#side .item', { hasText: 'Work this talk-out into the document.' }).locator('[data-part="question-card"]');
+  page
+    .locator('#side .item', { hasText: 'Work this talk-out into the document.' })
+    .locator('[data-part="question-card"]');
 
 /** Send: the agent writes the outline and the script into the document and asks which opening. */
 async function send(page: Page, folder: string): Promise<void> {
@@ -200,18 +268,28 @@ async function send(page: Page, folder: string): Promise<void> {
   expect(doc).toContain('## Outline');
   expect(doc).toContain('## Script\n\n### Cold open');
   expect(doc).toContain(WORDS); // the person's words stay
-  await expect(text(page)).toHaveValue(/### Cold open/, { timeout: 10_000 });
+  await shows(page, /### Cold open/);
+  // The question shows in the document too, under its heading, with its two pictures.
+  const inline = page.locator('[data-ext="ignition"] [data-part="ignition-question"]');
+  await expect(inline).toContainText('Which opening?', { timeout: 10_000 });
+  await expect(inline.locator('[data-part="ignition-choice"]')).toHaveCount(2);
+  await expect
+    .poll(() => inline.locator('img').evaluateAll((im) => im.map((i) => (i as HTMLImageElement).naturalWidth)))
+    .toEqual([320, 320]);
   // The question's place shows it in the document, caret on it.
   await card.locator('.ask-time', { hasText: 'Cold open' }).click();
-  await expect
-    .poll(() => text(page).evaluate((el: HTMLTextAreaElement) => el.selectionStart === el.value.indexOf('### Cold open')))
-    .toBe(true);
+  await expect.poll(async () => (await caretAt(page)) === (await value(page)).indexOf('### Cold open')).toBe(true);
 }
 
-/** A tap answers it; the agent writes the answer in, and the comment is Done (no render). */
-async function answer(page: Page, folder: string): Promise<void> {
-  const card = question(page);
-  await card.locator('.choice', { hasText: 'Start on the jump' }).click();
+/** A tap answers it (in the comments column, or in the document); the agent writes the answer in, and the comment is
+ * Done (no render). */
+async function answer(page: Page, folder: string, inDoc = false): Promise<void> {
+  const inline = page.locator('[data-ext="ignition"] [data-part="ignition-question"]');
+  const choice = inDoc
+    ? inline.locator('[data-part="ignition-choice"]', { hasText: 'Start on the jump' })
+    : question(page).locator('.choice', { hasText: 'Start on the jump' });
+  await choice.click();
+  await expect(inline).toHaveCount(0, { timeout: 20_000 });
   await expect.poll(() => read(docOf(folder)), { timeout: 60_000 }).toContain('[Start on the jump.]');
   await expect
     .poll(
@@ -227,10 +305,10 @@ async function answer(page: Page, folder: string): Promise<void> {
 
 /** ⋯ → Undo the agent's edit: the document as it was before the agent's newest edit. */
 async function undo(page: Page, folder: string): Promise<void> {
-  await expect(text(page)).toHaveValue(/\[Start on the jump\.\]/, { timeout: 10_000 });
+  await shows(page, /\[Start on the jump\.\]/);
   await menu(page, 'ignition-undo');
   await expect.poll(() => read(docOf(folder))).toContain('[The jump.]');
-  await expect(text(page)).toHaveValue(/\[The jump\.\]/, { timeout: 10_000 });
+  await shows(page, /\[The jump\.\]/);
 }
 
 /** ⋯ → Start v1: the agent's video becomes v1/<folder>_v1.mp4, and the page goes there. */
@@ -269,8 +347,15 @@ test.describe('locally', () => {
       await type(page, idea(), 'The jump to secure souls only works if you time it.');
       expect(read(docOf(idea()))).toBe('# Jump souls\n\nThe jump to secure souls only works if you time it.');
       // Edited outside Retake, with nothing unsaved: it reloads in place.
-      writeFileSync(docOf(idea()), '# Jump souls\n\nThe jump to secure souls only works if you time it.\n\nOutside.\n');
-      await expect(text(page)).toHaveValue(/Outside\.\n$/, { timeout: 10_000 });
+      writeFileSync(
+        docOf(idea()),
+        '# Jump souls\n\nThe jump to secure souls only works if you time it.\n\nOutside.\n\n- [ ] Film the jump\n',
+      );
+      await shows(page, /Outside\.\n\n- \[ \] Film the jump\n$/);
+      // The live preview: a heading is larger than the text and its # is hidden; a task's box ticks the file.
+      await preview(page, 'Jump souls');
+      await tick(page, idea(), 'Film the jump');
+      await shot(page, 'editor-preview');
 
       // The home: the idea in Ignition's section.
       await page.goto(server.url);
@@ -289,7 +374,9 @@ test.describe('locally', () => {
       await page.locator('[data-part="nav-toggle"]').click();
       await expect(page.locator('[data-part="nav-ext"][data-ext="ignition"]')).toBeVisible();
       // The drawer slides in: measure it once it's there.
-      await expect.poll(async () => (await page.locator('[data-part="nav"]').boundingBox())?.x).toBeGreaterThanOrEqual(0);
+      await expect
+        .poll(async () => (await page.locator('[data-part="nav"]').boundingBox())?.x)
+        .toBeGreaterThanOrEqual(0);
       await noOverflow(page, 'the home with its drawer open');
       await shot(page, 'nav', PHONES[0]);
       await page.goto(`${server.url}#ext/ignition/`);
@@ -307,9 +394,7 @@ test.describe('locally', () => {
     }
   });
 
-  test('a talk-out lands in the document as a plain paragraph and adds a To do', async ({
-    browser,
-  }) => {
+  test('a talk-out lands in the document as a plain paragraph and adds a To do', async ({ browser }) => {
     const { context, page } = await newPage(browser);
     try {
       await page.goto(videoUrl());
@@ -336,10 +421,12 @@ test.describe('locally', () => {
         try {
           const p = phone.page;
           await p.goto(videoUrl());
-          await expect(text(p)).toHaveValue(/### Cold open/, { timeout: 20_000 });
+          await shows(p, /### Cold open/, 20_000);
           await expect(p.locator('#sideToggle')).toBeVisible();
+          await expect(p.locator('[data-ext="ignition"] [data-part="ignition-question"] img')).toHaveCount(2);
           await noOverflow(p, `the document at ${size.width}`);
           await phoneSized(p);
+          await preview(p, 'Jump souls');
           await shot(p, 'editor', size);
           await p.locator('#sideToggle').click();
           const card = question(p);
@@ -360,10 +447,12 @@ test.describe('locally', () => {
         }
       }
 
-      await answer(page, idea());
+      await answer(page, idea(), true);
       await undo(page, idea());
       // A comment typed in the comments column points where the caret is (the question's place put it there).
       await typedComment(page, 'Cold open');
+      await paste(page, idea());
+      await shot(page, 'editor-image');
     } finally {
       await context.close();
     }
@@ -420,7 +509,7 @@ test.describe('locally', () => {
       await page.goto(`${server.url}p/deadlock-old-idea/`);
       const migrated =
         '# Old idea\n\nThe idea, from before.\n\n## Outline\n\n- Cold open\n- The trick\n\n## Script\n\n### Cold open\n\nThe jump.\n';
-      await expect(text(page)).toHaveValue(migrated, { timeout: 20_000 });
+      await shows(page, migrated, 20_000);
       expect(read(docOf(old))).toBe(migrated);
       expect(read(join(old, 'v0', 'idea.md'))).toBe(OLD_IDEA);
       expect(read(join(old, 'v0', 'outline.md'))).toBe(OLD_OUTLINE);
@@ -502,12 +591,13 @@ test.describe('hosted', () => {
       await send(page, idea());
       await answer(page, idea());
       await undo(page, idea());
+      await paste(page, idea());
       await startV1(page, idea());
 
       // A v0 from before, migrated on the computer.
       const old = join(dir, 'deadlock', 'old-idea');
       await page.goto(`${BASE}/p/deadlock-old-idea/`);
-      await expect(text(page)).toHaveValue(/^# Old idea\n\nThe idea, from before\.\n\n## Outline/, { timeout: 20_000 });
+      await shows(page, /^# Old idea\n\nThe idea, from before\.\n\n## Outline/, 20_000);
       await expect.poll(() => read(docOf(old))).toContain('## Script\n\n### Cold open');
       expect(read(join(old, 'v0', 'idea.md'))).toBe(OLD_IDEA);
     } finally {

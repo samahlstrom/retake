@@ -26,9 +26,19 @@
     -webkit-user-select: none;
     -webkit-touch-callout: none;
   }
+  /* The page is exactly the screen: never wider (nothing inside can push it sideways, so Safari never widens its
+     layout viewport), and as tall as what's visible (100vh, then 100dvh where it's known). */
   html[data-phone] #app {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
     height: 100vh;
     height: 100dvh;
+    overflow: hidden;
+    overflow: clip;
+  }
+  html[data-phone] #stage {
+    min-width: 0;
   }
   html[data-phone] button {
     touch-action: manipulation;
@@ -266,11 +276,13 @@
     padding-bottom: 0;
     font-size: 16px;
   }
-  html[data-phone] #app:has(> #stage.kind) #sideToggle {
-    min-height: 44px;
+  /* The top bar: back at the top left (HomeNav), the comments toggle at the top right. On an extension's version the
+     slot puts its own ⋯ (44 px) in the top right corner, 8 px from the edge: the toggle sits just left of it. */
+  html[data-phone] #sideToggle {
     margin: 8px;
-    padding: 0 16px;
-    font-size: 15px;
+  }
+  html[data-phone] #app:has(> #stage.kind) #sideToggle {
+    margin-right: 60px;
   }
   html[data-layout='portrait'] #side {
     grid-area: side;
@@ -295,6 +307,19 @@
     padding: 14px max(14px, env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom))
       max(14px, env(safe-area-inset-left));
     background: var(--surface);
+  }
+  /* Portrait: Record and Send are fixed to the bottom of what's visible, above the home indicator (and lifted over
+     anything the browser lays over the page's bottom edge: PhoneControls measures it), so Safari's toolbar never
+     covers them. #pspace keeps their place in the grid. */
+  html[data-layout='portrait'] #precord {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 4;
+  }
+  #pspace {
+    grid-area: rec;
   }
   #precord .prow {
     gap: 12px;

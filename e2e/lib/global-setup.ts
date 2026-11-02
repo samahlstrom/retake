@@ -3,12 +3,14 @@ import { generateMedia } from './fixtures.ts';
 import { LEGACY_REVIEW, LEGACY, MODE, RETAKE_BIN, WORK } from './env.ts';
 import { killLeftovers } from './server.ts';
 import { resetWork } from './work.ts';
+import { startWebkit } from './webkit.ts';
 
 export default async function globalSetup(): Promise<void> {
   killLeftovers();
   resetWork();
   const t = Date.now();
   const media = await generateMedia(WORK);
+  await startWebkit();
   console.log(`e2e: server ${MODE} (${LEGACY ? LEGACY_REVIEW : RETAKE_BIN}); media in ${media.dir} `
     + `(${((Date.now() - t) / 1000).toFixed(1)} s${media.labels ? '' : ', no drawtext labels'})`);
 }

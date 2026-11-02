@@ -234,12 +234,23 @@ This software is based in part on the work of the Independent JPEG Group.
 These npm packages build and test the page and run the end-to-end tests. None of them is in a release. The packages
 bundled into the page are listed above.
 
-### web/ (202 packages)
+### web/ (224 packages)
 
 | Package | Version | License |
 |---|---|---|
 | `@cacheable/memory` | 2.2.0 | MIT |
 | `@cacheable/utils` | 2.5.0 | MIT |
+| `@codemirror/autocomplete` | 6.20.4 | MIT |
+| `@codemirror/commands` | 6.11.1 | MIT |
+| `@codemirror/lang-css` | 6.3.1 | MIT |
+| `@codemirror/lang-html` | 6.4.12 | MIT |
+| `@codemirror/lang-javascript` | 6.2.5 | MIT |
+| `@codemirror/lang-markdown` | 6.5.2 | MIT |
+| `@codemirror/language` | 6.13.1 | MIT |
+| `@codemirror/lint` | 6.9.7 | MIT |
+| `@codemirror/state` | 6.7.6 | MIT |
+| `@codemirror/streamparser` | 6.0.0 | MIT |
+| `@codemirror/view` | 6.43.15 | MIT |
 | `@eslint-community/eslint-utils` | 4.10.1 | MIT |
 | `@eslint-community/regexpp` | 4.12.2 | MIT |
 | `@eslint/config-array` | 0.23.5 | Apache-2.0 |
@@ -261,6 +272,14 @@ bundled into the page are listed above.
 | `@jridgewell/trace-mapping` | 0.3.31 | MIT |
 | `@keyv/bigmap` | 1.3.1 | MIT |
 | `@keyv/serialize` | 1.1.1 | MIT |
+| `@lezer/common` | 1.5.5 | MIT |
+| `@lezer/css` | 1.3.9 | MIT |
+| `@lezer/highlight` | 1.2.5 | MIT |
+| `@lezer/html` | 1.3.13 | MIT |
+| `@lezer/javascript` | 1.5.6 | MIT |
+| `@lezer/lr` | 1.4.12 | MIT |
+| `@lezer/markdown` | 1.8.1 | MIT |
+| `@marijn/find-cluster-break` | 1.0.4 | MIT |
 | `@oxc-project/types` | 0.156.0 | MIT |
 | `@rolldown/binding-android-arm-eabi` | 1.2.16 | MIT |
 | `@rolldown/binding-android-arm64` | 1.2.16 | MIT |
@@ -312,6 +331,7 @@ bundled into the page are listed above.
 | `cacheable` | 2.5.0 | MIT |
 | `chai` | 6.3.0 | MIT |
 | `chokidar` | 4.0.3 | MIT |
+| `crelt` | 1.0.7 | MIT |
 | `cross-spawn` | 7.0.6 | MIT |
 | `cssesc` | 3.0.0 | MIT |
 | `debug` | 4.4.3 | MIT |
@@ -418,6 +438,7 @@ bundled into the page are listed above.
 | `shebang-regex` | 3.0.0 | MIT |
 | `source-map-js` | 1.2.2 | BSD-3-Clause |
 | `std-env` | 4.3.0 | MIT |
+| `style-mod` | 4.1.4 | MIT |
 | `svelte-check` | 4.7.7 | MIT |
 | `svelte-eslint-parser` | 1.10.0 | MIT |
 | `tinybench` | 6.2.2 | MIT |
@@ -434,6 +455,7 @@ bundled into the page are listed above.
 | `vite` | 8.3.5 | MIT |
 | `vitefu` | 1.1.3 | MIT |
 | `vitest` | 5.0.5 | MIT |
+| `w3c-keyname` | 2.2.8 | MIT |
 | `which` | 2.0.2 | ISC |
 | `why-is-node-running` | 3.2.1 | MIT |
 | `word-wrap` | 1.2.5 | MIT |

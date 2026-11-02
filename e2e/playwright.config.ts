@@ -1,5 +1,12 @@
-import { defineConfig } from '@playwright/test';
+import { defineConfig, type Project } from '@playwright/test';
 import { chromiumPath, MIC_WAV } from './lib/env.ts';
+import { WEBKIT_WS } from './lib/webkit.ts';
+
+/** WebKit (iPhone Safari's engine) for the phone specs, when RETAKE_E2E_WEBKIT says where (lib/webkit.ts). It runs only
+ * the files made for it (`*-webkit.spec.ts`), which skip under Chromium. */
+const webkit: Project[] = WEBKIT_WS
+  ? [{ name: 'webkit', testMatch: /-webkit\.spec\.ts$/, use: { browserName: 'webkit', connectOptions: { wsEndpoint: WEBKIT_WS } } }]
+  : [];
 
 // One worker, one browser, files in order: the scenario is timed against the fake mic, so nothing runs in parallel.
 export default defineConfig({
@@ -37,4 +44,5 @@ export default defineConfig({
       ],
     },
   },
+  projects: [{ name: 'chromium' }, ...webkit],
 });

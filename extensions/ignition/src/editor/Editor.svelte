@@ -1,8 +1,9 @@
 <script lang="ts">
-  // The version slot (spec/ignition.md, "The editor"): the one document, v0/<video>_v0.md, and nothing else. One plain
-  // text, the full height of the area, in a readable column. One quiet ⋯ at the top right: Start v1 (while there's no
-  // cut) and Undo the agent's edit. Core keeps Record, Send, the agent and the comments column (where comments are
-  // typed: ctx.onAnchor says where they point; a comment's place comes back as ctx.on('reveal')).
+  // The version slot (spec/ignition.md, "The editor"): the one document, v0/<video>_v0.md, and nothing else. Its
+  // Markdown as a live preview, the full height of the area, in a readable column. One quiet ⋯ at the top right: Start
+  // v1 (while there's no cut) and Undo the agent's edit. Core keeps Record, Send, the agent and the comments column
+  // (where comments are typed: ctx.onAnchor says where they point; a comment's place comes back as ctx.on('reveal')).
+  // The agent's open questions about the document also show in it, under their places, with their choices to tap.
   import { onMount, untrack } from 'svelte';
   import type { Ctx, Edit } from '../types';
   import { Doc } from './doc.svelte';
@@ -14,6 +15,9 @@
   import { NEW_KEY, storageOf, takeHandOff, TALK_KEY } from '../lib/ideas';
   import { ago } from '../lib/stamp';
   import { hasCut as cutIn, START_V1 } from '../lib/versions';
+  import { imageName, imageUrl, MAX_IMAGE } from '../lib/links';
+  import { stamp } from '../lib/stamp';
+  import type { Question } from './live';
 
   let { ctx }: { ctx: Ctx } = $props();
 
@@ -39,6 +43,14 @@
   const talkOnOpen = takeHandOff(session, TALK_KEY, video);
   const fresh = talkOnOpen || takeHandOff(session, NEW_KEY, video);
   const touch = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+  /** The page's phone layout (web/src/lib/layout.ts): core leaves the slot's top right for its ⋯. */
+  const phone =
+    typeof matchMedia === 'function'
+      ? matchMedia(
+          '(max-width: 799.98px), (max-height: 419.98px), (pointer: coarse) and (max-width: 900px), ' +
+            '(pointer: coarse) and (max-height: 600px)',
+        )
+      : null;
 
   let doc = $state<Doc | null>(null);
   let openError = $state('');
@@ -76,6 +88,7 @@
       await d.ready;
       doc = d;
       void loadHistory();
+      void loadQuestions();
       if (canWrite && !d.loadError) void resume({ files, comments, doc: d, toast: (t) => c.toast(t) }).catch(() => {});
     } catch (e) {
       openError = sayError(e);
@@ -135,6 +148,72 @@
     void loadHistory();
   }
 
+  // ---------------------------------------------------------------- the agent's questions, in the document
+  let questions = $state.raw<Question[]>([]);
+  let asking = 0;
+  async function loadQuestions(): Promise<void> {
+    const p = doc?.path;
+    if (!p) return;
+    const n = ++asking;
+    try {
+      const items = await comments.list();
+      if (n !== asking) return;
+      const out: Question[] = [];
+      for (const it of items) {
+        const a = it.ask;
+        if (!a?.anchor || a.anchor.file !== p) continue;
+        const pics = (a.visuals?.options ?? []) as { text: string; image?: { url?: string } | null }[];
+        const words = a.options?.length ? a.options : pics.map((o) => o.text);
+        out.push({
+          id: a.id,
+          note: it.id,
+          text: a.text,
+          anchor: a.anchor,
+          options: words.map((text) => {
+            const url = pics.find((o) => o.text === text)?.image?.url;
+            return url ? { text, image: url } : { text };
+          }),
+        });
+      }
+      questions = out;
+    } catch {
+      /* the comments column still has them */
+    }
+  }
+
+  async function answerQuestion(q: Question, text: string): Promise<void> {
+    try {
+      await comments.answer(q.id, text);
+      questions = questions.filter((x) => x.id !== q.id);
+    } catch (e) {
+      c.toast(sayError(e));
+    }
+    void loadQuestions();
+  }
+
+  /** An image's address for the preview: an owned file of v0/, or a https address. */
+  const imageSrc = (src: string): string | null => imageUrl(src, (p) => files.url(p));
+
+  /** Keeps a pasted or dropped image as v0/images/<name> (a new name, never over another file). */
+  async function saveImage(f: File): Promise<string> {
+    if (f.size > MAX_IMAGE) {
+      c.toast(`${f.name || 'The image'} is over 25 MB`);
+      throw new Error('too large');
+    }
+    const st = stamp(new Date());
+    for (let n = 1; ; n++) {
+      const name = imageName(f, st, n);
+      try {
+        await files.write(`v0/images/${name}`, f, { ifMatch: '*' });
+        return name;
+      } catch (e) {
+        if (isChanged(e) && n < 9) continue;
+        c.toast(`The image wasn’t saved: ${sayError(e)}`);
+        throw e;
+      }
+    }
+  }
+
   // ---------------------------------------------------------------- ⋯
   let menu = $state(false);
   let moreEl = $state<HTMLButtonElement>();
@@ -154,6 +233,10 @@
 
   function place(): void {
     if (!root || !col) return;
+    if (phone?.matches) {
+      right = 8; // the corner core leaves for it, right of the comments toggle
+      return;
+    }
     const box = root.getBoundingClientRect(),
       c2 = col.getBoundingClientRect();
     let r = Math.max(8, box.right - c2.right);
@@ -196,8 +279,19 @@
       }),
     );
     offs.push(c.on('version', () => void loadInfo()));
-    offs.push(c.on('job', () => void loadHistory()));
-    offs.push(c.on('automation', () => void loadHistory()));
+    offs.push(
+      c.on('job', () => {
+        void loadHistory();
+        void loadQuestions();
+      }),
+    );
+    offs.push(
+      c.on('automation', () => {
+        void loadHistory();
+        void loadQuestions();
+      }),
+    );
+    offs.push(c.on('notes', () => void loadQuestions()));
     offs.push(
       c.onAnchor(() => {
         const d = doc;
@@ -294,6 +388,11 @@
           readonly={!canWrite}
           caret={fresh ? doc.text.length : null}
           focus={canWrite && !talkOnOpen && !touch}
+          {questions}
+          image={imageSrc}
+          answer={(q, t) => void answerQuestion(q, t)}
+          openQuestion={(q) => c.selectComment(q.id)}
+          {saveImage}
           bind:api={pane}
         />
       {/if}

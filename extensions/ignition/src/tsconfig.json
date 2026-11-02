@@ -9,7 +9,9 @@
     "paths": {
       "svelte": ["../../../web/node_modules/svelte/types/index.d.ts"],
       "svelte/*": ["../../../web/node_modules/svelte/types/index.d.ts"],
-      "vitest": ["../../../web/node_modules/vitest/dist/index.d.ts"]
+      "vitest": ["../../../web/node_modules/vitest/dist/index.d.ts"],
+      "@codemirror/*": ["../../../web/node_modules/@codemirror/*"],
+      "@lezer/*": ["../../../web/node_modules/@lezer/*"]
     },
     "strict": true,
     "noEmit": true,

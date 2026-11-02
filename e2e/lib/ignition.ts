@@ -19,8 +19,8 @@ process.stdout.write(JSON.stringify({ words: words.map((w, i) => ({ w: ' ' + w, 
  * - for a comment that wants a version (Start v1): writes a 2 s video to $RETAKE_OUTPUT and v0/cuts/v1.json;
  * - otherwise, on its first attempt: keeps the person's words and adds `## Outline` and `## Script` (with `### Cold
  *   open` and `### The trick`) when the document has no script yet, asks about "Cold open" with `retake ask --file v0/<video>_v0.md --heading "Cold open"`
- *   and two options, and reports; on a later attempt (the answer came back): writes the answer into the script's cold
- *   open and reports.
+ *   and two options with a picture each (v0/images/jump.png and shop.png, made with ffmpeg), and reports; on a later
+ *   attempt (the answer came back): writes the answer into the script's cold open and reports.
  */
 const AGENT = `import { execFileSync } from 'node:child_process';
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -40,8 +40,15 @@ if (mine.some((n) => n.detail && n.detail.wants === 'version')) {
 } else if (ctx.task.attempt === 1) {
   if (!text.includes('## Script')) writeFileSync(doc, text.trimEnd() + '\\n\\n## Outline\\n\\n- Cold open: the jump, cold.\\n- The trick: why timing matters.\\n\\n'
     + '## Script\\n\\n### Cold open\\n\\n[The jump.] So the idea is the jump.\\n\\n### The trick\\n\\nTime it.\\n');
+  // Two pictures to choose from, kept next to the document (v0/images/), as an agent asks an image decision.
+  mkdirSync('v0/images', { recursive: true });
+  for (const [name, src] of [['jump', 'testsrc2'], ['shop', 'smptebars']]) {
+    execFileSync('ffmpeg', ['-nostdin', '-v', 'error', '-y', '-threads', '2', '-f', 'lavfi', '-i', src + '=s=320x180',
+      '-frames:v', '1', 'v0/images/' + name + '.png']);
+  }
   execFileSync(process.env.RETAKE_BIN_FOR_AGENT, ['ask', '--note', String(ctx.task.notes[0]), '--file', doc,
-    '--heading', 'Cold open', '--option', 'Start on the jump', '--option', 'Start on the shop', 'Which opening?']);
+    '--heading', 'Cold open', '--option', 'Start on the jump@v0/images/jump.png',
+    '--option', 'Start on the shop@v0/images/shop.png', 'Which opening?']);
   report('Wrote the outline and the script; asked which opening');
 } else {
   const answer = (ctx.questions ?? []).map((q) => q.answer && q.answer.text).filter(Boolean).at(-1) ?? '';

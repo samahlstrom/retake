@@ -28,6 +28,8 @@ Run it through mise (`mise exec -- npm test`) to use the pinned node. Needs `ffm
 | `RETAKE_EDIT` | `<repo>/editor/target/release/retake-edit`, else `$PATH` | The editor, for `08-timemap` (it skips without one). |
 | `RETAKE_E2E_SHOTS` | unset | A folder: `05-sidebar` writes its screenshots there (1920×1080 and phone size). |
 | `RETAKE_E2E_THEME_SHOTS` | unset | A folder: `17-theme` writes the home and the review page there, desktop and phone, for the built-in look and both example themes. |
+| `RETAKE_E2E_WEBKIT` | unset | `docker`: run the phone specs (`*-webkit.spec.ts`) in WebKit too, its browser in Playwright's Docker image (below). A `ws://…` URL: a WebKit browser server you started. Unset: no `webkit` project, and those specs skip. |
+| `RETAKE_E2E_WEBKIT_PORT` | `8950` | The WebKit browser server's port with `RETAKE_E2E_WEBKIT=docker`. |
 
 Ports: the servers use 8831–8840 (scenario 8831, crash safety 8832 behind a proxy on 8834, HLS 8833, sidebar 8835,
 phone layout 8836, sharing 8837 behind a proxy on 8838, time map 8839, the team server 8840; the relay's server
@@ -35,6 +37,23 @@ reuses 8837). The browser talks to
 Playwright over a pipe, so it opens no devtools port. Each server is started
 for its spec file, waited on
 through `/api/ping`, and always stopped. Its log is in `<work>/logs/`.
+
+## WebKit (iPhone Safari's engine)
+
+Phones run Safari, so the phone layout is checked in WebKit as well. Playwright's WebKit build doesn't run on every
+Linux host, so its browser runs in Playwright's Docker image (the one that matches `@playwright/test`), as a browser
+server on the host's network; the tests, the servers, ffmpeg and the fixtures stay on the host and connect to it:
+
+```bash
+RETAKE_E2E_WEBKIT=docker npx playwright test --project webkit       # starts the container, runs, stops it
+```
+
+The global setup runs `docker run -d --rm --init --network host --ipc=host -v <repo>/e2e/node_modules:/pw/node_modules:ro
+mcr.microsoft.com/playwright:v1.64.1-noble node /pw/node_modules/playwright-core/cli.js run-server --port 8950 --host
+127.0.0.1` and the teardown stops that container by its id. To keep one running yourself, start it the same way and
+pass `RETAKE_E2E_WEBKIT=ws://127.0.0.1:8950/`. The image's tag must match the suite's Playwright version. The `webkit`
+project runs only `*-webkit.spec.ts`, on Playwright's `iPhone 13` and `iPhone 15` devices (their viewports already
+leave out Safari's toolbars); the default run (`chromium`) is unchanged and skips them.
 
 ## Fixtures (`lib/fixtures.ts`)
 
@@ -204,3 +223,13 @@ CLI.
 - `retake theme check` passes both examples and flags a token this version doesn't have (`--hair`).
 - An update: a freshly built binary at another path serves the same theme from the same folder, and the theme's files
   are byte for byte what they were.
+
+**`19-phone-webkit`** (new only; WebKit only, `RETAKE_E2E_WEBKIT`): `retake open` with Ignition on, a v0 document
+written as the owner writes one (a long paragraph, an unbroken 60-letter word, a long URL, headings, a list, a task)
+and a plain video, on the iPhone 13 and iPhone 15:
+- Nothing is wider than the screen: no sideways scroll, and no element past either edge (the document, the comments
+  drawer, the video page, the home).
+- Record and Send are wholly on screen, inside `innerHeight` and the visual viewport.
+- The top bar fits: back on the left, the document's ⋯ at the right edge and the comments toggle (an icon, and the
+  to-do count once there is one) just left of it, none overlapping, each at least 40 px.
+- Screenshots: `.retake-work/ignition-shots/webkit-<doc|drawer|doc-todo|video|home>-<device>.png`.

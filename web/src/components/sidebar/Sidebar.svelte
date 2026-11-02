@@ -35,6 +35,9 @@
   );
   const asking = $derived(review.versionRows.some((row) => review.statusOf(row).state === 'question'));
   const working = $derived(review.versionRows.some((row) => review.statusOf(row).state === 'working'));
+  const dot = $derived(job?.error ? 'err' : job ? 'busy' : asking ? 'q' : working ? 'w' : '');
+  /** A phone: the pill is an icon and the to-do count (only the icon at 0), so it fits beside the slot's ⋯. */
+  const compact = $derived(review.layoutMode !== 'desktop');
   const setOpen = (v: boolean) => {
     if (v !== view.panel) review.toggleSidebar();
   };
@@ -80,10 +83,29 @@
           <Tooltip.Root>
             <Tooltip.Trigger id="sideToggle">
               {#snippet child({ props })}
-                <Collapsible.Trigger {...props} data-part="sidebar-toggle" class={view.panel ? 'open' : ''}
-                  ><span class="dot {job?.error ? 'err' : job ? 'busy' : asking ? 'q' : working ? 'w' : ''}"
-                  ></span>{pill}</Collapsible.Trigger
-                >
+                {#if compact}
+                  <Collapsible.Trigger
+                    {...props}
+                    data-part="sidebar-toggle"
+                    class={['compact', view.panel && 'open'].filter(Boolean).join(' ')}
+                    aria-label={`${view.panel ? 'Hide' : 'Show'} comments: ${pill}`}
+                    ><svg viewBox="0 0 24 24" aria-hidden="true"
+                      ><path
+                        d="M6 5h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-7l-4.5 3.5V17H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.7"
+                        stroke-linejoin="round"
+                      /></svg
+                    >{#if review.todoCount}<span class="n">{review.todoCount}</span>{/if}{#if dot}<span
+                        class="dot {dot}"
+                      ></span>{/if}</Collapsible.Trigger
+                  >
+                {:else}
+                  <Collapsible.Trigger {...props} data-part="sidebar-toggle" class={view.panel ? 'open' : ''}
+                    ><span class="dot {dot}"></span>{pill}</Collapsible.Trigger
+                  >
+                {/if}
               {/snippet}
             </Tooltip.Trigger>
             <Tooltip.Content class="sideTip" side="left" sideOffset={8}>

@@ -113,7 +113,8 @@ tokens. No tabs and no toolbar.
   bullet and numbered lists with a hanging indent, task boxes (`- [ ]`) you tap to tick (that changes only the `[ ]`
   to `[x]`), links that open on a tap, `>` quotes and `---` rules. The markup characters (`#`, `**`, list markers,
   `>`, a link's brackets and address) are hidden except on the lines the caret or the selection touches, where the
-  text is shown as typed.
+  text is shown as typed. A bare `[picture or sound]` (no address) stays as typed, a little quieter, so script cues
+  keep their brackets. Line breaks are kept as they are (LF or CRLF).
 - **Images.** `![caption](images/x.png)` (a path relative to `v0/`) shows the image inline: the column's full width
   on a phone, rounded, with the caption under it; on the caret's line the Markdown shows instead. Pasting or dropping
   an image saves it as `v0/images/<name>` (a new name when one is taken, 25 MiB at most) and puts its Markdown at the
@@ -126,7 +127,7 @@ tokens. No tabs and no toolbar.
 - **Saving.** 600 ms after the last keystroke and when the text loses focus, with `If-Match` on the version read. The
   only word it shows is a quiet "Not saved · Retry" when a save fails, or "Changed outside Retake · Reload · Keep
   mine" when the file changed under unsaved typing (Keep mine writes over it). Outside edits with nothing unsaved
-  reload in place, keeping the caret's line.
+  go in as the smallest edit, keeping the caret on its word. Undo (Ctrl+Z) only undoes your typing.
 - **⋯**, one quiet button at the top right of the document: **Start v1** (while the video has no cut), and **Undo
   the agent's edit** (with when, while there is one to undo). Nothing else is over the text.
 - **The comments** are core's: the comments column (a drawer on a phone), To do · Done, Send, as on a video. On a kind
@@ -134,7 +135,9 @@ tokens. No tabs and no toolbar.
   heading above the caret (`ctx.onAnchor`, below), Ctrl+Enter (⌘+Enter) adds and sends.
 - **Questions.** A question the agent asked about a heading or line shows in the comments column, as on a video, with
   the place it's about ("Cold open"). Clicking its place scrolls the document there and puts the caret on it (core
-  sends the slot `ctx.on('reveal')` with the anchor). The document itself gets no marks.
+  sends the slot `ctx.on('reveal')` with the anchor). It also shows in the document under its place: its words and
+  its choices, with pictures side by side (stacked on a phone). A tap answers it from either place, and it leaves the
+  document once answered.
 - **Keys.** Typing goes to the text. Esc leaves the text, and then R talks, as on a video. The Record button always
   works. The page's other review keys do nothing here.
 - **A phone** shows the document from the top of the screen to the bottom bar, which holds just Record and Send (the

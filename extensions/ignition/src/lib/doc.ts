@@ -21,7 +21,7 @@ const HEADING = /^(#{1,6})(?:[ \t]+(.*?))?[ \t]*$/;
 
 /** A heading line's level and text ("## Cold open ##" is 2, "Cold open"), or null. */
 export function headingOf(line: string): { level: number; text: string } | null {
-  const m = HEADING.exec(line);
+  const m = HEADING.exec(line.endsWith('\r') ? line.slice(0, -1) : line); // a CR LF file's line keeps its CR
   if (!m) return null;
   return {
     level: m[1]!.length,

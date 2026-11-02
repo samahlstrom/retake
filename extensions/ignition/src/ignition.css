@@ -289,80 +289,325 @@
   padding: 68px 40px 0;
   font-size: calc(var(--font-size) * 17 / 13);
   line-height: 1.6;
+  min-width: 0;
 }
+/* The text: CodeMirror (editor/setup.ts), drawn as a live preview (editor/live.ts). CodeMirror's own stylesheet sets
+   the padding of its text and lines, so they read the custom properties set here: --ig-tail (room under the last line),
+   --ig-pad-top/-right/-bottom, --ig-indent (quotes, code) and --ig-list-pad (a list item's hanging indent). */
 [data-ext='ignition'] .ig-paper {
-  position: relative;
+  --ig-tail: 40vh;
   flex: 1 0 auto;
   width: 100%;
   min-width: 0;
-}
-/* The textarea covers the whole paper (a tap anywhere under the text lands in it); the mirror, in the flow, gives the
-   paper its height. Both lay the text out the same way. */
-[data-ext='ignition'] .ig-text,
-[data-ext='ignition'] .ig-mirror {
-  width: 100%;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  font-family: var(--font-ui);
-  font-size: inherit;
-  font-weight: 400;
-  font-style: normal;
-  line-height: inherit;
-  letter-spacing: normal;
-  word-spacing: normal;
-  text-align: left;
-  text-indent: 0;
-  text-transform: none;
-  white-space: pre-wrap;
-  overflow-wrap: break-word;
-  word-break: normal;
-  tab-size: 4;
-}
-[data-ext='ignition'] .ig-text {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  display: block;
-  height: 100%;
-  overflow: hidden;
-  resize: none;
-  outline: none;
-  background: transparent;
-  color: transparent;
-  caret-color: var(--text-strong);
-  user-select: text;
-  -webkit-user-select: text;
-}
-[data-ext='ignition'] .ig-text[readonly] {
-  caret-color: transparent;
-}
-[data-ext='ignition'] .ig-text::selection {
-  background: color-mix(in srgb, var(--focus) 32%, transparent);
-  color: transparent;
-}
-[data-ext='ignition'] .ig-mirror {
-  position: relative;
-  z-index: 1;
-  padding-bottom: 40vh;
-  pointer-events: none;
-  user-select: none;
-  -webkit-user-select: none;
   color: var(--text-2);
 }
-[data-ext='ignition'] .ig-ln {
-  border-radius: var(--radius-sm);
-  transition: background 0.6s ease;
+[data-ext='ignition'] .ig-paper .cm-editor {
+  min-width: 0;
+  font-family: var(--font-ui);
 }
-/* Headings: bold, not larger. A textarea has one font size, and a wider or larger mirror line would put the caret beside
-   its letters; the stroke thickens the letters without moving them. */
+[data-ext='ignition'] .ig-paper .cm-content {
+  overflow-wrap: anywhere;
+}
+[data-ext='ignition'] .ig-paper .cm-content[contenteditable='false'] {
+  caret-color: transparent;
+}
+[data-ext='ignition'] .ig-paper .cm-line::selection,
+[data-ext='ignition'] .ig-paper .cm-line ::selection {
+  background: color-mix(in srgb, var(--focus) 32%, transparent);
+}
+/* The Markdown's own characters, on the caret's lines. */
+[data-ext='ignition'] .ig-mk {
+  color: var(--faint);
+  font-style: normal;
+  font-weight: 400;
+  text-decoration: none;
+}
+[data-ext='ignition'] .ig-faint,
+[data-ext='ignition'] .ig-img-src {
+  color: var(--faint);
+}
+
+/* Headings at their sizes. */
 [data-ext='ignition'] .ig-h {
   color: var(--text-strong);
-  -webkit-text-stroke: 0.035em currentColor;
+  font-weight: 650;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
 }
-[data-ext='ignition'] .ig-h .ig-hm {
-  color: var(--faint);
-  -webkit-text-stroke-width: 0;
+[data-ext='ignition'] .ig-h1 {
+  --ig-pad-top: 0.15em;
+  --ig-pad-bottom: 0.1em;
+  font-size: 1.75em;
+  font-weight: 700;
+  letter-spacing: -0.022em;
+}
+[data-ext='ignition'] .ig-h2 {
+  --ig-pad-top: 0.3em;
+  font-size: 1.4em;
+  letter-spacing: -0.016em;
+}
+[data-ext='ignition'] .ig-h3 {
+  --ig-pad-top: 0.25em;
+  font-size: 1.16em;
+}
+[data-ext='ignition'] .ig-h4 {
+  font-size: 1em;
+}
+[data-ext='ignition'] .ig-h5,
+[data-ext='ignition'] .ig-h6 {
+  color: var(--text-4);
+  font-size: 0.94em;
+}
+
+/* Inline: bold, italic, struck, code, links. */
+[data-ext='ignition'] .ig-b {
+  color: var(--text-strong);
+  font-weight: 700;
+}
+[data-ext='ignition'] .ig-i {
+  font-style: italic;
+}
+[data-ext='ignition'] .ig-s {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+[data-ext='ignition'] .ig-code {
+  padding: 0.08em 0.32em;
+  border-radius: var(--radius-sm);
+  background: var(--surface-control);
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+[data-ext='ignition'] .ig-a {
+  color: var(--link);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--link) 40%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+[data-ext='ignition'] .ig-a[data-href] {
+  cursor: pointer;
+}
+/* A script's [picture or sound]: as typed, quieter than what's said. */
+[data-ext='ignition'] .ig-cue {
+  color: var(--text-4);
+}
+
+/* Quotes: a rule on the left, quieter words. Code: a box in the mono font. A rule: a line. */
+[data-ext='ignition'] .ig-quote {
+  --ig-indent: 0.9em;
+  border-left: 3px solid var(--border);
+  color: var(--text-4);
+}
+[data-ext='ignition'] .ig-pre {
+  --ig-indent: 0.9em;
+  --ig-pad-right: 0.9em;
+  background: var(--surface-control);
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 0.84em;
+  line-height: 1.55;
+}
+[data-ext='ignition'] .ig-pre-top {
+  --ig-pad-top: 0.45em;
+  border-top-left-radius: var(--radius);
+  border-top-right-radius: var(--radius);
+}
+[data-ext='ignition'] .ig-pre-end {
+  --ig-pad-bottom: 0.45em;
+  border-bottom-left-radius: var(--radius);
+  border-bottom-right-radius: var(--radius);
+}
+[data-ext='ignition'] .ig-hr {
+  background: linear-gradient(var(--line-strong), var(--line-strong)) left center / 100% 1px no-repeat;
+}
+
+/* Lists: the mark (a bullet, its number or a task's box) hangs in the indent, and the item's lines wrap under its
+   text. */
+[data-ext='ignition'] .ig-li {
+  --ig-list-pad: 1.5em;
+}
+[data-ext='ignition'] .ig-li.ig-d1 {
+  --ig-list-pad: 3em;
+}
+[data-ext='ignition'] .ig-li.ig-d2 {
+  --ig-list-pad: 4.5em;
+}
+[data-ext='ignition'] .ig-li.ig-d3 {
+  --ig-list-pad: 6em;
+}
+[data-ext='ignition'] .ig-li.ig-d4 {
+  --ig-list-pad: 7.5em;
+}
+[data-ext='ignition'] .ig-li.ig-d5 {
+  --ig-list-pad: 9em;
+}
+[data-ext='ignition'] .ig-li-first {
+  text-indent: -1.5em;
+}
+[data-ext='ignition'] .ig-lm {
+  display: inline-block;
+  width: 1.5em;
+  text-indent: 0;
+  color: var(--muted);
+  font-weight: 600;
+  text-align: left;
+}
+[data-ext='ignition'] .ig-lm-ol {
+  color: var(--text-4);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+[data-ext='ignition'] .ig-task {
+  position: relative;
+  vertical-align: -0.16em;
+  cursor: pointer;
+}
+/* A bigger place to tap than the box. */
+[data-ext='ignition'] .ig-task::after {
+  content: '';
+  position: absolute;
+  inset: -0.45em -0.3em -0.45em -0.45em;
+}
+[data-ext='ignition'] .ig-box {
+  display: grid;
+  place-items: center;
+  width: 1.05em;
+  height: 1.05em;
+  border: 1.5px solid var(--border-hover);
+  border-radius: 0.28em;
+  color: var(--on-accent);
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease;
+}
+[data-ext='ignition'] .ig-box svg {
+  width: 0.78em;
+  height: 0.78em;
+  opacity: 0;
+}
+[data-ext='ignition'] .ig-task:hover .ig-box {
+  border-color: var(--text-4);
+}
+[data-ext='ignition'] .ig-task.ig-on .ig-box {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+[data-ext='ignition'] .ig-task.ig-on .ig-box svg {
+  opacity: 1;
+}
+[data-ext='ignition'] .ig-li.ig-done {
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--muted) 55%, transparent);
+}
+
+/* Images: the picture with its caption under it, rounded, never wider than the text. */
+[data-ext='ignition'] .ig-fig {
+  display: block;
+  padding: 0.35em 0 0.5em;
+  text-indent: 0;
+}
+[data-ext='ignition'] .ig-fig img {
+  display: block;
+  max-width: 100%;
+  max-height: 70vh;
+  height: auto;
+  border-radius: var(--radius-md);
+  background: var(--surface-control);
+  object-fit: contain;
+}
+[data-ext='ignition'] .ig-cap {
+  display: block;
+  margin-top: 0.45em;
+  color: var(--muted);
+  font-size: 0.8em;
+  font-style: normal;
+  font-weight: 400;
+  line-height: 1.4;
+}
+[data-ext='ignition'] .ig-cap:empty {
+  display: none;
+}
+[data-ext='ignition'] .ig-fig-missing img {
+  display: none;
+}
+[data-ext='ignition'] .ig-fig-missing .ig-cap {
+  margin: 0;
+  padding: 0.7em 0.9em;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+}
+
+/* The agent's open question about a place, under it: its words and its choices. */
+[data-ext='ignition'] .ig-ask {
+  padding: 0.4em 0 0.7em;
+}
+[data-ext='ignition'] .ig-ask-card {
+  padding: 0.75em 0.9em 0.85em;
+  border: 1px solid color-mix(in srgb, var(--agent) 32%, transparent);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--agent) 7%, transparent);
+  font-size: 0.9em;
+  line-height: 1.45;
+}
+[data-ext='ignition'] .ig-ask-label {
+  display: block;
+  color: var(--agent-text-2);
+  font-size: 0.78em;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+[data-ext='ignition'] .ig-ask-text {
+  margin: 0.2em 0 0.7em;
+  color: var(--agent-text);
+}
+[data-ext='ignition'] .ig-ask-opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5em;
+}
+[data-ext='ignition'] .ig-ask-pics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13em), 1fr));
+}
+[data-ext='ignition'] .ig-ask-opt {
+  min-height: 40px;
+  padding: 0.45em 0.95em;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-control);
+  color: var(--text);
+  font-weight: 550;
+  text-align: left;
+  transition: border-color 0.15s ease;
+}
+[data-ext='ignition'] .ig-ask-pics .ig-ask-opt {
+  display: grid;
+  gap: 0.45em;
+  min-width: 0;
+  padding: 0.4em 0.4em 0.55em;
+}
+[data-ext='ignition'] .ig-ask-pics .ig-ask-opt span {
+  padding: 0 0.3em;
+}
+[data-ext='ignition'] .ig-ask-opt img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+}
+[data-ext='ignition'] .ig-ask-opt:hover:not(:disabled),
+[data-ext='ignition'] .ig-ask-opt.ig-on {
+  border-color: var(--agent);
+}
+[data-ext='ignition'] .ig-ask-opt:disabled:not(.ig-on) {
+  opacity: 0.55;
 }
 [data-ext='ignition'] .ig-flash {
   background: color-mix(in srgb, var(--focus) 18%, transparent);
@@ -550,8 +795,12 @@
     padding: 64px 20px 0;
     font-size: calc(var(--font-size) * 18 / 13);
   }
-  [data-ext='ignition'] .ig-mirror {
-    padding-bottom: 30vh;
+  [data-ext='ignition'] .ig-paper {
+    --ig-tail: 30vh;
+  }
+  /* A phone shows a picture the width of the text. */
+  [data-ext='ignition'] .ig-fig img {
+    width: 100%;
   }
   [data-ext='ignition'] .ig-more {
     top: 8px;

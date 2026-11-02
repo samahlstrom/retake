@@ -217,7 +217,7 @@
       left: 50%;
       z-index: 40;
       transform: translateX(-50%);
-      max-width: calc(100vw - 32px);
+      max-width: calc(100% - 32px);
       padding: 7px 15px;
       border-radius: var(--radius-pill);
       background: var(--surface-popover);

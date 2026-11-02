@@ -46,8 +46,20 @@ export default defineConfig({
     svelte({ configFile: false, preprocess: vitePreprocess(), compilerOptions: { runes: true } }),
     plainExports('ignition.js'),
   ],
-  // The sources live outside web/, so bare imports resolve from here (web/node_modules).
-  resolve: { dedupe: ['svelte', 'vitest'] },
+  // The sources live outside web/, so bare imports resolve from here (web/node_modules), each package once.
+  resolve: {
+    dedupe: [
+      'svelte',
+      'vitest',
+      '@codemirror/state',
+      '@codemirror/view',
+      '@codemirror/commands',
+      '@codemirror/language',
+      '@codemirror/lang-markdown',
+      '@lezer/common',
+      '@lezer/markdown',
+    ],
+  },
   build: {
     outDir: out,
     // ui/ also holds the extension's icon (spark.svg): only the two built files are replaced.
@@ -61,7 +73,8 @@ export default defineConfig({
       fileName: () => 'ignition.js',
       cssFileName: 'ignition',
     },
-    rolldownOptions: { output: { codeSplitting: false } },
+    // One file, fully minified (a library build keeps its whitespace for other bundlers; nothing bundles this one).
+    rolldownOptions: { output: { codeSplitting: false, minify: true } },
   },
   test: {
     dir: src,
