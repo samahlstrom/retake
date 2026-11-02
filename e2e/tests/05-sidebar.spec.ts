@@ -200,7 +200,9 @@ test('open questions have readable comments, timecodes and reply controls', asyn
   expect(sb.rows.map((r) => [r.key, r.time, r.mark, r.answer])).toEqual([
     ['question:101', '0:04', 'question', 101], ['question:102', '0:12', 'question', 102]]);
   await expect(page.locator('#side li.item')).toHaveCount(2);
-  await expect(page.locator('#side header')).toContainText('Comments');
+  // The header: a speech bubble (no word), the version, search and hide (spec/notes.md, "The comments header").
+  await expect(page.locator('#side header .cicon svg')).toBeVisible();
+  await expect(page.locator('#side header [data-part~="version-menu"]')).toHaveText('v6');
   await expect(item('question:101').locator('.text')).toHaveText(/Keep the zoom on the shop/);
   await expect(item('question:101').locator('.time')).toHaveText('0:04');
   await expect(item('question:101').locator('.chip')).toHaveCount(0);
@@ -267,7 +269,9 @@ test('N hides the sidebar (the page looks as before), remembered across a reload
   await ui.waitFor(() => !window.__review.sidebar!.panel, 3000);
   await expect(page.locator('#side')).toBeHidden();
   await expect(page.locator('#sideToggle')).toBeVisible();
-  await expect(page.locator('#sideToggle')).toHaveText('2 to do');
+  // The speech bubble and the to-do count, as on a phone.
+  await expect(page.locator('#sideToggle')).toHaveText('2');
+  await expect(page.locator('#sideToggle')).toHaveAttribute('aria-label', 'Show comments: 2 to do');
   expect((await box('#stage')).width).toBeCloseTo(1920, 0);
   await page.reload();
   await ui.waitFor(READY, 20_000);

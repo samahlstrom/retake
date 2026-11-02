@@ -195,7 +195,7 @@ test('a card opens its review page with the poster; Done makes it Reviewed; Next
     expect(await page.evaluate(() => (window.__review as unknown as { home: unknown }).home))
       .toEqual({ available: true, next: 'bravo' });
     // The review page is as before: the hint and the bar.
-    await expect(page.locator('#hint')).toHaveText(/^R record/);
+    await expect(page.locator('#hint')).toHaveText(/^Draw or type to comment · R record/);
     await expect(page.locator('#rec')).toBeVisible();
 
     await record(ui, page);

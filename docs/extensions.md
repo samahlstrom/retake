@@ -125,7 +125,7 @@ The `ctx` types for your editor are `web/src/ext/retake-ext.d.ts` in Retake's so
 
 ## What else an extension can do
 
-- **A kind of version**: a `v0/` folder with its marker file, shown in the version strip and opened in your
+- **A kind of version**: a `v0/` folder with its marker file, listed first in the version menus and opened in your
   `version` slot instead of the video. Comments on it are typed, and the agent works them like any other.
 - **Files it owns** (`[files] owns = ["v0/**"]`): `ctx.files()` reads, writes and watches them. They're plain files in
   the video's folder, local or on the editing computer when hosted.
@@ -142,7 +142,7 @@ The `ctx` types for your editor are `web/src/ext/retake-ext.d.ts` in Retake's so
 
 ## What it can't do
 
-Change the review: pen only, R to record, the pen does nothing unless recording. Your code gets no pen, takes or
+Change the review: the pen, the comment box and R to record are core's. Your code gets no pen, takes or
 review keys, and nothing over the video. It also can't change how agents run or who may send, answer or switch them,
 or write a video version. A broken extension shows one line in its own place, and the rest of Retake keeps working.
 

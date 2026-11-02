@@ -431,7 +431,7 @@ test.describe('locally', () => {
           await p.locator('#sideToggle').click();
           const card = question(p);
           await expect(card).toContainText('Which opening?');
-          await expect(p.locator('#side.drawer [data-part="agent-status"]')).toBeVisible();
+          await expect(p.locator('#side.drawer [data-part~="version-menu"]')).toBeVisible();
           await noOverflow(p, `the comments drawer at ${size.width}`);
           await shot(p, 'drawer-question', size);
           // Its place closes the drawer and shows it in the document.
@@ -464,9 +464,13 @@ test.describe('locally', () => {
       await page.goto(videoUrl());
       await expect(text(page)).toBeVisible({ timeout: 20_000 });
       await startV1(page, idea());
-      const strip = page.locator('[data-part="version-strip"]');
-      await expect(strip).toContainText('v0 · Doc');
-      await expect(strip).toContainText('v1');
+      // The comments' version menu lists v0 · Doc first, then v1.
+      await page.locator('#side [data-part~="version-menu"]').click();
+      const versions = page.locator('[data-part~="version-menu-list"] [data-version]');
+      await expect(versions).toHaveCount(2);
+      await expect(versions.first()).toContainText('v0 · Doc');
+      await expect(versions.nth(1)).toContainText('v1');
+      await page.keyboard.press('Escape');
       // The Script tab on v1: the document's ## Script, a section per beat, linked by cuts/v1.json.
       await page.locator('[data-ext-tab="ignition/sidebar-tab"]').click();
       const sections = page.locator('[data-part="ignition-section"]');
@@ -488,14 +492,15 @@ test.describe('locally', () => {
       await expect(p.locator('#verList [data-ver="v0"]')).toContainText('v0 · Doc');
       await noOverflow(p, 'the version list');
       await shot(p, 'versions', PHONES[0]);
-      // v0 from there: the document again, and the drawer has the versions (the strip) and the agent.
+      // v0 from there: the document again, and the drawer has the versions (its version menu).
       await p.locator('#verList [data-ver="v0"]').click();
       await expect(text(p)).toBeVisible({ timeout: 20_000 });
       await p.locator('#sideToggle').click();
-      await expect(p.locator('#side.drawer [data-part="version-strip"]')).toContainText('v0 · Doc');
-      await expect(p.locator('#side.drawer [data-part="version-strip"]')).toContainText('v1');
-      await expect(p.locator('#side.drawer [data-part="agent-status"]')).toBeVisible();
+      await expect(p.locator('#side.drawer [data-part~="version-menu"]')).toHaveText('v0 · Doc');
+      await p.locator('#side.drawer [data-part~="version-menu"]').click();
+      await expect(p.locator('[data-part~="version-menu-list"] [data-version="v1"]')).toBeVisible();
       await noOverflow(p, 'the drawer on v0 with v1');
+      await p.keyboard.press('Escape');
       await shot(p, 'drawer-versions', PHONES[0]);
     } finally {
       await phone.context.close();

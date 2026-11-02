@@ -42,7 +42,7 @@ without it. The full walkthrough is in [docs/quickstart.md](docs/quickstart.md).
 
 | Key | Does |
 |---|---|
-| **R** | Start or stop recording a segment. The pen only draws while recording. |
+| **R** | Start or stop recording your voice. Without it, draw or type a comment at any moment (the box at the bottom of the comments; Enter saves it, Esc cancels it). |
 | Space or K | Play or pause. |
 | ← / → | Back or forward 5 seconds. |
 | , / . | One frame back or forward. |
@@ -71,8 +71,9 @@ While recording you can also drag or paste an image onto the video. It's pinned 
   and a snapshot of the frame. They're kept in `<project>/.retake/project.db`.
 - An agent reads the notes, makes the next version with any tool, and pushes it with a changelog. A push is refused
   until every open note is either answered or asked about ([docs/agents.md](docs/agents.md)).
-- Each version keeps its own comments. The comments panel shows the version on screen, with a strip of versions and
-  what's still to do on each; the newest one says what's still open on earlier versions.
+- Each version keeps its own comments, and a comment on v7 becomes an edit in v8. The comments panel shows the version
+  on screen; its version menu lists every version with where its comments go and what's still to do ("v7 → v8 · 3 to
+  do").
 
 ## On a phone
 
@@ -93,7 +94,8 @@ retake open ~/Videos
 
 Open a video, press R, talk and draw, press R again, then **Send**. The agent edits the project on this computer,
 the page plays the edit as it renders, and the comment turns Done when the new version is ready. If something is
-missing, the agent menu next to Send says what. [docs/agents.md](docs/agents.md) covers other providers (OpenRouter, API keys)
+missing, one line over Send says what; the agent, its fallback and connecting a computer are in Settings, at the bottom
+of the home's left column. Hold Send to pick another agent for one send. [docs/agents.md](docs/agents.md) covers other providers (OpenRouter, API keys)
 and driving your own agent over MCP (`retake mcp <video>`) or the CLI.
 
 ## Editing with the timeline

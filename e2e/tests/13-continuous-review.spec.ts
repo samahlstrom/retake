@@ -156,21 +156,16 @@ test('recorded audio and drawings fold into one comment marker once transcribed'
   await page.keyboard.press('Tab');
 });
 
-test('Send with nothing new says the feedback is saved; the agent menu says why it can\'t edit', async ({page}) => {
+test('Send with nothing new says the feedback is saved; one line over it says why the agent can\'t edit', async ({page}) => {
   // This server's own worker can't edit (e2e turns agent discovery off): Send saves, and never says Finish review.
-  await expect(page.locator('#agent')).toHaveText('Agent unavailable');
-  await expect(page.locator('#done')).toHaveText('Send 1 to agent');
+  await expect(page.locator('#agent, [data-part~="agent-menu"]')).toHaveCount(0); // no agent menu in the bar
+  await expect(page.locator('[data-part~="send-notice"]')).toContainText('No agent found'); // e2e finds no agents
+  await expect(page.locator('#done')).toHaveText('Send');
   await page.locator('#done').click();
   await expect(page.locator('#toast')).toContainText('feedback is already saved');
   await expect(page.locator('#toast')).not.toContainText('Nothing recorded');
-  await page.waitForTimeout(300);
-  await expect(page.locator('.agent-pop')).toHaveCount(0); // it doesn't pop up over the review
   await expect(page.locator('#side .item')).toHaveCount(1);
   await expect(page.locator('#side .item .status')).toHaveText('Open');
-  await page.locator('#agent').click();
-  await expect(page.locator('.agent-pop')).toContainText('The agent can’t edit yet');
-  await expect(page.locator('.agent-pop')).toContainText('No agent found'); // plain videos are editable now; e2e finds no agents
-  await expect(page.locator('.agent-pop button')).toHaveCount(0); // nothing to press that does nothing
 });
 
 test('long recording publishes a completed clip while the next clip keeps recording, then finishes both', async ({page, context}) => {
@@ -210,10 +205,15 @@ test('an earlier version\'s open comment stays on it: the line goes there, its d
   await page.route('**/api/notes?*', r => json(r, {version:v(r),newest:v(r)==='v6',scope:'video',items:[{id:9,version:'v5',take:'old-take',seg:'S1',kind:'note',status:'open',text:'Move this title.',t0:3,t1:3,drawings:['red']}],jobs:[]}));
   await page.route('**/api/history?*', r => json(r, {label:v(r),history:v(r)!=='v5'?[]:[{id:'old-take',transcribed:true,voice:{bin:0.25,bins:[[12,1],[13,1],[14,1],[15,1],[16,1]]},strokes:[{id:1,video_t:3,color:'red',points:[[0.3,0.3],[0.6,0.6]]}]}]}));
   await page.reload(); await page.waitForFunction(READY);
-  // Not on v6: the newest version has none of its own, and one quiet line says v5 still has one.
+  // Not on v6: the newest version has none of its own; the version menu's dot and title say v5 still has one.
   await expect(page.locator('#side .item')).toHaveCount(0);
   await expect(page.locator('.comment-marker')).toHaveCount(0);
-  await page.locator('[data-part="earlier-versions"]').getByRole('button', {name:'v5 · 1'}).click();
+  const menu = page.locator('#side [data-part~="version-menu"]');
+  await expect(menu).toHaveAttribute('title', /Open on earlier versions: v5 · 1/);
+  await expect(menu.locator('.dot')).toBeVisible();
+  await menu.click();
+  await expect(page.locator('[data-part~="version-menu-list"] [data-version="v5"]')).toContainText('1 to do');
+  await page.locator('[data-part~="version-menu-list"] [data-version="v5"]').click();
   await expect.poll(() => page.evaluate(() => window.__review.view.shown)).toBe('v5');
   await expect(page.locator('#side .item')).toHaveCount(1);
   await page.locator('#side .time').click();
@@ -324,44 +324,28 @@ test('comment menu keys open and dismiss without recording or playing', async ({
   await expect.poll(() => page.evaluate(() => !!window.__review.seg)).toBe(false);
 });
 
-test('agent status opens a small popover whose choices save at once', async ({page}) => {
-  let config = {worker:'machine',agent:'claude',fallback:'',enabled:false};
-  const posts: Record<string, unknown>[] = [];
-  await page.route('**/api/automation',route=>{
-    if (route.request().method()==='POST') {
-      const body = JSON.parse(route.request().postData()!) as typeof config;
-      posts.push(body); config = body;
-      return json(route,{ok:true});
-    }
-    return json(route,{
-      local:true, config,
-      workers:[{id:'machine',name:'Editing computer',seen:Date.now()/1000,agents:[{id:'claude',name:'Claude Code'},{id:'codex',name:'Codex'}]}],
-      tasks:[],renders:[],
-    });
-  });
+test('Send never names the agent; held, it lists the computer\'s agents and the pick goes with that send', async ({page}) => {
+  const sent: Record<string, unknown>[] = [];
+  await page.route('**/api/automation',route=>json(route,{
+    local:true, config:{worker:'machine',agent:'claude',fallback:'',enabled:false},
+    workers:[{id:'machine',name:'Editing computer',seen:Date.now()/1000,agents:[{id:'claude',name:'Claude Code'},{id:'codex',name:'Codex'}]}],
+    tasks:[],renders:[],
+  }));
+  await page.route('**/api/automation/tasks',route=>{ sent.push(JSON.parse(route.request().postData()!)); return json(route,{ok:true}); });
   await page.reload();await page.waitForFunction(READY);
-  // The owner with a computer online sends: one open comment no task owns.
-  await expect(page.locator('#done')).toHaveText('Send 1 to agent');
-  const status = page.locator('#agent');
-  await expect(status).toHaveText('Claude Code');
-  await expect(status).toHaveClass(/\bok\b/);
-  await status.click();
-  await expect(page.locator('.agent-pop')).toContainText('on Editing computer');
-  const provider=page.getByRole('combobox',{name:'Agent',exact:true});
-  await expect(provider).toHaveText('Claude Code');
-  await provider.click();
-  await page.getByRole('option',{name:'Codex',exact:true}).click();
-  await expect.poll(() => posts.at(-1)).toMatchObject({worker:'machine',agent:'codex',fallback:'',enabled:false});
-  await expect(provider).toHaveText('Codex');
-  const fallback=page.getByRole('combobox',{name:'If its usage runs out',exact:true});
-  await expect(fallback).toHaveText('Pause and ask me');
-  await fallback.click();
-  await expect(page.getByRole('option',{name:'Switch to Claude Code',exact:true})).toBeVisible();
-  await page.keyboard.press('Escape');
-  // There is no auto-send switch any more: everyone sends. The config keeps whatever enabled it had.
-  await expect(page.getByRole('switch')).toHaveCount(0);
-  await expect(page.locator('.agent-pop')).not.toContainText('automatically');
-  expect(posts.every(p => p.enabled === false)).toBe(true);
+  const send = page.locator('#done');
+  await expect(send).toHaveText('Send');
+  await expect(send).toHaveAttribute('aria-label', 'Send 1 comment to the agent');
+  await expect(page.locator('#bar')).not.toContainText('Claude');
+  await expect(page.locator('#agent')).toHaveCount(0);
+  // A right-click (or holding it) lists the agents; the configured one says so. Nothing is sent yet.
+  await send.click({button:'right'});
+  const picker = page.locator('[data-part~="agent-picker"]');
+  await expect(picker.locator('[data-agent]')).toHaveText([/Claude Code\s*default/, /^Codex$/]);
+  expect(sent).toEqual([]);
+  await picker.locator('[data-agent="codex"]').click();
+  await expect.poll(() => sent).toEqual([{notes:[1], agent:'codex'}]);
+  await expect(picker).toHaveCount(0);
 });
 
 // A fake host for the agent: GET api/automation from `state`; a Send queues tasks and the notes carry them (`work`).
@@ -403,49 +387,39 @@ async function fakeAgent(page: import('@playwright/test').Page, opts: { local: b
   return state;
 }
 
-test('the owner sends with no computer: the comments wait for it, and the menu shows how to connect one', async ({page}) => {
+test('the owner sends with no computer: the comments wait for it, and one line says none is connected', async ({page}) => {
   const agent = await fakeAgent(page, {local:false});
-  await expect(page.locator('#agent')).toHaveText('Connect computer');
-  await expect(page.locator('#done')).toHaveText('Send 1 to agent');
+  const notice = page.locator('[data-part~="send-notice"]');
+  await expect(notice).toContainText('No editing computer connected'); // connecting one is in Settings now
+  await expect(page.locator('#done')).toHaveText('Send');
   await page.locator('#done').click();
   await expect.poll(() => agent.submitted).toEqual([{notes:[1]}]);
   await expect(page.locator('#toast')).toContainText('The agent starts when the editing computer is online');
-  await expect(page.locator('.agent-pop')).toContainText('Waiting for the editing computer');
-  await expect(page.locator('.agent-pop')).toContainText('retake connect https://review.example.com --token rk_test');
-  await expect(page.getByRole('button',{name:'Copy the command'})).toBeVisible();
   const card = page.locator('.item[data-key="note:1"]');
   await expect(card.locator('.status')).toHaveText('Working');
   await expect(card.locator('.waiting')).toHaveText('Waiting for the editing computer');
   await expect(page.locator('#done')).toHaveText('Sent');
-  await page.keyboard.press('Escape');
-  await page.locator('#agent').click();
-  await expect(page.locator('.agent-pop')).toContainText('rk_test');
-  expect(agent.minted).toBe(1); // one token per page, not one per click
-  await page.keyboard.press('Escape');
+  expect(agent.minted).toBe(0); // the review page mints no connect token: Settings does
   agent.workers.push({id:'machine',name:'Editing computer',seen:Date.now()/1000,online:true,agents:[{id:'claude',name:'Claude Code'}]});
-  // The page polls api/automation every 5 s: the computer shows up without a reload, and the line goes.
-  await expect(page.locator('#agent')).toHaveText('Claude Code', {timeout:12_000});
+  // The page polls api/automation every 5 s: the computer shows up without a reload, and the lines go.
+  await expect(notice).toHaveCount(0, {timeout:12_000});
   await expect(card.locator('.status')).toHaveText('Working');
   await expect(card.locator('.waiting')).toHaveCount(0);
 });
 
 test('a reviewer\'s link sends like the owner; with no computer it just waits, and a paused send retries', async ({page}) => {
   const agent = await fakeAgent(page, {local:false, role:'reviewer'});
-  await expect(page.locator('#agent')).toHaveText('Agent offline');
-  await expect(page.locator('#done')).toHaveText('Send 1 to agent');
+  await expect(page.locator('[data-part~="send-notice"]')).toHaveText('The editing computer is offline. Send still queues.');
+  await expect(page.locator('#done')).toHaveText('Send');
   await page.locator('#done').click();
   await expect.poll(() => agent.submitted).toEqual([{notes:[1]}]);
   await expect(page.locator('#toast')).toContainText('The agent starts when the editing computer is online');
   const card = page.locator('.item[data-key="note:1"]');
   await expect(card.locator('.status')).toHaveText('Working');
   await expect(card.locator('.waiting')).toHaveText('Waiting for the editing computer');
-  // No connect line for a reviewer: the menu only says what's happening.
-  await page.waitForTimeout(300);
-  await expect(page.locator('.agent-pop')).toHaveCount(0);
-  await page.locator('#agent').click();
-  await expect(page.locator('.agent-pop')).toHaveText('Waiting for the editing computer');
+  // No connect line for a reviewer, and no Settings link: the line only says what's happening.
+  await expect(page.locator('[data-part~="send-notice"] a')).toHaveCount(0);
   expect(agent.minted).toBe(0);
-  await page.keyboard.press('Escape');
   // The computer went away mid-task: the comment is Open with why, and the reviewer retries it (with its own agent).
   Object.assign(agent.tasks[0]!, {state:'paused', error:'Worker disconnected; retry or switch agent'});
   await expect(card.locator('.paused')).toContainText('Paused: computer offline', {timeout:12_000}); // next poll

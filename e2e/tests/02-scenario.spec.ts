@@ -1,7 +1,9 @@
 // The legacy end-to-end scenario (tests/e2e_headless.mjs + check_e2e.py of the Python player), ported to Playwright,
 // plus on-disk checks of the take and schema validation. It runs against either server (RETAKE_SERVER).
 //
-//  A:  play WITHOUT recording, drag on the video: nothing is drawn, no take starts.
+//  A:  play WITHOUT recording, drag on the video: no take starts. On the legacy player nothing is drawn; on this one
+//      the line starts a typed comment there and the video pauses (spec/notes.md, "Typed comments on a video"), and
+//      Esc cancels it.
 //  S1: R on, talk while playing, pause, draw (red), talk, R off. Then an unrecorded loop of the same clip, with speech
 //      and a drag that must both be dropped.
 //  S2: R on, talk, R off. C flips v6 to its partner at the same frame, and back: v7 (the newer 0:10 preview) on the
@@ -81,15 +83,19 @@ test('family: v5, v6 and the v7 preview; the newer v5 draft decoy is skipped', a
   if (LEGACY) expect(d.v7).toBeCloseTo(10, 0);
 });
 
-test('A: without recording, playing works and the pen draws nothing', async ({}, info) => {
+test('A: without recording, playing works and the pen makes no take', async ({}, info) => {
   await ui.key(' ');
   await sleep(1200);
   await ui.drag(loop(0.5, 0.5));
   await sleep(300);
   await shot(info, 'ui_not_recording.png');
+  if (!LEGACY) {
+    expect(await page.evaluate(() => window.__review.draft?.lines ?? 0), 'the line is a typed comment’s').toBe(1);
+    await ui.key('Escape'); // dropped, with its line
+  }
   c.afterUnrecordedDrag = await ui.state();
   await sleep(1000);
-  await ui.key(' ');
+  if (LEGACY) await ui.key(' ');
   await sleep(200);
   await ui.key('ArrowRight');
   await sleep(400);
@@ -98,12 +104,18 @@ test('A: without recording, playing works and the pen draws nothing', async ({},
   expect(a.take, 'no take before the first R').toBeNull();
   expect(a.strokes).toBe(0);
   expect(a.rec).toBe(false);
-  expect(a.toast).toContain('Press R');
-  expect(a.paused, 'still playing').toBe(false);
   expect(a.t).toBeGreaterThan(1);
+  if (LEGACY) {
+    expect(a.toast).toContain('Press R');
+    expect(a.paused, 'still playing').toBe(false);
+  } else {
+    // The line went to a typed comment, which paused the video; Esc dropped it with its line.
+    expect(a.paused, 'a comment pauses the video').toBe(true);
+    expect(await page.evaluate(() => window.__review.draft ?? null)).toBeNull();
+  }
 });
 
-test('S1-S4: R-gated recording and pen, an unrecorded loop, C flips, then Done', async ({}, info) => {
+test('S1-S4: R-gated recording (the pen pinned to it), an unrecorded loop, C flips, then Done', async ({}, info) => {
   const s = new Schedule();
   const mark = async (label: string) => { marks[label] = await ui.state(); };
   // S1. The fake mic starts with the first R: its schedule is relative to this moment.
@@ -119,7 +131,9 @@ test('S1-S4: R-gated recording and pen, an unrecorded loop, C flips, then Done',
   // The same clip again, unrecorded: the speech at 9.5 s and this drag must be dropped.
   await s.at(8.5); await ui.key('ArrowLeft'); await s.at(8.7); await ui.key(' ');
   await s.at(10.5); await ui.drag(loop(0.6, 0.45)); c.afterUnrecordedLoopDrag = await ui.state();
-  await s.at(12.0); await ui.key(' '); await mark('loop paused');
+  // This page: the drag started a typed comment (which paused the video); Esc drops it, and the video stays paused.
+  if (!LEGACY) await ui.key('Escape');
+  await s.at(12.0); if (LEGACY) await ui.key(' '); await mark('loop paused');
   // S2
   await s.at(12.5); await ui.key('r'); await ui.waitFor(recording); await mark('S2 on');
   await s.at(15.5); await ui.key('r'); await mark('S2 off');
@@ -149,7 +163,7 @@ test('S1-S4: R-gated recording and pen, an unrecorded loop, C flips, then Done',
   expect(marks['S1 on']!.take).toMatch(/^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}$/);
   expect(marks['S1 stroke']!.strokes).toBe(1);
   expect(marks['S1 off']!.rec).toBe(false);
-  expect(c.afterUnrecordedLoopDrag!.strokes, 'the unrecorded drag drew nothing').toBe(1);
+  expect(c.afterUnrecordedLoopDrag!.strokes, 'the unrecorded drag drew nothing into the take').toBe(1);
   expect(c.afterUnrecordedLoopDrag!.rec).toBe(false);
   expect(marks['S3 on (flipped)']).toMatchObject({ rec: true, shown: PARTNER, base: 'v6', flipped: true });
   expect(marks['S3 off, back on v6']).toMatchObject({ rec: false, shown: 'v6', flipped: false });

@@ -62,9 +62,12 @@ The page opens in your browser. `retake` found v1 by its name. Leave the server 
 1. Press Space to play. Pause at step two, around 0:11.
 2. Press **R** to start recording. The browser asks for the microphone the first time.
 3. Say "The labels at the bottom are too small. Make them bigger, please."
-4. Draw a loop around the "STEP 2" label. The pen only draws while you're recording.
-5. Press **R** to stop, then click **Send to agent**. Without an agent it just saves the take, and the agent menu
-   next to it says what's missing.
+4. Draw a loop around the "STEP 2" label. While you record, the line goes with what you say.
+5. Press **R** to stop, then click **Send**. Without an agent it just saves the take, and one line over Send says
+   what's missing.
+
+No microphone, or nothing to say out loud? Draw on the video, or click the box at the bottom of the comments
+("Comment at 0:11 · goes into v3…"), type, and press Enter: that's a comment too, with your drawing and that moment.
 
 The take is saved in `how-to/v2/how-to_v2.review/<timestamp>/`.
 

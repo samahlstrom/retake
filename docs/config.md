@@ -89,7 +89,7 @@ that one, so you can change how it runs without listing the other.
 
 ```toml
 [[agents]]
-id = "claude"                    # letters, digits, - and _; shown in the page's agent menu by name
+id = "claude"                    # letters, digits, - and _; Settings and a held Send list it by name
 name = "Claude Code (API key)"
 command = ["claude", "-p", "--output-format", "stream-json", "--verbose", "--dangerously-skip-permissions"]
 env = { ANTHROPIC_API_KEY = "$ANTHROPIC_API_KEY" }
@@ -97,7 +97,7 @@ env = { ANTHROPIC_API_KEY = "$ANTHROPIC_API_KEY" }
 
 | Key | Meaning |
 |---|---|
-| `id` | Unique. Tasks and the page's agent menu refer to it. |
+| `id` | Unique. Tasks, Settings and a held Send's list refer to it. |
 | `name` | What the page shows. Default: the id. |
 | `model` | Optional, shown next to the name. It doesn't change the command. |
 | `command` | The program and its arguments. It gets the task prompt on stdin and runs in the project folder. |

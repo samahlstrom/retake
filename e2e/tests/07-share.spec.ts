@@ -95,17 +95,19 @@ test('a viewer link: the review plays, with no Record, no pen and a "View only" 
 
     await expect(page.locator('#rec')).toHaveCount(0);
     await expect(page.locator('#done')).toHaveCount(0);
-    await expect(page.locator('.sw')).toHaveCount(0);
+    await expect(page.locator('#pen, .sw')).toHaveCount(0);
+    await expect(page.locator('[data-part~="comment-line"]')).toHaveCount(0); // no comment box either
     await expect(page.locator('#hint')).toHaveText('View only · Space play · ←/→ 5 s · C compare');
     await expect(page.locator('#hint')).not.toHaveClass(/gone/);
 
-    // R only says so, and a drag over the video draws nothing.
+    // R only says so, and a drag over the video draws nothing (no typed comment either).
     await ui.key('r');
     await sleep(300);
     expect(await ui.state()).toMatchObject({ rec: false, take: null, toast: 'View only' });
     await ui.drag(loop(0.5, 0.5));
     await sleep(200);
     expect((await ui.state()).strokes).toBe(0);
+    expect(await page.evaluate(() => window.__review.draft ?? null)).toBeNull();
 
     // It plays, through the tunnel's host.
     const t0 = (await ui.video()).t;
@@ -129,7 +131,7 @@ test('a reviewer link records a take, saved with the link\'s label as its author
     await openLink(page, token('reviewer', 'alex'));
     expect(await page.evaluate(() => (window.__review.info as { role?: string }).role)).toBe('reviewer');
     await expect(page.locator('#rec')).toBeVisible();
-    await expect(page.locator('#hint')).toHaveText(/^R record/);
+    await expect(page.locator('#hint')).toHaveText(/^Draw or type to comment · R record/);
 
     await page.evaluate(() => { document.querySelector('video')!.currentTime = 6; });
     await ui.waitFor(() => !document.querySelector('video')!.seeking, 5000);
@@ -141,7 +143,7 @@ test('a reviewer link records a take, saved with the link\'s label as its author
     await ui.key('r');
     await ui.waitFor(() => !window.__review.seg, 8000);
     // A reviewer has the same Send as the owner (this server's own worker can't edit, so Send saves the take).
-    await expect(page.locator('#done')).toHaveText(/^Send( \d+)? to agent$/);
+    await expect(page.locator('#done')).toHaveText('Send');
     await ui.click('#done');
     await ui.waitFor(() => window.__review.take.closed && !window.__review.take.saving, 15_000);
     await sleep(300);

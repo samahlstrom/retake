@@ -1,4 +1,4 @@
-// The eraser (new): E or the eraser button makes the pen an eraser. A swipe over a line on screen removes that whole
+// The eraser (new): E or the eraser in the pen's popover makes the pen an eraser (the pen button shows it). A swipe over a line on screen removes that whole
 // line, recording or not; Z brings back the last erased line; a pen color switches back to the pen. A line of the take
 // in progress is left out of its strokes.json (events.json says erase / unerase); a line of an earlier take is kept in
 // the version's erased.json, so it stays gone after a reload while the old take's files stay as they were.
@@ -65,10 +65,11 @@ test('the eraser removes the line it crosses, recording or not; Z brings it back
   await ui.key('z');
   expect(await live()).toEqual([1, 2]);
 
-  // The eraser button works like E; a swipe through both lines takes both.
-  await ui.click('#eraser'); // off
-  await ui.click('#eraser'); // on
-  expect(await page.locator('#eraser').getAttribute('aria-pressed')).toBe('true');
+  // The eraser in the pen's popover works like E; a swipe through both lines takes both.
+  await ui.pen('eraser'); // off
+  await expect(page.locator('#pen')).toHaveAttribute('data-color', 'red');
+  await ui.pen('eraser'); // on
+  await expect(page.locator('#pen')).toHaveAttribute('data-color', 'eraser');
   await ui.drag(line([0.3, 0.2], [0.3, 0.7]));
   expect(await live()).toEqual([]);
   await ui.key('z'); // brings back the later erase first
@@ -77,7 +78,7 @@ test('the eraser removes the line it crosses, recording or not; Z brings it back
 
   // A pen color switches back to the pen: a drag draws again.
   await ui.key('2');
-  expect(await page.locator('#eraser').getAttribute('aria-pressed')).toBe('false');
+  await expect(page.locator('#pen')).toHaveAttribute('data-color', 'yellow');
   await ui.drag(line([0.6, 0.3], [0.8, 0.3])); // id 3
   expect(await live()).toEqual([1, 2, 3]);
 

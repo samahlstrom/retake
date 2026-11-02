@@ -406,7 +406,7 @@ So slots are plain elements and the module runs in the page. A frame stays possi
 
 ## What an extension can never break
 
-1. **The review.** Pen only, R to record, and the pen does nothing unless recording. Core's key handler stays the
+1. **The review.** The pen, the comment box and R to record are core's (spec/notes.md, "Typed comments on a video"). Core's key handler stays the
    first listener (`onkeydowncapture` on the window, set before any module loads). It handles R, Space, Z, the pen
    keys, `>` and the rest wherever focus isn't in a text field, so a slot can't take them. No slot lies on the video,
    and `ctx` has nothing for the pen, takes or recording.

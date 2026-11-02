@@ -1,10 +1,10 @@
 // New: the phone layout, in Chromium's mobile emulation (touch, isMobile, a coarse pointer) at 390x844 portrait and
 // 844x390 landscape, driven by taps and real touch drags. The desktop layout is what the other specs run (1920x1080).
 //
-// For each orientation: the page fits (no horizontal overflow), the controls are visible thumb-sized tap targets,
-// a drag before recording draws nothing, Record records, the pen draws only while recording, undo, scrubbing the
-// timeline, the flip button (C) and its refusal past the preview's end, Done (the take validates against
-// spec/take.schema.json), and the version list.
+// For each orientation: the page fits (no horizontal overflow), the controls are visible thumb-sized tap targets
+// (the pen's colours too, in its popover), a drag without recording starts a typed comment (spec/notes.md, "Typed
+// comments on a video") that Cancel drops, Record records and the pen draws into the take, undo, scrubbing the
+// timeline, Send (the take validates against spec/take.schema.json), and the version list.
 // Then iOS Safari's recorder: it records only audio/mp4, and the segment is saved as seg_01.m4a.
 import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { join } from 'node:path';
@@ -22,7 +22,7 @@ const recording = () => !!window.__review.seg;
 const notSaving = () => window.__review.take.closed && !window.__review.take.saving;
 
 /** The tap targets the phone layout must have (and the e2e names them by). */
-const CONTROLS = ['#rec', '#done', '#undo', '#play'];
+const CONTROLS = ['#rec', '#done', '#undo', '#play', '#pen'];
 
 interface Phone {
   fam: Family;
@@ -104,8 +104,13 @@ for (const o of [{ name: 'portrait', width: 390, height: 844 }, { name: 'landsca
       expect(await p.page.evaluate(overflowing)).toEqual([]);
     });
 
-    test('Record, Done, undo and play are visible thumb-sized targets', async () => {
-      for (const sel of [...CONTROLS, '.sw[data-color=red]', '.sw[data-color=white]']) {
+    test('Record, Send, undo, play, the pen and its colours are visible thumb-sized targets', async () => {
+      const sels = [...CONTROLS, 'open the pen', '.sw[data-color=red]', '.sw[data-color=white]', '#eraser'];
+      for (const sel of sels) {
+        if (sel === 'open the pen') {
+          await p.ui.tap('#pen');
+          continue;
+        }
         const el = p.page.locator(sel);
         await expect(el, sel).toBeVisible();
         const b = (await el.boundingBox())!;
@@ -116,6 +121,8 @@ for (const o of [{ name: 'portrait', width: 390, height: 844 }, { name: 'landsca
         expect(b.x + b.width, `${sel} right`).toBeLessThanOrEqual(o.width);
         expect(b.y + b.height, `${sel} bottom`).toBeLessThanOrEqual(o.height);
       }
+      await p.page.keyboard.press('Escape'); // the pen's popover closes
+      await expect(p.page.locator('.pen-pop')).toHaveCount(0);
       // The timeline: a tall hit area, and wide (not a stub next to the other controls).
       const tl = (await p.page.locator('#timeline').boundingBox())!;
       expect(tl.height).toBeGreaterThanOrEqual(44);
@@ -126,16 +133,23 @@ for (const o of [{ name: 'portrait', width: 390, height: 844 }, { name: 'landsca
       else expect(ink.height).toBeGreaterThan(0.8 * o.height);
     });
 
-    test('a touch hint until the first record; a drag before recording draws nothing', async () => {
+    test('a touch hint until the first comment; a drag without recording starts a typed comment', async () => {
       const hint = p.page.locator('#hint');
-      await expect(hint).toHaveText('Tap ● to record · draw while recording');
+      await expect(hint).toHaveText('Draw on the video or type to comment · Record to talk');
       await expect(hint).not.toHaveClass(/gone/);
       await p.ui.touchDrag(loop(0.5, 0.5, 0.08));
       await sleep(300);
       const s = await p.ui.state();
-      expect(s).toMatchObject({ take: null, strokes: 0, rec: false, toast: 'Tap ● to record before drawing' });
+      expect(s).toMatchObject({ take: null, strokes: 0, rec: false, toast: '', paused: true });
+      expect(await p.page.evaluate(() => window.__review.draft?.lines)).toBe(1);
+      await expect(hint).toHaveClass(/gone/);
       // The drag neither scrolled nor zoomed the page.
       expect(await p.page.evaluate(() => [scrollX, scrollY, visualViewport?.scale ?? 1])).toEqual([0, 0, 1]);
+      // Portrait opened the comments with the box at their bottom: Cancel drops the comment and its line. Landscape
+      // keeps the video clear (the comments are an overlay there); Esc drops it.
+      if (o.name === 'portrait') await p.ui.tap('#side [data-part~="comment-line"] button:has-text("Cancel")');
+      else await p.page.keyboard.press('Escape');
+      expect(await p.page.evaluate(() => window.__review.draft ?? null)).toBeNull();
     });
 
     test('tapping Record records; the pen draws while recording; undo removes the last stroke', async () => {
@@ -148,10 +162,10 @@ for (const o of [{ name: 'portrait', width: 390, height: 844 }, { name: 'landsca
       await expect(p.page.locator('#hint')).toHaveClass(/gone/);
       await expect(p.page.locator('#recLabel')).toHaveText(/^REC \d:\d\d$/);
       await expect(p.page.locator('#recKey')).toHaveText('S1');
-      await p.ui.tap('.sw[data-color=green]');
-      expect(await p.page.evaluate(() => document.querySelector('.sw.on')?.getAttribute('data-color'))).toBe('green');
+      await p.ui.pen('green', true);
+      await expect(p.page.locator('#pen')).toHaveAttribute('data-color', 'green');
       await p.ui.touchDrag(loop(0.3, 0.45));
-      await p.ui.tap('.sw[data-color=yellow]');
+      await p.ui.pen('yellow', true);
       await p.ui.touchDrag(line([0.55, 0.3], [0.8, 0.35]));
       await sleep(200);
       const strokes = () => p.page.evaluate(() => window.__review.take.strokes.map((s) => {
@@ -183,13 +197,14 @@ for (const o of [{ name: 'portrait', width: 390, height: 844 }, { name: 'landsca
     test('Send saves the take; its files validate against spec/take.schema.json', async () => {
       await p.ui.tap('#rec'); // stop
       await p.ui.waitFor(() => !window.__review.seg, 5000);
-      // This server's own worker can't edit (a plain video): Send saves, and points at the agent menu for why.
-      await expect(p.page.locator('#done')).toHaveText(/^Send( \d+)? to agent$/);
+      // This server's own worker can't edit (no agent here): Send saves, and one line over it says why.
+      await expect(p.page.locator('#done')).toHaveText('Send');
+      await expect(p.page.locator('[data-part~="send-notice"]')).toContainText('agent');
       await p.ui.tap('#done');
       await p.ui.waitFor(notSaving, 10_000);
       await expect(p.page.locator('#done')).toHaveText('Saved');
-      expect((await p.ui.state()).toast).toBe('Saved. The agent can’t edit this project yet: its menu says why.');
-      await expect(p.page.locator('.agent-pop')).toHaveCount(0);
+      expect((await p.ui.state()).toast).toBe('Saved. The agent can’t edit this project yet.');
+      await expect(p.page.locator('[data-part~="agent-picker"]')).toHaveCount(0);
       const dirs = takeDirs(join(p.fam.dir, 'v6', 'clip_v6.review'));
       expect(dirs).toHaveLength(1);
       validateTakeDir(dirs[0]!);

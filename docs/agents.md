@@ -24,7 +24,7 @@ from people you'd let use your computer that way. To keep tighter permissions, a
 
 What it needs: Claude Code or Codex installed and signed in. A timeline project (`edit/timeline.json`, or
 `[edit] timeline` in the project's `retake.toml`) also needs `retake-edit` ([timeline.md](timeline.md)). When
-something is missing, the agent menu next to Send says what, and it picks the fix up within 15 seconds without a
+something is missing, one line over Send says what, and it picks the fix up within 15 seconds without a
 restart.
 
 A folder of finished videos with no timeline (`clip_v1.mp4`, `clip_v2.mp4`) works too: the agent makes the change

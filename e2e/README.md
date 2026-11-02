@@ -80,7 +80,8 @@ leave out Safari's toolbars); the default run (`chromium`) is unchanged and skip
 checks. It runs against both servers.
 - **Family.** v5, v6 and the v7 preview are found (legacy; this server opens the newest version, so its family is v5
   and v6). The newer draft decoy is skipped.
-- **A.** Without recording, play works and a drag draws nothing: no stroke, no take, and the "Press R" hint shows.
+- **A.** Without recording, play works and a drag makes no take and no stroke of a take. Legacy: the "Press R" hint
+  shows. This one: the drag starts a typed comment there, which pauses the video, and Esc drops it.
 - **S1–S4.**
   - R-gated recording and pen.
   - An unrecorded loop whose speech and drag are dropped.
@@ -150,13 +151,13 @@ pointer), driven by taps and real touch drags (CDP touch events). There is no We
 WebKit build needs Ubuntu's libicu74, libxml2 and libflite1, and doesn't launch on hosts without them (Arch, say).
 - At 390x844 portrait and 844x390 landscape:
   - The page is in the phone layout and fits: no horizontal overflow, nothing scrolls.
-  - Record, Done, flip, undo, play, the version chip and the pen colors are visible, inside the viewport and at
-    least 44 px. The timeline is at least 44 px tall and wide. The video is full width (portrait) or nearly the full
-    height (landscape).
-  - The touch hint shows until the first record. A drag before recording draws nothing and shows "Tap ● to record
-    before drawing". Drags neither scroll nor zoom the page.
-  - Tapping Record opens a segment without moving the video. The pen draws in the tapped color only while
-    recording, and Undo removes the last stroke.
+  - Record, Send, undo, play, the version chip, the pen and (in its popover) the pen colors and the eraser are
+    visible, inside the viewport and at least 44 px. The timeline is at least 44 px tall and wide. The video is full
+    width (portrait) or nearly the full height (landscape).
+  - The touch hint shows until the first comment. A drag without recording starts a typed comment (the video pauses,
+    no take starts), and Cancel (portrait) or Esc drops it. Drags neither scroll nor zoom the page.
+  - Tapping Record opens a segment without moving the video. The pen draws into the take in the color picked from
+    its popover, and Undo removes the last stroke.
   - A thumb drag on the timeline scrubs.
   - The flip button switches to v7 at the same time (within 40 ms) and back. Past the v7 preview's end it shows as
     disabled, and a tap gets C's refusal toast.
@@ -233,3 +234,22 @@ and a plain video, on the iPhone 13 and iPhone 15:
 - The top bar fits: back on the left, the document's ⋯ at the right edge and the comments toggle (an icon, and the
   to-do count once there is one) just left of it, none overlapping, each at least 40 px.
 - Screenshots: `.retake-work/ignition-shots/webkit-<doc|drawer|doc-todo|video|home>-<device>.png`.
+
+**`21-comment`** (new only; `spec/notes.md`, "Typed comments on a video", and `spec/automation.md`, "HTTP and UI"):
+`retake open <folder>` with a scratch config of two fake agents (their program is `true`), desktop Chromium.
+- Idle: play, time, timeline, version, the pen, Record (a mic with the red dot, "Record voice (R)"), Send and ?; no
+  agent's name anywhere in the bar; the comments header is a speech bubble, the version and To do · Done.
+- The pen: one button opens the four colours and the eraser; its icon takes the colour, and the eraser glyph with E.
+- A typed comment with a drawing and no recording: the video pauses, the line goes with the comment, Z undoes it,
+  the playhead moves freely, Enter saves a note (`doc/1`) with its time, its line and a JPEG still, and no take is
+  made; its card says Open and "→ v7". Esc drops a comment with its lines; a drawing alone saves with Enter.
+- Recording: REC and the time, the pen draws into the take, and nothing in the bar moves (the boxes are equal).
+- The comments' version menu says "v6 → v7" and the to-do count, and switches versions.
+- Send says Send (the count in its title); held with two agents it lists them, nothing is sent until one is picked,
+  and the tasks run the picked agent ("Sent to v7."). With one agent (a second server) holding Send is a plain Send.
+- Screenshots of each state and of the home's Settings go to `.retake-work/review2-shots/` (`RETAKE_E2E_SHOTS`).
+
+**`21-review-webkit`** (new only; WebKit only, `RETAKE_E2E_WEBKIT`): the same review page on the iPhone 13 and
+iPhone 15: every control at least 40 px and inside the screen and the visual viewport, nothing sideways; the pen's
+popover; a typed comment with a drawing, saved with its Save; the version menu; recording (a Web Audio stand-in for
+the microphone, and a stand-in recorder where WebKit has none), with Send not moving; and the home's Settings.
