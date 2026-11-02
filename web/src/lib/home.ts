@@ -59,7 +59,6 @@ export interface HomeResponse {
   projects: Card[];
   /** The folders, projects and videos. An older server sends none: then every video is at the top. */
   tree: TreeNode;
-  workspace?: Workspace;
   /** C5: the editing computers. Absent on an older server. */
   machines?: Machine[];
   /** The signed-in person on a hosted server (the team server). Its presence means hosted mode. */
@@ -70,18 +69,6 @@ export interface HomeResponse {
  * Local mode never shows it (the computer is the server). */
 export const needsComputer = (h: Pick<HomeResponse, 'user' | 'role' | 'machines'>): boolean =>
   !!h.user && h.role === 'owner' && Array.isArray(h.machines) && !h.machines.some((m) => m.online);
-
-export interface WorkspaceProject {
-  id: string;
-  title: string;
-  groups: { id: string; title: string }[];
-}
-
-export interface Workspace {
-  revision: number;
-  projects: WorkspaceProject[];
-  placements: { video: string; project: string; group: string }[];
-}
 
 export const STATUS_TEXT: Record<Status, string> = {
   to_review: 'To review',
@@ -166,8 +153,6 @@ export function normalizeHome(body: unknown): HomeResponse {
   const tree = normalizeNode(b.tree, byName, 0) ?? { title, path: '', project: false, videos: projects, children: [] };
   tree.title ||= title;
   const result: HomeResponse = { title, folder: str(b.folder) || undefined, role: str(b.role), projects, tree };
-  const w = b.workspace as Workspace | undefined;
-  if (w && Array.isArray(w.projects) && Array.isArray(w.placements)) result.workspace = w;
   if (b.user && typeof b.user === 'object') {
     const u = b.user as Record<string, unknown>;
     result.user = { email: str(u.email), name: str(u.name) };
