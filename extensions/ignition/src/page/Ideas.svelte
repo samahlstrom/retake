@@ -7,6 +7,7 @@
   import { ideasOf, projectsOf, type Project } from '../lib/ideas';
   import { sayError } from '../lib/errors';
   import { ago } from '../lib/stamp';
+  import { folderOf, OLD, pickDoc } from '../lib/v0';
 
   let { ctx }: { ctx: Ctx } = $props();
 
@@ -41,7 +42,11 @@
       while (next < rows.length) {
         const r = rows[next++]!;
         try {
-          const md = await (await ctx.files(r.card.name).read('v0/idea.md')).text();
+          const f = ctx.files(r.card.name);
+          const paths = (await f.list('v0/*')).map((x) => x.path);
+          const doc = pickDoc(paths, folderOf(r.card)) ?? (paths.includes(OLD.idea) ? OLD.idea : null);
+          if (!doc) continue;
+          const md = await (await f.read(doc)).text();
           r.title = titleOf(md) || r.card.title;
           r.lines = firstLines(md, 2);
         } catch {

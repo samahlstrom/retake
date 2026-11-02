@@ -98,7 +98,7 @@ describe('New idea', () => {
     expect(offline({ machines: [] })).toBe(false);
   });
 
-  it('makes <project>/<slug>/v0/idea.md with the title and a blank line', async () => {
+  it('makes <project>/<slug>/v0/<slug>_v0.md with the title and a blank line', async () => {
     const calls: unknown[] = [];
     const ctx = {
       createVideo: async (v: { project: string; name: string; files: Record<string, string> }) => {
@@ -110,21 +110,26 @@ describe('New idea', () => {
       name: 'vlog/jump-souls',
       url: 'p/vlog%2Fjump-souls/',
     });
-    expect(calls).toEqual([{ project: 'vlog', name: 'jump-souls', files: { 'v0/idea.md': '# Jump souls!\n\n' } }]);
+    expect(calls).toEqual([
+      { project: 'vlog', name: 'jump-souls', files: { 'v0/jump-souls_v0.md': '# Jump souls!\n\n' } },
+    ]);
     expect(ideaFile('A')).toBe('# A\n\n');
   });
 
   it('tries -2, -3, … while the folder exists', async () => {
     const names: string[] = [];
+    const files: string[][] = [];
     const ctx = {
-      createVideo: async (v: { name: string }) => {
+      createVideo: async (v: { name: string; files: Record<string, string> }) => {
         names.push(v.name);
+        files.push(Object.keys(v.files));
         if (names.length < 3) throw Object.assign(new Error('exists'), { status: 409 });
         return { name: v.name, url: '' };
       },
     };
     expect((await createIdea(ctx, { project: '', title: 'Jump' })).name).toBe('jump-3');
     expect(names).toEqual(['jump', 'jump-2', 'jump-3']);
+    expect(files.at(-1)).toEqual(['v0/jump-3_v0.md']);
   });
 
   it('gives up on anything else (an offline computer)', async () => {

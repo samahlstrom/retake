@@ -1,13 +1,22 @@
 /* Ignition's look (built to ui/ignition.css; the page imports it into @layer ext.ignition, after the built-in CSS and
    before the user's theme). Every selector starts with [data-ext='ignition'], every colour and font is a Theme API
-   token (spec/theme.md), and every class starts with ig- so the page's own rules (#side .item, .tabs …) can't reach
-   in. No @keyframes: the pulse is the page's dot-pulse. */
+   token (spec/theme.md), and every class starts with ig- so the page's own rules can't reach in. Nothing is ever wider
+   than the screen: every box is border-box and the editor never scrolls sideways. */
 
 /* ---------------------------------------------------------------- the slots and resets */
+[data-ext='ignition'],
+[data-ext='ignition'] *,
+[data-ext='ignition'] *::before,
+[data-ext='ignition'] *::after {
+  box-sizing: border-box;
+}
 [data-ext='ignition'][data-slot='version'],
 [data-ext='ignition'][data-slot='sidebar-tab'] {
   height: 100%;
   min-height: 0;
+}
+[data-ext='ignition'][data-slot='version'] {
+  overflow: hidden;
 }
 [data-ext='ignition'] button,
 [data-ext='ignition'] input,
@@ -34,9 +43,6 @@
   outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
-[data-ext='ignition'] .ig-grow {
-  flex: 1;
-}
 [data-ext='ignition'] .ig-link {
   padding: 0 2px;
   border: 0;
@@ -50,48 +56,37 @@
   text-decoration: underline;
   text-underline-offset: 3px;
 }
-[data-ext='ignition'] .ig-quiet {
-  color: var(--muted);
-}
 [data-ext='ignition'] .ig-err {
   margin: 0 0 16px;
   color: var(--danger);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.5;
 }
 [data-ext='ignition'] .ig-warn {
   margin: 0;
   color: var(--warn);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.5;
 }
 [data-ext='ignition'] .ig-empty {
   margin: 48px 0;
   color: var(--text-3);
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.6;
 }
-[data-ext='ignition'] .ig-x {
-  display: inline-grid;
-  place-items: center;
-  flex: none;
-  width: 20px;
-  height: 20px;
+[data-ext='ignition'] code {
+  padding: 1px 5px;
   border-radius: var(--radius-sm);
-  color: var(--faint);
-  font-size: 15px;
-  line-height: 1;
-}
-[data-ext='ignition'] .ig-x:hover {
-  color: var(--text);
-  background: color-mix(in srgb, var(--overlay) 6%, transparent);
+  background: var(--surface-control);
+  color: var(--text-2);
+  font: 0.92em var(--font-mono);
 }
 
 /* ---------------------------------------------------------------- buttons (the home's look) */
 [data-ext='ignition'] .ig-primary,
 [data-ext='ignition'] .ig-button {
-  min-height: 38px;
-  padding: 9px 16px;
+  min-height: 40px;
+  padding: 9px 18px;
   border: 1px solid transparent;
   border-radius: var(--radius);
   font-weight: 600;
@@ -119,8 +114,10 @@
 
 /* ---------------------------------------------------------------- the page: ideas and New idea */
 [data-ext='ignition'] .ig-page {
+  max-width: 100%;
   color: var(--text);
   font-family: var(--font-ui);
+  overflow-wrap: anywhere;
 }
 [data-ext='ignition'] .ig-head {
   display: flex;
@@ -128,7 +125,7 @@
   justify-content: space-between;
   gap: 16px;
   max-width: 760px;
-  margin: 0 0 24px;
+  margin: 0 0 20px;
 }
 [data-ext='ignition'] .ig-h1 {
   margin: 0;
@@ -146,6 +143,7 @@
 [data-ext='ignition'] .ig-idea {
   display: grid;
   gap: 4px;
+  min-width: 0;
   padding: 16px 12px 18px;
   margin: 0 -12px;
   border-bottom: 1px solid var(--line);
@@ -158,7 +156,7 @@
   background: color-mix(in srgb, var(--overlay) 3%, transparent);
 }
 [data-ext='ignition'] .ig-idea-title {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -166,7 +164,7 @@
 }
 [data-ext='ignition'] .ig-idea-meta {
   color: var(--muted);
-  font-size: 12.5px;
+  font-size: 13px;
   font-variant-numeric: tabular-nums;
 }
 [data-ext='ignition'] .ig-sep {
@@ -175,7 +173,7 @@
 }
 [data-ext='ignition'] .ig-idea-line {
   color: var(--text-4);
-  font-size: 13.5px;
+  font-size: 14px;
   line-height: 1.5;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -185,30 +183,34 @@
 [data-ext='ignition'] .ig-new {
   display: grid;
   gap: 18px;
+  width: 100%;
   max-width: 520px;
   color: var(--text);
   font-family: var(--font-ui);
 }
 [data-ext='ignition'] .ig-new .ig-h1 {
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 [data-ext='ignition'] .ig-field {
   display: grid;
-  gap: 7px;
+  gap: 8px;
+  min-width: 0;
 }
 [data-ext='ignition'] .ig-field > span {
   color: var(--muted);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 [data-ext='ignition'] .ig-input,
 [data-ext='ignition'] .ig-select {
   width: 100%;
-  min-height: 40px;
+  min-width: 0;
+  min-height: 42px;
   padding: 9px 12px;
   border: 1px solid color-mix(in srgb, var(--overlay) 11%, transparent);
   border-radius: var(--radius);
   background: var(--surface-control);
   color: var(--text);
+  font-size: 15px;
   outline: none;
   user-select: text;
 }
@@ -226,8 +228,9 @@
 [data-ext='ignition'] .ig-where {
   margin: -8px 0 0;
   min-height: 1.5em;
-  color: var(--faint);
-  font: 12px / 1.5 var(--font-mono);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
   overflow-wrap: anywhere;
 }
 [data-ext='ignition'] .ig-actions {
@@ -237,204 +240,99 @@
   gap: 10px;
 }
 [data-ext='ignition'] .ig-cancel {
-  margin-left: 8px;
+  min-height: 40px;
+  padding: 0 10px;
   color: var(--muted);
   font-weight: 500;
 }
 
 /* ---------------------------------------------------------------- the editor (the version slot) */
-/* The page's back link ("← Project › video") sits over the slot's top-left corner: the header starts under it. */
+/* The one document fills the slot, top to bottom, and scrolls inside itself. Core's back link (top left) and, on a
+   phone, its comments pill (top right) float over the top: the text starts under them. */
 [data-ext='ignition'] .ig-ed {
+  position: absolute;
+  inset: 0;
+  isolation: isolate; /* its layers stay under core's toast, back link and pills */
   display: flex;
   flex-direction: column;
-  height: 100%;
-  min-height: 0;
-  padding-top: 44px;
+  overflow: hidden;
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-ui);
 }
-[data-ext='ignition'] .ig-bar {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  height: 52px;
-  padding: 0 var(--bar-padding);
-  border-bottom: 1px solid var(--line);
-}
-[data-ext='ignition'] .ig-tabs {
-  display: flex;
-  align-self: stretch;
-  gap: 22px;
-}
-[data-ext='ignition'] .ig-tab {
-  position: relative;
-  display: flex;
-  align-items: center;
-  color: var(--muted);
-  font-size: 13.5px;
-  font-weight: 500;
-}
-[data-ext='ignition'] .ig-tab:hover {
-  color: var(--text-4);
-}
-[data-ext='ignition'] .ig-tab.ig-on {
-  color: var(--text);
-}
-[data-ext='ignition'] .ig-tab.ig-on::after {
+/* The text scrolls away under a fade at the top, so it never runs into the back link, ⋯ or the comments pill. */
+[data-ext='ignition'] .ig-ed::before {
   content: '';
   position: absolute;
+  top: 0;
   left: 0;
   right: 0;
-  bottom: -1px;
-  height: 2px;
-  border-radius: 1px;
-  background: var(--text);
-}
-[data-ext='ignition'] .ig-agent-edit {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 4px;
-  min-width: 0;
-  color: var(--agent-text);
-  font-size: 12.5px;
-  white-space: nowrap;
-}
-[data-ext='ignition'] .ig-agent-edit > span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-[data-ext='ignition'] .ig-start {
-  flex: none;
-  height: 30px;
-  padding: 0 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  color: var(--text);
-  font-size: 12.5px;
-  font-weight: 600;
-}
-[data-ext='ignition'] .ig-start:hover {
-  border-color: var(--border-hover);
-}
-/* The saved-state word: a fixed width, so a longer word never moves anything. */
-[data-ext='ignition'] .ig-word {
-  flex: none;
-  width: 64px;
-  color: var(--faint);
-  font-size: 12px;
-  text-align: right;
-  white-space: nowrap;
-}
-
-[data-ext='ignition'] .ig-body {
-  position: relative;
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
+  z-index: 2;
+  height: 60px;
+  background: linear-gradient(var(--bg) 72%, transparent);
+  pointer-events: none;
 }
 [data-ext='ignition'] .ig-scroll {
   flex: 1;
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
-/* One readable column, 72 characters wide; the left padding is the questions' margin. */
 [data-ext='ignition'] .ig-col {
-  max-width: calc(72ch + 88px);
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 100%;
+  max-width: calc(70ch + 80px);
   margin: 0 auto;
-  padding: 28px 40px 0 48px;
-  font-size: calc(var(--font-size) + 2px);
+  padding: 68px 40px 0;
+  font-size: calc(var(--font-size) * 17 / 13);
+  line-height: 1.6;
 }
-[data-ext='ignition'] .ig-crumb {
-  margin: 0 0 16px;
-  color: var(--muted);
-  font-size: 12.5px;
-}
-[data-ext='ignition'] .ig-loading,
-[data-ext='ignition'] .ig-offline {
-  margin: 24px 0;
-  font-size: 13.5px;
-}
-[data-ext='ignition'] .ig-offline {
-  color: var(--warn);
-}
-[data-ext='ignition'] .ig-offline code,
-[data-ext='ignition'] .ig-script-note code {
-  color: var(--text);
-  font-family: var(--font-mono);
-  font-size: 0.92em;
-}
-
-/* One line over the text (an outside edit, a failed save): it covers, it never pushes. */
-[data-ext='ignition'] .ig-note {
-  position: absolute;
-  top: 12px;
-  left: 50%;
-  z-index: 3;
-  transform: translateX(-50%);
-  max-width: calc(100% - 24px);
-  padding: 7px 14px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-pill);
-  background: var(--surface-popover);
-  box-shadow: 0 8px 28px color-mix(in srgb, var(--shadow) 45%, transparent);
-  color: var(--text-2);
-  font-size: 12.5px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-[data-ext='ignition'] .ig-note-err {
-  color: var(--danger);
-}
-
-/* The text: a textarea under a mirror of it (editor/TextPane.svelte). Both are laid out alike to the pixel. */
 [data-ext='ignition'] .ig-paper {
   position: relative;
-  display: grid;
+  flex: 1 0 auto;
+  width: 100%;
+  min-width: 0;
 }
+/* The textarea covers the whole paper (a tap anywhere under the text lands in it); the mirror, in the flow, gives the
+   paper its height. Both lay the text out the same way. */
 [data-ext='ignition'] .ig-text,
 [data-ext='ignition'] .ig-mirror {
-  grid-area: 1 / 1;
   width: 100%;
   margin: 0;
-  padding: 0 0 35vh;
+  padding: 0;
   border: 0;
   font-family: var(--font-ui);
-  font-size: calc(var(--font-size) + 2px);
+  font-size: inherit;
   font-weight: 400;
   font-style: normal;
-  line-height: 1.65;
+  line-height: inherit;
   letter-spacing: normal;
   word-spacing: normal;
   text-align: left;
   text-indent: 0;
   text-transform: none;
-  tab-size: 4;
-  /* Plain text shows as typed: no ligatures or contextual arrows (Inter draws "->" as an arrow). */
-  font-variant-ligatures: none;
-  font-feature-settings:
-    'calt' 0,
-    'liga' 0;
   white-space: pre-wrap;
   overflow-wrap: break-word;
   word-break: normal;
+  tab-size: 4;
 }
 [data-ext='ignition'] .ig-text {
-  position: relative;
+  position: absolute;
+  inset: 0;
   z-index: 0;
   display: block;
-  min-height: 50vh;
+  height: 100%;
   overflow: hidden;
   resize: none;
   outline: none;
   background: transparent;
   color: transparent;
-  caret-color: var(--text);
+  caret-color: var(--text-strong);
   user-select: text;
+  -webkit-user-select: text;
 }
 [data-ext='ignition'] .ig-text[readonly] {
   caret-color: transparent;
@@ -446,246 +344,118 @@
 [data-ext='ignition'] .ig-mirror {
   position: relative;
   z-index: 1;
+  padding-bottom: 40vh;
   pointer-events: none;
   user-select: none;
+  -webkit-user-select: none;
   color: var(--text-2);
 }
 [data-ext='ignition'] .ig-ln {
-  position: relative;
-}
-[data-ext='ignition'] .ig-ln-on {
   border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--status-question) 12%, transparent);
+  transition: background 0.6s ease;
 }
-/* Headings: stronger, not larger. A textarea has one font size, and a larger mirror line would put the caret beside
+/* Headings: bold, not larger. A textarea has one font size, and a wider or larger mirror line would put the caret beside
    its letters; the stroke thickens the letters without moving them. */
 [data-ext='ignition'] .ig-h {
   color: var(--text-strong);
-  -webkit-text-stroke: 0.03em currentColor;
-}
-[data-ext='ignition'] .ig-h.ig-lv1 {
-  -webkit-text-stroke-width: 0.045em;
+  -webkit-text-stroke: 0.035em currentColor;
 }
 [data-ext='ignition'] .ig-h .ig-hm {
   color: var(--faint);
   -webkit-text-stroke-width: 0;
 }
-[data-ext='ignition'] .ig-mark {
-  position: absolute;
-  top: calc(0.825em - 9px);
-  left: -32px;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: var(--status-question);
-  color: var(--agent-ink);
-  font: 700 11px / 18px var(--font-ui);
-  text-align: center;
-  -webkit-text-stroke-width: 0;
-  pointer-events: auto;
-  user-select: none;
+[data-ext='ignition'] .ig-flash {
+  background: color-mix(in srgb, var(--focus) 18%, transparent);
 }
-[data-ext='ignition'] .ig-mark:hover,
-[data-ext='ignition'] .ig-mark.ig-on {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-question) 35%, transparent);
-}
-[data-ext='ignition'] .ig-chip {
-  position: absolute;
-  margin: calc(0.825em - 8px) 0 0 12px;
-  height: 20px;
-  padding: 0 7px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface-raised);
-  color: var(--muted);
-  font: 500 11.5px / 18px var(--font-mono);
-  white-space: nowrap;
-  -webkit-text-stroke-width: 0;
-  pointer-events: auto;
-  user-select: none;
-}
-[data-ext='ignition'] .ig-chip:hover {
-  border-color: var(--border-hover);
-  color: var(--text);
-}
-
-/* The ask box, under the text. */
-[data-ext='ignition'] .ig-ask {
-  flex: none;
-  padding: 10px 0 14px;
-  border-top: 1px solid var(--line);
-  background: var(--bg);
-}
-[data-ext='ignition'] .ig-ask .ig-col {
-  padding-top: 0;
-}
-[data-ext='ignition'] .ig-about,
-[data-ext='ignition'] .ig-answering {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 20px;
-  margin: 0 0 6px;
-  font-size: 12px;
-  white-space: nowrap;
-}
-[data-ext='ignition'] .ig-about {
-  color: var(--muted);
-}
-[data-ext='ignition'] .ig-answering {
-  color: var(--agent-text);
-}
-[data-ext='ignition'] .ig-about-text,
-[data-ext='ignition'] .ig-answering-text {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-[data-ext='ignition'] .ig-qdot {
-  flex: none;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--status-question);
-}
-[data-ext='ignition'] .ig-recording .ig-qdot {
-  animation: dot-pulse 1.4s ease-in-out infinite;
-}
-[data-ext='ignition'] .ig-ask-box {
-  position: relative;
-}
-[data-ext='ignition'] .ig-ask-input {
-  display: block;
-  width: 100%;
-  min-height: 40px;
-  max-height: 160px;
-  field-sizing: content;
-  padding: 10px 150px 10px 12px;
-  border: 1px solid color-mix(in srgb, var(--overlay) 12%, transparent);
-  border-radius: var(--radius);
-  background: var(--surface-control);
-  color: var(--text);
-  font-size: 13.5px;
-  line-height: 1.45;
-  resize: none;
-  outline: none;
-  user-select: text;
-}
-[data-ext='ignition'] .ig-ask-input:focus {
-  border-color: color-mix(in srgb, var(--focus) 55%, transparent);
-}
-[data-ext='ignition'] .ig-ask-input::placeholder {
-  color: var(--faint);
-}
-[data-ext='ignition'] .ig-keys {
-  position: absolute;
-  right: 12px;
-  bottom: 11px;
-  color: var(--faint);
-  font-size: 11.5px;
-  pointer-events: none;
-}
-
-/* Refs */
-[data-ext='ignition'] .ig-refs {
-  min-height: 100%;
-  transition: background 0.15s ease;
-}
-[data-ext='ignition'] .ig-refs.ig-over {
-  outline: 2px dashed color-mix(in srgb, var(--focus) 55%, transparent);
-  outline-offset: -12px;
-  background: color-mix(in srgb, var(--focus) 4%, transparent);
-}
-[data-ext='ignition'] .ig-refs-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  margin: 0 0 10px;
-  color: var(--muted);
-  font-size: 12.5px;
-}
-[data-ext='ignition'] .ig-files,
-[data-ext='ignition'] .ig-talks {
-  list-style: none;
+[data-ext='ignition'] .ig-note {
   margin: 0;
-  padding: 0 0 48px;
+  color: var(--text-3);
+  font-size: 15px;
+  line-height: 1.6;
 }
-[data-ext='ignition'] .ig-file {
-  padding: 11px 0 12px;
-  border-bottom: 1px solid var(--line);
+
+/* "Not saved · Retry", "Changed outside Retake · Reload · Keep mine": a quiet line over the bottom of the text. */
+[data-ext='ignition'] .ig-status {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  z-index: 3;
+  max-width: calc(100% - 24px);
+  transform: translateX(-50%);
+  padding: 8px 14px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--scrim) 88%, transparent);
+  color: var(--on-scrim);
+  font-size: 13.5px;
+  line-height: 1.4;
+  text-align: center;
+  backdrop-filter: blur(10px);
 }
-[data-ext='ignition'] .ig-file-line {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
+
+/* ⋯ and its menu, at the top right of the document (clear of core's pills: the editor sets `right`). */
+[data-ext='ignition'] .ig-more {
+  position: absolute;
+  top: 12px;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--scrim) 72%, transparent);
+  color: var(--on-scrim);
+  backdrop-filter: blur(10px);
+  opacity: 0.75;
+  transition:
+    opacity 0.15s ease,
+    color 0.15s ease;
 }
-[data-ext='ignition'] .ig-file-name {
-  min-width: 0;
+[data-ext='ignition'] .ig-more:hover,
+[data-ext='ignition'] .ig-more.ig-on {
+  color: var(--on-scrim-strong);
+  opacity: 1;
+}
+[data-ext='ignition'] .ig-more svg {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
+[data-ext='ignition'] .ig-menu {
+  position: absolute;
+  top: 54px;
+  z-index: 4;
+  display: grid;
+  width: max-content;
+  min-width: 240px;
+  max-width: calc(100% - 16px);
+  padding: 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface-popover);
+  box-shadow: 0 12px 36px color-mix(in srgb, var(--shadow) 50%, transparent);
+  outline: none;
+}
+[data-ext='ignition'] .ig-item {
+  display: grid;
+  gap: 2px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
   color: var(--text-2);
   font-size: 14px;
+  font-weight: 500;
   text-align: left;
-  text-decoration: none;
-  overflow-wrap: anywhere;
 }
-[data-ext='ignition'] .ig-file-name:hover {
+[data-ext='ignition'] .ig-item:hover,
+[data-ext='ignition'] .ig-item:focus-visible {
+  background: color-mix(in srgb, var(--overlay) 7%, transparent);
   color: var(--text-strong);
-  text-decoration: underline;
-  text-underline-offset: 3px;
+  outline: none;
 }
-[data-ext='ignition'] .ig-file-size {
-  margin-left: auto;
-  flex: none;
-  color: var(--faint);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-}
-[data-ext='ignition'] .ig-file-img {
-  display: block;
-  max-width: 100%;
-  max-height: 60vh;
-  margin: 10px 0 2px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-}
-
-/* Voice */
-[data-ext='ignition'] .ig-talk {
-  padding: 14px 0 16px;
-  border-bottom: 1px solid var(--line);
-}
-[data-ext='ignition'] .ig-talk-line {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  font-size: 12.5px;
-}
-[data-ext='ignition'] .ig-when {
-  color: var(--text-3);
-  font-weight: 600;
-}
-[data-ext='ignition'] .ig-dur {
-  color: var(--text-4);
-  font: 500 12px var(--font-mono);
-  font-variant-numeric: tabular-nums;
-}
-[data-ext='ignition'] .ig-audio {
-  display: block;
-  width: 100%;
-  height: 36px;
-  margin: 10px 0 8px;
-}
-[data-ext='ignition'] .ig-transcript {
-  margin: 0;
-  color: var(--text-2);
-  font-size: 13.5px;
-  line-height: 1.55;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  user-select: text;
-}
-[data-ext='ignition'] .ig-transcript.ig-quiet {
+[data-ext='ignition'] .ig-item-sub {
   color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 400;
 }
 
 /* ---------------------------------------------------------------- the Script tab (sidebar) */
@@ -775,33 +545,85 @@
   (max-height: 419.98px),
   (pointer: coarse) and (max-width: 900px),
   (pointer: coarse) and (max-height: 600px) {
-  [data-ext='ignition'] .ig-ed {
-    padding-top: 54px;
-  }
-  [data-ext='ignition'] .ig-bar {
-    gap: 12px;
-    padding: 0 12px;
-    overflow-x: auto;
-  }
-  [data-ext='ignition'] .ig-tabs {
-    gap: 16px;
-  }
   [data-ext='ignition'] .ig-col {
-    padding: 20px 16px 0 34px;
+    max-width: none;
+    padding: 64px 20px 0;
+    font-size: calc(var(--font-size) * 18 / 13);
   }
-  [data-ext='ignition'] .ig-mark {
-    left: -26px;
+  [data-ext='ignition'] .ig-mirror {
+    padding-bottom: 30vh;
   }
-  [data-ext='ignition'] .ig-keys {
-    display: none;
+  [data-ext='ignition'] .ig-more {
+    top: 8px;
+    width: 44px;
+    height: 44px;
   }
-  [data-ext='ignition'] .ig-ask-input {
-    padding-right: 12px;
+  [data-ext='ignition'] .ig-more svg {
+    width: 22px;
+    height: 22px;
+  }
+  [data-ext='ignition'] .ig-menu {
+    top: 60px;
+    min-width: min(280px, calc(100% - 16px));
+  }
+  [data-ext='ignition'] .ig-item {
+    min-height: 56px;
+    padding: 10px 14px;
+    font-size: 17px;
+  }
+  [data-ext='ignition'] .ig-item-sub {
+    font-size: 14px;
+  }
+  [data-ext='ignition'] .ig-status {
+    font-size: 15px;
+  }
+  [data-ext='ignition'] .ig-h1 {
+    font-size: 26px;
+  }
+  [data-ext='ignition'] .ig-idea {
+    margin: 0;
+    padding: 16px 0 18px;
+    border-radius: 0;
+  }
+  [data-ext='ignition'] .ig-idea-title {
+    font-size: 17px;
+  }
+  [data-ext='ignition'] .ig-idea-meta {
+    font-size: 14px;
+  }
+  [data-ext='ignition'] .ig-idea-line {
+    font-size: 15px;
+  }
+  [data-ext='ignition'] .ig-field > span,
+  [data-ext='ignition'] .ig-where {
+    font-size: 15px;
+  }
+  [data-ext='ignition'] .ig-ed::before {
+    height: 64px;
   }
   [data-ext='ignition'] .ig-primary,
   [data-ext='ignition'] .ig-button,
+  [data-ext='ignition'] .ig-cancel {
+    min-height: 48px;
+    font-size: 17px;
+  }
+  /* 17 px or more: Safari zooms into a field whose text is smaller than 16 px. */
   [data-ext='ignition'] .ig-input,
   [data-ext='ignition'] .ig-select {
-    min-height: 44px;
+    min-height: 48px;
+    font-size: 17px;
+  }
+  [data-ext='ignition'] .ig-actions .ig-primary,
+  [data-ext='ignition'] .ig-actions .ig-button {
+    flex: 1 1 140px;
+  }
+  [data-ext='ignition'] .ig-actions .ig-cancel {
+    flex: 1 1 100%;
+  }
+  [data-ext='ignition'] .ig-sec-h {
+    font-size: 16px;
+  }
+  [data-ext='ignition'] .ig-sec-p {
+    font-size: 15px;
   }
 }

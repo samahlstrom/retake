@@ -304,6 +304,7 @@ Versioning). Classes and ids are not part of the API and can change in any relea
 | `nav-ext-action` | Its + (the extension's action, such as New idea) | home |
 | `nav-ext-video` | A video in that section (an idea: only an extension's version) | home |
 | `ext-slot` | Where an extension's UI mounts; `data-ext` is its id, `data-slot` the slot | home, review |
+| `comment-line` | The line to type a comment for the agent on an extension's version ("Comment for the agent…") | review |
 | `brand` | The name (and logo) at the top left of the home | home |
 | `logo` | The theme's logo inside `brand` | home |
 | `brand-name` | The name inside `brand` | home |

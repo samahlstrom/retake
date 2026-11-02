@@ -1,5 +1,6 @@
-// The documents are plain Markdown (spec/ignition.md): headings are `#` lines, and that's all Ignition reads into them.
-// Pure text logic: headings, where an anchor is, the talk-out block, and keeping the caret when the text changes.
+// The document is plain Markdown (spec/ignition.md): headings are `#` lines, and that's all Ignition reads into it.
+// Pure text logic: headings, the anchor at the caret, finding an anchor again, putting a paragraph in, keeping the
+// caret when the text changes, an idea's title, and the script's sections.
 import type { Anchor } from '../types';
 
 export interface Heading {
@@ -86,8 +87,11 @@ export function paragraph(lines: string[], line: number): [number, number] | nul
   return [a, b];
 }
 
-/** A comment's anchor at the caret (spec/extensions.md, "Typed comments"): the line, the heading above it, and up to
- * 200 characters of the caret's paragraph (none on a heading or a blank line). */
+/**
+ * Where a comment typed in the comments column points (ctx.onAnchor; spec/extensions.md, "Typed comments"): the
+ * caret's line (from 1), the heading above it, and up to 200 characters of the caret's paragraph (none on a heading or
+ * a blank line).
+ */
 export function anchorAt(file: string, text: string, pos: number): Anchor {
   const lines = text.split('\n');
   const line = lineOf(text, pos);
@@ -119,8 +123,10 @@ function findQuote(lines: string[], quote: string, from: number, to: number): nu
   return -1;
 }
 
-/** Where an anchor is now (a line from 0): by its heading (and inside that section by its quote), then by its quote
- * anywhere, then by its line. -1 for an empty text. */
+/**
+ * Where an anchor is now (a line from 0), as `reveal` shows it: by its heading (and inside that section by its quote),
+ * then by its quote anywhere, then by its line. -1 for an empty text.
+ */
 export function findAnchor(text: string, a: Pick<Anchor, 'line' | 'heading' | 'quote'>): number {
   if (!text) return -1;
   const lines = text.split('\n');
@@ -145,28 +151,16 @@ export function findAnchor(text: string, a: Pick<Anchor, 'line' | 'heading' | 'q
   return Math.min(Math.max(0, line), lines.length - 1);
 }
 
-// ---------------------------------------------------------------- talk-outs
-
-/** Where a talk-out stands while its words are on the way. */
-export const TRANSCRIBING = '(transcribing…)';
-const MARKER = /^<!--\s*talk-out\s+(\S+)\s*-->\s*$/;
-
-/** The marker line of a talk-out: `<!-- talk-out voice/20261101-190211.webm -->`. */
-export const marker = (rel: string): string => `<!-- talk-out ${rel} -->`;
-
-/** A talk-out as it goes into a document: the marker line, then its words. */
-export const talkOutBlock = (rel: string, body: string): string => `${marker(rel)}\n${body.trim()}`;
-
-/** The talk-out a line marks (`voice/….webm`), or null. */
-export function talkOutOf(line: string): string | null {
-  return MARKER.exec(line)?.[1] ?? null;
-}
-
 /**
- * Puts a block in at the caret as a paragraph of its own: on the caret's line when it's blank, else after it, with a
- * blank line on each side. Returns the change, and the caret after the block.
+ * Puts a paragraph in at the caret, plainly: on the caret's line when it's blank, else after it, with a blank line on
+ * each side. Returns the new text, the change, where the paragraph starts and the caret after it.
  */
-export function insertBlock(text: string, pos: number, block: string): { text: string; splice: Splice; caret: number } {
+export function insertParagraph(
+  text: string,
+  pos: number,
+  para: string,
+): { text: string; splice: Splice; start: number; caret: number } {
+  const block = para.trim();
   const line = lineOf(text, pos);
   const lines = text.split('\n');
   const start = lineStart(text, line);
@@ -185,46 +179,8 @@ export function insertBlock(text: string, pos: number, block: string): { text: s
           ? '\n'
           : '\n\n';
   const ins = `${lead}${block}${tail}`;
-  return { text: pre + ins + post, splice: { at, del: 0, ins }, caret: at + lead.length + block.length };
-}
-
-/** The lines of a talk-out's words: those after its marker, up to a blank line, a heading or another marker. */
-function talkOutLines(lines: string[], rel: string): [number, number] | null {
-  const m = lines.findIndex((l) => talkOutOf(l) === rel);
-  if (m === -1) return null;
-  let end = m + 1;
-  while (end < lines.length && !blank(lines[end]) && !headingOf(lines[end]!) && !talkOutOf(lines[end]!)) end++;
-  return [m + 1, end];
-}
-
-/** The line (from 0) of a talk-out's marker, or -1. */
-export const talkOutLine = (text: string, rel: string): number =>
-  text.split('\n').findIndex((l) => talkOutOf(l) === rel);
-
-/**
- * Puts a talk-out's words in place of its placeholder. null when there's nothing to do: the marker is gone (someone
- * removed it) or the words under it aren't the placeholder any more (someone wrote there).
- */
-export function fillTalkOut(text: string, rel: string, body: string): { text: string; splice: Splice } | null {
-  const lines = text.split('\n');
-  const r = talkOutLines(lines, rel);
-  if (!r) return null;
-  const old = lines.slice(r[0], r[1]).join('\n');
-  if (old.trim() !== TRANSCRIBING) return null;
-  const at = lineStart(text, r[0]);
-  const ins = body.trim();
-  return { text: text.slice(0, at) + ins + text.slice(at + old.length), splice: { at, del: old.length, ins } };
-}
-
-/** The talk-outs of a text still waiting for their words (their placeholder is there), by their audio's path. */
-export function waitingTalkOuts(text: string): string[] {
-  const lines = text.split('\n');
-  const out: string[] = [];
-  lines.forEach((l, i) => {
-    const rel = talkOutOf(l);
-    if (rel && lines[i + 1]?.trim() === TRANSCRIBING) out.push(rel);
-  });
-  return out;
+  const begin = at + lead.length;
+  return { text: pre + ins + post, splice: { at, del: 0, ins }, start: begin, caret: begin + block.length };
 }
 
 /** A words file's text: its words joined, or "" (spec/extensions.md: `{model, words: [{w, s, e, p}]}`). */
@@ -248,6 +204,19 @@ export function mapCaret(caret: number, s: Splice): number {
   return s.at + s.ins.length;
 }
 
+/** The one splice that turns `a` into `b` (their common start and end kept). */
+export function diff(a: string, b: string): Splice {
+  let p = 0;
+  const n = Math.min(a.length, b.length);
+  while (p < n && a.charCodeAt(p) === b.charCodeAt(p)) p++;
+  let s = 0;
+  while (s < n - p && a.charCodeAt(a.length - 1 - s) === b.charCodeAt(b.length - 1 - s)) s++;
+  return { at: p, del: a.length - p - s, ins: b.slice(p, b.length - s) };
+}
+
+/** A position in `a`, in `b`: where a talk-out goes when the text changed while its words were on the way. */
+export const mapPos = (a: string, b: string, pos: number): number => mapCaret(pos, diff(a, b));
+
 /** The caret on the same line and column of a new text (clamped): how a reload in place keeps your place. */
 export function keepLine(oldText: string, caret: number, newText: string): number {
   const line = lineOf(oldText, caret);
@@ -259,7 +228,7 @@ export function keepLine(oldText: string, caret: number, newText: string): numbe
 
 // ---------------------------------------------------------------- an idea's title and first lines
 
-/** The `# ` line of idea.md, or "". */
+/** The document's `# ` line, or "". */
 export function titleOf(md: string): string {
   for (const l of md.split('\n')) {
     const h = headingOf(l);
@@ -268,7 +237,7 @@ export function titleOf(md: string): string {
   return '';
 }
 
-/** The first lines of an idea, for its row: not blank, not its title, not a talk-out marker or other HTML comment. */
+/** The first lines of an idea, for its row: not blank, not its title, not an HTML comment. */
 export function firstLines(md: string, n = 2): string[] {
   const out: string[] = [];
   let titled = false;
@@ -289,35 +258,54 @@ export function firstLines(md: string, n = 2): string[] {
 // ---------------------------------------------------------------- the script's sections
 
 export interface Section {
-  /** The `##` heading's text, or null for what comes before the first one. */
+  /** The beat's heading text, or null for what comes before the first one. */
   heading: string | null;
-  /** Lines [start, end) from 0; the heading line is the first. */
+  /** Lines [start, end) from 0 in the document; the heading line is the first. */
   start: number;
   end: number;
   lines: string[];
 }
 
-/** A script cut at its `##` headings (deeper headings stay inside their section). */
-export function sections(text: string): Section[] {
-  const lines = text.split('\n');
+/** Lines cut at headings of `level` (deeper headings stay inside their section). `offset` is the first line's number. */
+function cut(lines: string[], level: number, offset: number): Section[] {
   const out: Section[] = [];
-  let cur: Section = { heading: null, start: 0, end: 0, lines: [] };
+  let cur: Section = { heading: null, start: offset, end: offset, lines: [] };
   lines.forEach((l, i) => {
     const h = headingOf(l);
-    if (h?.level === 2) {
-      cur.end = i;
+    if (h?.level === level) {
+      cur.end = offset + i;
       if (cur.heading !== null || cur.lines.some((x) => x.trim())) out.push(cur);
-      cur = { heading: h.text, start: i, end: i, lines: [] };
+      cur = { heading: h.text, start: offset + i, end: offset + i, lines: [] };
     }
     cur.lines.push(l);
   });
-  cur.end = lines.length;
+  cur.end = offset + lines.length;
   if (cur.heading !== null || cur.lines.some((x) => x.trim())) out.push(cur);
   return out;
 }
 
-/** Lines as read-only blocks: paragraphs (their lines kept) and headings, without blank lines or HTML comments (the
- * talk-out markers), which rendered Markdown doesn't show either. */
+/**
+ * The script's beats: the document's `## Script` section (a heading "Script" of level 1 or 2, up to the next heading
+ * as high), cut at its first deeper heading level (`###` under `## Script`). null when there's no script: no Script
+ * heading, or nothing under it. `whole`: a text that is all script (an old `script.md`), cut at `##`.
+ */
+export function scriptSections(text: string, whole = false): Section[] | null {
+  const lines = text.split('\n');
+  if (whole) return cut(lines, 2, 0);
+  const all = headings(text);
+  const i = all.findIndex((h) => key(h.text) === 'script' && h.level <= 2);
+  if (i === -1) return null;
+  const s = all[i]!;
+  const next = all.slice(i + 1).find((h) => h.level <= s.level);
+  const body = lines.slice(s.line + 1, next ? next.line : lines.length);
+  if (!body.some((l) => l.trim())) return null;
+  const inner = all.filter((h) => h.line > s.line && (!next || h.line < next.line) && h.level > s.level);
+  const level = inner.length ? Math.min(...inner.map((h) => h.level)) : s.level + 1;
+  return cut(body, level, s.line + 1);
+}
+
+/** Lines as read-only blocks: paragraphs (their lines kept) and headings, without blank lines or HTML comments, which
+ * rendered Markdown doesn't show either. */
 export function blocks(lines: string[]): { heading: boolean; text: string }[] {
   const out: { heading: boolean; text: string }[] = [];
   let para: string[] = [];

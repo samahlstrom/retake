@@ -62,7 +62,11 @@
       >{/if}
     {#if row.typed}
       <!-- A typed comment on an extension's version has no moment: where in the document it is, if anywhere. -->
-      {#if row.anchor}<span class="time anchor" title={row.anchor.file}>{anchorText(row.anchor)}</span>{/if}
+      {#if row.anchor && review.kindShown}<button
+          class="time anchor"
+          title="Show it in {row.anchor.file}"
+          onclick={() => review.reveal(row.anchor)}>{anchorText(row.anchor)}</button
+        >{:else if row.anchor}<span class="time anchor" title={row.anchor.file}>{anchorText(row.anchor)}</span>{/if}
     {:else}
       <button class="time jump" title="Go to {row.time}" onclick={() => review.jumpToComment(row)}>{row.time}</button>
     {/if}

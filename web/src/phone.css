@@ -209,11 +209,68 @@
     aspect-ratio: var(--ar, 16 / 9);
     min-height: 0;
   }
-  /* An extension's version (no video): its slot takes most of the page, the controls and Record stay below. */
+  /* An extension's version (no video): its slot fills the page from the top down to the bar, which holds only Record
+     and Send. The comments are a drawer over the slot (the pill opens it), with the version and the agent in its
+     header. */
+  html[data-layout='portrait'] #app:has(> #stage.kind) {
+    grid-template-rows: minmax(0, 1fr) auto;
+    grid-template-areas: 'stage' 'rec';
+    background: var(--bg);
+  }
   html[data-layout='portrait'] #stage.kind {
     aspect-ratio: auto;
-    height: 58vh;
-    height: 58dvh;
+    height: auto;
+    min-height: 0;
+  }
+  #precord.kind {
+    padding-top: 10px;
+    border-top: 1px solid var(--line);
+    transition: box-shadow 0.2s ease;
+  }
+  #precord.kind.recording {
+    box-shadow: inset 0 2px 0 var(--record);
+  }
+  html[data-layout='portrait'] #side.drawer {
+    grid-area: stage;
+    align-self: end;
+    z-index: 5;
+    height: calc(100% - 64px);
+    max-height: none;
+    border-top: 1px solid var(--line-strong);
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -16px 48px color-mix(in srgb, var(--shadow) 60%, transparent);
+  }
+  html[data-layout='portrait'] #side.drawer header {
+    height: 60px;
+    gap: 8px;
+    padding: 0 8px 0 14px;
+  }
+  html[data-layout='portrait'] #side.drawer .icon {
+    width: 44px;
+    height: 44px;
+  }
+  html[data-layout='portrait'] #side.drawer .icon svg {
+    width: 22px;
+    height: 22px;
+  }
+  html[data-layout='portrait'] #side.drawer .agent-status {
+    min-width: 0;
+    font-size: 15px;
+  }
+  html[data-layout='portrait'] #side.drawer .agent-status .name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  html[data-layout='portrait'] #side.drawer .tabs button {
+    min-height: 44px;
+    padding-bottom: 0;
+    font-size: 16px;
+  }
+  html[data-phone] #app:has(> #stage.kind) #sideToggle {
+    min-height: 44px;
+    margin: 8px;
+    padding: 0 16px;
+    font-size: 15px;
   }
   html[data-layout='portrait'] #side {
     grid-area: side;

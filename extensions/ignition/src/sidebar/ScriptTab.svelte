@@ -1,10 +1,11 @@
 <script lang="ts">
-  // The Script tab next to the comments, on a video that has v0 (spec/ignition.md): script.md read-only, the section
-  // under the playhead highlighted (from v0/cuts/<this version>.json). Clicking a section seeks to its start; sections
-  // this version doesn't cover are dimmed.
+  // The Script tab next to the comments, on a video that has v0 (spec/ignition.md): the document's `## Script` read-only,
+  // a section per beat heading, the one under the playhead highlighted (from v0/cuts/<this version>.json). Clicking a
+  // section seeks to its start; sections this version doesn't cover are dimmed.
   import { onMount, untrack } from 'svelte';
   import type { Ctx } from '../types';
-  import { blocks, sections } from '../lib/doc';
+  import { blocks, scriptSections } from '../lib/doc';
+  import { folderOf, isDoc, OLD, pickDoc } from '../lib/v0';
   import { parseCut, sectionAt, sectionFor, type Cut } from '../lib/cuts';
   import { isMissing, sayError } from '../lib/errors';
   import { clock } from '../lib/stamp';
@@ -16,8 +17,9 @@
   const label = c.version?.label ?? '';
   /** On a video version, with a playhead; on v0 itself there's nothing to follow. */
   const playing = !!c.player && !c.version?.kind;
-  const SCRIPT = 'v0/script.md';
   const CUT = `v0/cuts/${label}.json`;
+  /** The document (or, before it was one file, script.md). */
+  let script = $state('');
 
   let text = $state<string | null>(null);
   let cut = $state.raw<Cut | null>(null);
@@ -27,7 +29,9 @@
 
   async function loadScript(): Promise<void> {
     try {
-      text = await (await files.read(SCRIPT)).text();
+      const paths = (await files.list('v0/*')).filter((f) => !f.deleted).map((f) => f.path);
+      script = pickDoc(paths, folderOf(c.video)) ?? (paths.includes(OLD.script) ? OLD.script : '');
+      text = script ? await (await files.read(script)).text() : '';
       error = '';
     } catch (e) {
       if (isMissing(e)) text = '';
@@ -44,7 +48,7 @@
     }
   }
 
-  const secs = $derived(text ? sections(text) : []);
+  const secs = $derived(text ? (scriptSections(text, script === OLD.script) ?? []) : []);
   const active = $derived(sectionAt(cut, t));
 
   $effect(() => {
@@ -60,7 +64,7 @@
     void loadCut();
     const offs = [
       files.watch((changed) => {
-        if (changed.some((f) => f.path === SCRIPT)) void loadScript();
+        if (changed.some((f) => f.path === script || isDoc(f.path))) void loadScript();
         if (changed.some((f) => f.path === CUT)) void loadCut();
       }),
     ];
@@ -76,8 +80,8 @@
     </p>
   {:else if error}
     <p class="ig-err">{error}</p>
-  {:else if text !== null && !text.trim()}
-    <p class="ig-empty">No script yet. Write it in v0's Script tab.</p>
+  {:else if text !== null && !secs.length}
+    <p class="ig-empty">No script yet. It goes under ## Script in v0’s document.</p>
   {:else if text !== null}
     {#if playing && !cut}
       <p class="ig-script-note">{label} has no cuts file yet, so its sections aren't linked.</p>

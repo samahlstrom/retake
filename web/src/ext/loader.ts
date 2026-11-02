@@ -19,7 +19,8 @@ export interface ExtKind {
   id: string;
   kind: string;
   folder: string;
-  marker: string;
+  /** The file names or globs that make its folder this kind (`*_v0.md`). */
+  marker: string[];
   label: string;
   status: string;
   record: boolean;
@@ -90,7 +91,7 @@ export function normalizeExts(body: unknown): ExtInfo[] {
         id: str(k.id) || `${id}.${str(k.kind)}`,
         kind: str(k.kind) || str(k.id).split('.').pop() || '',
         folder: str(k.folder) || 'v0',
-        marker: str(k.marker),
+        marker: (Array.isArray(k.marker) ? k.marker : [k.marker]).map(str).filter(Boolean),
         label: str(k.label),
         status: str(k.status),
         record: k.record === true,

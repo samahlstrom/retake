@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { hasCut } from './versions';
+import { hasCut, START_V1 } from './versions';
 
 describe('Start v1', () => {
   it('shows while api/info lists no version that is not a kind', () => {
     expect(hasCut({ versions: [{ label: 'v0', kind: 'ignition.doc' }] })).toBe(false);
     expect(hasCut({ versions: [{ label: 'v0', kind: 'ignition.doc' }, { label: 'v1' }] })).toBe(true);
     expect(hasCut({ versions: [{ label: 'v1', kind: null }] })).toBe(true);
+  });
+
+  it('asks for the first cut from the script', () => {
+    expect(START_V1).toBe('Build the first cut (v1) from the script.');
   });
 
   it("doesn't know without a list", () => {

@@ -12,6 +12,8 @@
   import VersionStrip from './VersionStrip.svelte';
   import EarlierOpen from './EarlierOpen.svelte';
   import ExtSlot from '../../ext/ExtSlot.svelte';
+  import AgentStatus from '../AgentStatus.svelte';
+  import { composeKey } from '../../lib/notes/typed';
   import './sidebar.css';
 
   let { review }: { review: Review } = $props();
@@ -48,6 +50,26 @@
     searching = false;
     review.commentSearch = '';
   }
+
+  // On an extension's version (v0): a line to type a comment for the agent (spec/extensions.md, "Typing one").
+  const mac = typeof navigator !== 'undefined' && /Mac|iP(hone|ad)/.test(navigator.platform);
+  let line = $state<HTMLTextAreaElement | null>(null);
+  /** The line grows with what's typed, up to a few lines. */
+  function grow() {
+    if (!line) return;
+    line.style.height = 'auto';
+    line.style.height = `${Math.min(line.scrollHeight, 160)}px`;
+  }
+  $effect(() => {
+    void review.commentDraft;
+    grow();
+  });
+  function lineKey(e: KeyboardEvent) {
+    const k = composeKey(e);
+    if (!k) return;
+    e.preventDefault();
+    void review.addTypedComment(k === 'send');
+  }
 </script>
 
 {#if notes.available}
@@ -73,10 +95,17 @@
           id="side"
           data-part="sidebar"
           aria-label="Comments"
-          class={tab?.slot === 'review-panel' ? 'wide' : undefined}
+          class={[tab?.slot === 'review-panel' && 'wide', review.kindShown && 'kind', review.kindDrawer && 'drawer']
+            .filter(Boolean)
+            .join(' ') || undefined}
         >
           <header>
-            {#if searching}
+            {#if review.kindDrawer && !searching}
+              <!-- A phone on an extension's version: the bar holds only Record and Send, so the agent is here (and the
+                   versions are the strip under it). -->
+              {#if review.canRecord && review.agent.available}<AgentStatus {review} />{/if}
+              <span class="h"></span>
+            {:else if searching}
               <input
                 bind:this={input}
                 class="search"
@@ -124,7 +153,20 @@
                 >
               {/if}
             </button>
-            {#if !view.phone}
+            {#if review.kindDrawer}
+              <Collapsible.Trigger class="icon hide" title="Hide comments" aria-label="Hide comments">
+                <svg viewBox="0 0 20 20" aria-hidden="true"
+                  ><path
+                    d="M5 8l5 5 5-5"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  /></svg
+                >
+              </Collapsible.Trigger>
+            {:else if !view.phone}
               <Collapsible.Trigger class="icon hide" title="Hide comments (N)" aria-label="Hide comments">
                 <svg viewBox="0 0 20 20" aria-hidden="true"
                   ><path
@@ -163,6 +205,30 @@
               >
             {/each}
           </div>
+          {#if review.kindShown && review.canRecord && !tab}
+            <form
+              class="compose"
+              data-part="comment-line"
+              onsubmit={(e) => {
+                e.preventDefault();
+                void review.addTypedComment(false);
+              }}
+            >
+              <textarea
+                bind:this={line}
+                bind:value={review.commentDraft}
+                rows="1"
+                placeholder="Comment for the agent…"
+                aria-label="Comment for the agent"
+                readonly={review.commentBusy}
+                onkeydown={lineKey}></textarea>
+              {#if !review.touch}
+                <span class="keys" class:shown={!!review.commentDraft.trim()}
+                  >Enter adds · {mac ? '⌘' : 'Ctrl'}+Enter sends</span
+                >
+              {/if}
+            </form>
+          {/if}
           {#if tab}
             <ExtSlot
               ext={tab.ext}
@@ -189,11 +255,15 @@
                 {:else if !job}
                   <p class="empty">
                     {review.versionRows.length ? 'All done' : 'No comments yet'}<span
-                      >{review.canRecord
-                        ? review.touch
-                          ? 'Tap ● and talk to leave one at this moment.'
-                          : 'Press R and talk to leave one at this moment.'
-                        : 'Comments will show up here.'}</span
+                      >{!review.canRecord
+                        ? 'Comments will show up here.'
+                        : review.kindShown
+                          ? review.touch
+                            ? 'Type one above, or tap Record and talk it out.'
+                            : 'Type one above, or press R and talk it out.'
+                          : review.touch
+                            ? 'Tap ● and talk to leave one at this moment.'
+                            : 'Press R and talk to leave one at this moment.'}</span
                     >
                   </p>
                 {/if}

@@ -28,6 +28,10 @@ export interface Host {
   onRecorded?(cb: (a: T.Recorded) => void): () => void;
   recording?(): boolean;
   onRecording?(cb: (on: boolean) => void): () => void;
+  /** The version slot says where a typed comment points (ctx.onAnchor). */
+  onAnchor?(fn: () => T.Anchor | null): () => void;
+  /** A comment's place was clicked: `{anchor}` for the version slot (ctx.on('reveal')). */
+  onReveal?(cb: (data: { anchor: T.Anchor }) => void): () => void;
   /** sidebar-tab and review-panel on a video version. */
   player?(): T.Player | undefined;
   /** Shows another version of this page's video, and/or seeks. */
@@ -88,6 +92,20 @@ export const wordsText = (words: readonly T.Word[]): string =>
     .replace(/\s+/g, ' ')
     .replace(/\s+([,.!?;:])/g, '$1')
     .trim();
+
+/** An anchor an extension gave, made safe: a file and a line from 1, the heading and quote when they're text (the
+ * quote cut to 200 characters); null when it isn't one. */
+export function validAnchor(a: unknown): T.Anchor | null {
+  if (!a || typeof a !== 'object') return null;
+  const x = a as Record<string, unknown>;
+  const file = str(x.file);
+  const line = typeof x.line === 'number' && Number.isFinite(x.line) ? Math.max(1, Math.floor(x.line)) : 1;
+  if (!file) return null;
+  const out: T.Anchor = { file, line };
+  if (str(x.heading).trim()) out.heading = str(x.heading).trim();
+  if (str(x.quote).trim()) out.quote = str(x.quote).trim().slice(0, 200);
+  return out;
+}
 
 function validWords(body: unknown): T.Word[] {
   const ws = (body && typeof body === 'object' ? (body as { words?: unknown }).words : null) ?? [];
@@ -442,6 +460,19 @@ export function makeCtx(ext: ExtInfo, slot: T.SlotName, host: Host): Made {
     onRecorded: (cb) => keep(host.onRecorded ? host.onRecorded(safe(cb)) : () => {}),
     recording: () => !!host.recording?.(),
     onRecording: (cb) => keep(host.onRecording ? host.onRecording(safe(cb)) : () => {}),
+    onAnchor(fn) {
+      if (slot !== 'version' || !host.onAnchor || typeof fn !== 'function') return () => {};
+      const ask = (): T.Anchor | null => {
+        if (disposed) return null;
+        try {
+          return validAnchor(fn());
+        } catch (err) {
+          console.error(`retake: the ${ext.name} extension's anchor failed:`, err);
+          return null;
+        }
+      };
+      return keep(host.onAnchor(ask));
+    },
     selectComment: (n) => host.selectComment?.(n),
     ...(player
       ? {
@@ -454,6 +485,7 @@ export function makeCtx(ext: ExtInfo, slot: T.SlotName, host: Host): Made {
         }
       : {}),
     on(event, cb) {
+      if (event === 'reveal') return keep(host.onReveal ? host.onReveal(safe(cb)) : () => {});
       const name = event === 'files' ? 'ext.files' : event;
       const own = safe(cb);
       const filtered =

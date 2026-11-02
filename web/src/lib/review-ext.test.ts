@@ -197,7 +197,7 @@ describe("an extension's version is never landed on by following or comparing", 
             id: 'ignition.doc',
             kind: 'doc',
             folder: 'v0',
-            marker: 'idea.md',
+            marker: ['*_v0.md'],
             label: 'Script',
             status: 'Idea',
             record: true,
@@ -260,5 +260,78 @@ describe("a talk-out on an extension's version", () => {
     expect(review.sideTab).toBeNull();
     expect(review.commentFilter).toBe('todo');
     await start;
+  });
+});
+
+describe("typed comments and places on an extension's version (the comments column's line, ctx.onAnchor, reveal)", () => {
+  it("typing in the line never reaches the review keys: R, Space and N are the text's; Esc leaves it", () => {
+    const { review, ran } = page([V0, v('v1')], 'v0');
+    const line = focused('textarea');
+    for (const k of ['r', ' ', 'n', 'c', 'Enter']) {
+      const e = press(review, k, line);
+      expect(e.preventDefault).not.toHaveBeenCalled();
+    }
+    expect(ran).toEqual([]);
+    press(review, 'Escape', line);
+    expect(line.blur).toHaveBeenCalled();
+  });
+
+  it('Enter adds a comment anchored where the slot says; Ctrl+Enter adds and sends it', async () => {
+    const { review } = page([V0], 'v0');
+    review.role = 'reviewer';
+    const calls: { url: string; body: unknown }[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init: RequestInit = {}) => {
+        calls.push({ url, body: init.body ? JSON.parse(init.body as string) : null });
+        if (url === 'api/notes') return new Response(JSON.stringify({ id: 7 + calls.length }), { status: 201 });
+        return new Response('{}', { status: 200 });
+      }),
+    );
+    review.toast.say = () => {};
+    review.notes.refresh = async () => {};
+    const anchor = { file: 'v0/jump-souls_v0.md', line: 9, heading: 'Cold open' };
+    const off = review.extHost('version').onAnchor!(() => anchor);
+    try {
+      review.commentDraft = '  Make it tighter ';
+      expect(await review.addTypedComment(false)).toBe(true);
+      expect(calls).toEqual([{ url: 'api/notes', body: { version: 'v0', text: 'Make it tighter', anchor } }]);
+      expect(review.commentDraft).toBe('');
+      expect(await review.addTypedComment(false)).toBe(false); // nothing typed: nothing added
+      review.commentDraft = 'Now';
+      await review.addTypedComment(true);
+      expect(calls.map((c) => c.url)).toContain('api/automation/tasks');
+      expect(calls.find((c) => c.url === 'api/automation/tasks')?.body).toEqual({ notes: [9] });
+      // Without the slot's anchor, the comment is on v0 as a whole.
+      off();
+      review.commentDraft = 'Whole doc';
+      await review.addTypedComment(false);
+      expect(calls.at(-1)?.body).toEqual({ version: 'v0', text: 'Whole doc' });
+      // On a video there is no line.
+      review.versions = [V0, v('v1')];
+      review.shown = 'v1';
+      review.commentDraft = 'Nope';
+      expect(await review.addTypedComment(false)).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("a comment's or a question's place goes to the slot (reveal); a video has none", () => {
+    const { review } = page([V0, v('v1')], 'v0');
+    const seen: unknown[] = [];
+    const off = review.extHost('version').onReveal!((d) => seen.push(d));
+    const anchor = { file: 'v0/jump-souls_v0.md', line: 4, heading: 'Cold open' };
+    review.reveal(anchor);
+    review.selectAsk({
+      key: 'q',
+      ask: { id: 40, task: 't1', t: 0, version: 'v0', text: 'Which opening?', anchor, time: 'Cold open' },
+    } as never);
+    expect(seen).toEqual([{ anchor }, { anchor }]);
+    expect(review.selectedAsk).toBe(40);
+    review.shown = 'v1';
+    review.reveal(anchor);
+    expect(seen).toHaveLength(2);
+    off();
   });
 });

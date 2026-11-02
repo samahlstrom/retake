@@ -13,7 +13,15 @@ const ignition: ExtInfo = {
   style: '',
   nav: null,
   kinds: [
-    { id: 'ignition.doc', kind: 'doc', folder: 'v0', marker: 'idea.md', label: 'Script', status: 'Idea', record: true },
+    {
+      id: 'ignition.doc',
+      kind: 'doc',
+      folder: 'v0',
+      marker: ['*_v0.md'],
+      label: 'Script',
+      status: 'Idea',
+      record: true,
+    },
   ],
   slots: [],
   machine: true,
@@ -571,6 +579,53 @@ describe('ctx: the rest', () => {
     expect(select).toHaveBeenCalledWith(40);
     made.dispose();
     expect(ev.count('ext.files') + ev.count('job') + recSubs.size).toBe(0);
+  });
+
+  it('onAnchor: the version slot tells core where a typed comment points; reveal brings a place back', () => {
+    let given: (() => unknown) | null = null;
+    const reveals = new Set<(d: { anchor: { file: string; line: number } }) => void>();
+    const host = videoHost(server({}).fetch, {
+      onAnchor: (fn) => {
+        given = fn;
+        return () => {
+          if (given === fn) given = null;
+        };
+      },
+      onReveal: (cb) => {
+        reveals.add(cb);
+        return () => void reveals.delete(cb);
+      },
+    });
+    const made = makeCtx(ignition, 'version', host);
+    const { ctx } = made;
+    let anchor: unknown = { file: 'v0/jump-souls_v0.md', line: 12.7, heading: ' Cold open ', quote: 'q'.repeat(300) };
+    const off = ctx.onAnchor(() => anchor as never);
+    expect(given!()).toEqual({ file: 'v0/jump-souls_v0.md', line: 12, heading: 'Cold open', quote: 'q'.repeat(200) });
+    anchor = { line: 3 }; // no file: not an anchor
+    expect(given!()).toBeNull();
+    anchor = null;
+    expect(given!()).toBeNull();
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    ctx.onAnchor(() => {
+      throw new Error('extension bug');
+    });
+    expect(given!()).toBeNull();
+    expect(err).toHaveBeenCalledTimes(1);
+    err.mockRestore();
+    off();
+    // Only the version slot points comments.
+    const tab = makeCtx(ignition, 'sidebar-tab', host);
+    const before = given;
+    tab.ctx.onAnchor(() => ({ file: 'x', line: 1 }));
+    expect(given).toBe(before);
+
+    const seen: unknown[] = [];
+    ctx.on('reveal', (d) => seen.push(d));
+    for (const cb of reveals) cb({ anchor: { file: 'v0/jump-souls_v0.md', line: 4 } });
+    expect(seen).toEqual([{ anchor: { file: 'v0/jump-souls_v0.md', line: 4 } }]);
+    made.dispose();
+    expect(reveals.size).toBe(0);
+    expect(given).toBeNull();
   });
 
   it("player: the host's, its time callbacks ended with the slot", () => {

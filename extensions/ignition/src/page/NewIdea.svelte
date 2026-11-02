@@ -1,5 +1,5 @@
 <script lang="ts">
-  // New idea (#ext/ignition/new): a title and the project to put it in. Create makes <project>/<slug>/v0/idea.md and
+  // New idea (#ext/ignition/new): a title and the project to put it in. Create makes <project>/<slug>/v0/<slug>_v0.md and
   // opens it; Create and talk does the same and starts recording there.
   import { onMount } from 'svelte';
   import type { Ctx } from '../types';
@@ -10,10 +10,10 @@
     offline,
     projectsOf,
     rememberedSelection,
+    storageOf,
     type Project,
   } from '../lib/ideas';
   import { isOffline, OFFLINE, sayError } from '../lib/errors';
-  import { storageOf } from '../lib/prefs';
   import { slug } from '../lib/slug';
 
   let { ctx }: { ctx: Ctx } = $props();
@@ -29,7 +29,8 @@
 
   const owner = $derived(ctx.role === 'owner');
   const ready = $derived(loaded && owner && !away && !busy && !!title.trim() && projects.length > 0);
-  const where = $derived(`${project ? `${project}/` : ''}${slug(title)}/v0/idea.md`);
+  /** Where it goes: the new video's folder (its document is v0/<slug>_v0.md in it). */
+  const where = $derived(`Goes in ${project ? `${project}/` : ''}${slug(title)}`);
 
   onMount(() => {
     input?.focus();

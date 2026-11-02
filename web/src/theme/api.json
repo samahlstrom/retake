@@ -35,6 +35,7 @@
     "comment": "One comment; data-state is open, working, question or done",
     "status": "A status: a dot and a word (in a comment, on a video card)",
     "reply-box": "The field to answer the agent",
+    "comment-line": "The line to type a comment for the agent on an extension's version (Comment for the agent…)",
     "question-card": "The agent's question under its comment (thumbnail, choices)",
     "progress": "The strip at the bottom of the comments (recording, transcribing, undo)",
     "version-strip": "The versions over the comments (v1 … v7, each with what's still to do)",

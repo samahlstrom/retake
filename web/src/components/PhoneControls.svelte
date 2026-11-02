@@ -6,7 +6,9 @@
   //  - landscape, around the video (which fills the height): the pen colors and undo at the left edge, Send and a big
   //    round Record at the right edge, and a slim bar at the bottom with play, time, the timeline, version and agent.
   // A viewer's share link has no pen, undo, Record or Send; the hint says "View only". On an extension's kind of
-  // version (v0) there is no video: no timeline, play, time, pens or undo; Record only when the kind records.
+  // version (v0) there is no video: in portrait the slot fills the page down to Record and Send (the version and the
+  // agent are in the comments drawer's header); in landscape no timeline, play, time, pens or undo. Record only when
+  // the kind records.
   import type { Review } from '../lib/review.svelte';
   import VersionPicker from './VersionPicker.svelte';
   import AgentStatus from './AgentStatus.svelte';
@@ -27,7 +29,16 @@
   </div>
 {/snippet}
 
-{#if review.layoutMode === 'portrait'}
+{#if review.layoutMode === 'portrait' && review.kindShown}
+  <div id="precord" data-part="bar" class="kind" class:recording={!!review.seg}>
+    {#if review.canRecord}
+      <div class="prow">
+        {#if review.recordHere}<PhoneRecord {review} />{/if}
+        <SendButton {review} />
+      </div>
+    {/if}
+  </div>
+{:else if review.layoutMode === 'portrait'}
   <div id="pbar" data-part="bar" class="portrait" class:recording={!!review.seg}>
     {#if !review.kindShown}<Timeline {review} />{/if}
     <div class="prow">

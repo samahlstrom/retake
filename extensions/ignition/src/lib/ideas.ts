@@ -3,6 +3,7 @@
 import type { Card, Ctx } from '../types';
 import { messageOf, statusOf } from './errors';
 import { nth, slug } from './slug';
+import { docPathFor } from './v0';
 
 /** A folder of the home's tree, as far as New idea reads it. */
 export interface Folder {
@@ -92,10 +93,10 @@ export function offline(home: object): boolean {
   );
 }
 
-/** idea.md of a new idea: its title and a blank line, where the caret goes. */
+/** A new idea's document: its title and a blank line, where the caret goes. */
 export const ideaFile = (title: string): string => `# ${title.replace(/\s+/g, ' ').trim()}\n\n`;
 
-/** Makes `<project>/<slug>/v0/idea.md`, trying `-2`, `-3`, … while the folder exists (409). */
+/** Makes `<project>/<slug>/v0/<slug>_v0.md`, trying `-2`, `-3`, … while the folder exists (409). */
 export async function createIdea(
   ctx: Pick<Ctx, 'createVideo'>,
   o: { project: string; title: string },
@@ -104,11 +105,8 @@ export async function createIdea(
   const base = slug(o.title);
   for (let n = 1; ; n++) {
     try {
-      return await ctx.createVideo({
-        project: o.project,
-        name: nth(base, n),
-        files: { 'v0/idea.md': ideaFile(o.title) },
-      });
+      const name = nth(base, n);
+      return await ctx.createVideo({ project: o.project, name, files: { [docPathFor(name)]: ideaFile(o.title) } });
     } catch (e) {
       const exists = statusOf(e) === 409 || /\bexists\b/i.test(messageOf(e));
       if (!exists || n >= tries) throw e;
@@ -150,5 +148,14 @@ export function takeHandOff(
     return typeof h.at === 'number' && now - h.at < 120_000;
   } catch {
     return false;
+  }
+}
+
+/** The browser's storage, or null where it's blocked. */
+export function storageOf(kind: 'local' | 'session'): Storage | null {
+  try {
+    return kind === 'local' ? globalThis.localStorage : globalThis.sessionStorage;
+  } catch {
+    return null;
   }
 }

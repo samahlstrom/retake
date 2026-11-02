@@ -2,25 +2,20 @@ import { describe, expect, it } from 'vitest';
 import {
   anchorAt,
   blocks,
-  fillTalkOut,
+  diff,
   findAnchor,
   firstLines,
   headingAbove,
   headingOf,
   headings,
-  insertBlock,
+  insertParagraph,
   keepLine,
   lineOf,
   lineStart,
   mapCaret,
-  marker,
-  sections,
-  talkOutBlock,
-  talkOutLine,
-  talkOutOf,
+  mapPos,
+  scriptSections,
   titleOf,
-  TRANSCRIBING,
-  waitingTalkOuts,
   wordsText,
 } from './doc';
 
@@ -56,7 +51,7 @@ describe('headings', () => {
     ]);
   });
 
-  it('the one above the caret names what the ask box is about', () => {
+  it('the one above the caret is where a typed comment points', () => {
     expect(headingAbove(SCRIPT, at(SCRIPT, 4, 3))?.text).toBe('Cold open');
     expect(headingAbove(SCRIPT, at(SCRIPT, 6))?.text).toBe('The trick');
     expect(headingAbove(SCRIPT, at(SCRIPT, 9))?.text).toBe('The trick');
@@ -73,7 +68,7 @@ describe('headings', () => {
   });
 });
 
-describe('anchors', () => {
+describe('the anchor of a typed comment (ctx.onAnchor) and finding it again (reveal)', () => {
   it('at the caret: the line, the heading above and the paragraph', () => {
     expect(anchorAt('v0/script.md', SCRIPT, at(SCRIPT, 8, 2))).toEqual({
       file: 'v0/script.md',
@@ -119,62 +114,38 @@ describe('anchors', () => {
   });
 });
 
-describe('talk-outs', () => {
-  const rel = 'voice/20261101-190211.webm';
+describe('a talk-out paragraph', () => {
+  it('goes in at the caret as a plain paragraph: on a blank line, with blank lines around', () => {
+    const r = insertParagraph('# Jump\n\n', 8, '  So the idea is the jump. ');
+    expect(r.text).toBe('# Jump\n\nSo the idea is the jump.\n');
+    expect(r.text.slice(r.start, r.caret)).toBe('So the idea is the jump.');
+    expect(r.splice).toEqual({ at: 8, del: 0, ins: 'So the idea is the jump.\n' });
+  });
 
-  it('are a marker line and their words', () => {
-    expect(talkOutBlock(rel, '  So the idea is…  ')).toBe(
-      '<!-- talk-out voice/20261101-190211.webm -->\nSo the idea is…',
+  it('after the caret line when it has text, never inside it, with a blank line on each side', () => {
+    const text = '# Jump\nFirst thought.\nMore.';
+    const r = insertParagraph(text, 9, 'Words.');
+    expect(r.text).toBe('# Jump\nFirst thought.\n\nWords.\n\nMore.');
+    expect(insertParagraph('', 0, 'Words.').text).toBe('Words.\n');
+    expect(insertParagraph('a\n\nb', 0, 'W').text).toBe('a\n\nW\n\nb');
+    // No marker, no comment line: just the words.
+    expect(r.text).not.toMatch(/<!--/);
+  });
+
+  it('follows the caret through what changed while its words were on the way', () => {
+    const was = '# Jump\n\nOne.\n';
+    const now = '# Jump\n\nAdded above.\n\nOne.\n';
+    expect(mapPos(was, now, was.indexOf('One.') + 4)).toBe(now.indexOf('One.') + 4);
+    expect(mapPos(was, now, 3)).toBe(3);
+    expect(diff('abc', 'aXbc')).toEqual({ at: 1, del: 0, ins: 'X' });
+    expect(diff('same', 'same')).toEqual({ at: 4, del: 0, ins: '' });
+  });
+
+  it('is a words file joined', () => {
+    expect(wordsText({ words: [{ w: ' So' }, { w: ' the' }, { w: ' idea' }, { w: ',' }, { w: ' ok' }] })).toBe(
+      'So the idea, ok',
     );
-    expect(talkOutOf(marker(rel))).toBe(rel);
-    expect(talkOutOf('<!--talk-out voice/a.webm-->')).toBe('voice/a.webm');
-    expect(talkOutOf('<!-- something else -->')).toBeNull();
-  });
-
-  it('go in at the caret as a paragraph of their own', () => {
-    const idea = '# Jump souls\n\n';
-    const r = insertBlock(idea, idea.length, talkOutBlock(rel, 'Words.'));
-    expect(r.text).toBe(`# Jump souls\n\n${marker(rel)}\nWords.\n`);
-    expect(r.caret).toBe(r.text.length - 1);
-    expect(talkOutLine(r.text, rel)).toBe(2);
-  });
-
-  it('after the caret line when it has text, with blank lines around', () => {
-    const t = 'First para\nstill first\n\nSecond';
-    const r = insertBlock(t, 3, 'BLOCK');
-    expect(r.text).toBe('First para\n\nBLOCK\n\nstill first\n\nSecond');
-    const end = insertBlock('Only line', 4, 'BLOCK');
-    expect(end.text).toBe('Only line\n\nBLOCK\n');
-    const top = insertBlock('', 0, 'BLOCK');
-    expect(top.text).toBe('BLOCK\n');
-    const blankLine = insertBlock('A\n\n\nB', at('A\n\n\nB', 2), 'BLOCK');
-    expect(blankLine.text).toBe('A\n\nBLOCK\n\nB');
-  });
-
-  it('get their words in place of the placeholder', () => {
-    const t = `# Idea\n\n${talkOutBlock(rel, TRANSCRIBING)}\n\nMore.\n`;
-    const r = fillTalkOut(t, rel, 'So the idea is the jump.');
-    expect(r?.text).toBe(`# Idea\n\n${marker(rel)}\nSo the idea is the jump.\n\nMore.\n`);
-    expect(r?.splice).toEqual({
-      at: t.indexOf(TRANSCRIBING),
-      del: TRANSCRIBING.length,
-      ins: 'So the idea is the jump.',
-    });
-  });
-
-  it('that still wait for their words are found, and their words read from the words file', () => {
-    const t = `${talkOutBlock('voice/a.webm', TRANSCRIBING)}\n\n${talkOutBlock('voice/b.webm', 'Done.')}\n`;
-    expect(waitingTalkOuts(t)).toEqual(['voice/a.webm']);
-    expect(
-      wordsText({ model: 'x', words: [{ w: 'So' }, { w: ' the' }, { w: 'idea' }, { w: ',' }, { w: 'right' }] }),
-    ).toBe('So the idea, right');
-    expect(wordsText({})).toBe('');
-  });
-
-  it("don't overwrite what someone wrote there, or come back after being removed", () => {
-    const typed = `${marker(rel)}\nI typed this`;
-    expect(fillTalkOut(typed, rel, 'words')).toBeNull();
-    expect(fillTalkOut('# Idea\n', rel, 'words')).toBeNull();
+    expect(wordsText(null)).toBe('');
   });
 });
 
@@ -196,32 +167,68 @@ describe('the caret', () => {
 });
 
 describe('an idea on the ideas page', () => {
-  const md = `# Jump souls\n\n${marker('voice/a.webm')}\nSo the idea is the jump.\n\n## Hook\nSecond line.\nThird line.`;
+  const md = `# Jump souls\n\n<!-- an old note -->\nSo the idea is the jump.\n\n## Hook\nSecond line.\nThird line.`;
 
   it('is titled by its # line', () => {
     expect(titleOf(md)).toBe('Jump souls');
     expect(titleOf('no title\n## Only h2')).toBe('');
   });
 
-  it('shows its first two lines, without the title or talk-out markers', () => {
+  it('shows its first two lines, without the title or HTML comments', () => {
     expect(firstLines(md)).toEqual(['So the idea is the jump.', 'Hook']);
     expect(firstLines('# T\n\n')).toEqual([]);
   });
 });
 
-describe('the script read-only', () => {
-  it('is cut at its ## headings', () => {
-    const s = sections(SCRIPT);
+describe('the script read-only (the Script tab)', () => {
+  const DOC = [
+    '# Jump souls', // 0
+    'My idea, my words.', // 1
+    '', // 2
+    '## Outline', // 3
+    '- Cold open', // 4
+    '', // 5
+    '## Script', // 6
+    '', // 7
+    '### Cold open', // 8
+    '[The jump.] So the idea is the jump.', // 9
+    '', // 10
+    '### The trick', // 11
+    'Time it.', // 12
+    '#### Detail', // 13
+    'Frames.', // 14
+    '', // 15
+    '## Cut', // 16
+    'Old line.', // 17
+  ].join('\n');
+
+  it("is the document's ## Script, cut at its ### headings", () => {
+    const s = scriptSections(DOC)!;
     expect(s.map((x) => [x.heading, x.start, x.end])).toEqual([
+      ['Cold open', 8, 11],
+      ['The trick', 11, 16],
+    ]);
+    expect(s[0]!.lines[0]).toBe('### Cold open');
+    expect(s[1]!.lines).toContain('#### Detail');
+  });
+
+  it('is nothing without a Script heading or with nothing under it', () => {
+    expect(scriptSections('# T\n\nJust an idea.')).toBeNull();
+    expect(scriptSections('# T\n\n## Script\n\n## Cut\nx')).toBeNull();
+  });
+
+  it('takes the beats at whatever level is under Script, and an old script.md whole at ##', () => {
+    expect(scriptSections('# Script\n## A\na\n## B\nb')!.map((x) => x.heading)).toEqual(['A', 'B']);
+    const old = scriptSections(SCRIPT, true)!;
+    expect(old.map((x) => [x.heading, x.start, x.end])).toEqual([
       [null, 0, 2],
       ['Cold open', 2, 6],
       ['The trick', 6, 12],
     ]);
-    expect(s[1]!.lines[0]).toBe('## Cold open');
   });
 
   it('shows paragraphs and headings, not blank lines or HTML comments', () => {
-    expect(blocks(['Para one', 'still one', '', marker('voice/a.webm'), 'Talk', '### Sub', 'x'])).toEqual([
+    expect(blocks(['Para one', 'still one', '', '<!-- x -->', 'Talk', '### Sub', 'x'])).toEqual([
       { heading: false, text: 'Para one\nstill one' },
       { heading: false, text: 'Talk' },
       { heading: true, text: 'Sub' },

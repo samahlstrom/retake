@@ -24,6 +24,7 @@
     "onRecorded",
     "recording",
     "onRecording",
+    "onAnchor",
     "selectComment",
     "player",
     "on",
@@ -34,6 +35,6 @@
   "files": ["list", "read", "write", "remove", "url", "watch", "history", "undo"],
   "comments": ["list", "add", "send", "answer"],
   "player": ["time", "duration", "seek", "onTime"],
-  "events": ["notes", "job", "version", "automation", "files"],
+  "events": ["notes", "job", "version", "automation", "files", "reveal"],
   "deprecated": {}
 }

@@ -1,6 +1,6 @@
 // The video's versions as api/info lists them: Start v1 shows while there's no cut (no version that isn't a kind).
 
-export const START_V1 = 'Build the first cut (v1) from script.md.';
+export const START_V1 = 'Build the first cut (v1) from the script.';
 
 /** Whether api/info lists a cut (a version without `kind`); null when it lists no versions at all. */
 export function hasCut(info: unknown): boolean | null {

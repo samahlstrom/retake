@@ -1,7 +1,7 @@
-// One document of v0 (idea.md, outline.md, script.md, refs/*.md) as the editor holds it: what you typed, what's on
-// disk, and saving with If-Match (spec/ignition.md, "Saving" and "Outside edits").
+// The document (v0/<video>_v0.md) as the editor holds it: what you typed, what's on disk, and saving with If-Match
+// (spec/ignition.md, "The editor": saving, outside edits).
 import type { Files } from '../types';
-import { fillTalkOut, insertBlock, talkOutBlock, TRANSCRIBING, lineOf, type Splice } from '../lib/doc';
+import { insertParagraph, mapPos, type Splice } from '../lib/doc';
 import { isChanged, isMissing, isOffline, sayError, shaOf } from '../lib/errors';
 import { decide, type Change } from '../lib/merge';
 
@@ -45,16 +45,6 @@ export class Doc {
 
   get dirty(): boolean {
     return this.text !== this.saved;
-  }
-
-  /** The quiet word in the header: Saved, Saving…, Edited, Not saved, Offline (or nothing). */
-  get word(): string {
-    if (!this.loaded) return '';
-    if (this.loadError) return this.offline ? 'Offline' : '';
-    if (this.conflict || this.error) return this.offline ? 'Offline' : 'Not saved';
-    if (this.saving) return 'Saving…';
-    if (this.dirty) return 'Edited';
-    return this.exists ? 'Saved' : '';
   }
 
   async #load(): Promise<void> {
@@ -215,23 +205,22 @@ export class Doc {
     this.external = { kind: 'splice', splice, caret };
   }
 
-  /** Puts a talk-out in at `pos` with its placeholder and saves. Returns its marker's line (from 0). */
-  async insertTalkOut(pos: number, rel: string, body = TRANSCRIBING): Promise<number> {
+  /**
+   * Puts a paragraph in, plainly, and saves: at `pos` of the text as it was when `was` was read (mapped through what
+   * changed since), or at the end. `follow(pos)` says whether the caret moves to the paragraph's end (it's still where
+   * the paragraph goes), so the next talk-out lands after this one. Returns where the paragraph starts now.
+   */
+  async insert(
+    para: string,
+    at: { pos: number; was: string } | null,
+    follow?: (pos: number) => boolean,
+  ): Promise<number> {
     await this.ready;
-    const r = insertBlock(this.text, Math.min(pos, this.text.length), talkOutBlock(rel, body));
-    this.#splice(r.text, r.splice, r.caret);
+    const pos = Math.min(at ? mapPos(at.was, this.text, at.pos) : this.text.length, this.text.length);
+    const r = insertParagraph(this.text, pos, para);
+    this.#splice(r.text, r.splice, at && follow?.(pos) ? r.caret : undefined);
     await this.save();
-    return lineOf(r.text, r.caret) - body.trim().split('\n').length;
-  }
-
-  /** Puts a talk-out's words in place of its placeholder (when both are still there) and saves. */
-  async fillTalkOut(rel: string, body: string): Promise<boolean> {
-    await this.ready;
-    const r = fillTalkOut(this.text, rel, body);
-    if (!r) return false;
-    this.#splice(r.text, r.splice);
-    await this.save();
-    return true;
+    return r.start;
   }
 
   dispose(): void {

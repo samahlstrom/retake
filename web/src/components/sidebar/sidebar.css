@@ -148,6 +148,72 @@
     padding: 0 0 64px; /* room for the floating strip at the bottom */
   }
 
+  /* The line to type a comment on an extension's version (v0): "Comment for the agent…". */
+  #side .compose {
+    flex: none;
+    padding: 12px 14px 4px;
+    border-bottom: 1px solid var(--line);
+  }
+  #side .compose textarea {
+    box-sizing: border-box;
+    display: block;
+    width: 100%;
+    min-height: 40px;
+    max-height: 160px;
+    margin: 0;
+    padding: 9px 12px;
+    border: 1px solid color-mix(in srgb, var(--overlay) 12%, transparent);
+    border-radius: var(--radius);
+    background: color-mix(in srgb, var(--overlay) 4%, transparent);
+    color: var(--text);
+    font: inherit;
+    font-size: 13.5px;
+    line-height: 1.45;
+    resize: none;
+    outline: none;
+    overflow-y: auto;
+    user-select: text;
+    -webkit-user-select: text;
+  }
+  #side .compose textarea:focus {
+    border-color: color-mix(in srgb, var(--focus) 55%, transparent);
+  }
+  #side .compose textarea::placeholder {
+    color: var(--faint);
+  }
+  #side .compose .keys {
+    display: block;
+    height: 22px;
+    padding-top: 4px;
+    color: var(--faint);
+    font-size: 11.5px;
+    visibility: hidden;
+  }
+  #side .compose .keys.shown {
+    visibility: visible;
+  }
+  /* 17 px on a phone: Safari zooms into a field whose text is smaller than 16 px. */
+  html[data-phone] #side .compose {
+    padding: 10px 14px;
+  }
+  html[data-phone] #side .compose textarea {
+    min-height: 48px;
+    padding: 12px 14px;
+    font-size: 17px;
+  }
+  /* A typed comment's place, on its version: a button that shows it in the document. */
+  #side button.time.anchor {
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: pointer;
+  }
+  #side button.time.anchor:hover {
+    color: var(--text-strong);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
   /* ---------------------------------------------------------------- a comment */
   #side .item {
     position: relative;

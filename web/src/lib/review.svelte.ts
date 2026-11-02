@@ -132,7 +132,8 @@ import { brandOf, reviewTitle } from './brand';
 import { clamp, fmt, isoLocal, now, r3, stamp } from './util';
 import { ExtLoader, type ExtInfo } from '../ext/loader';
 import type { Host } from '../ext/ctx';
-import type { Player, Recorded, Role as ExtRole, SlotName } from '../ext/retake-ext';
+import type { Anchor, Player, Recorded, Role as ExtRole, SlotName } from '../ext/retake-ext';
+import { addTyped } from './notes/typed';
 import { kindRecords, openingVersion, sidebarTabs, versionName, versionSlot, type ExtTab } from '../ext/kinds';
 
 export interface Elements {
@@ -445,6 +446,74 @@ export class Review {
     this.sideTab = null;
     this.commentFilter = filter;
   };
+
+  // ---------------------------------------------------------------- typed comments on a kind's version
+  /** Where the version slot says a typed comment points (ctx.onAnchor), or null. */
+  #anchorFn: (() => Anchor | null) | null = null;
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- listeners, never shown
+  readonly #revealSubs = new Set<(d: { anchor: Anchor }) => void>();
+  /** The comments column's line on a kind's version: "Comment for the agent…". */
+  commentDraft = $state('');
+  commentBusy = $state(false);
+  /** A phone in portrait on a kind's version: the document fills the page, the comments are a drawer over it whose
+   * header has the version picker and the agent. */
+  get kindDrawer(): boolean {
+    return !!this.kindShown && this.layoutMode === 'portrait';
+  }
+
+  /** The anchor the version slot gives now, or null (none, or it failed). */
+  anchorHere(): Anchor | null {
+    try {
+      return this.#anchorFn?.() ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** A comment's or a question's place clicked on a kind's version: the slot shows it (ctx.on('reveal')), and on a
+   * phone the drawer closes so the document is in view. */
+  reveal = (anchor: Anchor | null | undefined): void => {
+    if (!anchor || !this.kindShown) return;
+    for (const cb of [...this.#revealSubs]) {
+      try {
+        cb({ anchor });
+      } catch (err) {
+        console.error('retake: an extension failed to show a place:', err);
+      }
+    }
+    if (this.phone && this.sidebar.panel) this.toggleSidebar();
+  };
+
+  /** Enter (add) or Ctrl+Enter (add and send) in the comments column's line: a typed comment on this kind's version,
+   * anchored where the slot says. */
+  addTypedComment = async (send: boolean): Promise<boolean> => {
+    const text = this.commentDraft.trim(),
+      version = this.shown;
+    if (!text || !version || !this.kindShown || !this.canRecord || this.commentBusy) return false;
+    this.commentBusy = true;
+    try {
+      const item = await addTyped({ fetch: (...a) => fetch(...a), version, text, anchor: this.anchorHere() });
+      this.commentDraft = '';
+      if (send) {
+        const w = this.agent.worker;
+        if (this.owner && w && !this.automation.state?.config?.worker)
+          await this.automation.configure({ worker: w.id, agent: w.agents[0]?.id ?? '', fallback: '' });
+        if (await this.automation.send('/tasks', { notes: [item.id] }))
+          this.toast.say(
+            this.agent.online ? 'Sent to the agent.' : 'Sent. The agent starts when the editing computer is online.',
+            3000,
+          );
+        else this.toast.say(this.automation.error || 'Added, but not sent. Press Send to try again.', 5000);
+      }
+      void this.notes.refresh();
+      return true;
+    } catch (err) {
+      this.toast.say(err instanceof Error ? err.message : 'Could not add the comment', 5000);
+      return false;
+    } finally {
+      this.commentBusy = false;
+    }
+  };
   /** What a sidebar tab or a review panel gets as `ctx.player`. Seeking does nothing while recording. */
   readonly #player: Player = {
     time: () => this.video?.currentTime ?? 0,
@@ -507,6 +576,16 @@ export class Review {
       player: () => (r.kindShown ? undefined : r.#player),
       show: (label, t) => void r.navigateTo(label, t),
       selectComment: (id) => r.selectComment(id),
+      onAnchor: (fn) => {
+        r.#anchorFn = fn;
+        return () => {
+          if (r.#anchorFn === fn) r.#anchorFn = null;
+        };
+      },
+      onReveal: (cb) => {
+        r.#revealSubs.add(cb);
+        return () => void r.#revealSubs.delete(cb);
+      },
     };
   }
 
@@ -1804,7 +1883,8 @@ export class Review {
   selectAsk = (row: Row): void => {
     if (!row.ask) return;
     if (row.ask.anchor || this.kindShown) {
-      this.selectedAsk = row.ask.id; // a question about a document: no moment to go to
+      this.selectedAsk = row.ask.id; // a question about a document: no moment to go to, its place in the slot
+      this.reveal(row.ask.anchor);
       return;
     }
     this.video.pause();

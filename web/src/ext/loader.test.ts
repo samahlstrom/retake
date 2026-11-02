@@ -56,7 +56,7 @@ const apiExt = {
           id: 'ignition.doc',
           kind: 'doc',
           folder: 'v0',
-          marker: 'idea.md',
+          marker: ['*_v0.md', 'idea.md'],
           label: 'Script',
           status: 'Idea',
           record: true,
@@ -112,12 +112,21 @@ describe('GET api/ext', () => {
       id: 'ignition.doc',
       kind: 'doc',
       folder: 'v0',
-      marker: 'idea.md',
+      marker: ['*_v0.md', 'idea.md'],
       label: 'Script',
       status: 'Idea',
       record: true,
     });
     expect(a[1]!.machine).toBe(false);
+  });
+
+  it("reads a kind's marker as a list, one name or several", () => {
+    const kinds = (marker: unknown) =>
+      normalizeExts({ extensions: [{ id: 'x', module: 'x.js', kinds: [{ id: 'x.doc', kind: 'doc', marker }] }] })[0]!
+        .kinds[0]!.marker;
+    expect(kinds('idea.md')).toEqual(['idea.md']);
+    expect(kinds(['*_v0.md', 'idea.md', 3])).toEqual(['*_v0.md', 'idea.md']);
+    expect(kinds(undefined)).toEqual([]);
   });
 
   it('is no extensions on an older server, an error or no network', async () => {

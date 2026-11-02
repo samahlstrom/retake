@@ -24,7 +24,15 @@ const ignition: ExtInfo = {
   style: 'ui/ignition.css',
   nav: { title: 'Ignition', icon: 'ui/spark.svg', list: 'kind-only', action: { title: 'New idea', route: 'new' } },
   kinds: [
-    { id: 'ignition.doc', kind: 'doc', folder: 'v0', marker: 'idea.md', label: 'Script', status: 'Idea', record: true },
+    {
+      id: 'ignition.doc',
+      kind: 'doc',
+      folder: 'v0',
+      marker: ['*_v0.md'],
+      label: 'Script',
+      status: 'Idea',
+      record: true,
+    },
   ],
   slots: [
     { slot: 'page', kind: '', title: '', when: 'always' },

@@ -1,6 +1,6 @@
 // Ignition's end-to-end helpers (spec/ignition.md): a config folder with Ignition turned on (through `retake ext
-// enable`), a fake transcriber (a command engine that prints fixed words), and a fake agent that shapes the documents,
-// asks about a heading and builds a first cut. Nothing runs a real agent or a real speech model.
+// enable`), a fake transcriber (a command engine that prints fixed words), and a fake agent that shapes the one
+// document (v0/<video>_v0.md), asks about a heading and builds a first cut. Nothing runs a real agent or a real speech model.
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -15,17 +15,20 @@ process.stdout.write(JSON.stringify({ words: words.map((w, i) => ({ w: ' ' + w, 
 `;
 
 /**
- * The fake agent. It reads the task's context ($RETAKE_CONTEXT) and:
+ * The fake agent. It reads the task's context ($RETAKE_CONTEXT) and edits the one document, v0/<video>_v0.md:
  * - for a comment that wants a version (Start v1): writes a 2 s video to $RETAKE_OUTPUT and v0/cuts/v1.json;
- * - otherwise, on its first attempt: writes v0/outline.md and v0/script.md with a "Cold open" section, asks about it
- *   with `retake ask --file v0/script.md --heading "Cold open"` and two options, and reports; on a later attempt
- *   (the answer came back): writes the answer into the script and reports.
+ * - otherwise, on its first attempt: keeps the person's words and adds `## Outline` and `## Script` (with `### Cold
+ *   open` and `### The trick`) when the document has no script yet, asks about "Cold open" with `retake ask --file v0/<video>_v0.md --heading "Cold open"`
+ *   and two options, and reports; on a later attempt (the answer came back): writes the answer into the script's cold
+ *   open and reports.
  */
 const AGENT = `import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 const ctx = JSON.parse(readFileSync(process.env.RETAKE_CONTEXT, 'utf8'));
 const report = (message) => writeFileSync(process.env.RETAKE_REPORT, JSON.stringify({ state: 'completed', message }));
 const mine = (ctx.notes ?? []).filter((n) => ctx.task.notes.includes(n.id));
+const doc = 'v0/' + readdirSync('v0').filter((f) => f.endsWith('_v0.md')).sort()[0];
+const text = readFileSync(doc, 'utf8');
 if (mine.some((n) => n.detail && n.detail.wants === 'version')) {
   execFileSync('ffmpeg', ['-nostdin', '-v', 'error', '-y', '-threads', '2', '-f', 'lavfi', '-i',
     'testsrc2=s=320x180:r=25:d=2', '-f', 'lavfi', '-i', 'sine=f=330:d=2', '-c:v', 'libx264', '-preset', 'ultrafast',
@@ -33,17 +36,16 @@ if (mine.some((n) => n.detail && n.detail.wants === 'version')) {
   mkdirSync('v0/cuts', { recursive: true });
   writeFileSync('v0/cuts/v1.json', JSON.stringify({ version: 'v1', sections: [
     { heading: 'Cold open', from: 0, to: 1 }, { heading: 'The trick', from: 1, to: 2 }] }));
-  report('Built the first cut from script.md');
+  report('Built the first cut from the script');
 } else if (ctx.task.attempt === 1) {
-  writeFileSync('v0/outline.md', '## Cold open\\nThe jump, cold.\\n\\n## The trick\\nWhy timing matters.\\n');
-  writeFileSync('v0/script.md', '## Cold open\\n\\n[The jump.] So the idea is the jump.\\n\\n## The trick\\n\\nTime it.\\n');
-  execFileSync(process.env.RETAKE_BIN_FOR_AGENT, ['ask', '--note', String(ctx.task.notes[0]), '--file', 'v0/script.md',
-    '--line', '1', '--heading', 'Cold open', '--option', 'Start on the jump', '--option', 'Start on the shop',
-    'Which opening?']);
+  if (!text.includes('## Script')) writeFileSync(doc, text.trimEnd() + '\\n\\n## Outline\\n\\n- Cold open: the jump, cold.\\n- The trick: why timing matters.\\n\\n'
+    + '## Script\\n\\n### Cold open\\n\\n[The jump.] So the idea is the jump.\\n\\n### The trick\\n\\nTime it.\\n');
+  execFileSync(process.env.RETAKE_BIN_FOR_AGENT, ['ask', '--note', String(ctx.task.notes[0]), '--file', doc,
+    '--heading', 'Cold open', '--option', 'Start on the jump', '--option', 'Start on the shop', 'Which opening?']);
   report('Wrote the outline and the script; asked which opening');
 } else {
   const answer = (ctx.questions ?? []).map((q) => q.answer && q.answer.text).filter(Boolean).at(-1) ?? '';
-  writeFileSync('v0/script.md', '## Cold open\\n\\n[' + answer + '.] So the idea is the jump.\\n\\n## The trick\\n\\nTime it.\\n');
+  writeFileSync(doc, text.replace('[The jump.]', '[' + answer + '.]'));
   report('Opened on: ' + answer);
 }
 `;

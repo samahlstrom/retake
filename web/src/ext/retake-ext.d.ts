@@ -8,8 +8,10 @@ export type SlotName = 'page' | 'version' | 'sidebar-tab' | 'review-panel';
 /** Who is looking (spec/team.md). */
 export type Role = 'viewer' | 'reviewer' | 'approver' | 'owner';
 
-/** What `ctx.on` listens to: the page's own events. `files` is `ext.files` for this extension, while a watch holds. */
-export type EventName = 'notes' | 'job' | 'version' | 'automation' | 'files';
+/** What `ctx.on` listens to: the page's own events. `files` is `ext.files` for this extension, while a watch holds.
+ * `reveal` is `{anchor}`: the person clicked a comment's or a question's place in the comments column (the version slot
+ * shows it). */
+export type EventName = 'notes' | 'job' | 'version' | 'automation' | 'files' | 'reveal';
 
 /** One function per slot the module fills. It gets an empty element and `ctx`; the function it returns unmounts. */
 export type Mount = (el: HTMLElement, ctx: Ctx) => void | (() => void);
@@ -54,6 +56,9 @@ export interface Ctx {
   /** Core is recording now (R or Record). */
   recording(): boolean;
   onRecording(cb: (on: boolean) => void): () => void;
+  /** The version slot: where a comment typed in the comments column points (the heading above the caret), asked when
+   * one is added. Another call replaces it; the function it returns (or unmounting) ends it. */
+  onAnchor(fn: () => Anchor | null): () => void;
   /** Scrolls the comments column to a comment (by its note id, or a question's thread id) and selects it. */
   selectComment(id: number): void;
   /** sidebar-tab and review-panel on a video version. */
