@@ -43,7 +43,7 @@ action = { title = "New script", route = "new" }
 id = "doc"
 folder = "v0"
 marker = ["*_v0.md", "idea.md"]   # the document; idea.md: a v0 from before it was one file (migrated, below)
-label = "Doc"
+label = "Script"
 status = "Idea"
 record = true
 chat = true                       # the agent chat in place of the comments (spec/chat.md)
@@ -292,7 +292,7 @@ with the section under the playhead highlighted; clicking a section seeks to its
   makes a new one. Its rows are the ideas (videos with only v0), most recently edited first.
 - **The scripts page** (headed with the manifest's `name`): New script, then each idea's title (the document's `# `
   line, else the folder's name), its project, when it was last edited and its first two lines. Clicking one opens it.
-- **The version strip and picker** list `v0 · Doc` first. A video with a cut opens on its newest cut, as today.
+- **The version strip and picker** list `v0 · Script` first. A video with a cut opens on its newest cut, as today.
   Following latest and comparing (C) never land on v0.
 
 ## Local and hosted
