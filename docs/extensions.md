@@ -33,7 +33,7 @@ there.
 
 | | Folder |
 |---|---|
-| Yours | `~/.config/retake/extensions/<id>/` (`retake ext install <dir>` copies one there) |
+| Yours | `~/.config/retake/extensions/<id>/` (copy the folder there) |
 | A server's | `<data dir>/extensions/<id>/` (`/data/extensions/` in Docker) |
 | A projects folder's | `<folder>/.retake/extensions/<id>/`: enabling one pins its files; a change turns it off until you enable it again |
 | Built in | Ignition |
@@ -117,10 +117,11 @@ Try it, then install it:
 ```bash
 retake ext check ./hello                 # the manifest, the exports, the CSS scope and tokens
 retake open ~/Videos --ext ./hello       # on for this run only; reload the page after each edit
-retake ext install ./hello && retake ext enable hello
+cp -r ./hello ~/.config/retake/extensions/ && retake ext enable hello
 ```
 
-`retake ext init hello` writes these files for you, plus `retake-ext.d.ts` (the `ctx` types for your editor).
+The `ctx` types for your editor are `web/src/ext/retake-ext.d.ts` in Retake's source. (`retake ext init`, `install`,
+`remove` and `tool` are in the spec but not built yet.)
 
 ## What else an extension can do
 
@@ -132,10 +133,12 @@ retake ext install ./hello && retake ext enable hello
   a file into words.
 - **Instructions for the agent** (`[agent]`): Markdown added to the prompt of a task on its version or files, and a
   short context for every task of a video that has its files. Retake's own rules come last and win.
-- **Agent tools** (`[[agent.tools]]`): small programs the agent runs with `retake ext tool`, in the asset plug-in
-  protocol ([plugins.md](plugins.md)).
-- **A server** (`[server]`), when files aren't enough. Retake starts it when needed and stops it when idle. It
-  signs people in for you and passes their role in a header.
+- **Agent tools** (`[[agent.tools]]`, not built yet): small programs the agent runs with `retake ext tool`, in the
+  asset plug-in protocol ([plugins.md](plugins.md)).
+- **A server** (`[server]`, not built yet), when files aren't enough. Retake starts it when needed and stops it when
+  idle. It signs people in for you and passes their role in a header.
+- **Undo an agent edit**: before each agent attempt Retake keeps a copy of the files you own in `.retake/history/`;
+  `ctx.files().history(path)` lists the agent's edits and `undo(id, path)` puts one back.
 
 ## What it can't do
 

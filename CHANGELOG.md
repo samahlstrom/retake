@@ -4,6 +4,30 @@ All notable changes are listed here. Versions follow semver once the first relea
 
 ## Unreleased
 
+### Extensions, and Ignition (extension API v1)
+- An extension adds a tool around review without changing it (spec/extensions.md, docs/extensions.md): a section in
+  the home's left column, a page, a tab next to the comments, its own kind of version (`v0`), files it owns in a
+  video's folder, and instructions for the agent. Its page code is one ES module that mounts into named slots, styled
+  with the Theme API's tokens in `@layer ext.<id>` (the user's theme still wins). A broken one shows one line in its
+  own place; review keeps working.
+- `retake ext list`, `enable <id>`, `disable <id>` and `check [DIR|ID]`; `--ext DIR` on `retake open`, `share` and
+  `connect` turns one on for a run. `retake serve --extensions ignition` (or `RETAKE_EXTENSIONS`, `[server]
+  extensions`) allows one for everyone on a server; each person can turn it off for themselves
+  (`PUT /api/me/extensions`).
+- **Ignition** (spec/ignition.md) comes with Retake, off until `retake ext enable ignition`. New idea makes a video
+  folder with only `v0/idea.md`; you type, or talk it out (R records; the words land in the document and a comment
+  asks the agent to work them in), Send has the agent shape `outline.md` and `script.md` and ask about a heading when
+  unsure, and Start v1 has it build the first cut. Everything is plain Markdown in the video's folder.
+- Before every agent attempt Retake keeps a copy of the extension's files (`.retake/history/`), so the editor can undo
+  one agent edit of a document without git.
+- Core: a folder whose `v0/` holds an enabled kind's marker is a video (an idea) in the scan, `api/info`, `api/home`
+  (`"status": "no_cut"`, `kind`, `kinds`, `changed`) and `retake connect`; `POST api/notes` adds typed comments
+  (`doc/<n>`, with a text `anchor` and `wants`), done by the agent's report without a render; `retake ask --file PATH
+  --line N --heading H --quote Q` asks about a place in a document; the next cut of a v0-only video is
+  `v1/<folder>_v1.mp4`; a task's prompt gets `## From the <name> extension` before Retake's own rules. Hosted, the
+  files stay on the editing computer and go through its worker's relay (`ext.*` requests), and a new idea's folder is
+  made there through the new machine channel (`GET/POST /api/machine/requests`).
+
 ### Your look, outside the install (Theme API v1)
 - A theme is a folder of CSS, fonts and images that lives outside the install: `~/.config/retake/theme/` for
   `retake open` and `retake share`, `<data dir>/theme/` (`/data/theme/` in Docker) for `retake serve`, or `--theme
