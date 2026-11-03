@@ -159,3 +159,69 @@ func TestFFmpegMakesAJPEG(t *testing.T) {
 		t.Errorf("a playlist: %v", err)
 	}
 }
+
+func TestKeyedIsMadeOnceFromWhatItFetches(t *testing.T) {
+	root := t.TempDir()
+	var runs, fetches atomic.Int32
+	var read []string
+	m := &Maker{Run: func(_ context.Context, video, out string) error {
+		runs.Add(1)
+		b, err := os.ReadFile(video)
+		if err != nil {
+			return err
+		}
+		read = append(read, string(b))
+		return os.WriteFile(out, []byte("\xff\xd8\xffframe"), 0o600)
+	}}
+	ctx := context.Background()
+	offline := errors.New("editing machine is offline")
+	fetch := func(fail error) func(context.Context, string) (string, error) {
+		return func(_ context.Context, dir string) (string, error) {
+			fetches.Add(1)
+			if fail != nil {
+				return "", fail
+			}
+			p := filepath.Join(dir, "first.mp4")
+			return p, os.WriteFile(p, []byte("init+seg"), 0o600)
+		}
+	}
+	// The media can't be reached: no poster, and it is asked for again next time.
+	for range 2 {
+		if _, err := m.Keyed(ctx, root, "render/r1/index.m3u8", fetch(offline)); !errors.Is(err, ErrNone) {
+			t.Fatalf("offline: %v", err)
+		}
+	}
+	if fetches.Load() != 2 || runs.Load() != 0 {
+		t.Fatalf("offline: %d fetches, %d runs", fetches.Load(), runs.Load())
+	}
+	p, err := m.Keyed(ctx, root, "render/r1/index.m3u8", fetch(nil))
+	if err != nil || filepath.Dir(p) != Dir(root) || read[0] != "init+seg" {
+		t.Fatalf("Keyed = %s, %v, read %q", p, err, read)
+	}
+	// Made once: a new maker (a restarted server) finds it without fetching.
+	if p2, err := (&Maker{Run: m.Run}).Keyed(ctx, root, "render/r1/index.m3u8", fetch(nil)); err != nil || p2 != p {
+		t.Errorf("again: %s, %v", p2, err)
+	}
+	if fetches.Load() != 3 || runs.Load() != 1 {
+		t.Errorf("%d fetches, %d runs, want 3 and 1", fetches.Load(), runs.Load())
+	}
+	// Another key is another frame; the scratch folders are gone.
+	if p3, err := m.Keyed(ctx, root, "render/r2/video.mp4", fetch(nil)); err != nil || p3 == p {
+		t.Errorf("another key: %s, %v", p3, err)
+	}
+	entries, _ := os.ReadDir(Dir(root))
+	if len(entries) != 2 {
+		t.Errorf("thumbs folder: %v", entries)
+	}
+	// What ffmpeg can't read is remembered, as for a file.
+	bad := &Maker{Run: fakeRun(&runs, errors.New("invalid data"))}
+	before := runs.Load()
+	for range 2 {
+		if _, err := bad.Keyed(ctx, root, "render/r3/index.m3u8", fetch(nil)); !errors.Is(err, ErrNone) {
+			t.Errorf("unreadable: %v", err)
+		}
+	}
+	if runs.Load()-before != 1 {
+		t.Errorf("ffmpeg ran %d times on unreadable media, want 1", runs.Load()-before)
+	}
+}

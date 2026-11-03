@@ -47,8 +47,9 @@ func TestPosterRoute(t *testing.T) {
 	if runs.Load() != 2 {
 		t.Errorf("frames made %d times, want 2", runs.Load())
 	}
-	if r := h.get("/api/poster?v=v7", nil); r.code != 404 || r.json(t)["error"] != "no poster" {
-		t.Errorf("no frame: %d %s", r.code, r.body)
+	// A version with no frame of its own gets the newest one before it that has one.
+	if r := h.get("/api/poster?v=v7", nil); r.code != 200 || !bytes.HasSuffix(r.body, []byte("clip_v6.mp4")) {
+		t.Errorf("no frame of its own: %d %q", r.code, r.body)
 	}
 	if r := h.get("/api/poster?v=v99", nil); r.code != 404 || r.json(t)["error"] != "no such version" {
 		t.Errorf("unknown version: %d %s", r.code, r.body)
@@ -67,6 +68,13 @@ func TestPosterRoute(t *testing.T) {
 	// Through a share's host, a token is needed, as for every watch route.
 	if r := h.do(http.MethodGet, "/api/poster", nil, map[string]string{"X-Forwarded-For": "1.2.3.4"}); r.code != 401 {
 		t.Errorf("shared without a token: %d", r.code)
+	}
+	// No version has a frame: 404.
+	none := start(t, Options{Video: newFixture(t).video, Thumbs: &thumb.Maker{Run: func(context.Context, string, string) error {
+		return os.ErrInvalid
+	}}})
+	if r := none.get("/api/poster?v=v6", nil); r.code != 404 || r.json(t)["error"] != "no poster" {
+		t.Errorf("no frame anywhere: %d %s", r.code, r.body)
 	}
 }
 

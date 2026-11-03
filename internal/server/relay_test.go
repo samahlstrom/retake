@@ -115,13 +115,17 @@ func pattern(n int) []byte {
 
 // relayFixture is a server with a relay cache and a connected fake worker that has a plain project's version files:
 // v1 (a 2.4-chunk MP4) and v2 (an HLS playlist with a segment).
-func relayFixture(t *testing.T, cacheSize int64) (*harness, *fakeWorker, map[string]string) {
+func relayFixture(t *testing.T, cacheSize int64, opts ...func(*Options)) (*harness, *fakeWorker, map[string]string) {
 	t.Helper()
 	cache, err := relay.OpenCache(t.TempDir(), cacheSize)
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := start(t, Options{Root: t.TempDir(), MediaCache: cache, CacheScope: "demo"})
+	o := Options{Root: t.TempDir(), MediaCache: cache, CacheScope: "demo"}
+	for _, f := range opts {
+		f(&o)
+	}
+	h := start(t, o)
 	t.Cleanup(func() { _ = h.srv.Close() })
 	token := makeToken(t, h, "agent", "worker", 0)
 	headers := map[string]string{"Authorization": "Bearer " + token, "X-Retake-Worker": "machine", "X-Retake-Session": "session"}
@@ -372,8 +376,5 @@ func TestTakesOnAVersionFileAreKeptOnTheServer(t *testing.T) {
 	v, ok := h.srv.version("v1")
 	if !ok || !strings.Contains(v.Path, ".retake/remote/v1/") {
 		t.Fatalf("v1's takes go under .retake/remote: %+v", v)
-	}
-	if r = h.get("/api/poster?v=v1", nil); r.code != 404 {
-		t.Fatalf("the server has no frame of a relayed version: %d", r.code)
 	}
 }
