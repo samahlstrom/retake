@@ -1,7 +1,7 @@
 <script lang="ts">
   // A comment's ⋯: everything you do to a comment now and then (edit its words, send just this one, retry, switch
-  // agent, pause, its history, reopen, delete). It shows on hover or focus (always on touch), so the list stays words and pictures. No ⋯
-  // at all when there's nothing to do.
+  // agent, pause, its history, reopen, delete). It shows on hover or focus (always on touch), so the list stays words
+  // and pictures. No ⋯ at all when there's nothing to do.
   import { DropdownMenu, Popover } from 'bits-ui';
   import type { Review } from '../../lib/review.svelte';
   import type { Row } from '../../lib/notes/view';
@@ -30,7 +30,7 @@
   const hasHistory = $derived(!!task?.events.length);
   const canDelete = $derived(row.kind === 'note' && review.canApprove);
   // Its words, while it's still to do and the agent isn't on it (spec/notes.md, "Editing a comment"); hidden otherwise.
-  const canEditWords = $derived(review.canRecord && canEdit(row, status, task) && !review.edit.editing(row.id, true));
+  const canEditWords = $derived(review.canRecord && canEdit(row, status, task));
   const any = $derived(
     canEditWords || canSend || canRetry || canSwitch || canPause || hasHistory || row.reopen || canDelete,
   );
