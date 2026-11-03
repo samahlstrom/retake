@@ -34,9 +34,8 @@ type LocalSettings struct {
 	Extensions func() []*ext.Ext
 	// Home is the user's home folder, which paths show as ~ ("" = none).
 	Home string
-	// Folder is the videos folder served. SetFolder makes retake start serve another one (spec/setup.md); nil under
-	// retake open <folder>, where the folder is its argument (read-only).
-	Folder    string
+	// SetFolder makes retake start serve another videos folder (spec/setup.md); nil under retake open <folder>, where
+	// the folder is its argument (read-only).
 	SetFolder func(dir string) error
 	// Try runs an agent's test (worker.TryAgent); nil: no Test.
 	Try func(ctx context.Context, id string) worker.TryResult
