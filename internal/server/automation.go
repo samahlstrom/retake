@@ -653,7 +653,7 @@ func (s *Server) remoteVersion(v project.LiveRender) family.Version {
 	duration := jsonx.Float(v.Duration)
 	w, h := v.Width, v.Height
 	return family.Version{Label: v.Label, N: v.N, Name: v.MediaName(), Path: s.remoteMediaPath(v.Label, v.MediaName()), FPS: jsonx.Float(v.FPS),
-		Duration: &duration, Width: &w, Height: &h, Stream: &stream, Relay: true}
+		Duration: &duration, Width: &w, Height: &h, Stream: &stream, Relay: true, Media: "video/" + v.ID}
 }
 
 // fileVersion is a connected computer's version file as a version of the family. Its takes live on the host, under

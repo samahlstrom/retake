@@ -99,6 +99,9 @@ type Version struct {
 	// Relay says the version plays from a connected computer through the server's relay (spec/automation.md):
 	// a worker's render or one of its version files. It can't play while that computer is offline.
 	Relay bool `json:"relay,omitempty"`
+	// Media is an immutable render's relative media base address. A plain file uses it directly; a playlist appends
+	// its Name (spec/api.md, "Versions").
+	Media string `json:"media,omitempty"`
 	// Kind is an extension's kind of version (spec/extensions.md, "Version kinds"), "<ext>.<kind>": a folder such as
 	// v0/ that isn't a video. It has no duration, size or poster, and no file plays.
 	Kind string `json:"kind,omitempty"`

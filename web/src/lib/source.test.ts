@@ -16,6 +16,15 @@ describe('source selection', () => {
     expect(isPlaylist('A.M3U8')).toBe(true);
     expect(isPlaylist('a.m3u8.mp4')).toBe(false);
   });
+  it('uses a render-specific media address when the API supplies one', () => {
+    expect(planSource({ label: 'v7', name: 'video.mp4', media: 'video/render-a' }, false)).toEqual({
+      kind: 'file',
+      url: 'video/render-a',
+    });
+    const hls = { label: 'v7', name: 'index.m3u8', media: 'video/render-b' };
+    expect(planSource(hls, true)).toEqual({ kind: 'native-hls', url: 'video/render-b/index.m3u8' });
+    expect(planSource(hls, false)).toEqual({ kind: 'hls.js', url: 'video/render-b/index.m3u8' });
+  });
   it('escapes odd labels and names', () => {
     expect(planSource({ label: 'my cut', name: 'my cut #2.m3u8' }, true).url).toBe(
       'video/my%20cut/my%20cut%20%232.m3u8',

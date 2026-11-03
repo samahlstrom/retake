@@ -342,6 +342,111 @@ func TestAGrowingRenderPlaylistIsNeverCached(t *testing.T) {
 	}
 }
 
+// A public version label can move to a later render. The browser must use the render-specific media address from
+// /api/info, so an entry it cached for the prior render cannot become the new one.
+func TestRenderMediaAddressesStayPinnedWhenALabelIsReplaced(t *testing.T) {
+	h, w, headers := relayFixture(t, 1<<30)
+	if r := h.post("/api/worker/files", `{"files":[]}`, headers); r.code != http.StatusOK {
+		t.Fatalf("clear version files: %d %s", r.code, r.body)
+	}
+	announce := func(id, media string) project.LiveRender {
+		t.Helper()
+		body := fmt.Sprintf(`{"id":%q,"worker":"machine","source":%q,"duration":2,"fps":30,"width":64,"height":36,"done":1,"total":1,"complete":true,"media":%q}`,
+			id, strings.Repeat("a", 64), media)
+		r := h.post("/api/worker/render", body, headers)
+		var v project.LiveRender
+		if r.code != http.StatusOK || json.Unmarshal(r.body, &v) != nil {
+			t.Fatalf("render %s: %d %s", id, r.code, r.body)
+		}
+		return v
+	}
+	version := func(label string) map[string]any {
+		t.Helper()
+		for _, raw := range h.get("/api/info", nil).json(t)["versions"].([]any) {
+			v := raw.(map[string]any)
+			if v["label"] == label {
+				return v
+			}
+		}
+		t.Fatalf("%s is not in /api/info", label)
+		return nil
+	}
+	media := func(v map[string]any) string {
+		t.Helper()
+		url, _ := v["media"].(string)
+		if url == "" {
+			t.Fatalf("render version has no media address: %v", v)
+		}
+		return url
+	}
+
+	old := announce("render-old", "old.mp4")
+	w.files[old.ID+"/old.mp4"] = []byte("old render")
+	oldMedia := media(version("v1"))
+	if r := h.get("/"+oldMedia, nil); r.code != http.StatusOK || !bytes.Equal(r.body, []byte("old render")) ||
+		r.header.Get("Cache-Control") != "private, max-age=31536000, immutable" {
+		t.Fatalf("old media: %d %q %q", r.code, r.body, r.header.Get("Cache-Control"))
+	}
+
+	// This is the state after a later completed render replaces v1: the former v1 stays retained as a draft.
+	st, err := h.srv.store(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = st.UpdateAutomation(func(a *project.AutomationState) (bool, error) {
+		prior := a.Render(old.ID)
+		prior.Label, prior.Draft = "v1-draft1", true
+		a.Renders = append(a.Renders, project.LiveRender{ID: "render-new", Worker: "machine", Label: "v1", N: 1,
+			Source: strings.Repeat("b", 64), Duration: 2, FPS: 30, Width: 64, Height: 36, Done: 1, Total: 1,
+			Complete: true, Media: "new.mp4"})
+		return true, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	w.files["render-new/new.mp4"] = []byte("new render")
+	newMedia := media(version("v1"))
+	if newMedia == oldMedia {
+		t.Fatalf("v1 reused %q after replacement", newMedia)
+	}
+	if r := h.get("/"+oldMedia, nil); r.code != http.StatusOK || !bytes.Equal(r.body, []byte("old render")) {
+		t.Fatalf("prior media: %d %q", r.code, r.body)
+	}
+	if r := h.get("/"+newMedia, nil); r.code != http.StatusOK || !bytes.Equal(r.body, []byte("new render")) {
+		t.Fatalf("current media: %d %q", r.code, r.body)
+	}
+	if r := h.get("/video/v1", nil); r.code != http.StatusOK || !bytes.Equal(r.body, []byte("new render")) ||
+		strings.Contains(r.header.Get("Cache-Control"), "immutable") {
+		t.Fatalf("mutable alias: %d %q %q", r.code, r.body, r.header.Get("Cache-Control"))
+	}
+
+	// A complete HLS render uses that same address as its directory: relative init and segment URLs never fall back
+	// to the mutable label.
+	if err = st.UpdateAutomation(func(a *project.AutomationState) (bool, error) {
+		a.Renders = append(a.Renders, project.LiveRender{ID: "render-hls", Worker: "machine", Label: "v2", N: 2,
+			Source: strings.Repeat("c", 64), Duration: 2, FPS: 30, Width: 64, Height: 36, Done: 1, Total: 1, Complete: true})
+		return true, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	w.files["render-hls/index.m3u8"] = []byte("#EXTM3U\n#EXT-X-MAP:URI=\"init.mp4\"\nseg_000.m4s\n#EXT-X-ENDLIST\n")
+	w.files["render-hls/init.mp4"] = []byte("init")
+	w.files["render-hls/seg_000.m4s"] = []byte("segment")
+	hlsMedia := media(version("v2"))
+	for path, want := range map[string]string{
+		"/" + hlsMedia + "/index.m3u8":  "#EXTM3U\n#EXT-X-MAP:URI=\"init.mp4\"\nseg_000.m4s\n#EXT-X-ENDLIST\n",
+		"/" + hlsMedia + "/init.mp4":    "init",
+		"/" + hlsMedia + "/seg_000.m4s": "segment",
+	} {
+		if r := h.get(path, nil); r.code != http.StatusOK || string(r.body) != want {
+			t.Fatalf("HLS %s: %d %q", path, r.code, r.body)
+		}
+	}
+	if r := h.get("/video/v2/seg_000.m4s", nil); r.code != http.StatusOK || !bytes.Equal(r.body, []byte("segment")) ||
+		strings.Contains(r.header.Get("Cache-Control"), "immutable") {
+		t.Fatalf("mutable HLS alias: %d %q %q", r.code, r.body, r.header.Get("Cache-Control"))
+	}
+}
+
 func TestTheCacheKeepsItsSizeAndAWorkerOnlyChangesItsOwnFiles(t *testing.T) {
 	h, w, headers := relayFixture(t, relay.Chunk+relay.Chunk/2) // one chunk fits, not two
 	for _, rng := range []string{"bytes=0-", fmt.Sprintf("bytes=%d-", relay.Chunk), "bytes=0-"} {

@@ -52,6 +52,10 @@ A version object:
   "duration": 40.0, "fps": 30.0, "width": 1920, "height": 1080 }
 ```
 
+An immutable render that is relayed from a worker may also have `media`, its relative media base address
+`video/<render id>`. The page uses that address itself for a plain file, or appends `/<name>` for a playlist.
+The public `label` still identifies the version for review data and the version menu.
+
 `duration` is null if ffprobe can't read one. `fps` defaults to 30.0. Probe results are cached per (path, mtime, size).
 A streamed version also has `"stream": {"state": "rendering", "done": 12, "total": 50, "seconds": 41.3}` (`state` is
 `pending`, `rendering` or `complete`; `done` counts published units of `total`, `seconds` is what's playable) and
@@ -101,6 +105,9 @@ an unsatisfiable range gives 416 with `Content-Range: bytes */<size>`. They send
 `.ts`). A playlist (`.m3u8`) can still be growing (spec/bridge.md, "Streaming"), so it also says no cache in between
 may keep it: `Cache-Control: no-cache, private`, `CDN-Cache-Control: no-store` and
 `Cloudflare-CDN-Cache-Control: no-store` (a tunnel such as Cloudflare's then always asks this server).
+An immutable worker render addressed by its `media` render ID instead sends `Cache-Control: private,
+max-age=31536000, immutable` for files whose bytes cannot change. Label and alias URLs stay mutable and do not send
+that immutable cache directive.
 
 **Every request** counts as contact for the idle timer. With `--idle-exit M` (default 15, 0 = never), the server exits
 M minutes after the last request, counting only once the page has made its first request. The page pings every 15 s.

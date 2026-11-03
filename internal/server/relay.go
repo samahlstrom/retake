@@ -41,9 +41,10 @@ type errRange struct{ size int64 }
 
 func (e errRange) Error() string { return "range not satisfiable" }
 
-// remoteMedia serves a relayed version's file: /video/<label> (name "") or /video/<label>/<name>. It reports false
-// when the version isn't relayed (it is on this server's disk).
-func (s *Server) remoteMedia(w http.ResponseWriter, r *http.Request, v family.Version, name string) bool {
+// remoteMedia serves a relayed version's file: /video/<label> (name "") or /video/<label>/<name>. requested is the
+// URL's label or immutable render ID; preserving it keeps an old render's media pinned after its public label moves.
+// It reports false when the version isn't relayed (it is on this server's disk).
+func (s *Server) remoteMedia(w http.ResponseWriter, r *http.Request, v family.Version, requested, name string) bool {
 	if !v.Relay {
 		return false
 	}
@@ -57,7 +58,7 @@ func (s *Server) remoteMedia(w http.ResponseWriter, r *http.Request, v family.Ve
 		s.storeFailed(w, r, err)
 		return true
 	}
-	t, ok := relayTarget(&a, v.Label, name)
+	t, ok := relayTarget(&a, requested, name)
 	if !ok {
 		s.fail(w, r, http.StatusNotFound, "no such media file")
 		return true
@@ -77,7 +78,10 @@ func relayTarget(a *project.AutomationState, label, name string) (mediaTarget, b
 			return mediaTarget{}, false
 		}
 		t := mediaTarget{worker: v.Worker, req: relay.Request{Render: v.ID, File: name}, ctype: mediaType(name),
-			cache: "private, max-age=31536000, immutable", key: "render/" + v.ID + "/" + name}
+			cache: "private, no-cache", key: "render/" + v.ID + "/" + name}
+		if label == v.ID {
+			t.cache = "private, max-age=31536000, immutable"
+		}
 		if family.IsPlaylist(name) {
 			t.cache = "no-store"
 			if !v.Complete {

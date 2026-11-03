@@ -10,18 +10,19 @@ export type SourcePlan =
   { kind: 'file'; url: string } | { kind: 'native-hls'; url: string } | { kind: 'hls.js'; url: string };
 
 export const isPlaylist = (name: string | undefined | null): boolean => /\.m3u8$/i.test(name ?? '');
-type SourceVersion = Pick<Version, 'label' | 'name' | 'stream'>;
+type SourceVersion = Pick<Version, 'label' | 'name' | 'stream' | 'media'>;
 
 /** The URL and the player for a version (`null` = the current version, before /api/info answered). */
 export function planSource(v: SourceVersion | null, canPlayHls: boolean): SourcePlan {
   if (!v) return { kind: 'file', url: 'video' };
+  const media = v.media ?? `video/${encodeURIComponent(v.label)}`;
   if (isPlaylist(v.name)) {
-    const url = `video/${encodeURIComponent(v.label)}/${encodeURIComponent(v.name)}`;
+    const url = `${media}/${encodeURIComponent(v.name)}`;
     // Chromium advertises native HLS but fails when an EVENT playlist runs out of rendered segments.
     // Use hls.js for streams, falling back to the native player below when MSE is unavailable (e.g. older iOS).
     return canPlayHls && !v.stream ? { kind: 'native-hls', url } : { kind: 'hls.js', url };
   }
-  return { kind: 'file', url: `video/${encodeURIComponent(v.label)}` };
+  return { kind: 'file', url: media };
 }
 
 /** What VideoSource needs of hls.js (kept narrow so tests can fake it). */

@@ -429,7 +429,9 @@ A connected computer's version files (the family of spec/api.md, "Versions": `cl
 ## The media relay
 
 Relayed versions (a worker's renders and its version files) play from the worker on request. The page uses the
-usual URLs: `/video/<label>`, and `/video/<label>/<file>` for a playlist and the files beside it.
+usual URLs: `/video/<label>`, and `/video/<label>/<file>` for a playlist and the files beside it. An immutable
+render's version object also gives `media: "video/<render id>"`; the page uses that base address instead, appending
+`/<file>` for a playlist. The render ID keeps old media bytes pinned if the public label later names another render.
 
 - The server asks the worker (`GET /api/worker/media`, a long poll of up to 15 s that answers 204 when there is
   nothing) with `{"id", "render" | "version", "file", "range", "head"}`: `render` is a render's id, `version` a

@@ -587,7 +587,11 @@ func (s *Server) get(w http.ResponseWriter, r *http.Request, parts []string) {
 			return
 		}
 		ctype, ok := family.ContentTypes[strings.ToLower(family.Suffix(v.Name))]
-		if s.remoteMedia(w, r, v, "") {
+		requested := label
+		if requested == "" {
+			requested = v.Label
+		}
+		if s.remoteMedia(w, r, v, requested, "") {
 			return
 		}
 		if !ok {
@@ -597,7 +601,7 @@ func (s *Server) get(w http.ResponseWriter, r *http.Request, parts []string) {
 	case parts[0] == "video" && len(parts) == 3 && parts[2] == "download":
 		s.downloadFile(w, r, parts[1])
 	case parts[0] == "video" && len(parts) == 3:
-		if v, ok := s.version(parts[1]); ok && s.remoteMedia(w, r, v, parts[2]) {
+		if v, ok := s.version(parts[1]); ok && s.remoteMedia(w, r, v, parts[1], parts[2]) {
 			return
 		}
 		s.playlistFile(w, r, parts[1], parts[2])
