@@ -40,7 +40,10 @@ for (const device of PHONES) {
       await page.goto(server.url);
       await page.waitForFunction(READY);
       await expect(page.locator('html')).toHaveAttribute('data-layout', 'portrait');
+      // Opening the list asks where v2's download is (the second phone finds it ready).
+      const looked = page.waitForResponse((r) => r.url().includes('api/download?v=v2'));
       await page.locator('#verBtn').tap();
+      const before = (await (await looked).json()) as { state: string };
       const entry = page.locator('#verList [data-part="download"]');
       await expect(entry).toBeVisible();
       await expect(entry).toHaveText(/^Download v2 \(MP4\)/);
@@ -53,16 +56,26 @@ for (const device of PHONES) {
       expect(box.height).toBeGreaterThanOrEqual(44);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 
-      // Tapping it gets the file ready: progress at its right, then its size.
-      await entry.tap();
-      await expect(entry.locator('.d')).toHaveText(/Checking…|Preparing…|\d+%|\d+ (KB|MB)/);
-      await expect(entry.locator('.d')).toHaveText(/\d+ (KB|MB)/, { timeout: 120_000 });
+      if (before.state === 'ready') {
+        // Ready: the tap is the browser's own download of the attachment.
+        const download = page.waitForEvent('download', { timeout: 30_000 });
+        await entry.tap();
+        expect((await download).suggestedFilename()).toBe('talk_v2.mp4');
+        await expect(page.locator('#verList')).toBeHidden(); // and the list closes
+      } else {
+        // Not yet: the tap gets it ready, with the progress on its own line under the entry (a phone's list stays
+        // narrow), then its size.
+        await entry.tap();
+        await expect(entry.locator('.d')).toHaveText(/Checking…|Preparing…|\d+%|\d+ (KB|MB)/);
+        await expect(entry.locator('.d')).toHaveText(/\d+ (KB|MB)/, { timeout: 120_000 });
+      }
       // The file the link names is an attachment with its name and length, as Safari's download sheet needs.
       const head = await page.request.head(`${server.url}video/v2/download`);
       expect(head.status()).toBe(200);
       expect(head.headers()['content-disposition']).toContain('attachment; filename="talk_v2.mp4"');
       expect(Number(head.headers()['content-length'])).toBeGreaterThan(0);
-      if (!(await entry.isVisible())) await page.locator('#verBtn').tap();
+      if (!(await page.locator('#verList').isVisible())) await page.locator('#verBtn').tap();
+      await expect(entry).toBeVisible();
       mkdirSync(SHOTS, { recursive: true });
       await page.waitForTimeout(300);
       await page.screenshot({ path: join(SHOTS, `webkit-menu-${device.toLowerCase().replace(/\s+/g, '')}.png`) });

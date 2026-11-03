@@ -727,6 +727,9 @@
     min-width: 10ch;
     text-align: right;
   }
+  #verList .download-progress {
+    display: none;
+  }
   /* The note wraps inside the list's width instead of widening it (it adds nothing to the width the list takes). */
   #verList .download-note {
     box-sizing: border-box;

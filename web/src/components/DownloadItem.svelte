@@ -15,6 +15,8 @@
   const shownName = $derived(draftOf(label) ? `${draftOf(label)} draft` : review.nameOf(label));
   const right = $derived(progressText(dl));
   const note = $derived(noteText(dl));
+  // A phone's list is narrow: there the progress is a line under the entry, so the list never gets wider.
+  const busy = $derived(dl?.state === 'checking' || dl?.state === 'making');
 
   // Opening the menu (or another version) looks where the file is, so a ready one downloads straight from the link.
   // Only the menu and the label count: the answer it gets doesn't ask again.
@@ -43,4 +45,5 @@
   download={dl?.name || undefined}
   onclick={choose}><span>Download {shownName} (MP4)</span><span class="d">{right}</span></a
 >
+{#if busy}<p class="download-note download-progress">{right}</p>{/if}
 {#if note}<p class="download-note" data-part="download-note">{note}</p>{/if}
