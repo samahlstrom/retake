@@ -13,7 +13,7 @@
 //   in under it), then a summary ("Edited the script · read example.org/…"). The column's left edge drags it wider,
 //   remembered after a reload; a double-click resets it. Scrollbars are thin and drawn from the theme's tokens.
 // - Send makes the video: with no cut yet the agent builds v1 from the script ("Building v1…"); v1 opens, with
-//   `v0 · Script` first; back on the script, Send is dimmed with "Nothing changed since the last Send".
+//   `Script` last in the version menu; back on the script, Send is dimmed with "Nothing changed since the last Send".
 // - A multi-file v0 from before (idea.md, outline.md, script.md) becomes one document and the old files stay.
 // On phones (390×844 and 430×932) nothing is wider than the screen, the text is at least 17 px and the controls are
 // thumb-sized; the bar holds the chat's pill and Send, the pill opens the chat sheet with its composer focused, and
@@ -536,7 +536,7 @@ test.describe('locally', () => {
           );
           const q = question(p);
           await expect(q).toContainText('Which opening?');
-          await expect(p.locator('#side.drawer [data-part~="version-menu"]')).toBeVisible();
+          await expect(p.locator('#side.drawer [data-part~="version-picker"]')).toBeVisible();
           // The pictures are stacked on a phone.
           const pics = await q.locator('.choice').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().x));
           expect(Math.abs(pics[0]! - pics[1]!)).toBeLessThan(1);
@@ -570,7 +570,7 @@ test.describe('locally', () => {
     }
   });
 
-  test('Send builds the first cut; v1 opens, with v0 · Script first; then Send says nothing changed', async ({
+  test('Send builds the first cut; v1 opens, with Script last in the version menu; then Send says nothing changed', async ({
     browser,
   }) => {
     const { context, page } = await newPage(browser);
@@ -582,12 +582,14 @@ test.describe('locally', () => {
       await page.locator('#verBtn').click();
       await page.locator('#verList [data-ver="v1"]').click();
       await page.waitForFunction(() => window.__review?.view?.shown === 'v1', null, { timeout: 20_000 });
-      // The comments' version menu lists v0 · Script first, then v1.
-      await page.locator('#side [data-part~="version-menu"]').click();
-      const versions = page.locator('[data-part~="version-menu-list"] [data-version]');
+      // The one version menu (the bar's; the comments header has none) lists v1, then Script, set apart.
+      await expect(page.locator('#side [data-part~="version-picker"]')).toHaveCount(0);
+      await page.locator('#verBtn').click();
+      const versions = page.locator('[data-part~="version-list"] [data-version]');
       await expect(versions).toHaveCount(2);
-      await expect(versions.first()).toContainText('v0 · Script');
-      await expect(versions.nth(1)).toContainText('v1');
+      await expect(versions.first()).toContainText('v1');
+      await expect(versions.nth(1).locator('.name')).toHaveText('Script');
+      await expect(page.locator('[data-part~="version-list"] [role="separator"]')).toHaveCount(1);
       await page.keyboard.press('Escape');
       // The Script tab on v1: the document's ## Script, a section per beat, linked by cuts/v1.json.
       await page.locator('[data-ext-tab="scripts/sidebar-tab"]').click();
@@ -596,7 +598,7 @@ test.describe('locally', () => {
       await expect(sections.first()).toContainText('Cold open');
       await expect(sections.nth(1)).toContainText('The trick');
       await page.locator('#verBtn').click();
-      await expect(page.locator('#verList [data-ver="v0"]')).toContainText('v0 · Script');
+      await expect(page.locator('#verList [data-ver="v0"] .name')).toHaveText('Script');
       await shot(page, 'versions');
     } finally {
       await context.close();
@@ -607,17 +609,19 @@ test.describe('locally', () => {
       await p.goto(videoUrl());
       await p.waitForFunction(() => window.__review?.view?.shown === 'v1', null, { timeout: 30_000 });
       await p.locator('#verBtn').click();
-      await expect(p.locator('#verList [data-ver="v0"]')).toContainText('v0 · Script');
+      await expect(p.locator('#verList [data-ver="v0"] .name')).toHaveText('Script');
       await noOverflow(p, 'the version list');
       await shot(p, 'versions', PHONES[0]);
-      // v0 from there: the document again, and the drawer has the versions (its version menu).
+      // v0 from there: the document again (no controls row), and the drawer's header has the one version menu.
       await p.locator('#verList [data-ver="v0"]').click();
       await expect(text(p)).toBeVisible({ timeout: 20_000 });
+      await expect(p.locator('[data-part~="version-picker"]:visible')).toHaveCount(0);
       await p.locator('#sideToggle').click();
-      await expect(p.locator('#side.drawer [data-part~="version-menu"]')).toHaveText('v0 · Script');
+      await expect(p.locator('#side.drawer [data-part~="version-picker"]')).toHaveText('Script');
+      await expect(p.locator('[data-part~="version-picker"]:visible')).toHaveCount(1);
       await expect(p.locator('#side.drawer [data-part="chat"]')).toBeVisible();
-      await p.locator('#side.drawer [data-part~="version-menu"]').click();
-      await expect(p.locator('[data-part~="version-menu-list"] [data-version="v1"]')).toBeVisible();
+      await p.locator('#side.drawer [data-part~="version-picker"]').click();
+      await expect(p.locator('[data-part~="version-list"] [data-version="v1"]')).toBeVisible();
       await noOverflow(p, 'the drawer on v0 with v1');
       await p.keyboard.press('Escape');
       await shot(p, 'drawer-versions', PHONES[0]);

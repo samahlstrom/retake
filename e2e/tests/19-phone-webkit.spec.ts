@@ -229,7 +229,8 @@ test.describe('phones in WebKit', () => {
         await expect(page.locator('#precord')).toBeVisible();
         await fitsWidth(page, `${device}: a video`);
         await barOnScreen(page, `${device}: a video`);
-        await topBarFits(page, `${device}: a video`, ['[data-part~="review-back"]', '#sideToggle']);
+        await topBarFits(page, `${device}: a video`, ['[data-part~="review-back"]']);
+        await expect(page.locator('#sideToggle')).toHaveCount(0); // the comments are always in view in portrait
         await shot(page, 'video', device);
 
         // The home.

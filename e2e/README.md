@@ -309,3 +309,19 @@ steps (`lib/progress.ts`). Chromium on a desktop and an iPhone 15; WebKit (`RETA
 - Done shows each change with "in v2", which plays v2 at that comment's moment. The report makes v2 final, the edge
   light goes, and the notes are answered in v2 with the agent's words.
 - Screenshots: `.retake-work/progress-shots/` (`working-<device>`, `mid-batch-<device>`).
+
+**`24-version-menu`** and **`24-version-menu-webkit`** (new only; spec/notes.md, "The version menu", and spec/home.md,
+"A version's name, never draft" and "Every card has a picture"): `retake open` on a folder with a video `promo` (v1, v2
+and its script v0), two ideas (a script with words, a script with an image) and another video, Scripts on, and a fake
+agent that waits at its gates, so Send on v2 makes v3 live (`lib/version-menu.ts`). It reuses the progress port.
+Chromium on a desktop and an iPhone 15; WebKit (`RETAKE_E2E_WEBKIT`) on the iPhone 15.
+- One version menu on screen in each layout: the bar's on a computer, the controls row's on a phone in portrait, the
+  bottom bar's in landscape; none in the comments header, no speech bubble while the comments are in view.
+- Its rows while v3 is live: `v3 v2 v1 Script`, the red dot on v3's line, v3 the one on screen, one detail each
+  (`0:40`, `3 to do`, `2 to do`), Script after a separator, never "draft", "Latest", "→" or a check; on the phone 44 px
+  rows in a menu at least 240 px wide inside the screen; a pick switches the comments.
+- In landscape (Safari's 734×343) the bubble opens the comments over the video, as tall as it.
+- The page's title (`Review · promo_v3`), the home's card (`v3` and its live dot) and tree say v3; the live revision's
+  poster is a JPEG; the cards' images load (the video's frame, the other video's, an idea's own image) and the other
+  idea shows its title and first lines.
+- Screenshots: `.retake-work/version-menu-shots/` (`menu-<device>`, `landscape-<device>`, `home-<device>`).

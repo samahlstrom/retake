@@ -17,17 +17,16 @@ import { startServer, type Server } from '../lib/server.ts';
 test.skip(LEGACY, 'versions in the comments panel are the current player');
 let server: Server;
 const json = (r: Route, body: unknown) => r.fulfill({ contentType: 'application/json', body: JSON.stringify(body) });
-/** The comments' version menu (spec/notes.md, "The comments header"). */
-const versionMenu = (page: Page) => page.locator('#side [data-part~="version-menu"]');
-/** Opens it and lists its entries: [version, where its comments go, what's still to do, checked]. */
+/** The one version menu (spec/notes.md, "The version menu"): the bar's, on a phone in the controls row. */
+const versionMenu = (page: Page) => page.locator('[data-part~="version-picker"]:visible');
+/** Opens it and lists its rows: [version, its one detail, on screen]. */
 async function menuEntries(page: Page): Promise<(string | boolean)[][]> {
   await versionMenu(page).click();
-  const rows = page.locator('[data-part~="version-menu-list"] [data-version]');
+  const rows = page.locator('[data-part~="version-list"] [data-version]');
   await expect(rows.first()).toBeVisible();
   const out = await rows.evaluateAll((els) => els.map((e) => [
     (e as HTMLElement).dataset.version!,
-    e.querySelector('.into')?.textContent?.trim() ?? '',
-    (e.querySelector('.n')?.firstChild?.textContent ?? '').trim(),
+    e.querySelector('.d')?.textContent?.trim() ?? '',
     e.getAttribute('aria-current') === 'true',
   ]));
   await page.keyboard.press('Escape');
@@ -36,7 +35,7 @@ async function menuEntries(page: Page): Promise<(string | boolean)[][]> {
 /** Picks a version from it. */
 async function menuPick(page: Page, version: string): Promise<void> {
   await versionMenu(page).click();
-  await page.locator(`[data-part~="version-menu-list"] [data-version="${version}"]`).click();
+  await page.locator(`[data-part~="version-list"] [data-version="${version}"]`).click();
 }
 
 const items = [
@@ -110,16 +109,16 @@ test('the newest version shows its own comments; the line goes to the earlier on
   await expect(page.locator('#done')).toHaveText('Send');
   await expect(page.locator('#done')).toHaveAttribute('aria-label', 'Send 1 comment to the agent');
   expect(await strokes(page)).toBe(0); // v1's drawing never shows on v3
-  // The version menu: v3 v2 v1, newest first, v3 checked; where each one's comments go and what's still to do.
+  // The version menu: v3 v2 v1, newest first, v3 on screen; one detail each, what's still to do, else the length.
   await expect(versionMenu(page)).toHaveText('v3');
   expect(await menuEntries(page)).toEqual([
-    ['v3', '→ v4', '1 to do', true],
-    ['v2', '', '', false],
-    ['v1', '→ v2', '2 to do', false],
+    ['v3', '1 to do', true],
+    ['v2', '0:40', false],
+    ['v1', '2 to do', false],
   ]);
   // Its dot and title say what's still open earlier.
   await expect(versionMenu(page)).toHaveAttribute('title', /Open on earlier versions: v1 · 2/);
-  await expect(versionMenu(page).locator('.dot')).toBeVisible();
+  await expect(versionMenu(page)).toHaveClass(/\bearlier\b/);
 
   await menuPick(page, 'v1');
   await expect.poll(() => shown(page)).toBe('v1');
@@ -127,7 +126,7 @@ test('the newest version shows its own comments; the line goes to the earlier on
   await expect(page.locator('#side .item').first()).toContainText('v1: the intro runs long');
   await expect(page.getByRole('tab', { name: 'To do 2', exact: true })).toBeVisible();
   expect(await markers(page)).toEqual(['note:1', 'note:2']);
-  await expect(versionMenu(page).locator('.dot')).toHaveCount(0); // only on the newest version
+  await expect(versionMenu(page)).not.toHaveClass(/\bearlier\b/); // only on the newest version
   await expect(page.locator('#done')).toHaveAttribute('aria-label', 'Send 2 comments to the agent');
   await expect.poll(() => strokes(page)).toBe(1); // v1's own drawing is back on v1
   // Its markers sit at its own times on its own clock (0:04 and 0:30 of 40 s).
@@ -165,7 +164,7 @@ test("the bar's picker takes the comments and the markers along", async ({ page 
   await expect(page.locator('#side .empty')).toContainText('No comments yet');
   expect(await markers(page)).toEqual([]);
   await expect(versionMenu(page)).toHaveText('v2');
-  await expect(versionMenu(page).locator('.dot')).toHaveCount(0);
+  await expect(versionMenu(page)).not.toHaveClass(/\bearlier\b/);
   await pick('v1');
   await expect(page.locator('#side .item')).toHaveCount(2);
   expect(await markers(page)).toEqual(['note:1', 'note:2']);
@@ -188,24 +187,23 @@ test("Send sends the shown version's comments; an older version's go from there"
   await expect.poll(() => seen.submitted).toEqual([[4], [1, 2]]);
 });
 
-test('a single version shows its label without a menu', async ({ page }) => {
+test('a single version has no version menu: nothing to choose', async ({ page }) => {
   await page.route('**/api/info', async (r) => {
     const real = (await (await r.fetch()).json()) as { versions: { label: string }[] };
     return json(r, { ...real, versions: real.versions.filter((v) => v.label === 'v3') });
   });
   await mock(page);
   await expect(page.locator('#side .item')).toHaveCount(1);
-  await expect(versionMenu(page)).toHaveText('v3');
-  await expect(page.locator('#side button[data-part~="version-menu"]')).toHaveCount(0);
+  await expect(page.locator('[data-part~="version-picker"]')).toHaveCount(0);
 });
 
 test('phone: the version menu fits the screen', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await mock(page);
-  await page.locator('#sideToggle').click();
   await expect(versionMenu(page)).toBeVisible();
+  await expect(page.locator('#pbar [data-part~="version-picker"]')).toBeVisible(); // in the controls row
   await versionMenu(page).click();
-  const list = page.locator('[data-part~="version-menu-list"]');
+  const list = page.locator('[data-part~="version-list"]');
   await expect(list).toBeVisible();
   const box = (await list.boundingBox())!;
   expect(box.x).toBeGreaterThanOrEqual(0);

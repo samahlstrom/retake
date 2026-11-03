@@ -22,7 +22,7 @@ export const KB = 246;
 const COMMENT_BOX = '#side [data-part~="comment-line"] textarea';
 const COMPOSER = '#side [data-part~="comment-line"]';
 /** What compose mode hides (spec/notes.md). */
-const FADES = ['#pbar', '#precord', '#sideToggle', '[data-part~="review-back"]', '#side > header', '#side > .list'];
+const FADES = ['#pbar', '#precord', '[data-part~="review-back"]', '#side > header', '#side > .list'];
 
 const COMMENTS = [
   'Cut the first two seconds, the intro drags',

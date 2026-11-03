@@ -104,12 +104,11 @@ test('idle: a calm bar (play, time, timeline, version, pen, Record, Send, ?) tha
   await expect(page.locator('#bar [data-part~="agent-status"], #agent')).toHaveCount(0);
   await expect(page.locator('#rec')).toHaveAttribute('aria-label', 'Record voice (R)');
   await expect(page.locator('#rec .mic .recdot')).toBeVisible();
-  // The comments' header: a speech bubble (no word), the version, search and hide; then To do · Done.
+  // The comments' header: one row, To do · Done, search and hide; no bubble and no version (the bar has the one menu).
   await expect(page.locator('#side header')).not.toContainText('Comments');
-  await expect(page.locator('#side header .cicon svg')).toBeVisible();
-  await expect(page.locator('#side [data-part~="version-menu"]')).toHaveText('v6');
-  await expect(page.locator('#side .tabs .seg button')).toHaveText(['To do 0', 'Done 0']);
-  await expect(page.locator('[data-part~="version-strip"] button, [data-part~="earlier-versions"] button')).toHaveCount(0);
+  await expect(page.locator('#side header .seg button')).toHaveText(['To do 0', 'Done 0']);
+  await expect(page.locator('#side [data-part~="version-picker"]')).toHaveCount(0);
+  await expect(page.locator('#bar [data-part~="version-picker"]')).toHaveText('v6');
   await expect(page.locator('#side [data-part~="comment-line"] textarea')).toHaveAttribute('placeholder',
     /^Comment at 0:00 · goes into v7…$/);
   await shot('idle');
@@ -227,25 +226,25 @@ test('recording: REC and the time, nothing in the bar moves, and the pen draws i
   expect(await Promise.all(parts.map(box))).toEqual(before);
 });
 
-test('the comments header: the version menu says where comments go and switches versions', async () => {
-  const menu = page.locator('#side [data-part~="version-menu"]');
+test('the version menu: one row per version, one detail each, and a pick switches the comments', async () => {
+  const menu = page.locator('#bar [data-part~="version-picker"]');
   await expect(menu).toHaveText('v6');
   await menu.click();
-  const list = page.locator('[data-part~="version-menu-list"]');
+  const list = page.locator('[data-part~="version-list"]');
   await expect(list).toBeVisible();
   await expect(list.locator('[data-version]')).toHaveCount(2);
-  await expect(list.locator('[data-version="v6"] .name')).toHaveText(/^v6\s*→ v7$/);
-  await expect(list.locator('[data-version="v6"]')).toContainText('to do');
+  await expect(list.locator('[data-version="v6"] .name')).toHaveText('v6'); // never "→ v7" or "Latest"
+  await expect(list.locator('[data-version="v6"] .d')).toHaveText(/^\d+ to do$/);
   await expect(list.locator('[data-version="v6"]')).toHaveAttribute('aria-current', 'true');
+  await expect(list.locator('[data-version="v5"] .d')).toHaveText('0:40');
   await shot('version-menu');
   await list.locator('[data-version="v5"]').click();
   await expect.poll(async () => (await ui.state()).shown).toBe('v5');
   await expect(menu).toHaveText('v5');
-  await expect(page.locator('#verBtn')).toContainText('v5');
   await expect(page.locator('#side [data-part~="comment-line"] textarea')).toHaveAttribute('placeholder', /goes into v6…$/);
   await expect(page.locator('#side .tabs .seg button').first()).toHaveText('To do 0');
   await menu.click();
-  await page.locator('[data-part~="version-menu-list"] [data-version="v6"]').click();
+  await page.locator('[data-part~="version-list"] [data-version="v6"]').click();
   await expect.poll(async () => (await ui.state()).shown).toBe('v6');
 });
 

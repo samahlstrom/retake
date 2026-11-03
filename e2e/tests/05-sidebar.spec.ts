@@ -200,9 +200,12 @@ test('open questions have readable comments, timecodes and reply controls', asyn
   expect(sb.rows.map((r) => [r.key, r.time, r.mark, r.answer])).toEqual([
     ['question:101', '0:04', 'question', 101], ['question:102', '0:12', 'question', 102]]);
   await expect(page.locator('#side li.item')).toHaveCount(2);
-  // The header: a speech bubble (no word), the version, search and hide (spec/notes.md, "The comments header").
-  await expect(page.locator('#side header .cicon svg')).toBeVisible();
-  await expect(page.locator('#side header [data-part~="version-menu"]')).toHaveText('v6');
+  // The header: one row, To do · Done, search and hide; no speech bubble and no version (spec/notes.md, "The comments
+  // header"): the version is the bar's one version menu.
+  await expect(page.locator('#side header [role="tab"]')).toHaveText(['To do 2', 'Done 0']);
+  await expect(page.locator('#side header svg')).toHaveCount(2); // search and hide
+  await expect(page.locator('#side [data-part~="version-picker"]')).toHaveCount(0);
+  await expect(page.locator('#bar [data-part~="version-picker"]')).toHaveText('v6');
   await expect(item('question:101').locator('.text')).toHaveText(/Keep the zoom on the shop/);
   await expect(item('question:101').locator('.time')).toHaveText('0:04');
   await expect(item('question:101').locator('.chip')).toHaveCount(0);
@@ -485,7 +488,7 @@ test('a drawing comment shows its strokes over the still of its moment', async (
 });
 
 // ------------------------------------------------------------------ phone
-test('phone: the list always fills the space under the controls; the bubble goes to it', async () => {
+test('phone: the list always fills the space under the controls, with no bubble over the video; N goes to it', async () => {
   await page.setViewportSize(PHONE);
   await page.reload();
   await ui.waitFor(READY, 20_000);
@@ -493,7 +496,8 @@ test('phone: the list always fills the space under the controls; the bubble goes
   // The phone layout (portrait): the list sits under the phone controls (#pbar) down to Record, which stays on screen
   // below it; nothing is left empty between them.
   expect(await page.evaluate(() => document.documentElement.dataset.layout)).toBe('portrait');
-  expect(await sidebar()).toMatchObject({ phone: true, panel: true, toggle: true });
+  expect(await sidebar()).toMatchObject({ phone: true, panel: true, toggle: false });
+  await expect(page.locator('#sideToggle')).toHaveCount(0); // the comments are in view: To do counts them
   await expect(page.locator('#side')).toBeVisible();
   // (polled: the stage takes the video's shape once it has loaded)
   await expect.poll(async () => {
@@ -503,9 +507,9 @@ test('phone: the list always fills the space under the controls; the bubble goes
   const side = await box('#side'), rec = await box('#precord');
   expect(side.width).toBeCloseTo(PHONE.width, 0);
   expect(rec.y + rec.height).toBeLessThanOrEqual(PHONE.height + 1);
-  // The bubble doesn't hide it: it shows To do.
+  // N doesn't hide it: it shows To do.
   await page.locator('#side .tabs button', { hasText: 'Done' }).click();
-  await page.locator('#sideToggle').click();
+  await ui.key('n');
   expect(await sidebar()).toMatchObject({ panel: true });
   await expect(page.locator('#side .tabs button', { hasText: 'To do' })).toHaveAttribute('aria-selected', 'true');
   await seek(4);
