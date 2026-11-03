@@ -185,7 +185,9 @@ func ffmpeg(ctx context.Context, video, out string) error {
 	if err != nil {
 		return errors.New("ffmpeg not found on $PATH")
 	}
-	args := []string{"-nostdin", "-v", "error", "-y", "-threads", "2", "-ss", "0", "-i", video, "-map", "0:v:0",
+	// No "-ss 0": the first frame is the default, and ffmpeg 6.1 (Ubuntu 24.04's) seeking an HLS playlist to 0 writes
+	// no frame at all.
+	args := []string{"-nostdin", "-v", "error", "-y", "-threads", "2", "-i", video, "-map", "0:v:0",
 		"-frames:v", "1", "-vf", "scale=min(" + strconv.Itoa(Width) + "\\,iw):-2", "-q:v", "4", "-f", "image2",
 		"-c:v", "mjpeg", out}
 	cmd := exec.CommandContext(ctx, bin, args...) //nolint:gosec // ffmpeg on a version file of the family

@@ -21,10 +21,12 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
-      - name: Install Go and golangci-lint from mise.toml
+      - name: Install Go, golangci-lint and node from mise.toml
         uses: jdx/mise-action@v5
         with:
-          install_args: go golangci-lint
+          install_args: go golangci-lint node
+      - name: Build the page and Scripts' UI (the tests load the bundled Scripts extension, whose ui/ is a build output)
+        run: npm --prefix web ci && npm --prefix web run build
       - name: go vet
         run: go vet ./...
       - name: Install ffmpeg (the transcribe and worker tests decode real audio with it)
@@ -162,6 +164,8 @@ jobs:
           go mod download
           npm --prefix web ci
           cargo fetch --locked --manifest-path editor/Cargo.toml
+      - name: Build the page (go list -tags webdist needs web/dist)
+        run: npm --prefix web run build
       - name: scripts/notices.mjs --check
         run: node scripts/notices.mjs --check
       - name: The README's motion graphics are current (scripts/build-motion.mjs --check)
