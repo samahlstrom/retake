@@ -1,87 +1,102 @@
-// 3. Bring your own agent: Claude Code, Codex or any command-line agent plugs into the same socket. One agent per
-// video takes that video's notes and makes its next version.
+// 3. Bring your own agent: Retake has one socket, and any agent fits it: Claude Code, Codex or any command-line
+// agent. You pick which: the default in Settings, another for one video in its ⋯ menu, or another for one Send by
+// holding Send. One agent works on a video's notes at a time.
 import {
-  Motion, INK, PAPER, RED, MUTED, EASE, IN, STEP, LINEAR,
-  rect, circle, path, g, at, text, arrow, travelKeys, heading, icon, wordmark,
+  Motion, INK, PAPER, RED, MUTED, EASE, IN, OUT, POP,
+  rect, circle, path, g, at, text, arrow, travelKeys, heading, icon, wordmark, textWidth,
 } from './kit.mjs';
 
 export default function anyAgent() {
-  const m = new Motion({ duration: 10, stillAt: 8.8 });
-  const RESET = 9.25;
+  const m = new Motion({ duration: 10, stillAt: 1.7 });
+  const RESET = 9.3;
   const out = [];
   out.push(heading('Bring your own agent.'));
 
-  const rows = [
-    { video: 'intro', from: 'v4', to: 'v5', agent: 'Claude Code' },
-    { video: 'promo', from: 'v2', to: 'v3', agent: 'Codex' },
-    { video: 'tutorial', from: 'v7', to: 'v8', agent: 'Any CLI agent' },
+  const SY = 330; // the socket's height
+  const P = { x: 420, y: 196, w: 180, h: 268 };
+  const SEAT = P.x + P.w + 2; // a plugged-in plug's left edge
+  const HOME_X = 930, STAGE_X = 650; // waiting plugs; where a plug lines up before it goes in
+  const PLUG_W = 220, PLUG_H = 76;
+  const agents = [
+    { name: 'Claude Code', home: SY - 120 },
+    { name: 'Codex', home: SY },
+    { name: 'Any CLI agent', home: SY + 120 },
   ];
-  const Y = [250, 370, 490];
-  const P = { x: 430, y: 150, w: 160, h: 410 };
-  const PLUG_W = 250, PLUG_H = 76, IN_X = P.x + P.w + 10, OUT_X = IN_X + 190;
+  const B = (k) => 0.3 + k * 3.0; // each agent's turn
+  const tr = (x, y) => ({ transform: `translate(${x}px,${y}px)` });
 
-  // The plugs go under the panel, so their prongs disappear into it.
-  rows.forEach((r, i) => {
-    const cy = Y[i];
-    const b = 0.4 + i * 2.8;
-    const cable = `M${PLUG_W} 0C${PLUG_W + 90} 0 ${PLUG_W + 90} 34 ${PLUG_W + 180} 34C${PLUG_W + 260} 34 ${PLUG_W + 300} 12 ${PLUG_W + 420} 18`;
-    const body = rect(-22, -16, 30, 9, { r: 3, fill: INK, stroke: 'none' }) + rect(-22, 7, 30, 9, { r: 3, fill: INK, stroke: 'none' })
-      + path(cable)
-      + rect(0, -PLUG_H / 2, PLUG_W, PLUG_H, { r: 16 })
-      + icon.terminal(20, -16, 40, 32, { sw: 2.5 }) + text(76, 9, r.agent, { size: 24 });
-    const spin = m.a([[0, { transform: 'rotate(0deg)' }], [1, { transform: 'rotate(360deg)' }, LINEAR]], { period: 1 });
-    const working = at(PLUG_W - 30, 0, at(0, 0, path('M0 -10C5.5 -10 10 -5.5 10 0C10 5.5 5.5 10 0 10C-5.5 10 -10 5.5 -10 0', { sw: 2.5 }), spin),
-      m.a([[0, { opacity: 0 }], [b + 1.3, { opacity: 0 }, EASE], [b + 1.45, { opacity: 1 }], [b + 1.85, { opacity: 1 }, EASE], [b + 2.0, { opacity: 0 }]]));
-    out.push(at(IN_X, cy, body + working, m.a([
-      [0, { transform: `translate(${OUT_X - IN_X}px,0px)` }], [b, { transform: `translate(${OUT_X - IN_X}px,0px)` }, EASE],
-      [b + 0.6, { transform: 'translate(0px,0px)' }], [RESET + i * 0.08, { transform: 'translate(0px,0px)' }, IN],
-      [RESET + 0.45 + i * 0.08, { transform: `translate(${OUT_X - IN_X}px,0px)` }],
-    ])));
+  // ---- the video and its notes ----
+  const V = { x: 56, y: SY - 48, w: 262, h: 96 };
+  out.push(rect(V.x, V.y, V.w, V.h, { r: 16 }) + icon.video(V.x + 18, SY - 21, 58, 42));
+  out.push(text(V.x + 92, SY - 4, 'intro', { size: 24 }) + text(V.x + 92, SY + 22, '3 notes', { size: 18, weight: 500, fill: MUTED }));
+  // Its version goes up by one each time an agent finishes.
+  const bx = V.x + V.w - 70, by = SY - 16;
+  const vers = ['v4', 'v5', 'v6', 'v7'];
+  const shown = [[0, B(0) + 2.2], [B(0) + 2.2, B(1) + 2.2], [B(1) + 2.2, B(2) + 2.2], [B(2) + 2.2, RESET]];
+  vers.forEach((v, i) => {
+    const [on, off] = shown[i];
+    const keys = i === 0
+      ? [[0, { opacity: 1, transform: 'scale(1)' }], [off, { opacity: 1, transform: 'scale(1)' }, IN], [off + 0.05, { opacity: 0, transform: 'scale(1)' }], [RESET + 0.1, { opacity: 0, transform: 'scale(1)' }, EASE], [RESET + 0.4, { opacity: 1, transform: 'scale(1)' }]]
+      : [[0, { opacity: 0, transform: 'scale(.7)' }], [on, { opacity: 0, transform: 'scale(.7)' }, POP], [on + 0.3, { opacity: 1, transform: 'scale(1)' }], [off, { opacity: 1, transform: 'scale(1)' }, IN], [off + 0.05, { opacity: 0, transform: 'scale(1)' }]];
+    const filled = i > 0;
+    out.push(at(bx + 27, by + 16, rect(-27, -16, 54, 32, { r: 16, fill: filled ? INK : PAPER, stroke: INK, sw: 2.5 }) + text(0, 7, v, { size: 19, anchor: 'middle', fill: filled ? PAPER : INK }), m.a(keys)));
   });
-
-  // The notes go into Retake, to this video's agent; the new version comes back out (under the panel, so they pass
-  // through it).
-  rows.forEach((r, i) => {
-    const cy = Y[i];
-    const b = 0.4 + i * 2.8;
-    for (let k = 0; k < 3; k++) {
-      out.push(at(0, 0, rect(-9, -9, 18, 18, { r: 4, fill: PAPER, stroke: INK, sw: 2.5 }), m.a(travelKeys([[338, cy], [P.x + 60, cy]], b + 0.75 + k * 0.12, b + 1.2 + k * 0.12, { fade: 0.04 }))));
+  out.push(arrow([[V.x + V.w + 12, SY], [P.x - 12, SY]]));
+  // The notes go in, and the new version comes back (under the panel, so they pass into Retake).
+  for (let k = 0; k < 3; k++) {
+    for (let j = 0; j < 3; j++) {
+      out.push(at(0, 0, rect(-9, -9, 18, 18, { r: 4, fill: PAPER, stroke: INK, sw: 2.5 }), m.a(travelKeys([[V.x + V.w + 16, SY], [P.x + 40, SY]], B(k) + 0.7 + j * 0.12, B(k) + 1.1 + j * 0.12, { fade: 0.04 }))));
     }
-    out.push(at(0, 0, circle(0, 0, 8, { fill: INK, stroke: PAPER, sw: 2.5 }), m.a(travelKeys([[P.x + 40, cy], [270, cy]], b + 1.85, b + 2.3, { fade: 0.04 }))));
+    out.push(at(0, 0, circle(0, 0, 8, { fill: INK, stroke: PAPER, sw: 2.5 }), m.a(travelKeys([[P.x + 30, SY], [bx - 8, SY]], B(k) + 1.8, B(k) + 2.2, { fade: 0.04 }))));
+  }
+
+  // ---- Retake, with its one socket ----
+  out.push(rect(P.x, P.y, P.w, P.h, { r: 18 }) + wordmark(P.x + P.w / 2, P.y + 46, 28, 'middle'));
+  const sx = P.x + P.w; // the socket opens on the panel's right edge
+  out.push(rect(sx - 48, SY - 46, 48, 92, { r: 12, sw: 2.5 }));
+  out.push(rect(sx - 36, SY - 23, 40, 14, { r: 3, fill: INK, stroke: 'none' }) + rect(sx - 36, SY + 9, 40, 14, { r: 3, fill: INK, stroke: 'none' }));
+  // Its light: on while an agent is plugged in.
+  out.push(circle(P.x + 40, SY, 8, { sw: 2.5 }));
+  const lit = [[0, { opacity: 0 }]];
+  for (let k = 0; k < 3; k++) lit.push([B(k) + 0.55, { opacity: 0 }, EASE], [B(k) + 0.7, { opacity: 1 }], [B(k) + 2.4, { opacity: 1 }, IN], [B(k) + 2.55, { opacity: 0 }]);
+  out.push(at(P.x + 40, SY, circle(0, 0, 8, { fill: RED, stroke: RED, sw: 2.5 }), m.a(lit)));
+
+  // ---- the agents: plugs that take turns in the one socket ----
+  agents.forEach((a, k) => {
+    const b = B(k);
+    const prong = (y) => rect(-34, y, 36, 8, { r: 2, fill: PAPER, stroke: INK, sw: 2.2 });
+    const body = prong(-20) + prong(12) + rect(0, -PLUG_H / 2, PLUG_W, PLUG_H, { r: 16 }) + icon.terminal(16, -14, 34, 28, { sw: 2.5 }) + text(62, 8, a.name, { size: 22 });
+    // Along its own row, then to the socket's height, then in; back the same way.
+    const home = tr(HOME_X, a.home), seat = tr(SEAT, SY);
+    const keys = a.home === SY
+      ? [[0, home], [b, home, EASE], [b + 0.7, seat], [b + 2.3, seat, EASE], [b + 2.95, home]]
+      : [[0, home], [b, home, EASE], [b + 0.3, tr(STAGE_X, a.home)], [b + 0.32, tr(STAGE_X, a.home), EASE], [b + 0.55, tr(STAGE_X, SY)], [b + 0.57, tr(STAGE_X, SY), EASE], [b + 0.75, seat],
+        [b + 2.3, seat, EASE], [b + 2.45, tr(STAGE_X, SY)], [b + 2.47, tr(STAGE_X, SY), EASE], [b + 2.67, tr(STAGE_X, a.home)], [b + 2.69, tr(STAGE_X, a.home), EASE], [b + 2.95, home]];
+    out.push(at(0, 0, body, m.a(keys)));
   });
 
-  // Retake: one socket per video.
-  out.push(rect(P.x, P.y, P.w, P.h, { r: 18 }) + wordmark(P.x + P.w / 2, P.y + 48, 28, 'middle'));
-  rows.forEach((r, i) => {
-    const cy = Y[i];
-    const b = 0.4 + i * 2.8;
-    out.push(rect(P.x + P.w - 44, cy - 34, 32, 68, { r: 10, sw: 2.5 }));
-    out.push(rect(P.x + P.w - 36, cy - 16, 18, 9, { r: 3, fill: INK, stroke: 'none' }) + rect(P.x + P.w - 36, cy + 7, 18, 9, { r: 3, fill: INK, stroke: 'none' }));
-    out.push(circle(P.x + 34, cy, 7, { sw: 2.5 }));
-    out.push(at(P.x + 34, cy, circle(0, 0, 7, { fill: RED, stroke: RED, sw: 2.5 }), m.a([[0, { opacity: 0 }], [b + 0.55, { opacity: 0 }, EASE], [b + 0.7, { opacity: 1 }], [RESET, { opacity: 1 }, IN], [RESET + 0.3, { opacity: 0 }]])));
+  // ---- how the agent is picked ----
+  const PY = 534;
+  out.push(text(56, PY + 7, 'Picked in', { size: 20, weight: 500, fill: MUTED }));
+  const picks = [{ s: 'Settings: default' }, { s: 'on a video', dots: true }, { s: 'Hold Send: one send' }];
+  let px = 56 + textWidth('Picked in', 20, 500) + 18;
+  picks.forEach((p, k) => {
+    const lw = textWidth(p.s, 20) + (p.dots ? 30 : 0);
+    const w = lw + 36, x = px, h = 40;
+    const content = (fill) => (p.dots ? icon.more(x + 26, PY, fill) : '') + text(x + 18 + (p.dots ? 30 : 0), PY + 7, p.s, { size: 20, fill });
+    out.push(rect(x, PY - h / 2, w, h, { r: h / 2, sw: 2.5 }) + content(INK));
+    const b = B(k);
+    out.push(g(rect(x, PY - h / 2, w, h, { r: h / 2, fill: INK, stroke: INK, sw: 2.5 }) + content(PAPER),
+      { cls: m.a([[0, { opacity: 0 }], [b, { opacity: 0 }, OUT], [b + 0.25, { opacity: 1 }], [b + 2.6, { opacity: 1 }, IN], [b + 2.85, { opacity: 0 }]]) }));
+    px += w + 12;
   });
 
-  // The videos, each with its notes, and the version its agent makes.
-  rows.forEach((r, i) => {
-    const cy = Y[i];
-    const b = 0.4 + i * 2.8;
-    const x = 56, w = 270, h = 84;
-    out.push(rect(x, cy - h / 2, w, h, { r: 14 }) + icon.video(x + 18, cy - 20, 56, 40));
-    out.push(text(x + 90, cy - 4, r.video, { size: 24 }) + text(x + 90, cy + 22, '3 notes', { size: 18, weight: 500, fill: MUTED }));
-    const bx = x + w - 70, by = cy - 16;
-    out.push(g(rect(bx, by, 54, 32, { r: 16, sw: 2.5 }) + text(bx + 27, by + 23, r.from, { size: 19, anchor: 'middle' }),
-      { cls: m.a([[0, { opacity: 1 }], [b + 2.3, { opacity: 1 }, STEP], [b + 2.31, { opacity: 0 }], [RESET + 0.1, { opacity: 0 }, STEP], [RESET + 0.11, { opacity: 1 }]]) }));
-    out.push(at(bx + 27, by + 16, rect(-27, -16, 54, 32, { r: 16, fill: INK, stroke: INK, sw: 2.5 }) + text(0, 7, r.to, { size: 19, anchor: 'middle', fill: PAPER }),
-      m.a([[0, { opacity: 0, transform: 'scale(.7)' }], [b + 2.3, { opacity: 0, transform: 'scale(.7)' }, 'cubic-bezier(.34,1.56,.64,1)'], [b + 2.6, { opacity: 1, transform: 'scale(1)' }], [RESET, { opacity: 1, transform: 'scale(1)' }, IN], [RESET + 0.25, { opacity: 0, transform: 'scale(1)' }]])));
-    out.push(arrow([[x + w + 12, cy], [P.x - 12, cy]]));
-  });
-
-  out.push(text(56, 618, 'Claude Code, Codex or any command-line agent. One agent per video.', { size: 24, weight: 500 }));
+  out.push(text(56, 618, 'Any agent fits the same socket. One works on a video at a time.', { size: 24, weight: 500 }));
 
   return {
     name: 'any-agent',
     title: 'Bring your own agent',
-    desc: 'Three videos, each with three notes, each connected through its own socket in Retake to an agent: Claude Code, Codex and any command-line agent plug into the same kind of socket. Each agent takes its video\'s notes and sends back the next version.',
+    desc: 'Retake has one socket and any agent fits it. In turn, Claude Code (the default from Settings), Codex (picked for this video in its ⋯ menu) and any command-line agent (picked for one Send by holding Send) plug into the same socket, take the video\'s notes and send back the next version: v5, v6, v7.',
     motion: m,
     body: out.join('\n'),
   };

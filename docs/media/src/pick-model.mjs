@@ -2,7 +2,7 @@
 // is set once in Settings, and holding Send picks another agent for one send. Everyone uses their own account.
 import {
   Motion, INK, PAPER, MUTED, EASE, IN, STEP,
-  rect, circle, path, g, at, text, heading, icon, n,
+  rect, circle, path, g, at, text, heading, icon, n, textWidth,
 } from './kit.mjs';
 
 export default function pickModel() {
@@ -16,7 +16,7 @@ export default function pickModel() {
   out.push(rect(S.x, S.y, S.w, S.h, { r: 20 }));
   out.push(icon.gear(S.x + 40, S.y + 46, 17) + text(S.x + 70, S.y + 56, 'Settings', { size: 28 }));
   out.push(path(`M${S.x} ${S.y + 88}H${S.x + S.w}`, { sw: 2.5 }));
-  out.push(text(S.x + 28, S.y + 128, 'What powers your agent', { size: 20, weight: 500, fill: MUTED }));
+  out.push(text(S.x + 28, S.y + 128, 'Your default agent', { size: 20, weight: 500, fill: MUTED }));
   const rows = [['Claude subscription', 'Claude Code'], ['ChatGPT subscription', 'Codex'], ['API key', 'any provider'], ['OpenRouter', 'any model']];
   const rowY = (i) => S.y + 150 + i * 66;
   const RH = 56;
@@ -75,12 +75,15 @@ export default function pickModel() {
   const click = (t, x, y) => at(x, y, circle(0, 0, 18, { fill: 'none', sw: 2.5 }), m.a([[0, { opacity: 0, transform: 'scale(.3)' }], [t, { opacity: 0, transform: 'scale(.3)' }, STEP], [t + 0.01, { opacity: 1, transform: 'scale(.3)' }, EASE], [t + 0.35, { opacity: 0, transform: 'scale(1.2)' }]]));
   out.push(click(PICK, 330, r1), click(HOLD, 930, B.y + 34), click(CLICK, 970, M.y + 14 + 64 + 34));
 
-  out.push(icon.key(56, 600) + text(118, 619, 'Set it once in Settings. It runs on your own subscription or key.', { size: 24, weight: 500 }));
+  // Settings sets the default; ⋯ on a video, or holding Send, picks another.
+  const t1 = 'Settings sets the default. ', t2 = 'on a video, or holding Send, picks another.';
+  const w1 = textWidth(t1, 24, 500);
+  out.push(text(56, 619, t1, { size: 24, weight: 500 }) + icon.more(56 + w1 + 12, 611, INK, 3) + text(56 + w1 + 30, 619, t2, { size: 24, weight: 500 }));
 
   return {
     name: 'pick-model',
     title: 'Pick what powers the agent',
-    desc: 'Settings lists what powers your agent: a Claude subscription (Claude Code), a ChatGPT subscription (Codex), an API key, or OpenRouter for any model. You set it once. Holding Send opens a short list of agents to pick another one for that send. It runs on your own subscription or key.',
+    desc: 'Settings sets your default agent and what powers it: a Claude subscription (Claude Code), a ChatGPT subscription (Codex), an API key, or OpenRouter for any model. The ⋯ menu on a video picks another for that video, and holding Send opens a short list of agents to pick another for one send. It runs on your own subscription or key.',
     motion: m,
     body: out.join('\n'),
   };
