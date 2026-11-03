@@ -378,7 +378,7 @@ Under spans, the gain is `1 + e · (10^(db/20) − 1)` with `e` the ramped envel
 | `true_peak` | A ceiling in dBTP: a look-ahead limiter (peaks found 4× oversampled, 3 ms attack, 60 ms release) keeps the true peak at or below it. Without it the mix is only clipped at 0 dBFS. |
 
 Without a `master` `loudness`, a render's mix isn't levelled, except the MP4 export a download uses: `render -o X.mp4
---export-loudness -14` levels that mix as if `master` had `loudness: -14` and (unless it sets one) `true_peak: -1`
+--export-loudness -14` levels that mix as if `master` had `loudness: -14` and (unless it sets one) `true_peak: -1.5`
 (spec/bridge.md, "Download").
 
 ## Patches

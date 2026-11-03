@@ -4,6 +4,22 @@ All notable changes are listed here. Versions follow semver once the first relea
 
 ## Unreleased
 
+### Download a version for YouTube
+- The version menu ends with **Download v5 (MP4)** for the version on screen, on a computer and a phone (with a single
+  version the menu shows just for this). The file is ready to drag into YouTube Studio: MP4 with faststart, H.264 High
+  `yuv420p` tagged BT.709, AAC-LC 48 kHz stereo at -14 LUFS (true peak at most -1 dBTP), at the version's size and
+  frame rate, named `<video>_v5.mp4` (spec/api.md, "Download").
+- A version file that is all that already downloads as it is. Any other is made once with ffmpeg into
+  `.retake/downloads/` (H.264 High copied, with its colour tags fixed; audio levelled with two-pass loudnorm) and
+  reused. A rendered version downloads the renderer's export (`<stem>.export.mp4`), packaged from the cached units with
+  the new `retake-edit render --export-loudness -14` unless the timeline's master sets a level; the export's MP4 now
+  carries the full BT.709 colour description.
+- While it gets ready the entry shows `Checking…` or a percentage, then the download starts by itself; a failure is
+  one plain line under it, and so is a license note ("Has 2 assets marked review only"), which never blocks it.
+- `GET/POST /api/download?v=<label>` and `GET /video/<label>/download` (attachment, ranges, Content-Length). Hosted, the
+  computer that has the version makes it and the file comes through the relay in 8 MiB chunks, cached on the server.
+- Anyone who can watch may download; `[server] downloads = "reviewers"` or `"off"` (or `RETAKE_DOWNLOADS`) narrows it.
+
 ### Chat with the agent on a script
 - On a script, the column beside the document (the sheet on a phone) is a chat with the agent in place of the
   comments (spec/chat.md): ask it, and it edits the document while you watch, pulls in links and images, and asks with

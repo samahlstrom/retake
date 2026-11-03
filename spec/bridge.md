@@ -219,14 +219,17 @@ BT.709, at the timeline's size and frame rate.
 
 - **Loudness.** The export is brought to -14 LUFS with a -1 dBTP ceiling unless the timeline's `master` sets a
   `loudness` of its own: `retake-edit render … -o <export> --export-loudness -14`. The flag acts like a `master`
-  `{loudness: -14, true_peak: -1}` (a `master` `true_peak` or `lowpass` the timeline sets is kept) on the export's mix
-  only. With `--hls`, the playlist keeps the timeline's own mix, so a streamed version plays as the timeline says and
+  `{loudness: -14, true_peak: -1.5}` (a ceiling under -1 dBTP, so the AAC encode's overshoot stays under it; a
+  `master` `true_peak` or `lowpass` the timeline sets is kept) on the export's mix only. With `--hls`, the playlist keeps the timeline's own mix, so a streamed version plays as the timeline says and
   only its MP4 is levelled; then the export's audio is its own encode (the playlist's audio and the export's are the
   same samples only when the timeline sets a master loudness, or the flag isn't given).
 - **Made when it's missing.** `retake-edit render <timeline> --doc <snapshot> -o <export> --export-loudness -14 --json
   [--draft]`, the snapshot being the version's (`<stem>.timeline.json`, or the render's `source.json`), written to a
   temporary name and moved in with its `<export stem>.manifest.json`. An export that's there already is reused when it
   passes the download's check; one made before this rule that misses the loudness target is made again.
+- **Colour.** The MP4 carries the whole BT.709 description (primaries, transfer, matrix, limited range) in its H.264
+  and its `colr` box, written when it's packaged; the units themselves carry only the matrix (encoders take the
+  rest from the frames, which the converter doesn't tag).
 - The renderer follows `[render] encoder` / `RETAKE_ENCODER` as for any render.
 - `retake push --render --export` passes `--export-loudness -14` too.
 

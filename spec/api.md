@@ -204,7 +204,7 @@ Retake holds no YouTube login; uploading stays the person's own business (theirs
   none); any other video is encoded with this computer's encoder (`[render] encoder` / `RETAKE_ENCODER`, as for
   renders; `auto` takes what `retake-edit` last picked here, else x264; a hardware encoder that fails falls back to
   x264). Audio that passes is copied; any other is brought to the target with two-pass `loudnorm` (linear when it can
-  be) and encoded as AAC at 384 kb/s. A changed version file has a new key, and so gets a new download.
+  be, aiming at -1.5 dBTP so the encode stays under -1) and encoded as AAC-LC at 384 kb/s. A changed version file has a new key, and so gets a new download.
 - **A rendered version** of a timeline project (a streamed push's playlist, spec/bridge.md, or a worker's render,
   spec/automation.md, drafts included) downloads the renderer's export: `<stem>.export.mp4` beside its playlist
   (`index.export.mp4` for a worker's render). An export that's missing, or that misses the loudness target, is
@@ -232,7 +232,7 @@ Retake holds no YouTube login; uploading stays the person's own business (theirs
 - `GET/HEAD /video/<label>/download` is the file: `Content-Type: video/mp4`, `Content-Disposition: attachment;
   filename="clip_v5.mp4"; filename*=UTF-8''clip_v5.mp4` (the plain name with anything outside printable ASCII or a
   quote replaced by `_`), `Accept-Ranges: bytes`, single ranges as for video files, `Content-Length`, and
-  `Cache-Control: private, no-cache`. When it isn't ready it starts getting it ready (as the POST does) and answers
+  `Cache-Control: no-cache` (`private, no-cache` through a share or a team server, as every answer there). When it isn't ready it starts getting it ready (as the POST does) and answers
   409 `{"error": "not ready", "state", "progress"}` with `Retry-After: 5`. `unavailable` is 409 with its `error`.
 - An unknown label is 404 `{"error": "no such version"}`; no `v` means the current version.
 - **Who may.** Anyone who can watch, unless the config's `[server] downloads` (spec/server.md) says `"reviewers"`
