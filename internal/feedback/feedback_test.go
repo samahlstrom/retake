@@ -7,8 +7,40 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 )
+
+func TestFeedbackConcurrentLimit(t *testing.T) {
+	t.Setenv("RETAKE_FEEDBACK_TOKEN", "test-token")
+	old := http.DefaultTransport
+	t.Cleanup(func() { http.DefaultTransport = old })
+	var calls atomic.Int32
+	http.DefaultTransport = roundTrip(func(*http.Request) (*http.Response, error) {
+		calls.Add(1)
+		return response(http.StatusCreated, `{"html_url":"https://github.com/samahlstrom/retake/issues/42","number":42}`), nil
+	})
+	for round := range 100 {
+		h := New("test")
+		h.limiter.Max = 1
+		calls.Store(0)
+		start := make(chan struct{})
+		var wg sync.WaitGroup
+		for range 32 {
+			wg.Go(func() {
+				<-start
+				r := httptest.NewRequest(http.MethodPost, "/api/feedback", strings.NewReader(`{"type":"bug","title":"Concurrent report","description":"Only one issue may be created."}`))
+				h.ServeHTTP(httptest.NewRecorder(), r)
+			})
+		}
+		close(start)
+		wg.Wait()
+		if got := calls.Load(); got != 1 {
+			t.Fatalf("round %d created %d GitHub issues with a limit of 1", round, got)
+		}
+	}
+}
 
 type roundTrip func(*http.Request) (*http.Response, error)
 

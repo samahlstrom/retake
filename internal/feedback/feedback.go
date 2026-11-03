@@ -12,6 +12,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -29,6 +30,7 @@ type Handler struct {
 	token   string
 	client  *http.Client
 	limiter *team.Limiter
+	limitMu sync.Mutex
 }
 
 // New returns the feedback endpoint for one Retake server. The token is read only
@@ -89,14 +91,19 @@ func (h *Handler) submit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	key, now := clientKey(r), time.Now()
-	if blocked, wait := h.limiter.Blocked(key, now); blocked {
+	h.limitMu.Lock()
+	blocked, wait := h.limiter.Blocked(key, now)
+	if !blocked {
+		// Charge before the upstream call: a retry after a lost response must not
+		// create an unbounded stream of duplicate issues.
+		h.limiter.Fail(key, now)
+	}
+	h.limitMu.Unlock()
+	if blocked {
 		w.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())+1))
 		writeError(w, http.StatusTooManyRequests, "too many feedback reports")
 		return
 	}
-	// The limiter is deliberately charged before the upstream call: a retry after
-	// a lost response must not create an unbounded stream of duplicate issues.
-	h.limiter.Fail(key, now)
 
 	payload, _ := json.Marshal(map[string]string{
 		"title": in.Title,
