@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/samahlstrom/retake/internal/assets"
+	"github.com/samahlstrom/retake/internal/userdir"
 )
 
 // Placeholder stands in for an asset a recipe doesn't carry.
@@ -61,7 +62,7 @@ var slugRE = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
 // expandPath resolves a timeline asset path as the editor does: ~/, $VAR and ${VAR}, relative to the timeline.
 func expandPath(p, dir string, getenv func(string) string) string {
 	if strings.HasPrefix(p, "~/") {
-		p = filepath.Join(getenv("HOME"), p[2:])
+		p = filepath.Join(userdir.Home(getenv), p[2:])
 	}
 	p = os.Expand(p, getenv)
 	if !filepath.IsAbs(p) {

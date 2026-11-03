@@ -17,6 +17,7 @@ import (
 	"github.com/samahlstrom/retake/internal/family"
 	"github.com/samahlstrom/retake/internal/jobs"
 	"github.com/samahlstrom/retake/internal/server"
+	"github.com/samahlstrom/retake/internal/userdir"
 	"github.com/samahlstrom/retake/internal/worker"
 )
 
@@ -229,8 +230,9 @@ notes build:
   --max-span S      longest a moment may get, in video seconds (default 8)
   --video-transcript F  the edit's own voice-over words (JSON), quoted under (audio) comments
 
-config: $XDG_CONFIG_HOME/retake/config.toml (default ~/.config/retake/config.toml), keys name, port,
-idle_exit_minutes, open_browser, [transcribe] and [edit] retake_edit. Flags override it.
+config: $XDG_CONFIG_HOME/retake/config.toml (default ~/.config/retake/config.toml; on Windows
+%APPDATA%\retake\config.toml), keys name, port, idle_exit_minutes, open_browser, [transcribe] and [edit]
+retake_edit. Flags override it.
 `
 
 // Main runs the command line and returns the exit code.
@@ -353,7 +355,7 @@ func versionOf(ldflag string, bi *debug.BuildInfo) string {
 // Path.expanduser().resolve()).
 func absPath(p string, getenv func(string) string) string {
 	if p == "~" || strings.HasPrefix(p, "~/") || strings.HasPrefix(p, `~\`) {
-		home := getenv("HOME")
+		home := userdir.Home(getenv)
 		if home == "" {
 			home, _ = os.UserHomeDir()
 		}

@@ -23,6 +23,7 @@ import (
 	"github.com/samahlstrom/retake/internal/config"
 	"github.com/samahlstrom/retake/internal/project"
 	"github.com/samahlstrom/retake/internal/tus"
+	"github.com/samahlstrom/retake/internal/userdir"
 )
 
 // Remotes and retake push --remote (spec/server.md, "CLI: remotes").
@@ -209,7 +210,10 @@ type pendingUpload struct {
 func statePath(getenv func(string) string) string {
 	dir := getenv("XDG_STATE_HOME")
 	if dir == "" || !filepath.IsAbs(dir) {
-		home := getenv("HOME")
+		dir = userdir.Local(getenv) // Windows: %LOCALAPPDATA%
+	}
+	if dir == "" {
+		home := userdir.Home(getenv)
 		if home == "" {
 			home, _ = os.UserHomeDir()
 		}

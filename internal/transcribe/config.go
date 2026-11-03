@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/samahlstrom/retake/internal/config"
+	"github.com/samahlstrom/retake/internal/userdir"
 )
 
 // Engines for [transcribe] engine.
@@ -97,12 +98,15 @@ func FromSettings(c config.Transcribe, env Env) (Transcriber, error) {
 }
 
 // InstallDir is where scripts/install-whisper.sh puts whisper.cpp: $XDG_DATA_HOME/retake/whisper.cpp, by default
-// ~/.local/share/retake/whisper.cpp.
+// ~/.local/share/retake/whisper.cpp (%LOCALAPPDATA%\retake\whisper.cpp on Windows).
 func InstallDir(getenv func(string) string) string {
 	if x := getenv("XDG_DATA_HOME"); x != "" && filepath.IsAbs(x) {
 		return filepath.Join(x, "retake", "whisper.cpp")
 	}
-	home := getenv("HOME")
+	if d := userdir.Local(getenv); d != "" {
+		return filepath.Join(d, "retake", "whisper.cpp")
+	}
+	home := userdir.Home(getenv)
 	if home == "" {
 		home, _ = os.UserHomeDir()
 	}
