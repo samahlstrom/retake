@@ -140,8 +140,8 @@ them; it doesn't hold the agent. Restarting or updating Retake never stops an ag
 - **One agent per video.** A new background attempt or turn first stops a background agent of an earlier record of the
   video that is still running.
 - **The lease.** A worker renews its attempt's lease with every poll (each second). When it lapses (30 s without one)
-  the task stays `running` (or `stopping`) for a grace of 10 minutes, still Working on the page, whose progress line
-  says "Reconnecting to the agent" while the computer is offline. A worker that comes back in the grace takes the task
+  the task stays `running` (or `stopping`) for a grace of 10 minutes, still Working on the page, where the line under
+  the comment being worked on says "Reconnecting to the agent" while the computer is offline. A worker that comes back in the grace takes the task
   back with its lease, with nothing shown. After the grace the task pauses as before ("Worker disconnected; retry or
   switch agent", with `lost` set). A chat turn's lease has the same grace; after it the turn ends with "The editing
   computer went offline". Reports, questions and renders with a lapsed lease are taken within the grace.
@@ -176,7 +176,8 @@ An agent runs unattended, so the built-in profiles never stop for a permission p
 - Claude Code refuses `--dangerously-skip-permissions` as root; run retake as a normal user.
 - Every task prompt says: never wait for input, and never ask the person in the terminal or with the agent's own
   question tools. When unsure about a note, ask with `retake ask` ("Questions from inside a task") and carry on with
-  the rest of the task.
+  the rest of the task. It also says to work the notes one at a time, `retake working` before each and `retake done`
+  after it ("Marking progress").
 
 ## A note's stills and images
 
@@ -303,6 +304,59 @@ the person), or has one that wasn't told to an agent yet.
 - The report's `question` state stays as the fallback: the task waits in `question` with the report's message,
   answered with a typed `…/answer` without `question`.
 
+## Marking progress: `retake working` and `retake done`
+
+The agent works a batch one note at a time and says so as it goes, so the person watches the notes finish one by one
+instead of all at once when the report arrives.
+
+```
+retake working <note> ["what I'm doing"] [--json]
+retake done <note> "what changed" [--json]
+```
+
+- **Where they work.** Inside a running task only, through the same endpoint as `retake ask` (`RETAKE_ASK_URL` and
+  `RETAKE_ASK_TOKEN`, else `.retake/worker/ask.json`; "Finding the worker" above), so they work the same in the
+  background, herdr, tmux and hosted (the worker relays them like a question). `<note>` is one of the task's notes
+  (`#12` or `12`). They print `working on #12: slowing the mask fade` and `#12 done → v5` (with `--json`, the
+  server's answer) and exit 0 at once. Exit 1 when refused, with the reason; exit 2 for a usage error, or when it isn't
+  run inside a task.
+- **`working`** says the agent has started on that note, with a few words of its own ("slowing the mask fade", at most
+  200 characters, optional). A task has at most one working note: a new `working` replaces the one before.
+- **`done`** says that note's edit is in, with what changed (1 to 4000 characters, required): from then on it is in
+  the live target, so the person can watch it ("The live version" below). In a plain project the agent first writes
+  the video so far to its output file; `done` without one that plays is refused ("write the video so far to <file>
+  first"). It clears the working note when it's that one. Saying `done` again replaces the mark; `working` on a note
+  marked done takes the mark back.
+- **The endpoint.** `POST <url>/progress` with the attempt's secret and `{"note", "state": "working" | "done",
+  "text"}`. The worker forwards `POST /api/worker/progress` with `"task"`, `"lease"` and `"join"` (notes of the next
+  batch it gave the session that the server hasn't heard of yet, as a poll's), fenced like a report. For `done` it adds
+  `"render"`, the revision that has the edit, once there is one: a timeline project's `done` goes first without it
+  (the note shows it is being put in) and again with it when that render is complete; a plain project's goes once,
+  with the revision it just registered; a document's comment needs none (`"ready": true`). The worker keeps the marks
+  still waiting for their render in the attempt's record, so a later worker finishes them. The server checks
+  the attempt is running and not stopping, the note is one of its notes still to do (`task.notes` minus `done` and
+  `dropped`), and the text; `done` also needs the note `open` (a note in `question` waits for its answer:
+  "note #12 waits for the answer to your question"), and its `render` a complete render of this task. It answers 200
+  `{"note", "state", "target", "ready"}`, 409 with the reason when it refuses, and emits `automation`, so every page
+  updates at once. A chat turn's secret is refused (a chat has
+  no notes to mark).
+- **On the task.** `working: {"note", "text", "at"}` and `marked: [{"note", "change", "at", "ready", "render"}]`, in
+  the order marked
+  (`GET /api/automation` shows both). A question about a note (`retake ask`) takes back its mark and, when it's the
+  working one, clears `working`. A note that drops out of the task (retracted, answered elsewhere) leaves both. A new
+  attempt starts with neither.
+- **What it changes.** What the page shows while the attempt runs: a note marked done shows Done, with its change,
+  "in v5", once its mark is `ready` (its edit is in the live v5); until then it stays Working, its line saying "Putting
+  it in v5…". The note itself stays `open` in the store, and no version is made or finished by a mark.
+- **The report is the source of truth.** When the attempt ends it reconciles everything, and `working` and `marked`
+  are cleared. A `completed` report finishes the task's notes as before (every note not held, with the render or
+  version). A finished note's change is the report's own entry for it (`notes`), else its `retake done` text, else the
+  message of the round that did it; the worker says which notes the agent wrote an entry for (`said` on the report).
+  A note marked done and then held by a question isn't finished: it shows Question. Any other end (paused, stopped,
+  a `question` report) finishes nothing, so the notes it marked show what the task shows (Open with Retry, Question).
+  Notes the agent never marked are finished by the report all the same.
+- The worker logs each one (`the agent is on #12: slowing the mask fade`, `the agent finished #12`).
+
 ## Connect your computer: `retake connect`
 
 ```
@@ -426,7 +480,8 @@ That is the whole rule, for the person and for the agent. A send never makes a v
 because a comment on the one before asked for changes.
 
 - **The target.** A comment's target is the version after the one it was made on: a comment on `v7` targets `v8`, one
-  on `v8` targets `v9`. A comment on a draft (`v8-draft2`) targets the version that draft is heading for (`v8`). A typed
+  on `v8` targets `v9`. A comment on a draft (`v8-draft2`, a revision of the live `v8`) targets `v9`, as one on `v8`
+  does ("The live version"). A typed
   comment on an extension's version (spec/extensions.md) that doesn't want a version is finished in its own version,
   as before; one that wants a version targets the next (`v0` → `v1`). The notes API gives each comment its `target`,
   and `later` when a version after its target already exists (below); a task carries its `target`.
@@ -478,10 +533,11 @@ because a comment on the one before asked for changes.
     session`, and drops the queued task once it is empty. A note that is no longer in a queued task of that target is
     skipped. A task of only typed comments (spec/extensions.md) takes only typed comments that way, so a report alone
     still finishes it.
-- **Per comment.** Each note still ends on its own: Done from the completed report, Question from `retake ask`. A
+- **Per comment.** Each note still ends on its own: Done from the completed report (shown as soon as the agent marks
+  it with `retake done`, "Marking progress"), Question from `retake ask`. A
   report may say what changed for each note: `{"state": "completed", "message": "summary", "notes": {"12": "Cut the
   intro to 3 s"}}` (keys are note ids; at most 1000, each at most 4000 characters). A note's `change` is its entry
-  (the latest round's, when several say one), else the message of the round that did it.
+  (the latest round's, when several say one), else its `retake done` text, else the message of the round that did it.
 - **Merging queued tasks.** Whenever a second task of a target would wait in `queued` (a send, a retry, an answer that
   queues a task again, a switch, a fallback), they become one: the oldest keeps its id, agent and history and takes the
   others' notes, questions (`asked`), told answers and done notes, with an event `Joined task <id>: #4, #5`; the others
@@ -529,7 +585,8 @@ because a comment on the one before asked for changes.
   Done. A Working comment whose task hasn't started says why in one short line: "Waiting for the editing computer"
   while no worker is online, "Waiting for the agent" while Local mode is `blocked`. Existing approval and retraction remain intact. Working comes from a task. Done requires a
   successfully rendered result plus an explicit per-note change description; an agent process exit alone never
-  completes feedback.
+  completes feedback. A note the running attempt's agent marked done (`retake done`) shows Done before that, going
+  into its target ("Marking progress"); the store finishes it only with the report.
 - A question and its answer stay on the task/comment. Answering resumes the same task ("Questions from inside a
   task"). A Working comment whose task asked about it shows Question until it is answered. Operational pauses (usage
   limits, offline, failed render) are displayed separately from creative questions.
@@ -543,7 +600,7 @@ because a comment on the one before asked for changes.
   `retake-edit` incrementally renders HLS using its existing dependency cache. A newer source revision cancels
   obsolete work and starts the latest revision; the last playable result stays available while that happens.
   Cancelled revisions retain their playable portion and display as stopped, rather than continuing to claim that
-  they are rendering. Starting an agent alone does not create an unchanged intermediate version.
+  they are rendering. Starting an agent creates no version, only the target's first live revision (below).
 - Only a task renders. Outside a task the worker renders just once, for a project with no version yet (the poll
   answer's `versions` is 0), so an empty project gets its first video; plain saves render nothing. Each render's
   `state.json` stays in `.retake/worker/renders/<id>/`, and on start the worker takes the newest complete one as
@@ -556,6 +613,26 @@ because a comment on the one before asked for changes.
   plus, per version number, the newest draft and the newest complete draft while they're ahead of the newest version
   or their task is unfinished, so following latest keeps showing the agent's work live. Older drafts aren't listed but stay playable by URL, and
   takes recorded on them still save.
+- **The live version.** During a batch its target `v<N>` is live: people see it as `v<N>`, updated in place as the
+  agent finishes each note, and never the word "draft". The drafts are its revisions, internal (their labels stay in
+  URLs and the API); the page shows a draft `v<N>-draft<K>` as `v<N>`, the picker and the comments' version menu have
+  one `v<N>` entry that plays its newest revision, with a quiet live mark while the task runs, and the red edge light
+  ("HTTP and UI") is on the video.
+  - **At once.** A task's attempt makes its target's first revision as it starts, so `v<N>` exists before any edit: in
+    a timeline project the worker renders the task's source as soon as it has no render of this task (it is the
+    starting version's source, so every unit is reused from the cache); in a plain project it registers the version
+    the agent starts from as a revision (a hard link of that file, else a copy, as `video.mp4` in the render's folder).
+  - **Per note.** `retake done` puts the note's edit in a new revision before the note shows Done ("Marking
+    progress"). In a timeline project the worker waits for a complete render of this task whose source is the one at
+    the `done`, or one started after it (the render loop renders every stable save of the source within about a
+    second, only the changed units; a render that's already complete for the current source counts at once). In a
+    plain project the agent writes the video so far to its output file (`$RETAKE_OUTPUT`) before `retake done`; the
+    worker checks that it plays, copies it (a reflink where the file system has them) to a new render folder as
+    `video.mp4` and registers it, a complete render with `"media": "video.mp4"`, before it tells the server. It keeps
+    the media of a task's newest two plain revisions and deletes the older ones' (only their `state.json` stays).
+  - Comments recorded on the live `v<N>` (on any of its revisions) belong to `v<N>` and go into `v<N+1>`, as for any
+    comment on `v<N>`. Completion makes `v<N>` final as before: the final render is promoted (timeline), or the agent's
+    video is put in as the version file (plain).
 - The host registers each immutable render revision in the video family as above. Pending/progressive render
   metadata reaches browsers through the existing events API. Following latest switches to the new revision once
   it can play the current position; recording, comparing with C and an explicit historical selection remain
@@ -583,7 +660,7 @@ because a comment on the one before asked for changes.
   selected worker offers it), `.../tasks/<id>/answer` and `.../tasks/<id>/retry`: any role that can record. A
   retry's `agent` counts only from the owner. Switching, pausing and the config are owner actions.
 - `/api/worker/*`: Bearer agent token only, including local requests. Worker registration, polling/heartbeats,
-  attempt reports, questions (`ask`), render registration/progress, version files (`files`), note artifacts and
+  attempt reports, questions (`ask`), the agent's progress marks (`progress`), render registration/progress, version files (`files`), note artifacts and
   relay response endpoints. An attempt's `completed` report names a render (`result`) or, in a plain project, a version file
   (`version`). The poll answer has
   `config`, `task`, `notes` (the task's notes, plus every open note of every version as context), `questions` (the
@@ -613,10 +690,23 @@ because a comment on the one before asked for changes.
   (the home's left nav, spec/home.md). Only where Send can't reach an agent does one quiet line say so, over the bar's
   right end: "No editing computer connected · Settings" for the owner of a hosted project with no computer online,
   "The editing computer is offline. Send still queues." for anyone else, and in local mode the `blocked` reason.
-- A task shows as one group: its comments are Working together, and the comments column's progress line says `Agent
-  working on 3 comments` while it runs (`· 2 more coming` while notes sent meanwhile for its target wait to join it).
-  Each comment's `target` (and `later`) comes from the notes API, and the page says it as "→ v8" (spec/notes.md,
-  "Where a comment goes").
+- **While the agent works** ("Marking progress"), on the computer and the phone alike. There is no line or pill over
+  the comments (it covered the list on a phone).
+  - The comment being worked on (the task's `working`) has a soft light sweeping across its card and, under its
+    words, one quiet italic line in the agent's words ("slowing the mask fade…"). One comment at a time. Its marker on
+    the timeline pulses softly. The list never scrolls to it by itself.
+  - A comment marked done fades and moves out of To do, and into Done, as its mark arrives: short, transform and
+    opacity only, the cards under it sliding up into its place (nothing jumps). In Done it shows its change and "in
+    v5", which plays v5 (its newest revision while it's live) at that comment's moment. A comment the report finishes
+    without a mark moves the same way then.
+  - While a task of this video runs, a slow light in the record red travels around the edge of the video's frame
+    (part `agent-edge`, token `--agent-edge`, spec/theme.md): a moving segment of light, never a steady border, so it
+    can't be taken for recording. It is the live version's mark ("Versions versus drafts"). It stops when the task
+    ends, when every comment it still has to do waits on a question, while you record, and on an extension's version. With `prefers-reduced-motion` it is a faint, still red
+    hairline instead. While the editing computer is offline, the working comment's line says "Reconnecting to the
+    agent".
+  - Each comment's `target` (and `later`) comes from the notes API, and the page says it as "→ v8" (spec/notes.md,
+    "Where a comment goes").
 - Per-comment actions are in the card's ⋯ menu: send one, retry, history and delete as the role allows (send one and
   retry add to their target's task, as any send); switch agent and pause for the owner; reopen for approvers. A
   question an agent asked from inside its task (`retake ask`) shows under its comment, with a reply box that takes
@@ -656,5 +746,12 @@ asks mid-task and then completes (Local mode and hosted), a wrong or stale secre
 and a tmux session (fake binaries) and a background attempt's context, a task ending with some notes Done and some
 Question, a note whose still the server can't give (a fake agent that gets the worker's own still, its pen line on it),
 an attached image that can't be fetched, the agent's visuals drawn in their own style (a web unit test), and an e2e test where an agent's question
-with a box, an arrow and two image choices is answered with one tap. Provider adapters are tested with deterministic executables; live paid-provider execution is reported
-separately if it is not exercised.
+with a box, an arrow and two image choices is answered with one tap. For "Marking progress": `retake working` and
+`retake done` through the endpoint (Local mode and hosted), a wrong or stale secret and a chat's secret refused, one
+working note at a time, a mark taken back by `working` and by `retake ask`, a retracted note leaving its marks, and the
+report reconciling (a note never marked gets the report's words, a marked one its own unless the report has an entry,
+a marked note held by a question stays Question, a paused attempt finishes nothing); a web unit test of the list's
+states and moves; and an e2e test (Chromium on a computer and a phone, WebKit on a phone) where a fake agent marks
+notes working and done one by one with pauses: they move to Done one at a time, the sweep and the line are on the right
+card, there is no pill, and the edge light is on while it works. Provider adapters are tested with deterministic
+executables; live paid-provider execution is reported separately if it is not exercised.

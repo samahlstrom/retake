@@ -177,6 +177,7 @@ the toast, the comments toggle, "← Projects") use `--scrim` and `--on-scrim`, 
 | `--record` | `#ff453a` | The record dot, the red edge while recording |
 | `--record-text` | `#ff7a70` | "REC 0:12" and other words in the record red |
 | `--record-wait` | `#d9a441` | The record dot while the mic starts |
+| `--agent-edge` | `var(--record)` | The light that travels around the video's edge while the agent works on its comments (a faint still hairline with reduced motion) |
 | `--voice` | `#5ac8fa` | Your voice on the timeline and the waveform, progress dots |
 | `--voice-text` | `#d6eefa` | "To review" on the home |
 | `--flip` | `#ffcf6e` | The version button while comparing (C) |
@@ -192,6 +193,7 @@ the toast, the comments toggle, "← Projects") use `--scrim` and `--on-scrim`, 
 | `--danger` | `#ff8f86` | Delete, errors |
 | `--warn` | `#e2bd73` | A paused comment, offline warnings |
 | `--change` | `#9ccfb3` | What a done comment changed |
+| `--working-sweep` | `--overlay` at 5% | The light that sweeps across the comment the agent is working on |
 | `--scrollbar-thumb` | `--overlay` at 14% | Every scrollbar's thumb: the document, the chat, the comments, the folder tree, the home, Settings |
 | `--scrollbar-thumb-hover` | `--overlay` at 28% | The thumb under the pointer, where a page can style that (Safari on a computer, the comments' list); Chrome and Firefox shade `--scrollbar-thumb` themselves |
 | `--scrollbar-track` | `transparent` | Behind the thumb |
@@ -282,6 +284,7 @@ Versioning). Classes and ids are not part of the API and can change in any relea
 | `home-nav` | The back link and "Next video" over the video | review |
 | `review-back` | The back link over the video: "Project › video", back to the same place on the home | review |
 | `agent-visuals` | The agent's boxes, arrows and lines over the video | review |
+| `agent-edge` | The light that travels around the video's edge while the agent works on this video's comments | review |
 | `offline` | "The editing computer is offline" over the video | review |
 | `undo` | Undo (phone) | review |
 | `flip` | Compare two versions (phone) | review |
@@ -293,7 +296,8 @@ Versioning). Classes and ids are not part of the API and can change in any relea
 | `tabs` | To do · Done (and an extension's tabs) | review |
 | `comment` | One comment; `data-state` is `open`, `working`, `question` or `done` | review |
 | `status` | A status: a dot and a word (in a comment, on a video card) | both |
-| `into` | Where a comment's edit goes (`→ v8`), next to its status | review |
+| `into` | Where a comment's edit goes (`→ v8`; `→ v8 · rendering`, then `in v8` once done), next to its status | review |
+| `doing` | The agent's line under the comment it's working on ("slowing the mask fade…"); that comment has `data-doing` | review |
 | `reply-box` | The field to answer the agent | review |
 | `question-card` | The agent's question under its comment (thumbnail, choices) | review |
 | `progress` | The strip at the bottom of the comments (recording, transcribing, undo) | review |
