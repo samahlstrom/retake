@@ -157,6 +157,7 @@ Every command has `--json`. `retake mcp <video>` serves the same tools over stdi
 | `notes_list` | `retake notes list <video> [--status open] [--version vN]` | Notes with text, times, author, strokes (shape, color, box), images, the snapshot path and the answers. |
 | `note_ask` | `retake ask <video> <note> "text" [--option v8a ...]` | Asks a question about a note. |
 | | `retake ask [--note ID] [--at T] [--from T --to T] [--box …] [--arrow …] [--draw F] [--image F] [--option TEXT[@F]] "text"` | From inside a running editing task, without the video: asks about a moment of the video through the worker, with visuals (spec/automation.md, "Questions from inside a task"). |
+| | `retake working <note> ["what I'm doing"]`, `retake done <note> "what changed"` | From inside a running editing task: the note the agent is on, and a note whose edit is in the live version (spec/automation.md, "Marking progress"). |
 | `note_set` | `retake note <video> <id> --status S [--in vN] [--change "..."]` | Changes one note. |
 | `version_push` | `retake push <video> <file> --parent vN --change ID="summary"... --ask ID="question"...` | Copies or moves the file into the family as the next `v<N>`, or takes `--label vN` (labels are `v<N>`: the page finds versions by the `_v<N>` in their names). Records sha256, parent and changelog, enforces the push rule, and emits a `version` event. |
 | `versions_list` | `retake versions <video>` | Versions, parents, changelogs. |
