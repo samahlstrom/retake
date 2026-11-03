@@ -34,6 +34,18 @@ func NeedShell(t testing.TB) {
 	}
 }
 
+// TempDir is t.TempDir() with its links and Windows short names resolved (macOS's /var is /private/var; a Windows
+// TEMP is often C:\Users\RUNNER~1\...). Retake resolves the folders it's given, so a test that compares the paths it
+// prints or stores with its own needs the same spelling.
+func TempDir(t testing.TB) string {
+	t.Helper()
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
 func run(t testing.TB, args ...string) {
 	t.Helper()
 	cmd := exec.Command("ffmpeg", append([]string{"-nostdin", "-v", "error", "-y", "-threads", "2"}, args...)...)
