@@ -27,8 +27,9 @@ test.afterAll(async () => { await server?.stop(); });
 
 const entry = (page: Page) => page.locator('#verList [data-part="download"]');
 
+/** Opens the version menu (a click on its button while it's open would close it). */
 async function openMenu(page: Page): Promise<void> {
-  await page.click('#verBtn');
+  if (!(await page.locator('#verList').isVisible())) await page.click('#verBtn');
   await expect(page.locator('#verList')).toBeVisible();
 }
 
