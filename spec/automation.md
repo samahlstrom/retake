@@ -374,6 +374,14 @@ usual URLs: `/video/<label>`, and `/video/<label>/<file>` for a playlist and the
   browser asks for the rest as it plays or seeks. The server sends the browser what the worker sent, with
   `Accept-Ranges: bytes` and `Content-Length`. A request without a range for a file larger than a chunk is answered
   200 with the whole file: the server asks for one chunk after another and streams them in order.
+- **Downloads** (spec/api.md, "Download"). The server asks `{"id", "op": "download", "render" | "version",
+  "start"}`; the worker answers 200 with the download's state as `GET /api/download` has it (without `label`
+  and `name`, which the server adds; `license` from its own asset catalog), plus `modified` (the ready file's mtime, Unix ms), and with `start`
+  first gets it ready as `POST` does: it checks and makes the file itself, with its own ffmpeg and renderer, under its
+  project's `.retake/downloads/` or beside the render's playlist. It answers 404 for a label or render it doesn't
+  have. A media read with `"download": true` (and `render` or `version`) reads that ready file, in chunks as above;
+  404 while it isn't ready. The server caches its chunks under the download's size and mtime, so a download made
+  again is a new file. A render's download needs the render complete (`state.json`) and its `source.json`.
 - **What a worker reads.** Only a render's own directory (`.retake/worker/renders/<id>/`, flat media names), or a
   file of its project's current family: the version's file itself, or for a playlist version a regular file
   directly beside it with a media extension (`.m3u8`, `.m4s`, `.mp4`, `.ts`). Never a path with a separator or

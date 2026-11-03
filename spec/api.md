@@ -66,9 +66,10 @@ A streamed version also has `"stream": {"state": "rendering", "done": 12, "total
 | GET/HEAD | `/assets/*` and other static files | The page's static files (new server only; the legacy page is a single file). |
 | GET/HEAD | `/video` | The current version's file. |
 | GET/HEAD | `/video/<label>` | That version's file. 404 `{"error":"no such version"}` if unknown. |
+| GET/HEAD | `/video/<label>/download` | New: the version as one MP4 that's ready to upload to YouTube, as an attachment named `<video>_<label>.mp4`. See "Download" below. |
 | GET/HEAD | `/video/<label>/<file>` | New, for `.m3u8` versions: the playlist itself (by its file name) or any file beside it, such as segments and init files. Only plain names inside that folder, never `..` or subfolders. The page loads `/video/<label>/<playlist name>`, so relative segment URLs resolve inside that folder. |
 | GET | `/api/ping` | `{"ok": true}` |
-| GET | `/api/info` | The current version object, plus `versions` (the re-scanned family), `stem`, `review_dir`, `sessions` and `history` (both for the current version). New in milestone 3a: `role` (spec/team.md). |
+| GET | `/api/info` | The current version object, plus `versions` (the re-scanned family), `stem`, `review_dir`, `sessions` and `history` (both for the current version). New in milestone 3a: `role` (spec/team.md). New: `downloads`, whether this request may download ("Download" below). |
 | GET | `/api/history?v=<label>` | `{"label": "...", "history": [...]}`. 404 if the label is unknown; no `v` means the current version. |
 | POST | `/api/session/<take>/data?v=<label>` | Saves a take's JSON files. See below. |
 | POST | `/api/session/<take>/audio?v=<label>&name=<file>&offset=<n>` | Appends audio bytes to one segment file. See below. |
@@ -80,6 +81,8 @@ A streamed version also has `"stream": {"state": "rendering", "done": 12, "total
 | GET/HEAD | `/api/poster?v=<label>` | New: a JPEG of the version's first frame (no `v`: the current one), for `<video poster>` and the home's cards (spec/home.md). 404 `{"error":"no poster"}` when there is none. |
 | POST | `/api/versions/<label>/unwatch?viewer=<id>` | New: the page left that version (spec/home.md, "Close means close"). 204. Needs watch, not record. |
 | GET | `/api/link-preview?url=<address>` | New with a script's embeds (spec/scripts.md, "Embeds"): what a public web page says about itself, for a link card: `{"url", "title", "site", "image", "description"}`. See "Link preview" below. |
+| GET | `/api/download?v=<label>` | New: where that version's download is: `{"label", "name", "state", "progress", "size", "as_is", "error", "license"}`. Starts nothing. See "Download" below. |
+| POST | `/api/download?v=<label>` | New: get that version's download ready (check the file; make the MP4 once when it has to), and answer as the GET does. |
 | GET | `/api/chat` | New: the chat with the agent on a kind's version that has one (spec/chat.md): `{"messages", "turn", "busy", "offline", "blocked", "sent"}`. Needs watch. |
 | POST | `/api/chat` | New: a person's message, `{"text", "images"?, "voice"?, "answer"?, "agent"?}`: 201 `{"message"}`. Needs record. `POST /api/chat/stop` stops the agent's reply; `POST /api/chat/send` `{"file"}` is Send on the chat's version (make the video). `GET /api/chat/files/<message>/<file>` is a question's image. The `chat` event of `/api/events` keeps a page current. |
 | any | `/mcp` | New in milestone 3a: the agent tools over MCP's streamable HTTP transport, for a Bearer `agent` token (spec/team.md). |
@@ -172,6 +175,87 @@ cards (spec/scripts.md, "Embeds"). It needs watch, like every read; under a vide
 - **Cached on disk**, one JSON file per address (named by its SHA-256) in `retake/link-preview/` under the user's
   cache folder (`$XDG_CACHE_HOME`, else `~/.cache`): an answer for 7 days, a page that couldn't be read for
   10 minutes, so asking again doesn't reach the site.
+
+## Download
+
+Any version that plays can be downloaded as one MP4 that YouTube takes as it is: drag it into YouTube Studio.
+Retake holds no YouTube login; uploading stays the person's own business (theirs, or their agent's).
+
+**The file.**
+
+- MP4 with the `moov` box before the media (faststart), so it starts processing while it uploads.
+- Video: H.264 High, `yuv420p`, tagged BT.709 (primaries, transfer and matrix) and limited range, at the version's
+  own frame rate and size.
+- Audio, when the version has any: AAC-LC, 48 kHz, stereo, integrated loudness -14 LUFS (within 1 LU) with the true
+  peak at or below -1 dBTP. A timeline whose `master` sets a `loudness` keeps its own level (spec/timeline.md, "The
+  master bus").
+- Named `<video>_<label>.mp4`: the family's name and the label (`clip_v5.mp4`, `clip_v5-draft2.mp4`); a version
+  without a number keeps its stem (`clip.mp4`). `<video>` is the name before `_v<N>` in the family's file names, else
+  the opened file's stem, else the project's name.
+
+**As it is, or made once.**
+
+- **A version file** (a plain project's, or an MP4 a push put in) that is all of the above already is served as it
+  is. The check (ffprobe, the MP4's top-level boxes, and ffmpeg's `loudnorm` measure of the audio) runs once per file
+  and is kept per (path, size, mtime) in `<root>/.retake/downloads/<key>.json`, beside the posters in
+  `.retake/thumbs/`.
+- Otherwise ffmpeg makes the MP4 once, into `<root>/.retake/downloads/<key>.mp4`, and later downloads reuse it. It
+  never writes beside the version. H.264 High `yuv420p` is copied (with BT.709 tags written into it when it has
+  none); any other video is encoded with this computer's encoder (`[render] encoder` / `RETAKE_ENCODER`, as for
+  renders; `auto` takes what `retake-edit` last picked here, else x264; a hardware encoder that fails falls back to
+  x264). Audio that passes is copied; any other is brought to the target with two-pass `loudnorm` (linear when it can
+  be) and encoded as AAC at 384 kb/s. A changed version file has a new key, and so gets a new download.
+- **A rendered version** of a timeline project (a streamed push's playlist, spec/bridge.md, or a worker's render,
+  spec/automation.md, drafts included) downloads the renderer's export: `<stem>.export.mp4` beside its playlist
+  (`index.export.mp4` for a worker's render). An export that's missing, or that misses the loudness target, is
+  packaged again from the cached units (spec/bridge.md, "Download"). A version that is still rendering has nothing
+  to download yet.
+- **An extension's version** (`v0`, a folder) has none.
+
+**The routes.**
+
+- `GET /api/download?v=<label>` says where the download is, and starts nothing:
+
+  ```json
+  { "label": "v5", "name": "clip_v5.mp4", "state": "ready", "progress": null, "size": 81234567, "as_is": true,
+    "error": "", "license": "" }
+  ```
+
+  `state` is `none` (nothing checked or made yet), `checking`, `making` (`progress` 0 to 1 when known, else null),
+  `ready` (`size` in bytes; `as_is` says the version file itself is served), `failed` (`error`, one plain sentence
+  such as "Couldn't make the MP4: ffmpeg isn't installed"), or `unavailable` (`error` says why: "v8 is still
+  rendering", "v0 isn't a video"). `license` is one quiet line when the version's license report (spec/assets.md,
+  "The gate") has `review-only` or `blocked` assets, such as "Has 2 assets marked review only", else "". It never
+  blocks the download: the file is also a review copy.
+- `POST /api/download?v=<label>` starts getting it ready when it's `none` or `failed`, and answers the same object.
+  The usual POST origin rules apply.
+- `GET/HEAD /video/<label>/download` is the file: `Content-Type: video/mp4`, `Content-Disposition: attachment;
+  filename="clip_v5.mp4"; filename*=UTF-8''clip_v5.mp4` (the plain name with anything outside printable ASCII or a
+  quote replaced by `_`), `Accept-Ranges: bytes`, single ranges as for video files, `Content-Length`, and
+  `Cache-Control: private, no-cache`. When it isn't ready it starts getting it ready (as the POST does) and answers
+  409 `{"error": "not ready", "state", "progress"}` with `Retry-After: 5`. `unavailable` is 409 with its `error`.
+- An unknown label is 404 `{"error": "no such version"}`; no `v` means the current version.
+- **Who may.** Anyone who can watch, unless the config's `[server] downloads` (spec/server.md) says `"reviewers"`
+  (record permission: reviewers, approvers and the owner) or `"off"` (nobody). A refused request is 403
+  `{"error": "downloads are off"}` or `{"error": "not allowed"}`. `/api/info` has `"downloads": true|false`: whether
+  this page may, so it shows the menu entry or not.
+- **Hosted.** A relayed version (spec/automation.md, "The media relay") is checked and made on its computer, the
+  server asking with the relay's `download` request; the file comes through the relay in 8 MiB chunks like a version
+  file, and the server caches them (keyed by the download's size and mtime). A plain GET of a large file is one 200
+  response with its whole `Content-Length` (the server fetches one chunk after another), so a browser or `curl`
+  through a Cloudflare tunnel gets it whole.
+
+**The page.** The bar's version menu (`#verBtn`, desktop and phone) ends with one quiet entry for the version on
+screen, `Download v5 (MP4)` (`data-part="download"`, a real `<a href="video/v5/download" download>`), when
+`downloads` is true and the version plays. With a single version, the menu shows just for this. Choosing it:
+
+- `ready`: the link downloads it (an attachment, so iOS Safari offers its own download sheet; never a blob from
+  `fetch`).
+- Otherwise the page posts `POST /api/download`, and the entry shows the progress at its right (`Checking…`,
+  `42%`, `Preparing…`) while the page asks every second; once `ready`, the download starts by itself (the same link,
+  clicked for the person). Closing the menu doesn't stop it.
+- `failed` or `unavailable`: its `error` is one quiet line under the entry; choosing it again tries again.
+- `license`, when not "": one quiet line under the entry.
 
 ## The page's test hook
 

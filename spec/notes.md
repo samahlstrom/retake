@@ -181,7 +181,7 @@ whisper_cli = ""     # whisper-cli's path; "" = $PATH, then scripts/install-whis
 
 ## Continuous review
 
-The review page opens the newest playable cut. A version picker exposes review checkpoints with their durations; choosing an older cut pins it until another is selected. The latest cut can still stream as it renders. Checkpoints do not require storing media in Git.
+The review page opens the newest playable cut. A version picker exposes review checkpoints with their durations; choosing an older cut pins it until another is selected. The latest cut can still stream as it renders. Checkpoints do not require storing media in Git. The picker's last entry downloads the version on screen as a YouTube-ready MP4, `Download v5 (MP4)` (spec/api.md, "Download").
 
 `GET /api/notes?v=<label>&scope=review` includes that cut's notes, earlier unresolved notes, and notes resolved in that cut, excluding future cuts. Each note exposes its originating `version`. It stays for integrations; the review page reads `scope=video` (below) and does the per-version split itself.
 
