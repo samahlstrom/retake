@@ -88,7 +88,7 @@ the `retake-edit` ones included.
 |---|---|
 | A `vX.Y.Z` tag is pushed | Every CI test (it calls `ci.yml`); `retake-edit` on each platform's runner; the archives, `checksums.txt`, the Mac app, the npm packages and the Homebrew formula (`package`); the npm install tested on each platform (`smoke`); then a **draft** GitHub release with the archives, `checksums.txt`, `install.sh` and `install.ps1`. Nothing public yet. |
 | You publish that draft on GitHub | `npm`: downloads the release's archives, checks them against its `checksums.txt`, makes the npm packages from them and publishes each with trusted publishing and provenance (a version with a `-` goes to the `next` tag, not `latest`). `homebrew`: writes the formula from the release's `checksums.txt` and pushes it to the tap (not for pre-releases). Both skip what's already there, so re-running is safe. |
-| Run workflow by hand, `dry_run` on (the default) | Everything a tag push does except the draft, from any branch, with snapshot versions. All of it is uploaded as the run's artifacts: `release` (archives, checksums, Mac app, `retake.rb`), `npm` (the tarballs), `editor-*`. Publishes nothing. |
+| Run workflow by hand, `dry_run` on (the default), or a push to a `dry-run/*` branch | Everything a tag push does except the draft, with snapshot versions. All of it is uploaded as the run's artifacts: `release` (archives, checksums, Mac app, `retake.rb`), `npm` (the tarballs), `editor-*`. Publishes nothing. |
 
 **The smoke test** (`scripts/npm-smoke.mjs`, the `smoke` jobs: Linux x64 on Node 18 and current, Linux arm64, both
 Macs, Windows) serves the npm tarballs from a registry of its own on 127.0.0.1, in a scratch HOME with empty caches,
@@ -105,15 +105,18 @@ nothing, and `@latest` picks up a newer release. On the Macs it also installs th
 
 ### A dry run
 
-Push the branch, then start it from the Actions tab (Release, Run workflow, pick the branch, keep `dry_run`
-ticked), or with the GitHub CLI:
+GitHub offers **Run workflow** only for workflows on the default branch, so until `release.yml` is on `main`, push the
+branch under a `dry-run/` name, which runs it as a dry run:
 
 ```bash
-git push origin simple-npm
-gh workflow run release.yml --ref simple-npm -f dry_run=true
+git push origin HEAD:dry-run/release                   # from the branch to test; publishes nothing
 gh run watch "$(gh run list --workflow release.yml --limit 1 --json databaseId --jq '.[0].databaseId')"
 gh run download <run id> -n npm -D dist/npm            # the npm tarballs it made, to look at or test locally
+git push origin --delete dry-run/release               # afterwards
 ```
+
+Once it's on `main`: Actions, Release, Run workflow, pick any branch, keep `dry_run` ticked; or
+`gh workflow run release.yml --ref <branch> -f dry_run=true`.
 
 ### A real release
 

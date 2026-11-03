@@ -8,12 +8,15 @@ name: Release
 #                          and provenance, and the Homebrew formula, both from the release's own archives.
 #   Run workflow, dry_run  (Actions, Release, Run workflow, any branch) the same builds and tests; everything is
 #                          uploaded as this run's artifacts and nothing is published. dry_run off, from a tag: as a push.
+#   push a dry-run/* branch the same dry run, for before this file is on the default branch (GitHub offers Run
+#                          workflow only for workflows there): git push origin HEAD:dry-run/<name>
 #
-# Normal pushes never run it; ci.yml does.
+# Other pushes never run it; ci.yml does.
 
 on:
   push:
     tags: ["v*"]
+    branches: ["dry-run/**"]
   release:
     types: [published]
   workflow_dispatch:
@@ -50,7 +53,10 @@ jobs:
         run: |
           tag="" draft=false
           if [ "$EVENT" = push ]; then
-            tag="$GITHUB_REF_NAME" draft=true
+            case "$GITHUB_REF" in
+              refs/tags/v*) tag="$GITHUB_REF_NAME" draft=true ;;
+              *) ;; # a dry-run/* branch
+            esac
           elif [ "$DRY_RUN" != true ]; then
             case "$GITHUB_REF" in
               refs/tags/v*) tag="$GITHUB_REF_NAME" draft=true ;;
