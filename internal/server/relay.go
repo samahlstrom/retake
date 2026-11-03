@@ -71,7 +71,7 @@ func (s *Server) remoteMedia(w http.ResponseWriter, r *http.Request, v family.Ve
 func relayTarget(a *project.AutomationState, label, name string) (mediaTarget, bool) {
 	if v := a.Render(label); v != nil {
 		if name == "" {
-			name = "index.m3u8"
+			name = v.MediaName()
 		}
 		if !relay.ValidFile(name) {
 			return mediaTarget{}, false

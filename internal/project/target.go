@@ -11,8 +11,9 @@ import (
 
 var targetLabelRE = regexp.MustCompile(`^v(\d+)(?:-draft\d+)?$`)
 
-// TargetOf is the version a comment made on version goes in: v7 → v8, and a draft (v8-draft2) → the version it heads
-// for (v8). "" for a label that isn't a version's.
+// TargetOf is the version a comment made on version goes in: v7 → v8, and a revision of the live v8 (its draft,
+// v8-draft2) → v9, as for v8 itself: people see it as v8 (spec/automation.md, "Versions versus drafts"). "" for a label
+// that isn't a version's.
 func TargetOf(version string) string {
 	m := targetLabelRE.FindStringSubmatch(version)
 	if m == nil {
@@ -21,9 +22,6 @@ func TargetOf(version string) string {
 	n, err := strconv.Atoi(m[1])
 	if err != nil {
 		return ""
-	}
-	if len(m[0]) > len("v"+m[1]) { // a draft heads for its own version
-		return fmt.Sprintf("v%d", n)
 	}
 	return fmt.Sprintf("v%d", n+1)
 }

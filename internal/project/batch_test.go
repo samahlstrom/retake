@@ -363,7 +363,7 @@ func TestCommentsOnVNBecomeEditsInVNPlus1(t *testing.T) {
 	if n, _ := s.Note(6); n.Version != "v7" || n.Target() != "v8" {
 		t.Fatalf("note 6: %+v", n)
 	}
-	if TargetOf("v8-draft2") != "v8" || TargetOf("v6") != "v7" || TargetOf("x") != "" {
+	if TargetOf("v8-draft2") != "v9" || TargetOf("v6") != "v7" || TargetOf("x") != "" {
 		t.Fatal("TargetOf")
 	}
 	run := func(want string, ids ...int64) {

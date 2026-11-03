@@ -101,6 +101,8 @@ the agent loop (spec/notes.md; <video> is any version of the family, and every c
   retake ask [--note ID] [--at T] [--from T --to T] [--box X,Y,W,H[:LABEL]]... [--arrow X1,Y1,X2,Y2[:LABEL]]...
              [--draw FILE] [--image FILE[@X,Y,W,H]]... [--option TEXT[@FILE]]... [--version L] [--px] "question"
       inside a running editing task: ask about a moment of the video, with visuals; returns at once
+  retake working <note> ["what I'm doing"]   and   retake done <note> "what changed"
+      inside a running editing task: the note you're on now, and a note whose edit is in (it shows Done at once)
   retake note <video> <id> --status answered --in vN --change "what changed"
       mark a note answered by a version that's already in the family
   retake push <video> <file> [--parent vN] [--label vN] [--change ID="summary"]... [--ask ID="question"]... [--move]
@@ -219,6 +221,8 @@ func Main(ctx context.Context, args []string, env Env) int {
 		return notesAgentCmd(ctx, args[1:], env)
 	case "ask":
 		return askCmd(ctx, args[1:], env)
+	case "working", "done":
+		return progressCmd(ctx, args[0], args[1:], env)
 	case "note":
 		return noteCmd(ctx, args[1:], env)
 	case "push":

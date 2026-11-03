@@ -173,6 +173,8 @@ func (at *attempt) start(ctx context.Context) *outcome {
 	rec.Snaps = at.snapshot()
 	at.batch()
 	r.setRecord(rec)
+	// The target is live at once: a plain project's first revision is the video the agent starts from.
+	r.startRevision(ctx, t, rec)
 	if at.mode != OpenBackground {
 		v, stop := r.openSession(ctx, at.mode, at.p, t, rec.Prompt, fresh)
 		if stop != nil {
@@ -301,7 +303,7 @@ func (at *attempt) rounds(ctx context.Context) outcome {
 	r, t, rec := at.r, at.t, at.rec
 	paused := func(s string) outcome { return outcome{state: "paused", message: s, usage: rec.Usage} }
 	done := func(o outcome) outcome {
-		o.state, o.message, o.changes, o.usage = "completed", strings.Join(rec.Messages, " "), rec.Changes, rec.Usage
+		o.state, o.message, o.changes, o.said, o.usage = "completed", strings.Join(rec.Messages, " "), rec.Changes, rec.Said, rec.Usage
 		return o
 	}
 	leave := func() outcome {
@@ -337,6 +339,9 @@ func (at *attempt) rounds(ctx context.Context) outcome {
 				}
 				for id, c := range noteChanges(report.Notes) {
 					x.Changes[id] = c
+					if !slices.Contains(x.Said, id) {
+						x.Said = append(x.Said, id)
+					}
 				}
 				for _, id := range x.Round {
 					if _, ok := x.Changes[id]; !ok {
@@ -684,7 +689,7 @@ func timelinePrompt(contextPath, timeline, reportPath, extra string) string {
 Read the project instructions, then the durable task context at %q. The native timeline is %q.
 Only the note IDs in task.notes are assigned (minus task.done, finished in an earlier attempt). Other notes are context: check them and prior events for conflicting or already-applied feedback. Original note versions, timing, strokes and targets must be respected. Saved annotated stills, when available, are note-<id>.png in this task directory. Attached reference images are note-<id>-<file>; their boxes and original video times are in the context. A note's "missing" says which of its files couldn't be given to you and what you have instead.
 Original local video revisions are retained in .retake/worker/renders/: each state.json gives its label (a draft such as v4-draft2 until a task completes it as v4), source.json is its timeline snapshot, and index.m3u8 is its video. Inspect the original frame there when needed; do not assume an old comment's time refers to the current source.
-Make the requested source edits in this project. Preserve all existing working changes, media and other people's work. Retake automatically renders valid saved source changes and streams them to reviewers. Do not run retake push or mark notes complete yourself.
+Make the requested source edits in this project. Preserve all existing working changes, media and other people's work. Retake automatically renders valid saved source changes and streams them to reviewers. Do not run retake push or retake note yourself.
 The next agent may differ from you; leave source changes and useful context on disk. Do not delete or edit the worker's identity, lock, logs, context files, ask.json or render output.
 `, contextPath, timeline) + extra + askRules(reportPath, "A completed report is only a request: Retake waits for a checked playable render before resolving the comment.")
 }

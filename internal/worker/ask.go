@@ -160,6 +160,10 @@ func (r *runner) serveAsk(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(status)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
 	}
+	if req.URL.Path == "/progress" && req.Method == http.MethodPost {
+		r.serveProgress(w, req, fail) // retake working, retake done (progress.go)
+		return
+	}
 	if req.URL.Path != "/ask" || req.Method != http.MethodPost {
 		fail(http.StatusNotFound, "not found")
 		return
@@ -373,6 +377,11 @@ Times are on the version the note was made on (the times in the context; add --v
   %[1]s ask --note 3 --at 1:23 --box 0.62,0.08,0.3,0.2:"this logo?" --option "Keep it" --option "Remove it" "Is this the logo you want gone?"
 It returns at once; the answer comes back to you later, as a message in this session or in "questions" of the context when the task resumes. The context's "questions" holds what was asked in this task before, with the answers.
 The assigned notes are one batch, sent together: do all of them in this one run and write one report, from which Retake makes one new version.
+Work them one note at a time, and say so as you go: the reviewer watches each one land in the version being made.
+  %[1]s working <note id> "what you're doing, in a few words"
+  (make that note's edit and save it)
+  %[1]s done <note id> "what changed"
+Then the next note. Both return at once.
 When you have done everything you can, write a JSON object to %[2]q: {"state":"completed","message":"concrete description of the change and checks","notes":{"<note id>":"what you changed for that note"}} ("notes" is optional: each comment shows its own entry, else the message). Write it also when some notes wait on your questions: Retake keeps those open for their answers and finishes the rest. Only if you can't carry on at all, write {"state":"question","message":"your question"} instead.
 %[3]s
 `, askCommand(), reportPath, done)

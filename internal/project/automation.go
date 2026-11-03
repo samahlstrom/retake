@@ -100,6 +100,11 @@ type EditingTask struct {
 	// Lost says it paused because its worker didn't come back within the grace: that worker may take it back
 	// (spec/automation.md, "Agents outlive Retake").
 	Lost bool `json:"lost,omitempty"`
+	// Working is the note the running attempt's agent works on now, and Marked the notes it says are done, in the
+	// order it said so (retake working, retake done: spec/automation.md, "Marking progress"). The report is the
+	// source of truth: both go when the attempt ends.
+	Working *NoteDoing `json:"working,omitempty"`
+	Marked  []NoteMark `json:"marked,omitempty"`
 }
 
 // lost reports whether t is paused because its worker went away (Lost, or the error an older version gave it).
@@ -136,6 +141,17 @@ type LiveRender struct {
 	Seconds  float64          `json:"seconds"`
 	Complete bool             `json:"complete"`
 	Error    string           `json:"error,omitempty"`
+	// Media is the render's one media file when it isn't an HLS playlist (index.m3u8): a plain project's revision
+	// is the agent's video as it was at a `retake done`, video.mp4 (spec/automation.md, "Versions versus drafts").
+	Media string `json:"media,omitempty"`
+}
+
+// MediaName is the file the render plays from: its Media, else its playlist.
+func (v LiveRender) MediaName() string {
+	if v.Media != "" {
+		return v.Media
+	}
+	return "index.m3u8"
 }
 
 // FileVersion is a version file on a connected computer (spec/automation.md, "Version files"): the host keeps its
@@ -291,6 +307,7 @@ func (s *Store) reconcileWork(t *tx, a *AutomationState) (bool, error) {
 			continue
 		}
 		j.Dropped = append(j.Dropped, dropped...)
+		j.unmark(dropped...)
 		j.AddEvent(now, "Dropped "+noteList(dropped)+": resolved or deleted outside this task")
 		changed = true
 		if len(j.Pending()) > 0 {
@@ -1143,6 +1160,7 @@ func (s *Store) PollWorkerChat(p WorkPoll) (task, next *EditingTask, chat *ChatT
 			j.Error = ""
 			j.Lost = false
 			j.Stop = false
+			j.clearProgress()
 			j.AddEvent(now, "Agent picked up the task")
 			clone := *j
 			task = &clone
@@ -1286,8 +1304,11 @@ type WorkReport struct {
 	// notes of the next batch given to the agent's live session, as in a poll, counted before it decides too.
 	Told []int64 `json:"told,omitempty"`
 	Join []int64 `json:"join,omitempty"`
-	// Notes is what changed for each note, from the agent's report; a note without an entry gets Message.
+	// Notes is what changed for each note, from the agent's report; a note without an entry gets Message. Said is
+	// the notes the agent wrote its own entry for: any other note marked done with retake done gets its mark's words
+	// (spec/automation.md, "Marking progress").
 	Notes map[int64]string `json:"notes,omitempty"`
+	Said  []int64          `json:"said,omitempty"`
 }
 
 // MaxNoteChanges is how many per-note changes a report may carry; MaxChange is the longest one.
@@ -1427,7 +1448,7 @@ func (s *Store) ReportWork(r WorkReport, floor int) (LiveRender, error) {
 							j.Dropped = append(j.Dropped, id) // withdrawn meanwhile: the batch carries on
 							continue
 						}
-						if _, e = t.Exec(`UPDATE notes SET status='answered', answered_in=?, change=?, updated=? WHERE id=?`, n.Version, r.change(id), s.stamp(), id); e != nil {
+						if _, e = t.Exec(`UPDATE notes SET status='answered', answered_in=?, change=?, updated=? WHERE id=?`, n.Version, r.changeFor(j, id), s.stamp(), id); e != nil {
 							return e
 						}
 					}
@@ -1488,7 +1509,7 @@ func (s *Store) ReportWork(r WorkReport, floor int) (LiveRender, error) {
 					j.Dropped = append(j.Dropped, id) // withdrawn meanwhile: the batch carries on
 					continue
 				}
-				if _, e = t.Exec(`UPDATE notes SET status='answered', answered_in=?, change=?, updated=? WHERE id=?`, label, r.change(id), s.stamp(), id); e != nil {
+				if _, e = t.Exec(`UPDATE notes SET status='answered', answered_in=?, change=?, updated=? WHERE id=?`, label, r.changeFor(j, id), s.stamp(), id); e != nil {
 					return e
 				}
 				finished = append(finished, id)
@@ -1508,6 +1529,9 @@ func (s *Store) ReportWork(r WorkReport, floor int) (LiveRender, error) {
 			j.AddEvent(now, r.Message)
 		default:
 			return fmt.Errorf("unknown report state %q", r.State)
+		}
+		if j.State != "running" && j.State != "stopping" {
+			j.clearProgress() // the report has settled every note (spec/automation.md, "Marking progress")
 		}
 		notes := slices.Clone(j.Notes)
 		if err = saveAutomation(t, a); err == nil { // a task queued again joins the video's queued batch
