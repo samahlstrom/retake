@@ -131,6 +131,13 @@ func TestUsesARunningShareFirst(t *testing.T) {
 	if err != nil || r.Kind != KindTunnel || r.Base != "https://live.trycloudflare.com/" || started {
 		t.Fatalf("%+v %v", r, err)
 	}
+	// A share in this same process (retake share <folder> serves the folder itself) counts too.
+	l = New(Options{Port: 9141, Hosts: func() []project.Host {
+		return []project.Host{{Host: "same.trycloudflare.com", Tunnel: "cloudflare", PID: os.Getpid()}}
+	}})
+	if r := l.Reach(nil); r.Host != "same.trycloudflare.com" {
+		t.Fatalf("a share of this process: %+v", r)
+	}
 	// No live share: the --allow-host name.
 	l = New(Options{Port: 9141, Hosts: func() []project.Host { return nil }, Allow: []string{"Proxy.Example.com"}})
 	if r := l.Reach(nil); r.Host != "proxy.example.com" || r.Base != "https://proxy.example.com/" {

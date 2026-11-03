@@ -35,7 +35,12 @@
   </a>
   <VideoMenu
     target={{ name: video.name, title: videoName(video), api: video.url, home: '' }}
-    context={{ owner: home.res.role === 'owner', local: !home.res.user && !!home.res.folder, page: 'card' }}
+    context={{
+      owner: home.res.role === 'owner',
+      approver: home.res.role === 'approver',
+      local: !home.res.user && !!home.res.folder,
+      page: 'card',
+    }}
   />
 </li>
 

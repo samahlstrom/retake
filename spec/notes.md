@@ -280,12 +280,12 @@ The review page has one ⋯ for the video itself (part `video-menu`): at the top
 link, 44 px on a phone. It fades with the back link while composing on a phone ("Typing on a phone"). Its items, the
 same as a home card's ⋯ (spec/home.md, "A video's ⋯"), each only where it can work:
 
-1. **Share…**: the share sheet (spec/team.md, "Sharing a video from the page"). The owner.
+1. **Share…**: the share sheet (spec/team.md, "Sharing a video from the page"). The owner and approvers.
 2. **Agent for this video ▸**: the agents the editing computer offers, a check on the one this video uses, and **Use
    my default (<name>)** (spec/automation.md, "An agent for one video"). The owner, while a computer offers an agent.
 3. **Download**: the version menu's Download, when the server offers it (a hook until then).
 
-No ⋯ when nothing applies (a viewer's or reviewer's link today). Nothing about the agent shows on or near Send: the
+No ⋯ when nothing applies (a viewer's or reviewer's link today; an approver's has Share… only). Nothing about the agent shows on or near Send: the
 video's agent is only in this menu (and the card's), checked.
 
 ## Deleting a comment

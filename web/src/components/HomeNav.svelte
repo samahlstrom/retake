@@ -45,7 +45,11 @@
           >{/each}</span
       ></a
     >{/if}
-  <VideoMenu {target} context={{ owner: review.owner, local: false, page: 'review' }} variant="review" />
+  <VideoMenu
+    {target}
+    context={{ owner: review.role === 'owner', approver: review.role === 'approver', local: false, page: 'review' }}
+    variant="review"
+  />
 </div>
 <VideoMenuHost say={(msg) => review.toast.say(msg, 2600)} />
 {#if review.homeAvailable}

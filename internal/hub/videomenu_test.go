@@ -84,10 +84,15 @@ func TestFolderVideoLinkOpensThatVideoOnly(t *testing.T) {
 			t.Fatalf("%s through alpha's link: %d", p, r.code)
 		}
 	}
-	// A reviewer's link can't make links.
+	// A reviewer's link can't make links; a folder's approver link can.
 	if r := x.do(http.MethodPost, "/p/alpha/api/shares", `{}`, shared(), cookie(ShareCookie, tok),
 		origin("https://share.test")); r.code != http.StatusForbidden {
 		t.Fatalf("a reviewer made a link: %d", r.code)
+	}
+	ap := homeToken(t, x.dir, team.Approver, "Sam phone")
+	if r := x.do(http.MethodPost, "/p/bravo/api/shares", `{"role":"viewer"}`, shared(), cookie(ShareCookie, ap),
+		origin("https://share.test")); r.code != http.StatusCreated {
+		t.Fatalf("an approver's link: %d %s", r.code, r.body)
 	}
 
 	// A folder's link still opens the whole folder, and bounces to the home.

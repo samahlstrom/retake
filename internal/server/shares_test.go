@@ -115,9 +115,14 @@ func TestSharesRefuseBadInput(t *testing.T) {
 	}
 }
 
-func TestSharesOwnerOnly(t *testing.T) {
+func TestSharesOwnerAndApprovers(t *testing.T) {
 	h := startTeam(t, Options{Sharing: &fakeSharing{reach: Reach{Kind: "tunnel", Base: "https://share.test/"}}})
-	for _, role := range []string{"viewer", "reviewer", "approver", "agent"} {
+	approver := map[string]string{"Authorization": "Bearer " + makeToken(t, h, "approver", "Sam phone", 0),
+		"Origin": "https://share.test"}
+	if got := h.req(http.MethodGet, "/api/shares", "share.test", approver); got.code != 200 {
+		t.Fatalf("an approver lists links: %d %s", got.code, got.body)
+	}
+	for _, role := range []string{"viewer", "reviewer", "agent"} {
 		tok := makeToken(t, h, role, role, 0)
 		hdr := map[string]string{"Authorization": "Bearer " + tok}
 		if got := h.get("/api/shares", hdr); got.code != http.StatusForbidden {

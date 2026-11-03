@@ -82,9 +82,9 @@ A streamed version also has `"stream": {"state": "rendering", "done": 12, "total
 | GET | `/api/link-preview?url=<address>` | New with a script's embeds (spec/scripts.md, "Embeds"): what a public web page says about itself, for a link card: `{"url", "title", "site", "image", "description"}`. See "Link preview" below. |
 | GET | `/api/chat` | New: the chat with the agent on a kind's version that has one (spec/chat.md): `{"messages", "turn", "busy", "offline", "blocked", "sent"}`. Needs watch. |
 | POST | `/api/chat` | New: a person's message, `{"text", "images"?, "voice"?, "answer"?, "agent"?}`: 201 `{"message"}`. Needs record. `POST /api/chat/stop` stops the agent's reply; `POST /api/chat/send` `{"file"}` is Send on the chat's version (make the video). `GET /api/chat/files/<message>/<file>` is a question's image. The `chat` event of `/api/events` keeps a page current. |
-| GET | `/api/shares` | New: the video's share links that work and how a new one would reach people (spec/team.md, "Sharing a video from the page"). Owner only. |
-| POST | `/api/shares` | New: `{"label"?, "role", "expires"}` makes a link for this video: 201 `{"url", "link", "reach"}`. Owner only. |
-| POST | `/api/shares/<id>/revoke` | New: that link stops working. Owner only. |
+| GET | `/api/shares` | New: the video's share links that work and how a new one would reach people (spec/team.md, "Sharing a video from the page"). The owner and approvers. |
+| POST | `/api/shares` | New: `{"label"?, "role", "expires"}` makes a link for this video: 201 `{"url", "link", "reach"}`. The owner and approvers. |
+| POST | `/api/shares/<id>/revoke` | New: that link stops working. The owner and approvers. |
 | POST | `/api/automation/agent` | New: `{"agent"}` sets this video's own agent, "" clears it (spec/automation.md, "An agent for one video"). Owner only. |
 | any | `/mcp` | New in milestone 3a: the agent tools over MCP's streamable HTTP transport, for a Bearer `agent` token (spec/team.md). |
 

@@ -30,7 +30,7 @@ How the link gets to them, without you setting anything up:
   (`http://192.168.…`), so people on the same Wi-Fi can open it. To share with anyone, install cloudflared (Settings
   shows the command) and make the link again.
 
-Only you (the owner) can make links. To turn the automatic tunnel off, choose *On my network only* under Sharing in
+You (the owner) and anyone with an approver's link can make links; reviewers and viewers can't. To turn the automatic tunnel off, choose *On my network only* under Sharing in
 Settings, or write `tunnel = "off"` under `[share]` in config.toml.
 
 ## Share a link from the command line

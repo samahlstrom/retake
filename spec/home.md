@@ -260,7 +260,7 @@ nothing more than the videos.
 Every card has a ⋯ with what you do to a video now and then, in this order; an item shows only where it can work, and
 the ⋯ doesn't show at all when nothing can:
 
-1. **Share…**: the sheet of spec/team.md, "Sharing a video from the page". The owner.
+1. **Share…**: the sheet of spec/team.md, "Sharing a video from the page". The owner and approvers.
 2. **Agent for this video ▸**: the agents the editing computer offers, a check on the one this video uses, and **Use my
    default (Claude Code)** (the default agent's name; checked when the video has no agent of its own). Picking one
    sets the video's agent (spec/automation.md, "An agent for one video"). The owner, while a computer offers an agent.

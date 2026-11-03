@@ -18,6 +18,8 @@ export interface VideoTarget {
 export interface MenuContext {
   /** The owner (locally the person at the computer; hosted a project owner or an admin). */
   owner: boolean;
+  /** An approver's link or membership: Share… too (spec/team.md, "Sharing a video from the page"). */
+  approver?: boolean;
   /** A local home (retake open <folder>, retake start), not the team server or a share link. */
   local: boolean;
   /** The editing computer offers an agent (else no agent list). null: not known yet (it's read when the menu opens). */
@@ -40,7 +42,7 @@ export interface MenuItems {
 export function menuItems(c: MenuContext): MenuItems {
   const card = c.page === 'card';
   return {
-    share: c.owner,
+    share: c.owner || !!c.approver,
     agent: c.owner && c.agents !== false,
     download: !!c.download,
     reveal: card && c.owner && c.local,

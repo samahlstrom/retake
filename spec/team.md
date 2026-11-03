@@ -30,7 +30,7 @@ Permissions by route:
 | `GET /api/automation` | watch |
 | `POST /api/automation/tasks`, `POST /api/automation/tasks/<id>/answer` and `/retry` | record |
 | `POST /api/automation`, `POST /api/automation/agent`, other `POST /api/automation/tasks/<id>/<action>` | owner only |
-| `GET` and `POST /api/shares`, `POST /api/shares/<id>/revoke` ("Sharing a video from the page") | owner only |
+| `GET` and `POST /api/shares`, `POST /api/shares/<id>/revoke` ("Sharing a video from the page") | approve |
 | `GET /s/<token>` | nothing: it is how a token arrives |
 
 A role without the permission gets 403 `{"error":"not allowed"}`.
@@ -223,17 +223,18 @@ counts as `video:<name>` (spec/home.md, "Share scopes"): the home lists only tha
 answer 403, and `/s/<token>` bounces straight to the video's page. A folder's links (`retake share <folder>`) keep
 opening the whole folder, and `retake share list <video>` lists the links made here.
 
-**Who.** The owner only: locally, the person at the computer; on the team server, a project's owner, or an admin (the
-owner of every project). Approvers, reviewers and viewers can't make, list or revoke links: a link hands out access to
-the video, and that stays with its owner. No email or invitation is sent.
+**Who.** The owner (locally, the person at the computer; on the team server, a project's owner, or an admin, the owner
+of every project) and approvers (an approver's link or membership): someone trusted to approve a version can bring
+someone in to comment or watch, which is no more than they can do themselves. Reviewers and viewers can't make, list
+or revoke links. No email or invitation is sent.
 
 Routes, on the video (`/p/<name>/` in a folder and on the team server, `/` for `retake open <video>`):
 
 | Method | Path | Needs | Does |
 |---|---|---|---|
-| GET | `api/shares` | owner | `{"links": [{"id", "role", "label", "created", "expires"}], "reach": {"kind", "host", "note"}}`: the video's links that work now (not revoked, not expired; agent tokens left out), newest first, and how a new link would reach people ("How a link reaches people"), without starting anything. |
-| POST | `api/shares` | owner | `{"label"?, "role": "reviewer"\|"viewer", "expires": "7d"\|"30d"\|"never"}`: 201 `{"url", "link", "reach"}`. Any other role or expiry is 400. It answers once the address works (it may start a tunnel: at most 60 s); when no address can be had it is 503 `{"error"}` and no token is kept. |
-| POST | `api/shares/<id>/revoke` | owner | The link stops working at once: `{"ok": true}`. 404 for an id that isn't one of the video's links. |
+| GET | `api/shares` | approve | `{"links": [{"id", "role", "label", "created", "expires"}], "reach": {"kind", "host", "note"}}`: the video's links that work now (not revoked, not expired; agent tokens left out), newest first, and how a new link would reach people ("How a link reaches people"), without starting anything. |
+| POST | `api/shares` | approve | `{"label"?, "role": "reviewer"\|"viewer", "expires": "7d"\|"30d"\|"never"}`: 201 `{"url", "link", "reach"}`. Any other role or expiry is 400. It answers once the address works (it may start a tunnel: at most 60 s); when no address can be had it is 503 `{"error"}` and no token is kept. |
+| POST | `api/shares/<id>/revoke` | approve | The link stops working at once: `{"ok": true}`. 404 for an id that isn't one of the video's links. |
 
 `label` is trimmed, at most 80 characters, without control characters (400 otherwise).
 

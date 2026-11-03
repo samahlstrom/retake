@@ -15,8 +15,8 @@ import (
 	"github.com/samahlstrom/retake/internal/team"
 )
 
-// Sharing a video from the page (spec/team.md, "Sharing a video from the page"): the owner makes, lists and revokes the
-// video's share links. A link's token is kept in the video's own store, so it opens this video only.
+// Sharing a video from the page (spec/team.md, "Sharing a video from the page"): the owner (or an approver) makes,
+// lists and revokes the video's share links. A link's token is kept in the video's own store, so it opens this video only.
 
 // Reach is how a share link reaches people (spec/team.md, "How a link reaches people").
 type Reach struct {
@@ -53,7 +53,8 @@ var shareExpiry = map[string]time.Duration{"7d": 7 * 24 * time.Hour, "30d": 30 *
 // maxShareLabel is the longest name a link may carry.
 const maxShareLabel = 80
 
-// sharesRoute is GET and POST api/shares, and POST api/shares/<id>/revoke. Only the owner reaches it (permFor).
+// sharesRoute is GET and POST api/shares, and POST api/shares/<id>/revoke. Only the owner and approvers reach it
+// (permFor).
 func (s *Server) sharesRoute(w http.ResponseWriter, r *http.Request, parts []string) {
 	if r.Method == http.MethodPost && !s.originOK(r) {
 		s.fail(w, r, http.StatusForbidden, "bad origin")

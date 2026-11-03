@@ -820,8 +820,13 @@ func TestHostedShareLinkFromThePage(t *testing.T) {
 		info.json(t)["role"] != "reviewer" {
 		t.Fatalf("the link: %d %s", info.code, info.body)
 	}
-	// An approver (a member, not an owner) can't.
-	if r := x.post("/p/demo/api/shares", `{}`, cookie(SessionCookie, x.session(ana)), origin(x.url)); r.code != 403 {
-		t.Fatalf("an approver made a link: %d", r.code)
+	// An approver (a member, not an owner) can too; a reviewer can't.
+	if r := x.post("/p/demo/api/shares", `{}`, cookie(SessionCookie, x.session(ana)), origin(x.url)); r.code != 201 {
+		t.Fatalf("an approver's link: %d %s", r.code, r.body)
+	}
+	bo := x.user("bo@example.com", false)
+	x.member(demo, bo, team.Reviewer)
+	if r := x.post("/p/demo/api/shares", `{}`, cookie(SessionCookie, x.session(bo)), origin(x.url)); r.code != 403 {
+		t.Fatalf("a reviewer made a link: %d", r.code)
 	}
 }

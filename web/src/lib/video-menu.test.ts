@@ -31,6 +31,15 @@ describe('which items a video’s ⋯ shows', () => {
       trash: false,
     });
   });
+  it('gives an approver Share… only', () => {
+    expect(menuItems(ctx({ owner: false, approver: true }))).toEqual({
+      share: true,
+      agent: false,
+      download: false,
+      reveal: false,
+      trash: false,
+    });
+  });
   it('shows nothing to someone who isn’t the owner (no ⋯ at all) until Download is there', () => {
     const m = menuItems(ctx({ owner: false }));
     expect(anyItem(m)).toBe(false);

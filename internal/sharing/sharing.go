@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"maps"
 	"net"
 	"net/http"
 	"os"
@@ -65,8 +66,9 @@ type Local struct {
 
 	startMu sync.Mutex // one tunnel start at a time
 
-	mu  sync.Mutex
-	tun *tunnel.Tunnel // the tunnel this process started, while it runs
+	mu      sync.Mutex
+	tun     *tunnel.Tunnel  // the tunnel this sharing started, while it runs
+	started map[string]bool // the hostnames of the tunnels it started (only a running l.tun counts of those)
 }
 
 // New returns a Local.
@@ -80,7 +82,7 @@ func New(o Options) *Local {
 	if o.Alive == nil {
 		o.Alive = alive
 	}
-	return &Local{o: o}
+	return &Local{o: o, started: map[string]bool{}}
 }
 
 var _ server.Sharing = (*Local)(nil)
@@ -102,12 +104,13 @@ func (l *Local) running() string {
 			return h
 		}
 	}
+	mine := maps.Clone(l.started)
 	l.mu.Unlock()
 	if l.o.Hosts != nil {
 		for _, h := range l.o.Hosts() {
 			switch {
 			case h.Tunnel == KindLAN: // the local network's, not a tunnel
-			case h.PID == os.Getpid(): // this process's own: only a running l.tun counts
+			case h.PID == os.Getpid() && mine[h.Host]: // one this sharing started: only a running l.tun counts
 			case h.PID > 0 && !l.o.Alive(h.PID): // a share that died
 			default:
 				return h.Host
@@ -208,6 +211,7 @@ func (l *Local) startTunnel(ctx context.Context) (string, error) {
 	}
 	l.mu.Lock()
 	l.tun = t
+	l.started[t.Host] = true
 	l.mu.Unlock()
 	return t.Host, nil
 }

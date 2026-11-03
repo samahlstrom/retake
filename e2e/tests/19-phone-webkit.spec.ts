@@ -229,7 +229,7 @@ test.describe('phones in WebKit', () => {
         await expect(page.locator('#precord')).toBeVisible();
         await fitsWidth(page, `${device}: a video`);
         await barOnScreen(page, `${device}: a video`);
-        await topBarFits(page, `${device}: a video`, ['[data-part~="review-back"]', '#sideToggle']);
+        await topBarFits(page, `${device}: a video`, ['[data-part~="review-back"]', '[data-part~="video-menu"]', '#sideToggle']);
         await shot(page, 'video', device);
 
         // The home.
