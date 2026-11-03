@@ -48,6 +48,9 @@ type Options struct {
 	// RelayCache is the most bytes of relayed video kept under the data folder's relay-cache/ (spec/automation.md,
 	// "The server's cache"); 0 keeps none.
 	RelayCache int64
+	// Downloads is who may download a version's MP4 ([server] downloads, spec/api.md "Download"): each project's
+	// server.Options.WhoDownloads.
+	Downloads string
 	// Theme is the host's theme folder (spec/theme.md), for the server's own pages (sign-in, setup): its name, logo
 	// and theme.css. "" = none. The review page and the home get it through UI (theme.Page).
 	Theme string

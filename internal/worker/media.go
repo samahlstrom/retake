@@ -37,8 +37,12 @@ func (r *runner) readMedia(ctx context.Context, request relay.Request) media {
 	switch {
 	case strings.HasPrefix(request.Op, "ext."):
 		return r.extAnswer(ctx, request)
+	case request.Op == "download":
+		return r.downloadAnswer(ctx, request)
 	case request.Op != "":
 		return missing()
+	case request.Download:
+		return r.readDownload(request)
 	case request.Render != "":
 		return readRender(r.dir, request)
 	case request.Version != "":

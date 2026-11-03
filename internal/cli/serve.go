@@ -16,6 +16,7 @@ import (
 	"github.com/samahlstrom/retake/internal/ext"
 	"github.com/samahlstrom/retake/internal/hub"
 	"github.com/samahlstrom/retake/internal/probe"
+	"github.com/samahlstrom/retake/internal/server"
 	"github.com/samahlstrom/retake/internal/theme"
 )
 
@@ -56,7 +57,8 @@ type serverSettings struct {
 	Proxies                           []string
 	S3                                *blob.S3Config
 	SMTPURL, SMTPFrom                 string
-	RelayCache                        int64 // bytes; 0 = no relay cache
+	RelayCache                        int64  // bytes; 0 = no relay cache
+	Downloads                         string // who may download (spec/api.md, "Download"); "" = everyone who can watch
 }
 
 // resolveServer combines flags, RETAKE_* environment variables, config.toml's [server] table and the defaults.
@@ -92,6 +94,9 @@ func resolveServer(env Env, cfg config.Config, sf serverFlags) (serverSettings, 
 	}
 	if s.Data == "" {
 		return s, errors.New("no data folder: give --data DIR, or set RETAKE_DATA")
+	}
+	if s.Downloads = pick("", "RETAKE_DOWNLOADS", c.Downloads, ""); !server.ValidDownloads(s.Downloads) {
+		return s, fmt.Errorf("RETAKE_DOWNLOADS %q isn't everyone, reviewers or off", s.Downloads)
 	}
 	size := pick(sf.relayCache, "RETAKE_RELAY_CACHE", c.RelayCache, DefaultRelayCache)
 	var err error
@@ -248,7 +253,8 @@ func serveCmd(ctx context.Context, args []string, env Env) int {
 		engines = env.Engines(cfg)
 	}
 	o := hub.Options{Stores: st, PublicURL: s.PublicURL, Proxies: s.Proxies, UI: page, Jobs: &engines, Prober: prober,
-		Version: Version(), Log: env.Stderr, Verbose: sf.verbose, RelayCache: s.RelayCache, Theme: tdir, Exts: exts}
+		Version: Version(), Log: env.Stderr, Verbose: sf.verbose, RelayCache: s.RelayCache, Theme: tdir, Exts: exts,
+		Downloads: s.Downloads}
 	if mail != nil {
 		o.Mailer = mail
 	}

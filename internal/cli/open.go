@@ -325,9 +325,24 @@ func newServer(env Env, cfg config.Config, st config.Settings, o server.Options)
 	o.Jobs = &engines
 	o.CheckEvery, o.Clock, o.Log, o.Version = env.CheckEvery, env.Clock, env.Stderr, Version()
 	o.Editor = editorOf(env)
+	o.WhoDownloads = whoDownloads(env, cfg)
 	o.LocalWorker = localWorker(env, cfg, o.Exts) // Send works with nothing else to run
 	o.FileTranscriber = fileTranscriber(cfg)
 	return server.New(o)
+}
+
+// whoDownloads is [server] downloads (spec/api.md, "Download"): $RETAKE_DOWNLOADS, else the config's; "" = everyone
+// who can watch. An unknown value turns downloads off rather than opening them up.
+func whoDownloads(env Env, cfg config.Config) string {
+	v := strings.TrimSpace(env.Getenv("RETAKE_DOWNLOADS"))
+	if v == "" && cfg.Server.Downloads != nil {
+		v = *cfg.Server.Downloads
+	}
+	if !server.ValidDownloads(v) {
+		_, _ = fmt.Fprintf(env.Stderr, "retake: RETAKE_DOWNLOADS %q isn't everyone, reviewers or off: downloads are off\n", v)
+		return server.DownloadsOff
+	}
+	return v
 }
 
 // themeDir is the theme folder for retake open: --theme, $RETAKE_THEME, then ~/.config/retake/theme (spec/theme.md).

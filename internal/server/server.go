@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/samahlstrom/retake/internal/bridge"
+	"github.com/samahlstrom/retake/internal/download"
 	"github.com/samahlstrom/retake/internal/ext"
 	"github.com/samahlstrom/retake/internal/family"
 	"github.com/samahlstrom/retake/internal/jobs"
@@ -151,6 +152,11 @@ type Options struct {
 	// Links reads the pages of a script's link cards (GET /api/link-preview, spec/api.md "Link preview"); nil is
 	// linkcard.Default(), which never connects to an address that isn't public.
 	Links *linkcard.Reader
+
+	// Downloads checks and makes the versions' downloads (spec/api.md, "Download"); nil = download.Default.
+	// WhoDownloads is [server] downloads: "" or DownloadsEveryone, DownloadsReviewers or DownloadsOff.
+	Downloads    *download.Manager
+	WhoDownloads string
 }
 
 // Server serves one version family.
@@ -574,6 +580,8 @@ func (s *Server) get(w http.ResponseWriter, r *http.Request, parts []string) {
 			ctype = "application/octet-stream"
 		}
 		s.serveFile(w, r, v.Path, ctype)
+	case parts[0] == "video" && len(parts) == 3 && parts[2] == "download":
+		s.downloadFile(w, r, parts[1])
 	case parts[0] == "video" && len(parts) == 3:
 		if v, ok := s.version(parts[1]); ok && s.remoteMedia(w, r, v, parts[2]) {
 			return
@@ -613,6 +621,8 @@ func (s *Server) get(w http.ResponseWriter, r *http.Request, parts []string) {
 		s.poster(w, r)
 	case is(parts, "api", "link-preview"):
 		s.linkPreview(w, r)
+	case is(parts, "api", "download") && r.Method == http.MethodGet:
+		s.downloadState(w, r, false)
 	case parts[0] == "api" || parts[0] == "video":
 		s.fail(w, r, http.StatusNotFound, "not found")
 	default:
@@ -628,6 +638,8 @@ type infoResponse struct {
 	Sessions  []store.Summary  `json:"sessions"`
 	History   []historyEntry   `json:"history"`
 	Role      team.Role        `json:"role"` // spec/team.md
+	// Downloads says whether this request may download (spec/api.md, "Download").
+	Downloads bool `json:"downloads"`
 }
 
 type historyResponse struct {
@@ -638,6 +650,7 @@ type historyResponse struct {
 func (s *Server) info(w http.ResponseWriter, r *http.Request) {
 	fam := s.Rescan()
 	cur := s.Current()
+	may, _ := s.mayDownload(r)
 	s.json(w, r, http.StatusOK, infoResponse{
 		Version:   cur,
 		Versions:  fam,
@@ -646,6 +659,7 @@ func (s *Server) info(w http.ResponseWriter, r *http.Request) {
 		Sessions:  store.Sessions(cur.Path),
 		History:   s.history(cur),
 		Role:      accessOf(r).role,
+		Downloads: may,
 	})
 }
 
@@ -729,6 +743,10 @@ func (s *Server) post(w http.ResponseWriter, r *http.Request, parts []string) {
 	}
 	if len(parts) == 2 && parts[0] == "api" && parts[1] == "erase" {
 		s.erase(w, r, body)
+		return
+	}
+	if is(parts, "api", "download") {
+		s.downloadState(w, r, true)
 		return
 	}
 	if is(parts, "api", "notes") {
