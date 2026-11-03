@@ -6,6 +6,7 @@
   import { videoName } from '../lib/home';
   import VideoMenu from './menus/VideoMenu.svelte';
   import VideoMenuHost from './menus/VideoMenuHost.svelte';
+  import { downloadLine } from '../lib/video-menu-api';
 
   let { review }: { review: Review } = $props();
   const target = $derived({
@@ -14,6 +15,15 @@
     api: '',
     home: review.homeCtx?.home ?? null,
   });
+  // The version menu's Download (spec/api.md, "Download"), for the version on screen, in the ⋯ too.
+  const dlLabel = $derived(review.mayDownload && review.shown && !review.kindShown ? review.shown : '');
+  async function download() {
+    const label = dlLabel;
+    if (!label) return;
+    await review.downloads.get(label);
+    const line = downloadLine(review.downloads.byLabel[label]);
+    if (line) review.toast.say(line, 3200);
+  }
   const SEP = ' › '; // its spaces stay (text at a tag's edges is trimmed)
 
   const next = (e: MouseEvent) => {
@@ -47,8 +57,15 @@
     >{/if}
   <VideoMenu
     {target}
-    context={{ owner: review.role === 'owner', approver: review.role === 'approver', local: false, page: 'review' }}
+    context={{
+      owner: review.role === 'owner',
+      approver: review.role === 'approver',
+      local: false,
+      page: 'review',
+      download: dlLabel ? { label: `Download ${review.nameOf(dlLabel)} (MP4)` } : null,
+    }}
     variant="review"
+    ondownload={download}
   />
 </div>
 <VideoMenuHost say={(msg) => review.toast.say(msg, 2600)} />

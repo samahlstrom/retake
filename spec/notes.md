@@ -311,9 +311,10 @@ same as a home card's ⋯ (spec/home.md, "A video's ⋯"), each only where it ca
 1. **Share…**: the share sheet (spec/team.md, "Sharing a video from the page"). The owner and approvers.
 2. **Agent for this video ▸**: the agents the editing computer offers, a check on the one this video uses, and **Use
    my default (<name>)** (spec/automation.md, "An agent for one video"). The owner, while a computer offers an agent.
-3. **Download**: the version menu's Download, when the server offers it (a hook until then).
+3. **Download v5 (MP4)**: the version menu's Download for the version on screen (spec/api.md, "Download"), when this
+   person may download (`/api/info`'s `downloads`), not on an extension's version.
 
-No ⋯ when nothing applies (a viewer's or reviewer's link today; an approver's has Share… only). Nothing about the agent shows on or near Send: the
+No ⋯ when nothing applies; a viewer's or reviewer's link has Download only, an approver's Share… and Download. Nothing about the agent shows on or near Send: the
 video's agent is only in this menu (and the card's), checked.
 
 ## Deleting a comment

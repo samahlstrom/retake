@@ -53,6 +53,7 @@ test('iPhone 15 (WebKit): the card’s ⋯, Share…, Move to Trash and Undo', a
     await expect(menu(page).getByRole('menuitem')).toHaveText([
       'Share…',
       'Agent for this video',
+      'Download v1 (MP4)',
       'Show in folder',
       'Move to Trash…',
     ]);

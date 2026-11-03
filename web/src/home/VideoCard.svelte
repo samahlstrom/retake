@@ -9,6 +9,7 @@
   import type { Home } from './home.svelte';
   import ScriptThumb from './ScriptThumb.svelte';
   import VideoMenu from '../components/menus/VideoMenu.svelte';
+  import { downloadVideo } from '../lib/video-menu-api';
   let { video, home, where = '' }: { video: Card; home: Home; where?: string } = $props();
   const status = $derived(cardStatus(video));
   const kindWord = $derived(kindStatus(home.exts, video));
@@ -52,6 +53,11 @@
       approver: home.res.role === 'approver',
       local: !home.res.user && !!home.res.folder,
       page: 'card',
+      download: video.version && !kindWord ? { label: `Download ${verName(video.version)} (MP4)` } : null,
+    }}
+    ondownload={async () => {
+      const line = await downloadVideo(video.url, video.version);
+      if (line) home.toast.say(line, 3200);
     }}
   />
 </li>

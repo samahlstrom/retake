@@ -288,8 +288,9 @@ the ⋯ doesn't show at all when nothing can:
 2. **Agent for this video ▸**: the agents the editing computer offers, a check on the one this video uses, and **Use my
    default (Claude Code)** (the default agent's name; checked when the video has no agent of its own). Picking one
    sets the video's agent (spec/automation.md, "An agent for one video"). The owner, while a computer offers an agent.
-3. **Download**: the newest version as a file, when the server can make one (a hook for the version menu's Download;
-   the card has none until then).
+3. **Download v6 (MP4)**: the newest version as one MP4, the version menu's Download (spec/api.md, "Download") for
+   this card's video: it gets the file ready when it has to and downloads it by itself; a toast says when it's getting
+   ready, or why it can't. Anyone who can watch (a refused one says so), and not for an idea (no cut yet).
 4. **Show in folder**: the video's folder in the file manager of the computer Retake runs on. The owner of a local
    home only (`retake open <folder>`, `retake start`); never on the team server or through a share link.
 5. **Move to Trash…**: the owner of a local home only, set apart, in the danger color.

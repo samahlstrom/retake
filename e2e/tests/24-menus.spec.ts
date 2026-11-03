@@ -68,12 +68,22 @@ test('a card’s ⋯ shows on hover on a computer and lists what the owner can d
     await expect(menu(page).getByRole('menuitem')).toHaveText([
       'Share…',
       'Agent for this video',
+      'Download v1 (MP4)',
       'Show in folder',
       'Move to Trash…',
     ]);
     await shot(page, 'card-menu', 'desktop');
     await menu(page).getByRole('menuitem', { name: 'Show in folder' }).click();
     await expect.poll(() => revealedFolder(f)).toBe(join(f.videos, 'alpha'));
+    // Download: the version menu's, for this card's video; the file comes as an attachment.
+    await card(page, 'alpha').hover();
+    await more.click();
+    const [file] = await Promise.all([
+      page.waitForEvent('download', { timeout: 60_000 }),
+      menu(page).getByRole('menuitem', { name: 'Download v1 (MP4)' }).click(),
+    ]);
+    expect(file.suggestedFilename()).toBe('alpha_v1.mp4');
+    await file.cancel();
     // Opening the menu doesn't open the video.
     expect(new URL(page.url()).pathname).toBe('/');
   } finally {
@@ -101,8 +111,10 @@ test('Share… makes a link that opens that video only, and their comments carry
     const home = await g.evaluate(async () => (await (await fetch('/api/home')).json()) as { projects: { name: string }[] });
     expect(home.projects.map((p) => p.name)).toEqual(['alpha']);
     expect(await g.evaluate(async () => (await fetch('/p/bravo/api/info')).status)).toBe(403);
-    // No ⋯ for a reviewer's link (sharing and the agent are the owner's).
-    await expect(g.locator('[data-part~="video-menu"]')).toHaveCount(0);
+    // A reviewer's link has Download only in the ⋯ (sharing and the agent are the owner's and approvers').
+    await g.locator('[data-part~="video-menu"]').click();
+    await expect(menu(g).getByRole('menuitem')).toHaveText(['Download v1 (MP4)']);
+    await g.keyboard.press('Escape');
     // A typed comment, with the link's name.
     const box = g.locator('#side [data-part~="comment-line"] textarea');
     await box.click();
@@ -143,7 +155,7 @@ test('Agent for this video: its comments go to that agent, and nothing about it 
     const more = page.locator('[data-part~="video-menu"]');
     await expect(more).toBeVisible();
     await more.click();
-    await expect(menu(page).getByRole('menuitem')).toHaveText(['Share…', 'Agent for this video']);
+    await expect(menu(page).getByRole('menuitem')).toHaveText(['Share…', 'Agent for this video', 'Download v1 (MP4)']);
     await menu(page).getByRole('menuitem', { name: 'Agent for this video' }).click();
     await expect(page.locator('.vm-agents').getByRole('menuitem', { name: 'Agent Two' })).toContainText('✓');
     await shot(page, 'review-menu', 'desktop');

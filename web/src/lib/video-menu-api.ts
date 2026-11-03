@@ -2,6 +2,7 @@
 // spec/automation.md, "An agent for one video"). `api` is the video's base (`p/<name>/` on the home, '' on its page),
 // `home` the home's.
 import { normalizeShares, type AgentState, type Reach, type ShareLink, type TrashInfo } from './video-menu';
+import { Downloads, clickLink, type DownloadState } from './download.svelte';
 
 /** A refused request's own words, else a plain line. */
 async function fail(r: Response, fallback: string): Promise<never> {
@@ -69,6 +70,31 @@ export function restoreFromTrash(home: string, id: string): Promise<{ name: stri
 
 export function revealFolder(home: string, name: string): Promise<unknown> {
   return post(`${home}api/videos/${encodeURIComponent(name)}/reveal`, {}, 'Couldn’t open the folder');
+}
+
+/** What a Download chosen in a ⋯ says once asked: "" when the file is on its way, else one line (it's getting ready and
+ * downloads by itself, or why it can't). */
+export function downloadLine(s: DownloadState | undefined): string {
+  switch (s?.state) {
+    case 'ready':
+      return '';
+    case 'failed':
+    case 'unavailable':
+      return s.error || 'Couldn’t get the MP4';
+    default:
+      return 'Getting the MP4 ready. It downloads by itself.';
+  }
+}
+
+/** Download on a card: the version `label` of the video at `api` (spec/api.md, "Download"), through the same steps as
+ * the version menu's (get it ready, follow it, click the real link once it is). */
+export async function downloadVideo(api: string, label: string): Promise<string> {
+  const d = new Downloads({
+    fetch: (url, init) => fetch(`${api}${String(url)}`, init),
+    click: (href, name) => clickLink(`${api}${href}`, name),
+  });
+  await d.get(label);
+  return downloadLine(d.byLabel[label]);
 }
 
 /** Copies text: the clipboard API, else a selection (plain http on a LAN address has no clipboard API). */
