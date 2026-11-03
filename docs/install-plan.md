@@ -12,7 +12,8 @@ Status of each part is at the end of every section: **built** (in this repo, tes
 | OS | What you download | What you do | Status |
 |---|---|---|---|
 | macOS (Apple silicon and Intel) | `Retake.dmg` with one universal `Retake.app` | Drag it to Applications, open it. A menu-bar icon appears and the browser opens the setup page. | App bundle: built, untested. `.dmg`: not built (needs a Mac or a macOS CI runner for `hdiutil`); a `.zip` of the app is built instead. |
-| Linux (x86_64, arm64) | Nothing; paste one line | `curl -fsSL <release>/install.sh \| sh`, then open **Retake** from the app menu (or run `retake start`). | Built, tested against a local snapshot (install, links, menu entry, checksum refusal). |
+| Any, with Node 18+ (the README's first route) | Nothing; paste one line | `npm i -g retake-cli`, then `retake`: setup opens in the browser. | Built; tested end to end on Linux (`scripts/npm-smoke.mjs`), and on every platform by the release workflow's dry run (docs/releasing.md). |
+| Linux (x86_64, arm64), macOS without Node | Nothing; paste one line | `curl -fsSL https://raw.githubusercontent.com/samahlstrom/retake/main/install.sh \| sh`, then `retake` (or **Retake** in the Linux app menu). Or `brew install samahlstrom/retake/retake`. | Built, tested against a local snapshot (install, links, menu entry, checksum refusal). The Homebrew formula: tested by `brew install` on both Mac runners in the release workflow. |
 | Windows (x64; ARM runs it emulated) | Nothing; paste one line in PowerShell | `irm <release>/install.ps1 \| iex` (or `npm i -g retake-cli`), then open **Retake** from the Start menu (or run `retake`). | Built; CI builds the package and smoke-tests it on `windows-latest` (below). Not yet tried on a Windows desktop by a person. |
 
 **macOS is a menu-bar app, not a dock app.** Retake is a server plus a browser page; it has no window of its own, so a
@@ -88,16 +89,35 @@ notarized app. A one-click app should work offline the moment it's opened.
   VideoToolbox on Mac (fine) and OpenH264 on Linux (lower quality at the same size), and previews and proxies change.
   Not worth it.
 
-Where static builds come from today: Windows, Gyan Doshi's "essentials" build (GPL, with libx264 and zimg;
-9.0.2, from its versioned GitHub mirror GyanD/codexffmpeg, pinned by SHA-256 in `scripts/build-windows.ps1`; CI
-checks `ffmpeg -buildconf` for both); Linux, John Van Sickle's static builds (GPL; his site lists x264 and zimg among
-the libraries; amd64/arm64; 7.0.2, pinned by SHA-256 in `scripts/bundle-deps.sh`; check `ffmpeg -buildconf` on a
-real machine before a release) or BtbN/FFmpeg-Builds (GPL and LGPL variants, but 130–150 MB and
-rolling); macOS, Martin Riedl's build server (GPL, arm64 and x86_64, signed) or evermeet.cx (Intel only). For the
-first real release, **build ffmpeg ourselves in CI** from a pinned source tarball with only what Retake uses (x264,
-zimg, opus, the decoders and muxers): smaller (about 20 MB a binary), reproducible, and the source offer is just our
-own tarball. The snapshot here bundles ffmpeg for Linux and Windows; the Mac app snapshot has none (Retake then says to
-install it).
+Where the static builds come from (all GPL, all pinned by SHA-256 in `scripts/bundle-deps.sh`, all with
+`--enable-libx264 --enable-libzimg` and the `zscale` filter):
+
+| Platform | Build | Checked |
+|---|---|---|
+| Linux x64, arm64 | John Van Sickle's 7.0.2 | x64 run here: build config, `-filters`, an encode through retake-edit's `zscale` chain with libx264 |
+| macOS arm64, x64 | Martin Riedl's 9.0.2 (signed by him) | configure line and filter list read from the binaries here (they can't run on Linux); run on both Mac runners by the release workflow |
+| Windows x64 | Gyan Doshi's 9.0.2 "essentials", from his GitHub releases | configure line read here; run on the Windows runner by the release workflow |
+
+`scripts/npm-smoke.mjs` runs each platform's ffmpeg on that platform: build config, filters, and a real encode. Later,
+**build ffmpeg ourselves in CI** from a pinned source tarball with only what Retake uses (x264, zimg, opus, the
+decoders and muxers): smaller (about 20 MB a binary, which would halve every download), reproducible, and the source
+offer is just our own tarball.
+
+### npm: ffmpeg comes in the platform package (decided)
+
+The npm route could have fetched ffmpeg on first run (pinned SHA-256, a progress bar on the setup page) to keep the
+packages small. It bundles it instead, in each `retake-cli-<os>-<cpu>` package, for these reasons:
+
+- **The bytes are the same.** First-run fetching saves nothing for the person: they download ffmpeg either way, just
+  later. It only moves 60–75 MB from `npm i` to the setup page.
+- **It works the moment it's installed, offline after that**, like the app and the archives, which bundle it for the
+  same reasons (above). npm and npx cache the package, so a second `npx retake-cli` downloads nothing.
+- **No new code that can fail at the worst moment.** First-run fetching needs a downloader, xz or zip unpacking in
+  Go, a progress UI, retries, and a third-party host that's up (John Van Sickle's site is one person's server). One
+  set of archives also stays the single source for npm, Homebrew, the install scripts and the app.
+- **It fits, just.** The packages are 71–111 MB (Windows is the biggest); npmjs.org has taken a 118 MB package (it
+  documents no limit; a 199 MB one was refused). `scripts/npm-pack.sh` stops above 117 MB, so a growing build fails
+  at packaging, not at `npm publish`. The fix when one nears it: our own smaller ffmpeg (above), not fetching.
 
 ### The npm package for Windows: `retake-cli-win32-x64`
 
@@ -161,6 +181,8 @@ editors, the $99 is worth it. Linux needs no signing (the install script checks 
 
 ## Updates
 
+- **Today, by route:** npm, `npm i -g retake-cli@latest` (`npx retake-cli` checks for a newer version by itself);
+  Homebrew, `brew upgrade retake`; the install scripts, run the same line again.
 - **First (not built yet):** the app checks once a day for a newer release (a small JSON file next to the releases: version, date,
   notes, download URL) and shows "Retake 0.4 is out" with a link in Settings. The person downloads and replaces the
   app. Nothing changes on its own. On Linux the same note says to run the install line again.
@@ -204,10 +226,15 @@ Retake already survives restarts without losing agent work (docs/agents.md), so 
 - Retake's own tools first: `retake-bundle.json` next to the binary puts its folder first on `PATH`; herdr is looked
   for next to the binary before `PATH`.
 - `scripts/bundle-deps.sh` (pinned herdr for 4 platforms, ffmpeg for Linux), goreleaser archives with them,
-  `scripts/install.sh` installing a bundle, `scripts/macos-app.sh` making the universal, unsigned `Retake.app` with
+  `install.sh` installing a bundle, `scripts/macos-app.sh` making the universal, unsigned `Retake.app` with
   its menu bar (`scripts/macos/menubar.js`). Nothing downloaded was run here.
+- npm: `npm i -g retake-cli`, then `retake` (npm/, `scripts/npm-pack.sh`, `scripts/npm-smoke.mjs`); plain `retake` in
+  a terminal is `retake start` (spec/setup.md). A Homebrew formula (`scripts/brew-formula.sh`), ffmpeg for macOS and
+  Windows and herdr for Windows in the archives, and `.github/workflows/release.yml`, which builds every platform on
+  its own runner, tests each install, drafts the GitHub release and, once it's published, publishes npm and Homebrew
+  (docs/releasing.md).
 - Windows: `scripts/build-windows.ps1` (the zip, with herdr's and ffmpeg's Windows builds pinned), `scripts/install.ps1`
   (installs it for the user: folder, PATH, Start menu; `-Uninstall`), `cmd/retakew` (the console-less launcher), and
   CI's `windows` job with `scripts/windows-smoke.ps1`. Nothing downloaded was run on Linux; CI runs it on Windows.
-- Not built: the `.dmg`, signing, an ffmpeg for macOS, starting herdr's server when none runs (to check with herdr:
-  whether `herdr workspace create` starts one), the update check, an app icon.
+- Not built: the `.dmg`, signing, starting herdr's server when none runs (to check with herdr: whether `herdr
+  workspace create` starts one), the update check, an app icon.

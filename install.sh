@@ -1,14 +1,14 @@
 #!/bin/sh
-# Installs retake from a release: downloads the archive for this OS and CPU, checks its SHA-256 against the
-# release's checksums.txt, and installs it. It never uses sudo.
+# Installs Retake from its GitHub release, without Node: downloads the archive for this OS and CPU, checks its SHA-256
+# against the release's checksums.txt, and installs it. It never uses sudo.
 #
-#   curl -fsSL https://<release host>/install.sh | sh
-#   curl -fsSL https://<release host>/install.sh | sh -s -- --version 0.1.0
+#   curl -fsSL https://raw.githubusercontent.com/samahlstrom/retake/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/samahlstrom/retake/main/install.sh | sh -s -- --version 0.1.0
 #
-# An archive with the tools that ship with retake (herdr, ffmpeg, retake-edit and retake-bundle.json) is unpacked
-# whole into ~/.local/share/retake/<version>/, with retake and retake-edit linked into ~/.local/bin and, on Linux, a
-# Retake entry in the app menu that runs `retake start --app`. Older versions' folders are removed. A plain archive
-# (just retake) is copied into ~/.local/bin.
+# The archive (with herdr, ffmpeg, retake-edit and retake-bundle.json) is unpacked whole into
+# ~/.local/share/retake/<version>/, with retake and retake-edit linked into ~/.local/bin and, on Linux, a Retake entry
+# in the app menu that runs `retake start --app`. Older versions' folders are removed. A plain archive (just retake)
+# is copied into ~/.local/bin. Run it again to update.
 #
 # Options:
 #   --version X.Y.Z   install this version (default: the latest release)
@@ -18,20 +18,20 @@
 #   -h, --help        show this help
 # Environment:
 #   INSTALL_DIR       the commands' folder, as --dir
-#   INSTALL_REPO      the GitHub owner/repo the releases come from
+#   INSTALL_REPO      the GitHub owner/repo the releases come from (default samahlstrom/retake)
 #   INSTALL_BASE_URL  the folder holding one release's files, instead of GitHub's URL for it ({version} in it is
 #                     replaced by the version; https:// or file://). Needs --version.
 #   XDG_DATA_HOME     where the versions' folders and the menu entry go (default ~/.local/share)
 #
-# Linux and macOS, on x86_64 or arm64. On a Mac, Retake.app is the easier way (docs/install-plan.md). On Windows,
-# download the .zip from the release page instead.
+# Linux and macOS, on x86_64 or arm64. Windows has install.ps1 next to this file:
+#   irm https://raw.githubusercontent.com/samahlstrom/retake/main/install.ps1 | iex
 set -eu
 
 # The product's name isn't final: these are the only places the installer names it.
 NAME="retake"
 EDITOR_NAME="retake-edit"
-# Where releases are published. A placeholder until the repository is public.
-REPO="${INSTALL_REPO:-OWNER/REPO}"
+# Where releases are published.
+REPO="${INSTALL_REPO:-samahlstrom/retake}"
 RELEASES="https://github.com/${REPO}/releases"
 
 say() { printf '%s\n' "$*"; }
@@ -106,7 +106,9 @@ os="$(uname -s)"
 case "$os" in
   Linux) os=linux ;;
   Darwin) os=darwin ;;
-  MINGW* | MSYS* | CYGWIN* | Windows_NT) die "on Windows, download the .zip for your CPU from $RELEASES" ;;
+  MINGW* | MSYS* | CYGWIN* | Windows_NT)
+    die "on Windows, use install.ps1 in PowerShell: irm https://raw.githubusercontent.com/$REPO/main/install.ps1 | iex"
+    ;;
   *) die "no build for $os: the releases cover Linux and macOS (and Windows as a .zip)" ;;
 esac
 arch="$(uname -m)"
@@ -241,7 +243,11 @@ case ":${PATH:-}:" in
   *) say "note: $dir isn't on your PATH. Add it, e.g. in ~/.profile: export PATH=\"$dir:\$PATH\"" ;;
 esac
 if [ -f "$tmp/$NAME/retake-bundle.json" ]; then
-  say "start it: open Retake from your app menu, or run: $NAME start"
+  if [ "$os" = linux ] && [ "$menu" = 1 ]; then
+    say "start it: run $NAME (or open Retake from your app menu)"
+  else
+    say "start it: run $NAME"
+  fi
 else
   say "run: $NAME version"
 fi

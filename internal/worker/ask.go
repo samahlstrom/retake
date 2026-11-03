@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/samahlstrom/retake/internal/desktop"
 	"github.com/samahlstrom/retake/internal/project"
 )
 
@@ -351,17 +352,31 @@ func where(q project.TaskQuestion) string {
 }
 
 // askCommand is how the prompt names retake: "retake" when that is this program on PATH, else its full path.
-var askCommand = func() string {
-	self, err := os.Executable()
-	if err != nil {
+var askCommand = func() string { return commandFor(desktop.Exe(), os.Getenv("PATH")) }
+
+// commandFor names the retake binary self (links resolved) for an agent whose PATH is path: "retake" when the first
+// retake on path is self, else self's full path, quoted for a shell when it needs it. A release bundle (npm, Homebrew,
+// install.sh, the Mac app) put its own folder first on this process's PATH (spec/setup.md), but an agent in herdr or
+// tmux, or the person's shell, doesn't have it, so that folder doesn't count. An npm install's `retake` is a node
+// script, so its agents get the Go binary's full path: no node start-up per call, whatever node manager is active.
+func commandFor(self, path string) string {
+	if self == "" {
 		return "retake"
 	}
-	if found, err := exec.LookPath("retake"); err == nil {
-		a, _ := filepath.EvalSymlinks(found)
-		b, _ := filepath.EvalSymlinks(self)
-		if a != "" && a == b {
+	bundle, _ := desktop.BundleDir(self)
+	for _, dir := range filepath.SplitList(path) {
+		if dir == "" || !filepath.IsAbs(dir) || dir == bundle {
+			continue
+		}
+		found := filepath.Join(dir, "retake")
+		st, err := os.Stat(found) //nolint:gosec // a folder on PATH: only whether a retake there runs
+		if err != nil || !st.Mode().IsRegular() || st.Mode().Perm()&0o111 == 0 {
+			continue
+		}
+		if r, _ := filepath.EvalSymlinks(found); r == self {
 			return "retake"
 		}
+		break // the shell would run that one, which isn't this program
 	}
 	if strings.ContainsAny(self, " '\"$`\\") {
 		return "'" + strings.ReplaceAll(self, "'", `'\''`) + "'"

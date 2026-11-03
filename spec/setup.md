@@ -8,7 +8,15 @@ side (what ships, per OS) is docs/install-plan.md.
 
 ```
 retake start [--port N] [--no-open] [--idle-exit MIN] [--app] [--verbose]
+retake                                     # in a terminal: retake start
+retake [--port N] [--no-open] [...]        # options without a command: retake start's
 ```
+
+- **Plain `retake`.** Typed in a terminal (stdin and stdout are a terminal), `retake` with no arguments is `retake
+  start`: that's all the npm install says to run (`npm i -g retake-cli`, then `retake`). Anywhere else (piped, a
+  script, an agent's shell), it prints the usage as before, so nothing starts a server by surprise. Arguments that
+  start with an option (`retake --no-open --port 9200`) are `retake start`'s, except `--version`, `-v`, `--help` and
+  `-h`.
 
 - **Your videos folder** is `folder` in config.toml (docs/config.md). When it is set and is a folder, `retake start`
   serves it exactly as `retake open <folder>` does (spec/home.md), at `/`.
@@ -48,6 +56,13 @@ changes.
 
 herdr is found next to the `retake` binary first (with or without the manifest), then on `PATH`, when an agent opens
 in herdr.
+
+**How agents are told to run retake.** An agent's prompt says plain `retake` (`retake ask`, `retake working`, `retake
+done`) only when the first `retake` on `PATH`, leaving out the bundle folder, is this binary: a Homebrew or
+install.sh link to it, or a build from source. Otherwise it gives this binary's full path. The bundle folder doesn't
+count because an agent in herdr or tmux, or the person's own shell, doesn't have it on `PATH`. With npm, `retake` on
+`PATH` is the node launcher (`npm/`), so agents get the Go binary inside the platform package by its full path: it
+works whatever node version manager is (or isn't) active, and no node starts on each call.
 
 **The login shell's `PATH`.** An app started from Finder or a desktop menu gets a short `PATH` (`/usr/bin:/bin:…`),
 so `claude` in `~/.local/bin` or `codex` in `/opt/homebrew/bin` would not be found. With `--app`, and on every

@@ -1,7 +1,7 @@
-// 8. Setup: download, open Retake, pick your videos folder, it finds the agents you have (or helps you sign in),
-// and you review in the browser. Optional: a share link for a phone or a teammate.
+// 8. Setup: install (npm i -g retake-cli), run retake, pick your videos folder, it finds the agents you have (or helps
+// you sign in), and you review in the browser. Optional: a share link for a phone or a teammate.
 import {
-  Motion, INK, PAPER, RED, MUTED, EASE, IN, STEP, POP, rect, circle, path, g, at, text, arrow, heading, icon,
+  Motion, INK, PAPER, RED, MUTED, EASE, IN, STEP, POP, rect, circle, path, g, at, text, textWidth, arrow, heading, icon,
   popKeys, showKeys,
 } from './kit.mjs';
 
@@ -9,14 +9,14 @@ export default function setup() {
   const m = new Motion({ duration: 10, stillAt: 9 });
   const RESET = 9.3;
   const out = [];
-  out.push(heading('Download it, open it, review.'));
+  out.push(heading('Install it, run it, review.'));
 
   const CW = 200, GAP = 22, Y = 128, CH = 300;
   const cx = (i) => 56 + i * (CW + GAP);
   const T = [0.6, 2.0, 3.3, 4.6, 5.9];
   const steps = [
-    ['Download', ''],
-    ['Open Retake', ''],
+    ['Install', ''],
+    ['Run retake', ''],
     ['Pick your', 'videos folder'],
     ['Finds your', 'agents'],
     ['Review in', 'the browser'],
@@ -35,19 +35,23 @@ export default function setup() {
   });
   const midY = Y + 122;
 
-  // 1. Download: the one button, and the file coming down.
+  // A command on a dark pill, as typed in a terminal.
+  const command = (mid, y, cmd, size) => {
+    const w = textWidth(cmd, size) + 36;
+    return rect(mid - w / 2, y - 24, w, 48, { r: 12, fill: INK, stroke: 'none' })
+      + text(mid, y + size * 0.36, cmd, { size, anchor: 'middle', fill: PAPER });
+  };
+  // 1. Install: the one command, and the download coming down.
   {
     const mid = cx(0) + CW / 2;
-    out.push(rect(mid - 80, midY - 27, 160, 54, { r: 27, fill: INK, stroke: 'none' }) + path(`M${mid - 52} ${midY - 10}V${midY + 6}M${mid - 59} ${midY}L${mid - 52} ${midY + 7}L${mid - 45} ${midY}`, { sw: 2.5, stroke: PAPER })
-      + text(mid + 12, midY + 7, 'Download', { size: 20, anchor: 'middle', fill: PAPER }));
+    out.push(command(mid, midY, 'npm i -g retake-cli', 15));
     out.push(path(`M${mid - 66} ${midY + 56}H${mid + 66}`, { sw: 4, stroke: '#e2e2e2' }));
     out.push(at(mid - 66, midY + 56, path('M0 0H132', { sw: 4 }), m.a([[0, { transform: 'scale(0,1)' }], [T[0] + 0.2, { transform: 'scale(0,1)' }, EASE], [T[1] - 0.2, { transform: 'scale(1,1)' }], [RESET, { transform: 'scale(1,1)' }, IN], [RESET + 0.3, { transform: 'scale(0,1)' }]])));
   }
-  // 2. Open Retake: the app.
+  // 2. Run retake.
   {
     const mid = cx(1) + CW / 2;
-    const app = rect(-44, -44, 88, 88, { r: 22 }) + text(-6, 17, 'R', { size: 48, anchor: 'middle' }) + circle(22, 12, 6, { fill: RED, stroke: 'none' });
-    out.push(at(mid, midY + 10, app, m.a([[0, { transform: 'scale(1)' }], [T[1], { transform: 'scale(1)' }, EASE], [T[1] + 0.12, { transform: 'scale(.88)' }, POP], [T[1] + 0.45, { transform: 'scale(1)' }]])));
+    out.push(at(mid, midY + 10, command(0, 0, 'retake', 20), m.a([[0, { transform: 'scale(1)' }], [T[1], { transform: 'scale(1)' }, EASE], [T[1] + 0.12, { transform: 'scale(.88)' }, POP], [T[1] + 0.45, { transform: 'scale(1)' }]])));
   }
   // 3. Pick your videos folder.
   {

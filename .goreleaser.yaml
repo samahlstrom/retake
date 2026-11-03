@@ -63,6 +63,19 @@ archives:
         dst: .
         strip_parent: true
         info: { owner: root, group: root, mode: 0755 }
+      # Windows' herdr.exe loads ConPTY from conpty/ next to itself (conpty.dll, herdr-conpty.json, <cpu>/OpenConsole.exe).
+      - src: "dist-bundle/{{ .Os }}_{{ .Arch }}/conpty/*.*"
+        dst: conpty
+        strip_parent: true
+        info: { owner: root, group: root, mode: 0755 }
+      - src: "dist-bundle/{{ .Os }}_{{ .Arch }}/conpty/x64/*"
+        dst: conpty/x64
+        strip_parent: true
+        info: { owner: root, group: root, mode: 0755 }
+      - src: "dist-bundle/{{ .Os }}_{{ .Arch }}/conpty/arm64/*"
+        dst: conpty/arm64
+        strip_parent: true
+        info: { owner: root, group: root, mode: 0755 }
       - src: "dist-bundle/{{ .Os }}_{{ .Arch }}/licenses/*"
         dst: licenses
         strip_parent: true
@@ -76,7 +89,7 @@ checksum:
   name_template: checksums.txt
   algorithm: sha256
   # The retake-edit archives, built on native runners, are put in dist-editor/ before goreleaser runs, so one
-  # checksums.txt covers both binaries (scripts/install.sh checks against it). Nothing there: nothing added.
+  # checksums.txt covers both binaries (install.sh checks against it). Nothing there: nothing added.
   extra_files:
     - glob: ./dist-editor/*
 

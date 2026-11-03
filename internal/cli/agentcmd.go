@@ -33,7 +33,7 @@ func (f flags) parse(args []string) (pos []string, help bool, err error) {
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		if arg == "--" {
-			return append(pos, args[i+1:]...), help, nil //nolint:gosec // i < len(args), so i+1 is a valid bound
+			return append(pos, args[i+1:]...), help, nil
 		}
 		if !isFlag(arg) {
 			pos = append(pos, arg)
@@ -57,7 +57,7 @@ func (f flags) parse(args []string) (pos []string, help bool, err error) {
 			return nil, false, fmt.Errorf("unknown option %s", name)
 		}
 		if !hasVal {
-			rest := args[i+1:] //nolint:gosec // i < len(args), so i+1 is a valid bound
+			rest := args[i+1:]
 			if len(rest) == 0 {
 				return nil, false, fmt.Errorf("%s needs a value", name)
 			}

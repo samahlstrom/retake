@@ -101,6 +101,7 @@ usage:
   retake start [--port N] [--no-open] [--idle-exit MIN] [--app]
       open your videos folder (folder in config.toml); the first time, a setup page in the browser picks it, your
       agent and where it works (spec/setup.md). One at a time: a second start opens the first one's page.
+      Plain retake, typed in a terminal, is retake start; so is retake with only options (retake --no-open).
       --app: started by the app (reads your login shell's PATH; on a Mac it never idle-exits)
   retake autostart [on|off]
       start Retake when you log in (macOS LaunchAgent, Linux autostart entry); prints on or off
@@ -238,6 +239,7 @@ retake_edit. Flags override it.
 // Main runs the command line and returns the exit code.
 func Main(ctx context.Context, args []string, env Env) int {
 	env = env.withDefaults()
+	args = route(args, terminal(env.Stdin) && terminal(env.Stdout))
 	if len(args) == 0 {
 		_, _ = io.WriteString(env.Stdout, usage)
 		return ExitOK
@@ -300,7 +302,7 @@ func Main(ctx context.Context, args []string, env Env) int {
 		return themeCmd(args[1:], env)
 	case "ext":
 		return extCmd(args[1:], env)
-	case "version", "--version":
+	case "version", "--version", "-v":
 		_, _ = fmt.Fprintf(env.Stdout, "retake %s\n", Version())
 		return ExitOK
 	case "help", "-h", "--help":
@@ -309,6 +311,36 @@ func Main(ctx context.Context, args []string, env Env) int {
 	}
 	_, _ = fmt.Fprintf(env.Stderr, "retake: unknown command %q\n\n%s", args[0], usage)
 	return ExitUsage
+}
+
+// route turns the arguments into a command (spec/setup.md, "Plain retake"): none, typed in a terminal, is `retake
+// start` (the npm install's whole instructions are `retake`); options without a command are start's. Piped or run by an
+// agent, plain `retake` still prints the usage, so nothing starts a server by surprise.
+func route(args []string, interactive bool) []string {
+	if len(args) == 0 {
+		if interactive {
+			return []string{"start"}
+		}
+		return args
+	}
+	switch args[0] {
+	case "--version", "-v", "--help", "-h":
+		return args
+	}
+	if isFlag(args[0]) {
+		return append([]string{"start"}, args...)
+	}
+	return args
+}
+
+// terminal says whether f is a terminal (a character device), not a pipe, a file or a test's buffer.
+func terminal(f any) bool {
+	file, ok := f.(*os.File)
+	if !ok {
+		return false
+	}
+	st, err := file.Stat()
+	return err == nil && st.Mode()&os.ModeCharDevice != 0
 }
 
 // Version returns the build's version, semver without a leading "v": the -X value (`make build` and the release

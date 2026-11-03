@@ -15,7 +15,7 @@ import (
 	"testing"
 )
 
-// scripts/install.sh against a release in a folder (INSTALL_BASE_URL=file://…): a bundle is unpacked into a
+// install.sh against a release in a folder (INSTALL_BASE_URL=file://…): a bundle is unpacked into a
 // versioned folder with its commands linked and a menu entry, a plain archive is copied, and a bad checksum installs
 // nothing (docs/releasing.md, "The installer").
 
@@ -62,7 +62,7 @@ func release(t *testing.T, version string, files map[string]string, sum func(str
 
 func runInstall(t *testing.T, home, base, version string, args ...string) (string, error) {
 	t.Helper()
-	script, err := filepath.Abs(filepath.Join("..", "..", "scripts", "install.sh"))
+	script, err := filepath.Abs(filepath.Join("..", "..", "install.sh"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +116,7 @@ func TestInstallScript(t *testing.T) {
 			t.Errorf("menu entry: %v\n%s", err, b)
 		}
 	}
-	if !strings.Contains(out, "retake start") {
+	if !strings.Contains(out, "start it: run retake") {
 		t.Errorf("doesn't say how to start it:\n%s", out)
 	}
 	// Again: same result, nothing left over.

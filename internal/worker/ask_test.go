@@ -157,3 +157,66 @@ func TestAnswersAreToldOnce(t *testing.T) {
 		t.Fatal("the server's told answer was told again")
 	}
 }
+
+// The prompt names the retake an agent will actually run (spec/setup.md, "Retake's own tools come first"): a bundle's
+// own folder, first on retake's PATH, isn't on the agent's (herdr, tmux, the person's shell), so it doesn't count.
+func TestCommandForNamesTheBinaryAnAgentRuns(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	write := func(p, body string, mode os.FileMode) string {
+		if e := os.MkdirAll(filepath.Dir(p), 0o750); e != nil {
+			t.Fatal(e)
+		}
+		if e := os.WriteFile(p, []byte(body), mode); e != nil {
+			t.Fatal(e)
+		}
+		return p
+	}
+	// An npm install: the platform package holds the Go binary and the manifest; the global bin's `retake` is the node
+	// launcher, a script elsewhere.
+	pkg := filepath.Join(root, "lib", "node_modules", "retake-cli", "node_modules", "retake-cli-linux-x64", "bin")
+	self := write(filepath.Join(pkg, "retake"), "\x7fELF", 0o755)
+	write(filepath.Join(pkg, "retake-bundle.json"), `{"bundle": 1}`, 0o644)
+	launcher := write(filepath.Join(root, "lib", "node_modules", "retake-cli", "bin", "retake.js"), "#!/usr/bin/env node\n", 0o755)
+	npmBin := filepath.Join(root, "npm-bin")
+	if e := os.MkdirAll(npmBin, 0o750); e != nil {
+		t.Fatal(e)
+	}
+	if e := os.Symlink(launcher, filepath.Join(npmBin, "retake")); e != nil {
+		t.Fatal(e)
+	}
+	// Homebrew or install.sh: a link on PATH to the bundle's own binary.
+	brewBin := filepath.Join(root, "brew-bin")
+	if e := os.MkdirAll(brewBin, 0o750); e != nil {
+		t.Fatal(e)
+	}
+	if e := os.Symlink(self, filepath.Join(brewBin, "retake")); e != nil {
+		t.Fatal(e)
+	}
+	// A build from source: bin/retake, no manifest, its folder on PATH.
+	dev := write(filepath.Join(root, "src", "bin", "retake"), "\x7fELF", 0o755)
+	empty := filepath.Join(root, "empty")
+	join := func(dirs ...string) string { return strings.Join(dirs, string(os.PathListSeparator)) }
+
+	for _, tc := range []struct {
+		name, self, path, want string
+	}{
+		{"npm: the launcher is first after the bundle", self, join(pkg, npmBin, "/usr/bin"), self},
+		{"npm: no retake on the agent's PATH at all", self, join(pkg, empty), self},
+		{"Homebrew or install.sh: the link is this binary", self, join(pkg, brewBin, npmBin), "retake"},
+		{"a relative PATH entry doesn't count", self, join(".", brewBin), "retake"},
+		{"from source, its own folder on PATH", dev, join(filepath.Dir(dev), npmBin), "retake"},
+		{"from source, another retake first", dev, join(npmBin, filepath.Dir(dev)), dev},
+		{"unknown binary", "", join(npmBin), "retake"},
+	} {
+		if got := commandFor(tc.self, tc.path); got != tc.want {
+			t.Errorf("%s: commandFor = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+	spaced := write(filepath.Join(root, "Retake App", "retake"), "\x7fELF", 0o755)
+	if got, want := commandFor(spaced, empty), "'"+spaced+"'"; got != want {
+		t.Errorf("a path with a space: %q, want %q", got, want)
+	}
+}

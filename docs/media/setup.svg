@@ -47,18 +47,18 @@ text{font-family:RI,Inter,sans-serif;font-kerning:normal}
 @media (prefers-reduced-motion:reduce){.m{animation:none!important}}
 </style>
 <defs><pattern id="dots" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="12" cy="12" r="1.5" fill="#111111" fill-opacity=".2"/></pattern></defs><rect width="1200" height="675" fill="#ffffff"/><rect width="1200" height="675" fill="url(#dots)"/>
-<text x="56" y="82" font-size="40" font-weight="600" fill="#111111" letter-spacing="-0.8">Download it, open it, review.</text>
+<text x="56" y="82" font-size="40" font-weight="600" fill="#111111" letter-spacing="-0.8">Install it, run it, review.</text>
 <rect x="56" y="128" width="200" height="300" rx="18" fill="#ffffff" stroke="#111111" stroke-width="3"/>
 <g class="m a0"><rect x="56" y="128" width="200" height="300" rx="18" fill="none" stroke="#111111" stroke-width="5.5"/></g>
 <circle cx="86" cy="158" r="15" fill="#111111" stroke="none"/><text x="86" y="164" font-size="17" font-weight="600" text-anchor="middle" fill="#ffffff">1</text>
 <g transform="translate(226 158)"><g class="m a1"><circle cx="0" cy="0" r="14" fill="#ffffff" stroke="#111111" stroke-width="2.5"/><path d="M-6.5 0.5L-1.95 5.05L6.5 -4.05" fill="none" stroke="#111111" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></g></g>
-<text x="156" y="392" font-size="24" font-weight="600" text-anchor="middle" fill="#111111">Download</text>
+<text x="156" y="392" font-size="24" font-weight="600" text-anchor="middle" fill="#111111">Install</text>
 <path d="M265 270L273 278L265 286" fill="none" stroke="#111111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
 <rect x="278" y="128" width="200" height="300" rx="18" fill="#ffffff" stroke="#111111" stroke-width="3"/>
 <g class="m a2"><rect x="278" y="128" width="200" height="300" rx="18" fill="none" stroke="#111111" stroke-width="5.5"/></g>
 <circle cx="308" cy="158" r="15" fill="#111111" stroke="none"/><text x="308" y="164" font-size="17" font-weight="600" text-anchor="middle" fill="#ffffff">2</text>
 <g transform="translate(448 158)"><g class="m a3"><circle cx="0" cy="0" r="14" fill="#ffffff" stroke="#111111" stroke-width="2.5"/><path d="M-6.5 0.5L-1.95 5.05L6.5 -4.05" fill="none" stroke="#111111" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></g></g>
-<text x="378" y="392" font-size="24" font-weight="600" text-anchor="middle" fill="#111111">Open Retake</text>
+<text x="378" y="392" font-size="24" font-weight="600" text-anchor="middle" fill="#111111">Run retake</text>
 <path d="M487 270L495 278L487 286" fill="none" stroke="#111111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
 <rect x="500" y="128" width="200" height="300" rx="18" fill="#ffffff" stroke="#111111" stroke-width="3"/>
 <g class="m a4"><rect x="500" y="128" width="200" height="300" rx="18" fill="none" stroke="#111111" stroke-width="5.5"/></g>
@@ -80,10 +80,10 @@ text{font-family:RI,Inter,sans-serif;font-kerning:normal}
 <g transform="translate(1114 158)"><g class="m a9"><circle cx="0" cy="0" r="14" fill="#ffffff" stroke="#111111" stroke-width="2.5"/><path d="M-6.5 0.5L-1.95 5.05L6.5 -4.05" fill="none" stroke="#111111" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></g></g>
 <text x="1044" y="374" font-size="24" font-weight="600" text-anchor="middle" fill="#111111">Review in</text>
 <text x="1044" y="404" font-size="24" font-weight="600" text-anchor="middle" fill="#111111">the browser</text>
-<rect x="76" y="223" width="160" height="54" rx="27" fill="#111111" stroke="none"/><path d="M104 240V256M97 250L104 257L111 250" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><text x="168" y="257" font-size="20" font-weight="600" text-anchor="middle" fill="#ffffff">Download</text>
+<rect x="71.309" y="226" width="169.381" height="48" rx="12" fill="#111111" stroke="none"/><text x="156" y="255.4" font-size="15" font-weight="600" text-anchor="middle" fill="#ffffff">npm i -g retake-cli</text>
 <path d="M90 306H222" fill="none" stroke="#e2e2e2" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
 <g transform="translate(90 306)"><g class="m a10"><path d="M0 0H132" fill="none" stroke="#111111" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></g></g>
-<g transform="translate(378 260)"><g class="m a11"><rect x="-44" y="-44" width="88" height="88" rx="22" fill="#ffffff" stroke="#111111" stroke-width="3"/><text x="-6" y="17" font-size="48" font-weight="600" text-anchor="middle" fill="#111111" letter-spacing="-0.96">R</text><circle cx="22" cy="12" r="6" fill="#ff453a" stroke="none"/></g></g>
+<g transform="translate(378 260)"><g class="m a11"><rect x="-48.762" y="-24" width="97.523" height="48" rx="12" fill="#111111" stroke="none"/><text x="0" y="7.2" font-size="20" font-weight="600" text-anchor="middle" fill="#ffffff">retake</text></g></g>
 <path d="M548 228Q548 220 556 220H585.44L595.84 229H644Q652 229 652 237V290Q652 298 644 298H556Q548 298 548 290Z" fill="#ffffff" stroke="#111111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><text x="600" y="280" font-size="19" font-weight="600" text-anchor="middle" fill="#111111">Videos</text>
 <g class="m a12"><rect x="534" y="206" width="132" height="108" rx="14" fill="none" stroke="#111111" stroke-width="2.5" stroke-dasharray="7 6"/></g>
 <rect x="740" y="212" width="26" height="22" rx="5.25" fill="#ffffff" stroke="#111111" stroke-width="2.2"/><path d="M745.281 219.344L749.344 223L745.281 226.656" fill="none" stroke="#111111" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M751.781 227.063H758.281" fill="none" stroke="#111111" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><text x="774" y="230" font-size="17" font-weight="600" fill="#111111">Claude Code</text>
