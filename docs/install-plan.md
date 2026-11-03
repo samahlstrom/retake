@@ -100,7 +100,7 @@ Where the static builds come from (all GPL, all pinned by SHA-256 in `scripts/bu
 
 | Platform | Build | Checked |
 |---|---|---|
-| Linux x64, arm64 | John Van Sickle's 7.0.2 | x64 run here: build config, `-filters`, an encode through retake-edit's `zscale` chain with libx264 |
+| Linux x64, arm64 | BtbN's FFmpeg-Builds 9.0.2 (GPL, static, on GitHub Releases; John Van Sickle's site refused GitHub's runners) | checked on the release runners: build config, an encode through retake-edit's `zscale` chain with libx264 |
 | macOS arm64, x64 | Martin Riedl's 9.0.2 (signed by him) | configure line and filter list read from the binaries here (they can't run on Linux); run on both Mac runners by the release workflow |
 | Windows x64 | Gyan Doshi's 9.0.2 "essentials", from his GitHub releases | configure line read here; run on the Windows runner by the release workflow |
 

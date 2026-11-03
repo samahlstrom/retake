@@ -39,7 +39,7 @@ links it into the binary:
 | `retake` | goreleaser (`.goreleaser.yaml`), the page built first and embedded (`-tags webdist`), CGO off, cross-compiled on one Linux runner | the commit |
 | `retake-edit` | `cargo build --release` on each platform's own runner (it links prebuilt Skia, which can't be cross-linked): Ubuntu 22.04 x64 and arm64 (so glibc 2.35 is enough), macOS 15 arm64 and Intel, Windows | the commit |
 | `herdr` | herdr's GitHub release v0.8.2 (Apache-2.0). Windows: `herdr.exe` and its `conpty/` folder (Microsoft's ConPTY, MIT), side by side | SHA-256 per platform |
-| `ffmpeg`, `ffprobe` | Static GPL builds with libx264 and zimg (`zscale`), which `retake-edit` renders with: Linux, John Van Sickle's 7.0.2; macOS, Martin Riedl's 9.0.2 (signed); Windows, Gyan Doshi's 9.0.2 "essentials" | SHA-256 |
+| `ffmpeg`, `ffprobe` | Static GPL builds with libx264 and zimg (`zscale`), which `retake-edit` renders with: Linux, BtbN's FFmpeg-Builds 9.0.2 (from GitHub Releases); macOS, Martin Riedl's 9.0.2 (signed); Windows, Gyan Doshi's 9.0.2 "essentials" | SHA-256 |
 | `licenses/` | herdr's LICENSE (and ConPTY's), ffmpeg's GPLv3 text, its build notes and where its source is | herdr's and macOS ffmpeg's by SHA-256 |
 | `retake-bundle.json` | What's inside, with versions, licenses and sources. It makes `retake` put its folder first on its own `PATH` (spec/setup.md) | |
 | `README.md`, `CHANGELOG.md`, `THIRD_PARTY_NOTICES.md`, `LICENSE` | this repo | |

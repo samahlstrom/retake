@@ -42,15 +42,16 @@ herdr_asset() { # os_arch -> "file sha256"
 
 # ffmpeg and ffprobe: static GPL builds with libx264 and zimg (zscale), which retake-edit renders with
 # (docs/install-plan.md, "ffmpeg").
-#   Linux: John Van Sickle's 7.0.2, one .tar.xz with both.
+#   Linux: BtbN's FFmpeg-Builds 9.0.2 (GPL, static), one .tar.xz with both, from GitHub Releases. (John Van
+#   Sickle's site refused GitHub's runners.)
 #   macOS: Martin Riedl's 9.0.2, signed, a .zip each (https://ffmpeg.martin-riedl.de).
 #   Windows: Gyan Doshi's 9.0.2 "essentials", one .zip (https://www.gyan.dev/ffmpeg/builds/, kept on GitHub).
-FFMPEG_VERSION="7.0.2"
-FFMPEG_URL="https://johnvansickle.com/ffmpeg/releases"
+FFMPEG_VERSION="9.0.2"
+FFMPEG_URL="https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-11-02-12-51"
 ffmpeg_asset() { # os_arch -> "file sha256"
   case "$1" in
-    linux_amd64) echo "ffmpeg-release-amd64-static.tar.xz abda8d77ce8309141f83ab8edf0596834087c52467f6badf376a6a2a4c87cf67" ;;
-    linux_arm64) echo "ffmpeg-release-arm64-static.tar.xz f4149bb2b0784e30e99bdda85471c9b5930d3402014e934a5098b41d0f7201b1" ;;
+    linux_amd64) echo "ffmpeg-n9.0.2-45-g1e65c6cd5d-linux64-gpl-9.0.tar.xz d80a385fa6e5737256a286e615fe6cbab748d417d6c11a001aacd981358bda89" ;;
+    linux_arm64) echo "ffmpeg-n9.0.2-45-g1e65c6cd5d-linuxarm64-gpl-9.0.tar.xz 6a80df458afb59e07f1c648374ace9996efac17cfce680359b4a4c75ed322280" ;;
   esac
 }
 MAC_FFMPEG_VERSION="9.0.2"
@@ -145,14 +146,13 @@ for p in $PLATFORMS; do
     tar -xJf "$archive" -C "$tmp"
     top="$(find "$tmp" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
     for b in ffmpeg ffprobe; do
-      [ -f "$top/$b" ] || die "$1 has no $b"
-      cp "$top/$b" "$dir/bin/$b"
+      [ -f "$top/bin/$b" ] || die "$1 has no bin/$b"
+      cp "$top/bin/$b" "$dir/bin/$b"
       chmod 755 "$dir/bin/$b"
     done
-    cp "$top/GPLv3.txt" "$dir/licenses/ffmpeg-GPLv3.txt"
-    [ ! -f "$top/readme.txt" ] || cp "$top/readme.txt" "$dir/licenses/ffmpeg-build-readme.txt"
+    cp "$top/LICENSE.txt" "$dir/licenses/ffmpeg-GPLv3.txt"
     rm -rf "$tmp"
-    printf 'ffmpeg %s, a static GPL build by John Van Sickle (%s).\nIts source is FFmpeg %s: %s\n' \
+    printf 'ffmpeg %s, a static GPL build by BtbN/FFmpeg-Builds (%s).\nIts source is FFmpeg %s: %s\n' \
       "$FFMPEG_VERSION" "$FFMPEG_URL" "$FFMPEG_VERSION" "$(ffmpeg_source "$FFMPEG_VERSION")" >"$dir/licenses/ffmpeg-SOURCE.txt"
     add_tool ffmpeg "$FFMPEG_VERSION" "GPL-3.0-or-later" "$(ffmpeg_source "$FFMPEG_VERSION")"
   elif [ -n "$(mac_ffmpeg_asset "$p" ffmpeg)" ]; then
