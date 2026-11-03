@@ -540,7 +540,7 @@ impl Lock {
         let text = serde_json::to_string_pretty(self).expect("lock serializes") + "\n";
         let tmp = path.with_extension("lock.tmp");
         std::fs::write(&tmp, text)
-            .and_then(|_| std::fs::rename(&tmp, path))
+            .and_then(|_| crate::fsx::replace(&tmp, path))
             .map_err(|e| EditError::new("lock_write", format!("can't write {}: {e}", path.display())))
     }
 }

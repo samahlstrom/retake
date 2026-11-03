@@ -64,7 +64,7 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
     let name = path.file_name().context("no file name")?.to_string_lossy();
     let tmp = dir.join(format!(".{name}.{}.tmp", std::process::id()));
     std::fs::write(&tmp, bytes).with_context(|| format!("writing {}", tmp.display()))?;
-    std::fs::rename(&tmp, path).with_context(|| format!("replacing {}", path.display()))
+    retake_timeline::fsx::replace(&tmp, path).with_context(|| format!("replacing {}", path.display()))
 }
 
 /// A line of the playlist: the init segment the segments after it need, a segment and its duration, or the mark

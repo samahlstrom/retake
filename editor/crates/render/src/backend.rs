@@ -61,11 +61,18 @@ pub struct BackendStream {
     done: bool,
 }
 
-/// The program's path: a first argument with a `/` is a path in the package, a bare name is looked up on `PATH`.
+/// The program's path: a first argument with a `/` (or, on Windows, a `\`) is a path in the package, a bare name is
+/// looked up on `PATH`.
 fn program(b: &RasterBackend) -> PathBuf {
     let p = &b.command[0];
-    if p.contains('/') && !Path::new(p).is_absolute() { Path::new(&b.dir).join(p) } else { PathBuf::from(p) }
+    let in_package = p.contains('/') || (cfg!(windows) && p.contains('\\'));
+    if in_package && !Path::new(p).is_absolute() { Path::new(&b.dir).join(p) } else { PathBuf::from(p) }
 }
+
+/// What a backend keeps of the environment besides `PATH`: nothing on Unix. On Windows a program started without
+/// `SystemRoot` can't even seed its random numbers (Python stops at once), so the system's own variables stay, and
+/// `TEMP`/`TMP` are the scratch folder as `TMPDIR` is.
+const KEEP_ENV: &[&str] = if cfg!(windows) { &["SYSTEMROOT", "WINDIR", "PATHEXT", "COMSPEC"] } else { &[] };
 
 fn scratch_dir() -> PathBuf {
     static N: AtomicU64 = AtomicU64::new(0);
@@ -91,9 +98,13 @@ impl BackendStream {
             .env("LANG", "C.UTF-8")
             .env("PYTHONDONTWRITEBYTECODE", "1")
             .env("TMPDIR", &tmp)
+            .envs(KEEP_ENV.iter().filter_map(|k| std::env::var_os(k).map(|v| (*k, v))))
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+        if cfg!(windows) {
+            cmd.env("TEMP", &tmp).env("TMP", &tmp);
+        }
         let mut child = match cmd.spawn() {
             Ok(c) => c,
             Err(e) => {
