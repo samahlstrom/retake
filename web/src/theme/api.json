@@ -12,6 +12,8 @@
     "tip": "The tip over the timeline",
     "version-picker": "The version button",
     "version-list": "The list of versions it opens",
+    "download": "Its last entry: Download the version on screen as an MP4 (spec/api.md, \"Download\")",
+    "download-note": "The one quiet line under Download: why it failed, or the license note",
     "pen-button": "The pen: one button, its pen in the colour you draw with (the eraser while that's on); it opens the pens",
     "pens": "The pen's colours and the eraser, in what the pen button opens",
     "pen": "One pen colour; data-color is its colour",

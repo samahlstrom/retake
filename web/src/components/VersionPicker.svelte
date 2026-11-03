@@ -7,6 +7,7 @@
   // The agent's drafts (`v5-draft2`, contract C4) read "v5" with a quiet "draft" tag: they aren't versions yet. An
   // extension's kind of version comes first, named `v0 · Script` (spec/extensions.md, "Version kinds").
   import { Popover } from 'bits-ui';
+  import DownloadItem from './DownloadItem.svelte';
   import type { Review } from '../lib/review.svelte';
   import { byLabel, draftOf, incomplete, latestVersion, streamChip } from '../lib/versions';
   import { fmt } from '../lib/util';
@@ -19,9 +20,12 @@
   const shownStreaming = $derived(incomplete(byLabel(review.versions, review.shown)));
   const shownDraft = $derived(draftOf(review.shown));
   const keepFocus = (e: Event) => e.preventDefault();
+  // The last entry downloads the version on screen (spec/api.md, "Download"); with one version the menu is just that.
+  const shownVersion = $derived(byLabel(review.versions, review.shown));
+  const download = $derived(review.mayDownload && !!shownVersion && !shownVersion.kind);
 </script>
 
-<div id="ver" hidden={review.versions.length < 2}>
+<div id="ver" hidden={review.versions.length < 2 && !download}>
   <Popover.Root bind:open={() => review.verOpen, (v) => (review.verOpen = v)}>
     <Popover.Trigger
       id="verBtn"
@@ -54,6 +58,7 @@
           ><span class="d">{v.kind ? '' : fmt(v.duration || 0, false)}</span></button
         >
       {/each}
+      {#if download}<DownloadItem {review} />{/if}
     </Popover.ContentStatic>
   </Popover.Root>
 </div>

@@ -696,6 +696,41 @@
     }
   }
 
+  /* The menu's last entry (spec/api.md, "Download"): a link that reads like the versions above it, under a hairline,
+     with its progress (or the file's size) where they have their length, and at most one quiet line under it. */
+  #verList .download {
+    position: relative;
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    margin-top: 9px;
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    text-decoration: none;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  #verList .download::before {
+    content: '';
+    position: absolute;
+    left: 4px;
+    right: 4px;
+    top: -5px;
+    border-top: 1px solid var(--line);
+  }
+  #verList .download:hover {
+    background: color-mix(in srgb, var(--overlay) 6%, transparent);
+  }
+  #verList .download-note {
+    margin: 0;
+    padding: 0 10px 4px;
+    max-width: 240px;
+    color: var(--dim);
+    font-size: 11px;
+    line-height: 1.4;
+  }
+
   /* The agent's drafts (contract C4): the version they head for, with a quiet tag. */
   #verBtn .draft,
   #verList .draft {

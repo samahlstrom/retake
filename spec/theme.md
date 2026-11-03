@@ -267,6 +267,8 @@ Versioning). Classes and ids are not part of the API and can change in any relea
 | `tip` | The tip over the timeline | review |
 | `version-picker` | The version button | review |
 | `version-list` | The list of versions it opens | review |
+| `download` | Its last entry: Download the version on screen as an MP4 (spec/api.md, "Download") | review |
+| `download-note` | The one quiet line under Download: why it failed, or the license note | review |
 | `pen-button` | The pen: one button, its pen in the colour you draw with (the eraser while that's on); it opens the pens | review |
 | `pens` | The pen's colours and the eraser, in what the pen button opens | review |
 | `pen` | One pen colour; `data-color` is its colour | review |
