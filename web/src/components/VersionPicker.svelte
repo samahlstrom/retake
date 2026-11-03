@@ -8,6 +8,7 @@
   // agent's drafts are never called that), with a small red live dot while the agent works on it. An extension's kind
   // of version comes first, named `v0 · Script` (spec/extensions.md, "Version kinds").
   import { Popover } from 'bits-ui';
+  import DownloadItem from './DownloadItem.svelte';
   import type { Review } from '../lib/review.svelte';
   import { byLabel, incomplete, pickerEntries, streamChip, verName } from '../lib/versions';
   import { fmt } from '../lib/util';
@@ -24,9 +25,12 @@
   const live = $derived(review.liveTarget);
   const shownLive = $derived(!!live && verName(review.shown) === live);
   const keepFocus = (e: Event) => e.preventDefault();
+  // The last entry downloads the version on screen (spec/api.md, "Download"); with one version the menu is just that.
+  const shownVersion = $derived(byLabel(review.versions, review.shown));
+  const download = $derived(review.mayDownload && !!shownVersion && !shownVersion.kind);
 </script>
 
-<div id="ver" hidden={review.versions.length < 2}>
+<div id="ver" hidden={review.versions.length < 2 && !download}>
   <Popover.Root bind:open={() => review.verOpen, (v) => (review.verOpen = v)}>
     <Popover.Trigger
       id="verBtn"
@@ -61,6 +65,7 @@
           ><span class="d">{v.kind ? '' : fmt(v.duration || 0, false)}</span></button
         >
       {/each}
+      {#if download}<DownloadItem {review} />{/if}
     </Popover.ContentStatic>
   </Popover.Root>
 </div>

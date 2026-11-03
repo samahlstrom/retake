@@ -68,6 +68,10 @@ type Request struct {
 	Job     string `json:"job,omitempty"`
 	Edit    string `json:"edit,omitempty"`
 	HasBody bool   `json:"has_body,omitempty"`
+	// Start, with Op "download", gets the version's download ready (spec/automation.md, "The media relay": Downloads).
+	Start bool `json:"start,omitempty"`
+	// Download, on a media read, reads the version's (Version) or render's (Render) ready download, not its file.
+	Download bool `json:"download,omitempty"`
 	// Body is what HasBody's fetch gets; it never goes in the request's JSON.
 	Body []byte `json:"-"`
 }

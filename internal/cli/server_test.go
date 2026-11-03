@@ -236,6 +236,27 @@ func TestServeSettings(t *testing.T) {
 		s.S3.Region != "us-east-1" {
 		t.Fatalf("%+v %v", s, err)
 	}
+	// Who may download: the config, else everyone; the environment wins; a bad value stops it.
+	if s.Downloads != "" {
+		t.Fatalf("downloads default: %q", s.Downloads)
+	}
+	w.config(t, "[server]\ndata = \"/srv/retake\"\ndownloads = \"reviewers\"\n")
+	if s, err = resolveServer(env, loadConfig(env), serverFlags{}); err != nil || s.Downloads != "reviewers" {
+		t.Fatalf("downloads from the config: %q %v", s.Downloads, err)
+	}
+	w.env["RETAKE_DOWNLOADS"] = "off"
+	if s, err = resolveServer(env, loadConfig(env), serverFlags{}); err != nil || s.Downloads != "off" ||
+		whoDownloads(env, loadConfig(env)) != "off" {
+		t.Fatalf("downloads from the environment: %q %v", s.Downloads, err)
+	}
+	w.env["RETAKE_DOWNLOADS"] = "nobody"
+	if _, err = resolveServer(env, loadConfig(env), serverFlags{}); err == nil {
+		t.Fatal("a bad RETAKE_DOWNLOADS passed")
+	}
+	if whoDownloads(env, loadConfig(env)) != "off" {
+		t.Fatal("retake open with a bad RETAKE_DOWNLOADS isn't off")
+	}
+	delete(w.env, "RETAKE_DOWNLOADS")
 	delete(w.env, "RETAKE_DATA")
 	w.config(t, "")
 	if code := w.run("serve"); code != ExitUsage || !strings.Contains(w.stderr.String(), "no data folder") {

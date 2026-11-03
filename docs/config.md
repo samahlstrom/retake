@@ -132,7 +132,11 @@ s3_insecure = false                      # RETAKE_S3_INSECURE=1, --s3-insecure: 
 smtp_url = ""                            # RETAKE_SMTP_URL: smtp://user:pass@host:587 (STARTTLS) or smtps://...:465
 smtp_from = ""                           # RETAKE_SMTP_FROM, --smtp-from: default retake@<public host>
 relay_cache = "20GB"                     # RETAKE_RELAY_CACHE, --relay-cache: relayed video kept on the server; "0" = none
+downloads = "everyone"                   # RETAKE_DOWNLOADS: who may download a version's MP4: everyone (who can watch), reviewers, off
 ```
+
+`downloads` also applies to `retake open` and `retake share`: with `"reviewers"` a view-only share link has no
+Download entry, with `"off"` nobody has.
 
 Without `public_url` any Host is accepted and the CLI makes links for `http://localhost:<port>`; set it in production.
 Forwarding headers (`X-Forwarded-For`, `-Proto`, `-Host`) are believed only from `trusted_proxies`.
@@ -157,6 +161,7 @@ See [theming.md](theming.md).
 | `XDG_CACHE_HOME` | retake, retake-edit | Where whisper models are downloaded (`retake/models`), and where retake-edit keeps `retake/ffmpeg-caps.json`. |
 | `RETAKE_WHISPER_THREADS` | retake | whisper.cpp's CPU threads. |
 | `RETAKE_DATA`, `RETAKE_LISTEN`, `RETAKE_PUBLIC_URL`, `RETAKE_TRUSTED_PROXIES`, `RETAKE_DATABASE_URL`, `RETAKE_S3_*`, `RETAKE_SMTP_URL`, `RETAKE_SMTP_FROM`, `RETAKE_RELAY_CACHE` | retake serve, user, project | The team server's settings ([server] above). |
+| `RETAKE_DOWNLOADS` | retake open, share, serve | Who may download a version's MP4 ([server] `downloads` above). |
 | `RETAKE_THEME` | retake open, share, serve, theme | The theme folder ([theming.md](theming.md)), or `none` for the built-in look. |
 | `RETAKE_TOKEN` | retake remote add | The agent token, when `--token` isn't given. |
 | `XDG_STATE_HOME` | retake push --remote, retake start | Where unfinished uploads are remembered (`retake/uploads.json`), and the running `retake start` (`retake/start.json`). |

@@ -108,6 +108,24 @@
   html[data-phone] #verList button:hover {
     background: transparent;
   }
+  html[data-phone] #verList .download {
+    align-items: center;
+    min-height: 44px;
+    padding: 0 14px;
+  }
+  html[data-phone] #verList .download:hover {
+    background: transparent;
+  }
+  html[data-phone] #verList .download-note {
+    padding: 0 14px 6px;
+  }
+  /* A phone's list is narrow and anchored to the picker: the progress goes under the entry, not beside it. */
+  html[data-phone] #verList .download .d {
+    display: none;
+  }
+  html[data-phone] #verList .download-progress {
+    display: block;
+  }
   #flip {
     flex: none;
     display: inline-flex;

@@ -54,6 +54,10 @@ struct RenderArgs {
     /// machine), x264, nvenc, videotoolbox, qsv or vaapi. Default: `$RETAKE_ENCODER`, else auto.
     #[arg(long)]
     encoder: Option<String>,
+    /// The MP4 export's loudness in LUFS when the timeline's master sets none (YouTube: -14): `-o`'s mix is levelled
+    /// to it with a -1.5 dBTP ceiling. With `--hls` the playlist keeps the timeline's own mix.
+    #[arg(long, allow_negative_numbers = true, value_parser = parse_lufs)]
+    export_loudness: Option<f64>,
 }
 
 impl RenderArgs {
@@ -71,6 +75,7 @@ impl RenderArgs {
             jobs: self.jobs,
             cache: self.cache.clone(),
             encoder,
+            export_loudness: self.export_loudness,
         })
     }
 
@@ -84,6 +89,13 @@ impl RenderArgs {
         let text = std::fs::read_to_string(doc).with_context(|| format!("reading {}", doc.display()))?;
         let v: Value = serde_json::from_str(&text).with_context(|| format!("{} isn't valid JSON", doc.display()))?;
         Engine::from_project(Project::from_doc(timeline, v)?, opts)
+    }
+}
+
+fn parse_lufs(s: &str) -> Result<f64, String> {
+    match s.parse::<f64>() {
+        Ok(v) if (-70.0..=0.0).contains(&v) => Ok(v),
+        _ => Err("a loudness in LUFS from -70 to 0, e.g. -14".into()),
     }
 }
 

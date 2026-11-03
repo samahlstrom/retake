@@ -153,6 +153,7 @@ import {
 } from '../ext/kinds';
 import { Chat, type ChatFiles } from './chat/chat.svelte';
 import { sendState } from './chat/thread';
+import { Downloads } from './download.svelte';
 
 export interface Elements {
   stage: HTMLElement;
@@ -302,6 +303,9 @@ export class Review {
   cards = $state.raw<ImageCard[]>([]);
   /** Who the page acts as (spec/team.md), from /api/info; null until it answers, or from a server without roles. */
   role = $state<Role | null>(null);
+  /** The version menu's Download entry (spec/api.md, "Download"): whether this page may, and the files it asked for. */
+  mayDownload = $state(false);
+  readonly downloads = new Downloads();
   /** A viewer's share link only watches: no Record, no pen, no Answer. */
   get canRecord(): boolean {
     return this.role !== 'viewer' && this.role !== 'agent';
@@ -3333,6 +3337,7 @@ export class Review {
     }
     document.title = reviewTitle(this.info.name, brandOf());
     this.role = this.info.role ?? null;
+    this.mayDownload = this.info.downloads === true;
     // Shown once per browser, then it's behind ?. A viewer's "View only" always shows.
     if (!this.take.id) this.hintGone = this.canRecord && hintSeen();
     this.versions = this.info.versions || [];

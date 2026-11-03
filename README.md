@@ -31,6 +31,10 @@ changed, and each note turns Done as its change lands in the next version.
 - Each version keeps its own comments, and a comment on v7 becomes an edit in v8. The comments panel shows the version
   on screen; its version menu lists every version with where its comments go and what's still to do ("v7 → v8 · 3 to
   do").
+- The version menu (`v5 ⌄`) ends with **Download v5 (MP4)**: one MP4 you can drag straight into YouTube Studio (H.264
+  High, BT.709, AAC 48 kHz stereo at -14 LUFS, faststart, named `clip_v5.mp4`). A file that already is that downloads
+  as it is; anything else is made once and kept in `.retake/downloads/`. It works the same through a share link or a
+  hosted server. Uploading stays yours: Retake holds no YouTube login ([spec/api.md](spec/api.md), "Download").
 
 ## Quickstart
 
