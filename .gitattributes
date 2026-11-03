@@ -1,0 +1,14 @@
+# Text files are checked out with LF on every system, Windows too: golden files, THIRD_PARTY_NOTICES.md, the embedded
+# page and the test fixtures must stay byte for byte as committed. Git finds binary files itself; media is named here
+# so it's never mistaken for text.
+* text=auto eol=lf
+
+*.gif binary
+*.jpg binary
+*.mp4 binary
+*.ogg binary
+*.png binary
+*.ttf binary
+*.webm binary
+*.webp binary
+*.woff2 binary
