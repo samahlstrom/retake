@@ -21,6 +21,19 @@ All notable changes are listed here. Versions follow semver once the first relea
   and drafts the GitHub release; publishing the draft publishes npm (trusted publishing, provenance) and the Homebrew
   formula. Run by hand with `dry_run`, it builds and tests everything and publishes nothing (docs/releasing.md).
 
+### Windows
+- Retake runs on Windows 10 and 11 (x64): `irm https://raw.githubusercontent.com/samahlstrom/retake/main/install.ps1 |
+  iex` installs it for your account (no admin rights) with a Start menu entry, or `npm i -g retake-cli`. What's
+  different there: docs/windows.md.
+- Agents open in herdr (its Windows build comes with Retake) or in the background; tmux is offered only where it's
+  installed. Background agents outlive Retake on Windows too: a hidden console and a job object of their own, known
+  by pid and creation time, so a stop ends everything they started.
+- Settings in `%APPDATA%\retake`, data and caches in `%LOCALAPPDATA%\retake`, videos in `%USERPROFILE%\Videos` by
+  default. Move to Trash uses the Recycle Bin (Undo restores), Show in folder opens Explorer, and `retake autostart`
+  uses the Run key with `retakew.exe`, which starts Retake without a console window.
+- CI runs the Go and page tests, builds `retake-edit` with MSVC and the whole package on `windows-latest`, and
+  smoke-tests it: `retake start`, the page, a poster, and a fake agent's background task.
+
 ### Edit a comment's words while it's still to do
 - ⋯ → **Edit**, or a double-click on a comment's words: they become a field in their own place (same font and size,
   nothing moves), with Cancel and Save where the ⋯ was. Enter saves, Shift+Enter is a new line, Esc cancels. On a

@@ -19,6 +19,7 @@ import (
 	"github.com/samahlstrom/retake/internal/family"
 	"github.com/samahlstrom/retake/internal/jobs"
 	"github.com/samahlstrom/retake/internal/project"
+	"github.com/samahlstrom/retake/internal/testmedia"
 )
 
 const agentTake = "2026-10-29_20-48-01"
@@ -313,6 +314,7 @@ func TestWatch(t *testing.T) {
 
 // push --render in a timeline project, with a stand-in retake-edit named by [edit] retake_edit.
 func TestPushRenderCommand(t *testing.T) {
+	testmedia.NeedShell(t)
 	w := newWorld(t)
 	w.seedNotes(t)
 	bin := filepath.Join(w.root, "tools", "retake-edit")

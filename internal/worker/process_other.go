@@ -1,4 +1,4 @@
-//go:build !unix
+//go:build !unix && !windows
 
 package worker
 
@@ -9,10 +9,12 @@ import (
 
 // Automated switching requires process-tree cancellation and a crash-safe project lock.
 func lockProject(string) (func(), error) {
-	return nil, errors.New("editing workers currently require Linux or macOS")
+	return nil, errors.New("editing workers currently require Linux, macOS or Windows")
 }
-func detach(*exec.Cmd)     {}
-func stopGroup(int) error  { return errors.ErrUnsupported }
-func killGroup(int)        {}
-func procStart(int) string { return "" }
-func endGroup(int, string) {}
+func startOwn(c *exec.Cmd) (*exec.Cmd, error) { return c, c.Start() }
+func track(int, string)                       {}
+func withSelfOnPath(env []string) []string    { return env }
+func sessionEnv(profile []string) []string    { return profile }
+func killGroup(int, string)                   {}
+func procStart(int) string                    { return "" }
+func endGroup(int, string)                    {}

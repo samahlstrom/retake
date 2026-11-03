@@ -21,6 +21,7 @@ import (
 // A folder of finished videos, no timeline: retake connect puts it on the server, and its videos play there through
 // the relay, in ranges, from the computer (and its chunks are kept in the server's cache). Nothing is uploaded.
 func TestConnectRelaysAFolderOfPlainVideos(t *testing.T) {
+	testmedia.NeedShell(t)
 	testmedia.Need(t)
 	scratch, err := filepath.Abs("../../.retake-work")
 	if err != nil {

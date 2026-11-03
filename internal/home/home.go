@@ -87,8 +87,11 @@ type User struct {
 
 // Response is GET /api/home.
 type Response struct {
-	Title    string `json:"title"`
-	Folder   string `json:"folder,omitempty"` // the owner's only
+	Title  string `json:"title"`
+	Folder string `json:"folder,omitempty"` // the owner's only
+	// Trash is what this computer calls its trash, for Move to Trash's words: "Trash", or "Recycle Bin" on Windows.
+	// The owner's only, on a local home.
+	Trash    string `json:"trash,omitempty"`
 	Role     string `json:"role"`
 	User     *User  `json:"user,omitempty"` // the team server's
 	Projects []Card `json:"projects"`

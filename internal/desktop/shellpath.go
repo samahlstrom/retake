@@ -10,6 +10,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/samahlstrom/retake/internal/userdir"
 )
 
 // An app started from Finder or a desktop menu gets a short PATH (/usr/bin:/bin:...), so the person's own programs,
@@ -22,8 +24,27 @@ var ShellTimeout = 5 * time.Second
 const pathMark = "__RETAKE_PATH__"
 
 // CommonDirs are the folders agent installers put programs in, added after the shell's PATH when they exist.
-func CommonDirs(home string) []string {
+func CommonDirs(home string) []string { return commonDirs(runtime.GOOS, home, os.Getenv) }
+
+func commonDirs(goos, home string, getenv func(string) string) []string {
 	var out []string
+	if goos == "windows" {
+		// Claude Code's installer (claude.exe in ~\.local\bin), npm's global shims (claude.cmd, codex.cmd), bun, and
+		// where install.ps1 puts Retake.
+		if home != "" {
+			out = append(out, filepath.Join(home, ".local", "bin"))
+		}
+		if d := getenv("APPDATA"); d != "" {
+			out = append(out, filepath.Join(d, "npm"))
+		}
+		if home != "" {
+			out = append(out, filepath.Join(home, ".bun", "bin"))
+		}
+		if d := getenv("LOCALAPPDATA"); d != "" {
+			out = append(out, filepath.Join(d, "Programs", "retake"))
+		}
+		return out
+	}
 	if home != "" {
 		out = append(out, filepath.Join(home, ".local", "bin"))
 	}
@@ -79,11 +100,16 @@ func MergePath(bundle, shell, current, home string, exists func(string) bool) st
 }
 
 // RefreshPath sets this process's PATH from the login shell's (MergePath), keeping the bundle's folder first. It
-// returns the new PATH; on error, PATH still gains the common folders.
+// returns the new PATH; on error, PATH still gains the common folders. Windows has no login shell: a program started
+// from the Start menu has the person's own PATH already, and only the common folders are added.
 func RefreshPath(ctx context.Context) (string, error) {
-	shellPath, err := LoginShellPath(ctx, os.Getenv("SHELL"))
+	var shellPath string
+	var err error
+	if runtime.GOOS != "windows" {
+		shellPath, err = LoginShellPath(ctx, os.Getenv("SHELL"))
+	}
 	bundle, _ := BundleDir(Exe())
-	p := MergePath(bundle, shellPath, os.Getenv("PATH"), os.Getenv("HOME"), func(d string) bool {
+	p := MergePath(bundle, shellPath, os.Getenv("PATH"), userdir.Home(os.Getenv), func(d string) bool {
 		st, err := os.Stat(d)
 		return err == nil && st.IsDir()
 	})

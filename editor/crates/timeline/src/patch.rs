@@ -406,7 +406,7 @@ pub fn pretty(v: &Value) -> String {
 fn write_atomic(path: &Path, text: &str) -> Result<(), EditError> {
     let tmp = path.with_extension("json.tmp");
     std::fs::write(&tmp, text)
-        .and_then(|_| std::fs::rename(&tmp, path))
+        .and_then(|_| crate::fsx::replace(&tmp, path))
         .map_err(|e| EditError::new("timeline_write", format!("can't write {}: {e}", path.display())))
 }
 

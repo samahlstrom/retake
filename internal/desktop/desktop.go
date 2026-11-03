@@ -99,20 +99,15 @@ func UseBundle(exe string) string {
 }
 
 // Find returns the program name next to the retake binary, else on PATH. bundled says it's the copy next to retake.
+// On Windows the name needs no extension: herdr finds herdr.exe.
 func Find(name string) (path string, bundled bool, err error) {
 	if exe := Exe(); exe != "" {
-		p := filepath.Join(filepath.Dir(exe), name)
-		if isExec(p) {
+		if p := programIn(filepath.Dir(exe), name); p != "" {
 			return p, true, nil
 		}
 	}
 	p, err := exec.LookPath(name)
 	return p, false, err
-}
-
-func isExec(p string) bool {
-	st, err := os.Stat(p) //nolint:gosec // a program next to retake or on PATH: only whether it runs
-	return err == nil && st.Mode().IsRegular() && st.Mode().Perm()&0o111 != 0
 }
 
 // AppBundle is the .app folder when exe is a Mac app's main program (X.app/Contents/MacOS/<exe>), else "".

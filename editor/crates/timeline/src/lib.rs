@@ -4,6 +4,7 @@
 pub mod anchor;
 pub mod component;
 pub mod error;
+pub mod fsx;
 pub mod keyframe;
 pub mod layer;
 pub mod lint;

@@ -102,7 +102,7 @@ and carries on with the rest of its work. It can draw to show what it means:
 
 ```bash
 retake ask --note 12 --from 1:20 --to 1:26 --at 1:23 \
-  --box 0.1,0.6,0.4,0.3:"this logo" --arrow 0.8,0.2,0.55,0.45:"or this one?" \
+  --box "0.1,0.6,0.4,0.3:this logo" --arrow "0.8,0.2,0.55,0.45:or this one?" \
   --option "Old logo@old.png" --option "New logo@new.png" \
   "Which logo should stay here?"
 ```
@@ -164,8 +164,9 @@ open_agents_in = "herdr"   # or "tmux"; "background" is the default
 ```
 
 The setup page of `retake start` asks this the first time (spec/setup.md), and Settings changes it. herdr comes with
-the Retake app and the Linux install: Retake uses the copy next to its own binary first, then the one on `PATH`. Run
-`herdr` in a terminal to watch.
+the Retake app and the Linux and Windows installs: Retake uses the copy next to its own binary first, then the one on
+`PATH`. Run `herdr` in a terminal to watch. On Windows the choices are herdr and the background (there's no tmux);
+see [windows.md](windows.md).
 
 Each video then gets its own interactive Claude Code or Codex session (not `claude -p` or `codex exec`), named after
 the video:

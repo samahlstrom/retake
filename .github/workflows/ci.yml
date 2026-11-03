@@ -201,3 +201,107 @@ jobs:
           CHROMIUM_PATH="$(cd e2e && node -e "console.log(require('@playwright/test').chromium.executablePath())")"
           export CHROMIUM_PATH
           examples/sample/run-quickstart.sh
+
+  # Retake on Windows: the Go tests, the page's unit tests, retake-edit, the release folder (scripts/build-windows.ps1)
+  # and a smoke test of it (scripts/windows-smoke.ps1). After the toolchain is in, every step runs even when an earlier
+  # one failed, so one run shows every failure.
+  windows:
+    name: Windows (Go, web, retake-edit, package, smoke test)
+    runs-on: windows-latest
+    timeout-minutes: 75 # a cold cargo build (Skia's download included) is the long part
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      CGO_ENABLED: "0" # pure Go (modernc.org/sqlite), as the release builds it
+    steps:
+      # The runner's git turns LF into CRLF on checkout; golden files, notices and embedded files must stay as committed.
+      - name: Keep line endings as committed
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@v7
+      - name: Install Go, node and Rust from mise.toml
+        id: tools
+        uses: jdx/mise-action@v5
+        with:
+          install_args: go node rust
+      - name: Versions
+        run: |
+          go version
+          node --version
+          cargo --version
+      - name: go build
+        if: ${{ !cancelled() && steps.tools.outcome == 'success' }}
+        run: go build ./...
+      - name: go vet
+        if: ${{ !cancelled() && steps.tools.outcome == 'success' }}
+        run: go vet ./...
+      # No -race (it needs cgo). No ffmpeg on PATH: the tests that need media skip themselves (testmedia.Need), and the
+      # smoke test below runs the real media path with the bundled ffmpeg. Tests whose fake programs are POSIX shell
+      # scripts skip on Windows (testmedia.NeedShell).
+      - name: go test
+        if: ${{ !cancelled() && steps.tools.outcome == 'success' }}
+        run: |
+          # Whatever the runner image has, these tests run without ffmpeg (see above).
+          $env:PATH = (($env:PATH -split ';') | Where-Object { $_ -and -not (Test-Path -LiteralPath (Join-Path $_ 'ffmpeg.exe')) }) -join ';'
+          go test ./...
+      - name: Web unit tests
+        if: ${{ !cancelled() && steps.tools.outcome == 'success' }}
+        working-directory: web
+        run: |
+          npm ci
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npx vitest run -c vite.scripts.config.ts
+      - name: Cache cargo builds
+        if: ${{ !cancelled() && steps.tools.outcome == 'success' }}
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: editor
+          key: windows
+      - name: cargo build retake-edit (MSVC)
+        id: editor
+        if: ${{ !cancelled() && steps.tools.outcome == 'success' }}
+        working-directory: editor
+        run: cargo build --release --locked -p retake-edit
+      # What release.yml runs on its Windows runner: retake-edit.exe alone into the folder (cargo's build is cached by now).
+      - name: The release workflow's part (scripts/build-windows.ps1 -OutDir)
+        if: ${{ !cancelled() && steps.editor.outcome == 'success' }}
+        run: |
+          ./scripts/build-windows.ps1 -OutDir release-stage
+          if (-not (Test-Path release-stage/retake-edit.exe)) { throw "no release-stage/retake-edit.exe" }
+          ./release-stage/retake-edit.exe --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Package (scripts/build-windows.ps1)
+        id: package
+        if: ${{ !cancelled() && steps.editor.outcome == 'success' }}
+        run: ./scripts/build-windows.ps1
+      - name: The package's contents
+        if: ${{ !cancelled() && steps.package.outcome == 'success' }}
+        run: |
+          Get-Content dist/checksums-windows.txt
+          Get-Content dist/windows/retake-bundle.json
+          Get-ChildItem -Recurse dist/windows | Select-Object FullName, Length | Format-Table -AutoSize
+          ./dist/windows/retake.exe version
+          $conf = ./dist/windows/ffmpeg.exe -hide_banner -buildconf | Out-String
+          foreach ($lib in 'libx264', 'libzimg') { if ($conf -notmatch "--enable-$lib") { throw "the bundled ffmpeg has no $lib" } }
+      # The real check that a background agent outlives its worker on Windows (hidden console, its own process group,
+      # pid + creation time as its identity): these tests need ffmpeg, which the package now has.
+      - name: Detached agents on Windows (with ffmpeg)
+        if: ${{ !cancelled() && steps.package.outcome == 'success' }}
+        run: |
+          $env:PATH = "$((Resolve-Path dist/windows).Path);$env:PATH"
+          go test -count=1 -v -run "TestProcessIdentity|TestBackgroundAgentOutlivesItsWorker|TestAgentsFindThisRetakeOnWindows" ./internal/worker/
+      - name: Smoke test (retake start, the page, a poster, a fake agent's background task)
+        if: ${{ !cancelled() && steps.package.outcome == 'success' }}
+        run: ./scripts/windows-smoke.ps1 -Port 9271
+      - name: Upload the smoke test's folder
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-smoke
+          path: ${{ runner.temp }}/retake-smoke/
+          include-hidden-files: true # the worker's files are under .retake/
+          if-no-files-found: ignore
+          retention-days: 14
+

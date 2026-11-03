@@ -8,9 +8,11 @@ export interface FolderList {
   folders: string[];
 }
 
-/** A folder inside another, as the server takes it: "~" + "/Clips" → "~/Clips", "/" + "x" → "/x". */
+/** A folder inside another, as the server takes it: "~" + "Clips" → "~/Clips", "/" + "x" → "/x". A Windows path keeps
+ * its backslashes: "D:\\Footage" + "x" → "D:\\Footage\\x", "C:\\" + "Users" → "C:\\Users". */
 export function join(dir: string, name: string): string {
-  return dir.endsWith('/') ? dir + name : `${dir}/${name}`;
+  if (dir.endsWith('/') || dir.endsWith('\\')) return dir + name;
+  return dir.includes('\\') && !dir.includes('/') ? `${dir}\\${name}` : `${dir}/${name}`;
 }
 
 /** GET the list, or throw a one-line reason. */

@@ -19,6 +19,7 @@
     fallbackOptions,
     loadSettings,
     normalizeSettings,
+    openInOptions,
     pendingRestart,
     saveSettings,
     type Settings,
@@ -197,7 +198,7 @@
           <StyledSelect
             label="Where agents run"
             value={s.open_in}
-            options={OPEN_IN.map((o) => ({ value: o.value, label: o.label }))}
+            options={openInOptions(s)}
             disabled={busy}
             onValueChange={(v) => save({ open_in: v as Settings['open_in'] })}
           />

@@ -233,6 +233,9 @@ curl -fsSL https://raw.githubusercontent.com/samahlstrom/retake/main/install.sh 
 irm https://raw.githubusercontent.com/samahlstrom/retake/main/install.ps1 | iex           # Windows
 ```
 
+On Windows (x64) that installs into your user folder with a Start menu entry and needs no administrator rights;
+agents open in herdr or in the background. What's different there: [docs/windows.md](docs/windows.md).
+
 **Homebrew:** `brew install samahlstrom/retake/retake`
 
 Everything Retake uses comes with it: ffmpeg, `retake-edit` (the renderer) and [herdr](https://herdr.dev), to watch
@@ -260,6 +263,7 @@ own account; the setup page shows how. Runs on macOS (Apple silicon, Intel), Lin
 - [deploy/README.md](deploy/README.md): the self-hosting reference (HTTPS, transcription, mail, backups).
 - [docs/timeline.md](docs/timeline.md): the editor's timeline format, as a guide.
 - [docs/install-plan.md](docs/install-plan.md): one-click install per OS, what ships inside, signing and updates.
+- [docs/windows.md](docs/windows.md): Retake on Windows: install, where things live, what's different.
 - [docs/releasing.md](docs/releasing.md): versions, release archives, the installer and the license notices.
 - [spec/](spec/): the contracts. [setup.md](spec/setup.md) (`retake start` and the setup page), [api.md](spec/api.md) (HTTP), [take-format.md](spec/take-format.md),
   [notes.md](spec/notes.md) (notes, questions, agent API), [team.md](spec/team.md) (sharing),

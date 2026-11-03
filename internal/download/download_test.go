@@ -183,6 +183,7 @@ func TestTheTimelinesOwnLevelIsKept(t *testing.T) {
 // A rendered version downloads the renderer's export: packaged with the export's level when it is missing, reused
 // when it passes, packaged again when an older one misses the level.
 func TestARenderedVersionDownloadsItsExport(t *testing.T) {
+	testmedia.NeedShell(t)
 	root := t.TempDir()
 	dir := filepath.Join(root, "v8")
 	ready := filepath.Join(root, "ready.mp4")

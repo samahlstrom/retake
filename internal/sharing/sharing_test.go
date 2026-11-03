@@ -8,10 +8,10 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"testing"
 
 	"github.com/samahlstrom/retake/internal/project"
+	"github.com/samahlstrom/retake/internal/testmedia"
 	"github.com/samahlstrom/retake/internal/tunnel"
 )
 
@@ -39,7 +39,7 @@ func gone(t *testing.T, dir string) bool {
 		t.Fatal(err)
 	}
 	pid, _ := strconv.Atoi(strings.TrimSpace(string(b)))
-	return syscall.Kill(pid, 0) != nil
+	return !alive(pid)
 }
 
 // hostsTable is a hosts table in memory.
@@ -74,6 +74,7 @@ func (h *hostsTable) remove(host string) {
 }
 
 func TestStartsATunnelOnceAndStopsIt(t *testing.T) {
+	testmedia.NeedShell(t)
 	bin, dir := fakeCloudflared(t, "brave-words.trycloudflare.com")
 	hosts := &hostsTable{}
 	l := New(Options{Port: 9141, Hosts: hosts.list, AddHost: hosts.add, RemoveHost: hosts.remove, Cloudflared: bin,
@@ -176,6 +177,7 @@ func TestLocalNetworkWhenNoTunnel(t *testing.T) {
 }
 
 func TestTunnelThatFailsFallsBackToTheNetwork(t *testing.T) {
+	testmedia.NeedShell(t)
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "cloudflared")
 	if err := os.WriteFile(bin, []byte("#!/bin/sh\necho 'ERR failed to reach Cloudflare' >&2\nexit 1\n"), 0o700); err != nil {

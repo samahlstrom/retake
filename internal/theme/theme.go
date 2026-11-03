@@ -15,6 +15,8 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
+
+	"github.com/samahlstrom/retake/internal/userdir"
 )
 
 // API is the Theme API's version (spec/theme.md, "Versioning").
@@ -86,12 +88,15 @@ func Dir(flag string, getenv func(string) string, def string) string {
 }
 
 // LocalDir is the theme folder of retake open and retake share: $XDG_CONFIG_HOME/retake/theme, else
-// ~/.config/retake/theme (beside config.toml).
+// ~/.config/retake/theme (%APPDATA%\retake\theme on Windows), beside config.toml.
 func LocalDir(getenv func(string) string) (string, error) {
 	if x := getenv("XDG_CONFIG_HOME"); x != "" && filepath.IsAbs(x) {
 		return filepath.Join(x, "retake", "theme"), nil
 	}
-	home := getenv("HOME")
+	if d := userdir.Roaming(getenv); d != "" {
+		return filepath.Join(d, "retake", "theme"), nil
+	}
+	home := userdir.Home(getenv)
 	if home == "" {
 		h, err := os.UserHomeDir()
 		if err != nil {

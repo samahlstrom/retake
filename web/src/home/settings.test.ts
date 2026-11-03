@@ -7,6 +7,7 @@ import {
   fallbackOptions,
   loadSettings,
   normalizeSettings,
+  openInOptions,
   pendingRestart,
   saveSettings,
 } from './settings';
@@ -41,6 +42,18 @@ describe('settings', () => {
       folder_editable: true,
       test: true,
     });
+  });
+
+  it('offers the places agents can run here: tmux only where the server says it is', () => {
+    const values = (b: unknown) => openInOptions(normalizeSettings(b)).map((o) => o.value);
+    expect(values(base)).toEqual(['background', 'herdr', 'tmux']); // an older server: all of them
+    expect(values({ ...base, open_in_choices: ['herdr', 'background'] })).toEqual(['background', 'herdr']);
+    expect(values({ ...base, open_in: 'tmux', open_in_choices: ['herdr', 'background'] })).toEqual([
+      'background',
+      'herdr',
+      'tmux',
+    ]);
+    expect(values({ ...base, open_in_choices: ['herdr', 'screen', 'background'] })).toEqual(['background', 'herdr']);
   });
 
   it('shows the agent tasks run with, and only other agents as the fallback', () => {

@@ -10,9 +10,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/samahlstrom/retake/internal/ext"
 	"github.com/samahlstrom/retake/internal/family"
@@ -521,7 +524,7 @@ func (at *attempt) background(ctx context.Context) *outcome {
 	var exit error
 	if proc != nil && proc.own {
 		exit = proc.err
-		killGroup(proc.PID) // what it left running in its group
+		killGroup(proc.PID, proc.Start) // what it left running in its group
 	}
 	usage, limited := telemetry(tailOf(rec.Log, 128<<10))
 	r.update(rec, func(x *runRecord) { x.Proc, x.Usage = nil, addUsage(x.Usage, usage) })
@@ -688,7 +691,7 @@ func docPrompt(contextPath, reportPath, extra string) string {
 Read the project instructions, then the durable task context at %q. Only the note IDs in task.notes are assigned (minus task.done, finished in an earlier attempt); each is a typed comment, and its "anchor" says which file and place it is about. Other notes are context.
 Make the requested changes to the files the notes are about, as the section below says. Don't render, push or change any video version. Preserve other people's work.
 The next agent may differ from you; leave useful context on disk. Do not delete or edit the worker's identity, lock, logs, context files, ask.json or anything under .retake/.
-`, contextPath) + extra + askRules(reportPath, "A completed report finishes these comments with your message as their change.")
+`, promptPath(contextPath)) + extra + askRules(reportPath, "A completed report finishes these comments with your message as their change.")
 }
 
 // timelinePrompt is the task prompt of a project with a native timeline. extra is the extensions' section.
@@ -699,7 +702,7 @@ Only the note IDs in task.notes are assigned (minus task.done, finished in an ea
 Original local video revisions are retained in .retake/worker/renders/: each state.json gives its label (a draft such as v4-draft2 until a task completes it as v4), source.json is its timeline snapshot, and index.m3u8 is its video. Inspect the original frame there when needed; do not assume an old comment's time refers to the current source.
 Make the requested source edits in this project. Preserve all existing working changes, media and other people's work. Retake automatically renders valid saved source changes and streams them to reviewers. Do not run retake push or retake note yourself.
 The next agent may differ from you; leave source changes and useful context on disk. Do not delete or edit the worker's identity, lock, logs, context files, ask.json or render output.
-`, contextPath, timeline) + extra + askRules(reportPath, "A completed report is only a request: Retake waits for a checked playable render before resolving the comment.")
+`, promptPath(contextPath), promptPath(timeline)) + extra + askRules(reportPath, "A completed report is only a request: Retake waits for a checked playable render before resolving the comment.")
 }
 
 func (r *runner) fetchArtifact(ctx context.Context, path, destination string) error {
@@ -801,4 +804,23 @@ func telemetry(data []byte) (*project.AgentUsage, bool) {
 		}
 	}
 	return usage, limited
+}
+
+// promptPath is a path in a prompt. %q quotes it as Go does, except on Windows, where a path has no quotes or control
+// characters to escape: there it's only put in double quotes, so the agent reads C:\Users\… with single backslashes.
+type promptPath string
+
+// windowsQuote is whether %q of a promptPath quotes it the Windows way.
+var windowsQuote = runtime.GOOS == "windows"
+
+func (p promptPath) Format(f fmt.State, verb rune) {
+	s := string(p)
+	if verb == 'q' {
+		if windowsQuote && !strings.ContainsFunc(s, func(r rune) bool { return r == '"' || !unicode.IsPrint(r) }) {
+			s = `"` + s + `"`
+		} else {
+			s = strconv.Quote(s)
+		}
+	}
+	_, _ = io.WriteString(f, s)
 }

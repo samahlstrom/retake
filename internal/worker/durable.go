@@ -182,12 +182,12 @@ func startDetached(argv []string, dir string, env []string, in, out, errs string
 		defer func() { _ = stderr.Close() }()
 	}
 	cmd := exec.Command(argv[0], argv[1:]...) //nolint:gosec // trusted local argv, never supplied by the host
-	cmd.Dir, cmd.Env, cmd.Stdin, cmd.Stdout, cmd.Stderr = dir, env, stdin, stdout, stderr
-	detach(cmd)
-	if err = cmd.Start(); err != nil {
+	cmd.Dir, cmd.Env, cmd.Stdin, cmd.Stdout, cmd.Stderr = dir, withSelfOnPath(env), stdin, stdout, stderr
+	if cmd, err = startOwn(cmd); err != nil {
 		return nil, err
 	}
 	p := &agentProc{PID: cmd.Process.Pid, Start: procStart(cmd.Process.Pid), own: true, done: make(chan struct{})}
+	track(p.PID, p.Start)
 	go func() {
 		p.err = cmd.Wait()
 		close(p.done)
@@ -224,7 +224,7 @@ func (p *agentProc) stop() {
 		return
 	}
 	if p.own && p.Start == "" {
-		killGroup(p.PID) // it started and ended before its start time could be read
+		killGroup(p.PID, "") // it started and ended before its start time could be read
 	}
 	endGroup(p.PID, p.Start)
 	if p.own {

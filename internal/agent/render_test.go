@@ -11,6 +11,7 @@ import (
 
 	"github.com/samahlstrom/retake/internal/bridge"
 	"github.com/samahlstrom/retake/internal/project"
+	"github.com/samahlstrom/retake/internal/testmedia"
 )
 
 // fakeEditor is a stand-in retake-edit: `render <timeline> -o <out> --json [--draft]` writes a file and a manifest
@@ -35,6 +36,7 @@ echo '{"ok": true, "output": "'"$out"'", "units": 3, "reused": 1, "rendered": 2,
 // retake-edit. p1 answers #1, p2 answers #2 and #3, p3 is the agent's own.
 func timelineProject(t *testing.T) (*Project, string) {
 	t.Helper()
+	testmedia.NeedShell(t)
 	p := newProject(t)
 	dir := filepath.Join(p.Root, "edit")
 	write(t, filepath.Join(dir, "timeline.json"), `{"schema": "timeline/0.1", "id": "t", "rev": 3}`)

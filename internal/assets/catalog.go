@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/samahlstrom/retake/internal/transcribe"
+	"github.com/samahlstrom/retake/internal/userdir"
 )
 
 // License statuses.
@@ -143,7 +144,7 @@ func Open(o Options) (*Catalog, error) {
 }
 
 // LibraryDir returns the user library's folder: $RETAKE_LIBRARY, else $XDG_DATA_HOME/retake/library, else
-// ~/.local/share/retake/library.
+// ~/.local/share/retake/library (%LOCALAPPDATA%\retake\library on Windows).
 func LibraryDir(getenv func(string) string) string {
 	if d := getenv("RETAKE_LIBRARY"); d != "" {
 		return d
@@ -151,7 +152,10 @@ func LibraryDir(getenv func(string) string) string {
 	if d := getenv("XDG_DATA_HOME"); d != "" {
 		return filepath.Join(d, "retake", "library")
 	}
-	home := getenv("HOME")
+	if d := userdir.Local(getenv); d != "" {
+		return filepath.Join(d, "retake", "library")
+	}
+	home := userdir.Home(getenv)
 	if home == "" {
 		home, _ = os.UserHomeDir()
 	}

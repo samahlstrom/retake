@@ -603,7 +603,7 @@ func (r *runner) chatRead(ctx context.Context, rec *turnRecord, stream *chatStre
 	var exit error
 	if proc != nil && proc.own {
 		exit = proc.err
-		killGroup(proc.PID) // what it left running in its group
+		killGroup(proc.PID, proc.Start) // what it left running in its group
 	}
 	r.saveTurn(rec, func(x *turnRecord) { x.Proc = nil })
 	return append(tailOf(rec.Out, 64<<10), tailOf(rec.Log, 64<<10)...), false, exit

@@ -103,6 +103,9 @@ describe('home', () => {
       tree: { title: '', path: '', project: false, videos: [], children: [] },
     });
     expect(normalizeHome({ projects: 'nope' }).projects).toEqual([]);
+    // A Windows computer's trash is its Recycle Bin; nothing sent: the page says Trash.
+    expect(normalizeHome({ trash: 'Recycle Bin' }).trash).toBe('Recycle Bin');
+    expect(normalizeHome({ trash: 3 })).not.toHaveProperty('trash');
     // An older server's project organization (gone: folders on disk organize videos) is ignored.
     const old = normalizeHome({ projects: [], workspace: { revision: 1, projects: [], placements: [] } });
     expect(old).not.toHaveProperty('workspace');

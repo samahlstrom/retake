@@ -12,6 +12,8 @@ import (
 	"strings"
 
 	"lukechampine.com/blake3"
+
+	"github.com/samahlstrom/retake/internal/userdir"
 )
 
 // EnvPath is the variable that adds extension folders for a run, after --ext (":"-separated, like PATH).
@@ -46,12 +48,15 @@ func FlagDirs(flags []string, getenv func(string) string) []string {
 }
 
 // UserDir is the user's extensions folder: $XDG_CONFIG_HOME/retake/extensions, else ~/.config/retake/extensions
-// (next to the theme and config.toml).
+// (%APPDATA%\retake\extensions on Windows), next to the theme and config.toml.
 func UserDir(getenv func(string) string) (string, error) {
 	if x := getenv("XDG_CONFIG_HOME"); x != "" && filepath.IsAbs(x) {
 		return filepath.Join(x, "retake", "extensions"), nil
 	}
-	home := getenv("HOME")
+	if d := userdir.Roaming(getenv); d != "" {
+		return filepath.Join(d, "retake", "extensions"), nil
+	}
+	home := userdir.Home(getenv)
 	if home == "" {
 		h, err := os.UserHomeDir()
 		if err != nil {

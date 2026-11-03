@@ -16,6 +16,8 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
+
+	"github.com/samahlstrom/retake/internal/userdir"
 )
 
 // Config is the file's contents. A nil field wasn't set.
@@ -144,7 +146,10 @@ func Path(getenv func(string) string) (string, error) {
 	if x := getenv("XDG_CONFIG_HOME"); x != "" && filepath.IsAbs(x) {
 		return filepath.Join(x, "retake", "config.toml"), nil
 	}
-	home := getenv("HOME")
+	if d := userdir.Roaming(getenv); d != "" {
+		return filepath.Join(d, "retake", "config.toml"), nil
+	}
+	home := userdir.Home(getenv)
 	if home == "" {
 		h, err := os.UserHomeDir()
 		if err != nil {
@@ -253,7 +258,7 @@ func FolderPath(c Config, home string) string {
 	return ExpandHome(strings.TrimSpace(*c.Folder), home)
 }
 
-// ExpandHome makes a leading ~ (alone, or before a slash) the home folder.
+// ExpandHome makes a leading ~ (alone, or before a slash; on Windows also a backslash) the home folder.
 func ExpandHome(p, home string) string {
 	if home == "" {
 		return p
@@ -262,6 +267,9 @@ func ExpandHome(p, home string) string {
 		return home
 	}
 	if rest, ok := strings.CutPrefix(p, "~/"); ok {
+		return filepath.Join(home, rest)
+	}
+	if rest, ok := strings.CutPrefix(p, `~\`); ok && filepath.Separator == '\\' {
 		return filepath.Join(home, rest)
 	}
 	return p

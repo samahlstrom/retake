@@ -24,6 +24,7 @@ import (
 	"github.com/samahlstrom/retake/internal/hub"
 	"github.com/samahlstrom/retake/internal/project"
 	"github.com/samahlstrom/retake/internal/setup"
+	"github.com/samahlstrom/retake/internal/userdir"
 	"github.com/samahlstrom/retake/internal/worker"
 )
 
@@ -106,7 +107,8 @@ func parseStart(args []string) (startArgs, error) {
 	return a, nil
 }
 
-// startState is $XDG_STATE_HOME/retake/start.json: the running retake start.
+// startState is $XDG_STATE_HOME/retake/start.json (%LOCALAPPDATA%\retake\start.json on Windows): the running
+// retake start.
 type startState struct {
 	PID int    `json:"pid"`
 	URL string `json:"url"`
@@ -116,7 +118,10 @@ type startState struct {
 func startStatePath(env Env) string {
 	dir := env.Getenv("XDG_STATE_HOME")
 	if dir == "" || !filepath.IsAbs(dir) {
-		h := env.Getenv("HOME")
+		dir = userdir.Local(env.Getenv)
+	}
+	if dir == "" {
+		h := userdir.Home(env.Getenv)
 		if h == "" {
 			return ""
 		}
@@ -216,7 +221,7 @@ func startCmd(ctx context.Context, args []string, env Env) int {
 	}
 	for {
 		cfg = reloadConfig(env, loadConfig(env))
-		folder := config.FolderPath(cfg, env.Getenv("HOME"))
+		folder := config.FolderPath(cfg, userdir.Home(env.Getenv))
 		if folder == "" || !isDir(folder) {
 			if code, again := serveSetup(ctx, env, cfg, st, a, page, port, ho.phase()); !again {
 				return code
@@ -236,7 +241,7 @@ func serveSetup(ctx context.Context, env Env, cfg config.Config, st config.Setti
 	port int, ln net.Listener) (code int, again bool) {
 	cfgPath, _ := config.Path(env.Getenv)
 	done := make(chan string, 1)
-	h := setup.New(setup.Options{UI: page, Port: port, ConfigPath: cfgPath, Home: env.Getenv("HOME"),
+	h := setup.New(setup.Options{UI: page, Port: port, ConfigPath: cfgPath, Home: userdir.Home(env.Getenv),
 		Agents: func() []project.AgentProfile { return agentList(env, cfg) },
 		Try:    tryAgent(env, cfg),
 		Check: func(ctx context.Context) {
@@ -475,7 +480,7 @@ func autostartCmd(args []string, env Env) int {
 	if want != "" && want != "on" && want != "off" {
 		return usageError(env, "autostart", errors.New("say on or off (or nothing, to see which)"))
 	}
-	as := desktop.Autostart{GOOS: env.goos(), Home: env.Getenv("HOME"), ConfigHome: env.Getenv("XDG_CONFIG_HOME"),
+	as := desktop.Autostart{GOOS: env.goos(), Home: userdir.Home(env.Getenv), ConfigHome: env.Getenv("XDG_CONFIG_HOME"),
 		Exe: desktop.StableExe()}
 	if want != "" {
 		if err := as.Set(want == "on"); err != nil {

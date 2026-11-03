@@ -14,7 +14,7 @@ Status of each part is at the end of every section: **built** (in this repo, tes
 | macOS (Apple silicon and Intel) | `Retake.dmg` with one universal `Retake.app` | Drag it to Applications, open it. A menu-bar icon appears and the browser opens the setup page. | App bundle: built, untested. `.dmg`: not built (needs a Mac or a macOS CI runner for `hdiutil`); a `.zip` of the app is built instead. |
 | Any, with Node 18+ (the README's first route) | Nothing; paste one line | `npm i -g retake-cli`, then `retake`: setup opens in the browser. | Built; tested end to end on Linux (`scripts/npm-smoke.mjs`), and on every platform by the release workflow's dry run (docs/releasing.md). |
 | Linux (x86_64, arm64), macOS without Node | Nothing; paste one line | `curl -fsSL https://raw.githubusercontent.com/samahlstrom/retake/main/install.sh \| sh`, then `retake` (or **Retake** in the Linux app menu). Or `brew install samahlstrom/retake/retake`. | Built, tested against a local snapshot (install, links, menu entry, checksum refusal). The Homebrew formula: tested by `brew install` on both Mac runners in the release workflow. |
-| Windows | Not yet | | Not built (see below). |
+| Windows (x64; ARM runs it emulated) | Nothing; paste one line in PowerShell | `irm <release>/install.ps1 \| iex` (or `npm i -g retake-cli`), then open **Retake** from the Start menu (or run `retake`). | Built; CI builds the package and smoke-tests it on `windows-latest` (below). Not yet tried on a Windows desktop by a person. |
 
 **macOS is a menu-bar app, not a dock app.** Retake is a server plus a browser page; it has no window of its own, so a
 dock icon would open nothing. The menu-bar item has **Open Retake**, **Start at login** and **Quit Retake**. The
@@ -40,19 +40,43 @@ Linux: the install script unpacks the release into `~/.local/share/retake/<versi
 sudo. An AppImage would add a double-clickable file but no tray or autostart for free; it's not worth it before
 there are Linux users who aren't developers.
 
-**Windows** would need: the Go binary (already cross-compiles), `retake-edit` built on a Windows runner (it is in CI
-already), herdr's Windows build (exists upstream), an ffmpeg Windows build, a tray app (Go has pure-Win32 tray
-libraries), an installer (Inno Setup or MSIX), and a code-signing certificate (an EV certificate, about $300/yr, or
-SmartScreen warns for months). The agents (`claude`, `codex`) run on Windows, but `retake`'s worker, herdr and tmux
-paths assume a POSIX system and are untested there. Estimate: a week once there is a Windows machine to test on.
+**Windows** is a folder and a Start menu entry, not an installer. `install.ps1` at the repo's top (`irm …/install.ps1 |
+iex`; the release also carries it)
+downloads `retake_<version>_windows_amd64.zip`, checks its SHA-256 against the release's `checksums.txt`, unpacks it
+into `%LOCALAPPDATA%\Programs\retake` (an older install there is replaced file by file; a running Retake keeps going),
+adds that folder to the user's PATH and makes a **Retake** Start menu shortcut. No administrator rights, no MSI or
+MSIX: there's nothing to register. `-Uninstall` undoes it, leaving settings and videos. docs/windows.md is the
+user's page.
+
+- The shortcut and the login item (`retake autostart on`: the user's Run key) run `retakew.exe start --app`.
+  `retakew.exe` (`cmd/retakew`, built with `-H=windowsgui`) is a tiny launcher with no console window that starts
+  `retake.exe` beside it hidden, so a person never sees a console they could close by mistake. `retake.exe` stays a
+  console program for the terminal. No tray icon: Retake lives in the browser, and opening it again from the Start
+  menu finds the one that runs.
+- The release's Windows zip is made like the others: goreleaser cross-builds `retake.exe` and `retakew.exe` on Linux,
+  and `scripts/bundle-deps.sh` adds herdr, ffmpeg and `retake-edit.exe`, which the release workflow builds on
+  `windows-latest` with `scripts/build-windows.ps1 -OutDir <dir>` (it links prebuilt Skia with MSVC, so it can't be
+  cross-compiled).
+- `scripts/build-windows.ps1` without `-OutDir` builds that same package natively in one go, for CI and by hand: the
+  page, `retake.exe`, `retakew.exe`, `retake-edit.exe` and the pinned downloads (ffmpeg, herdr, the same pins as
+  `bundle-deps.sh`) in `dist/windows/`, plus `dist/retake_<version>_windows_amd64.zip` and its line in
+  `dist/checksums-windows.txt`. That zip is for testing; the release uses goreleaser's.
+- CI's `windows` job (`.github/workflows/ci.yml`) runs the Go tests and the page's unit tests on `windows-latest`,
+  builds `retake-edit`, runs `build-windows.ps1`, and smoke-tests the result (`scripts/windows-smoke.ps1`):
+  `retake start` on a scratch folder of generated clips, the page and a poster, then a typed comment sent to a fake
+  agent (a PowerShell script) that makes the next version in the background.
+- Signing: unsigned for now. Files the install line downloads aren't marked as coming from the internet, so
+  SmartScreen doesn't stop them; a zip downloaded in a browser is, and its first start shows "Windows protected your
+  PC" (More info → Run anyway). Signing is a decision below.
 
 ## What ships inside
 
 | Part | Why | Source | License |
 |---|---|---|---|
-| `retake` | The server, the page, the worker. | This repo (goreleaser). | Not decided yet. |
+| `retake` | The server, the page, the worker. | This repo (goreleaser). | Apache-2.0. |
+| `retakew` (Windows) | Starts `retake` with no console window: the Start menu entry and the login item run it. | This repo (`cmd/retakew`, `-H=windowsgui`). | Same as retake. |
 | `retake-edit` | Renders timeline projects. | This repo, built per platform on native runners (it links prebuilt Skia, so it can't be cross-compiled). | Same as retake. |
-| `herdr` | Where agents open by default: a workspace per video you can watch and type into. | Pinned upstream release binaries with their SHA-256 (`scripts/bundle-deps.sh`): v0.8.2, the version Retake's herdr support was built and tested against. | Apache-2.0: ship its LICENSE (there's no NOTICE file upstream). |
+| `herdr` | Where agents open by default: a workspace per video you can watch and type into. | Pinned upstream release binaries with their SHA-256 (`scripts/bundle-deps.sh`; on Windows `scripts/build-windows.ps1`): v0.8.2 on every platform, the version Retake's herdr support was built and tested against. Windows: `herdr-windows-x86_64.zip`, which is `herdr.exe` plus the `conpty\` folder (Microsoft's ConPTY: `conpty.dll`, `OpenConsole.exe`, `herdr-conpty.json`) that herdr loads from beside itself, so it ships whole, in that layout. | Apache-2.0: ship its LICENSE (there's no NOTICE file upstream). The ConPTY files are MIT: their LICENSE and NOTICE go in `licenses/`. |
 | `ffmpeg`, `ffprobe` | Probing, thumbnails, stills, renders. | Static builds, pinned with SHA-256 (below). | GPL (recommended) or LGPL. |
 | `retake-bundle.json`, `licenses/`, `THIRD_PARTY_NOTICES.md` | The bundle's manifest (what's inside, versions, sources) and every license text. | Written by `scripts/bundle-deps.sh`. | |
 
@@ -101,6 +125,30 @@ packages small. It bundles it instead, in each `retake-cli-<os>-<cpu>` package, 
   documents no limit; a 199 MB one was refused). `scripts/npm-pack.sh` stops above 117 MB, so a growing build fails
   at packaging, not at `npm publish`. The fix when one nears it: our own smaller ffmpeg (above), not fetching.
 
+### The npm package for Windows: `retake-cli-win32-x64`
+
+`scripts/npm-pack.sh` makes it from the release's `retake_<version>_windows_amd64.zip` (goreleaser's, above), the same
+way as the other platform packages: the programs and `retake-bundle.json` side by side in `bin/`, so Retake finds its
+own tools first, and the license files with them.
+
+```
+retake-cli-win32-x64/            os: ["win32"], cpu: ["x64"]
+  bin/retake.exe                 the server, the page, the worker
+  bin/retakew.exe                the console-less launcher (Start menu, login item)
+  bin/retake-edit.exe            the renderer
+  bin/ffmpeg.exe, bin/ffprobe.exe
+  bin/herdr.exe
+  bin/conpty/conpty.dll, bin/conpty/herdr-conpty.json,
+  bin/conpty/x64/OpenConsole.exe, bin/conpty/arm64/OpenConsole.exe   herdr's ConPTY, beside herdr.exe as it expects
+  bin/retake-bundle.json         {"bundle": 1, "version", "tools": {ffmpeg, herdr}}
+  licenses/                      ffmpeg-GPLv3.txt, ffmpeg-SOURCE.txt, ffmpeg-build-readme.txt, herdr-LICENSE.txt,
+                                 herdr-conpty-LICENSE.txt, herdr-conpty-NOTICE.md
+  THIRD_PARTY_NOTICES.md, LICENSE, README.md
+```
+
+herdr's version is the one every platform's package has (`scripts/bundle-deps.sh` and `scripts/build-windows.ps1`
+pin the same one). The arm64 `OpenConsole.exe` stays although the package is x64: `herdr-conpty.json` lists it.
+
 ## What can't be bundled: the agents
 
 Claude Code, Codex and the rest are the person's own programs with their own accounts and billing. Retake never ships
@@ -111,6 +159,9 @@ each with a copy button, then **Check again**:
 - Claude Code: `curl -fsSL https://claude.ai/install.sh | bash`, then `claude` once to sign in.
 - Codex: `curl -fsSL https://chatgpt.com/codex/install.sh | sh` (or `brew install --cask codex`), then `codex` and
   "Sign in with ChatGPT".
+- On Windows: Claude Code with `irm https://claude.ai/install.ps1 | iex` (its shell tool needs Git for Windows:
+  `winget install Git.Git`), Codex with `npm install -g @openai/codex`. Retake finds `claude.exe`, `codex.exe` and npm's
+  `.cmd` launchers on PATH.
 
 This is the one place a normie needs Terminal: paste one line, then sign in in the browser window the agent opens.
 There's no way around it short of the agent makers shipping a GUI installer for their CLI. **Test** on the setup page
@@ -156,11 +207,16 @@ Retake already survives restarts without losing agent work (docs/agents.md), so 
 3. **Where agents open by default.** The brief says herdr (bundled). For editors who never open a terminal, "in the
    background" may suit better: herdr is only useful if they open it (`herdr` in Terminal). The setup page asks
    either way; this is only the pre-selected choice.
-4. **herdr version.** v0.8.2 is pinned because Retake was built against it; upstream is at v0.9.5. Moving up needs
-   one pass over Retake's herdr commands.
+4. **herdr version, one on every platform.** v0.8.2 is pinned everywhere because Retake was built against it (it has
+   a Windows build); upstream is at v0.9.5. 0.9.x has Windows fixes Retake would benefit from (Codex and Claude Code
+   prompt submission on Windows, npm agent shims), which is a reason to move up. Moving needs one pass over Retake's
+   herdr commands and new pins in `scripts/bundle-deps.sh` and `scripts/build-windows.ps1` together.
 5. **Where releases live.** A public GitHub repo (the install script and update check read from it) or a private
    bucket. Either works; the repo also needs a name and a license first (docs/releasing.md).
-6. **Windows:** not now, or plan the week above.
+6. **Windows signing.** Unsigned works for the install line (no SmartScreen stop) but not for a zip downloaded in a
+   browser. Azure Trusted Signing (about $10 a month, needs a verifiable organization or individual identity) or an
+   OV certificate signs `retake.exe`, `retakew.exe` and `retake-edit.exe` in CI; SmartScreen reputation then builds up
+   per certificate.
 7. **The app's identifier**, `io.github.samahlstrom.retake` for now (the bundle id and the login item). It's
    hard to change after release, like the name.
 
@@ -178,5 +234,9 @@ Retake already survives restarts without losing agent work (docs/agents.md), so 
   Windows and herdr for Windows in the archives, and `.github/workflows/release.yml`, which builds every platform on
   its own runner, tests each install, drafts the GitHub release and, once it's published, publishes npm and Homebrew
   (docs/releasing.md).
+- Windows: `install.ps1` (installs a release for the user: folder, PATH, Start menu; `-Uninstall`), `cmd/retakew`
+  (the console-less launcher, in the goreleaser build), `scripts/build-windows.ps1` (`-OutDir` for the release's
+  `retake-edit.exe`, else the whole package), and CI's `windows` job with `scripts/windows-smoke.ps1`. Nothing
+  downloaded was run on Linux; CI runs it on Windows.
 - Not built: the `.dmg`, signing, starting herdr's server when none runs (to check with herdr: whether `herdr
   workspace create` starts one), the update check, an app icon.

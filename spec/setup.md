@@ -39,7 +39,9 @@ retake [--port N] [--no-open] [...]        # options without a command: retake s
 `retake autostart [on|off]` turns starting at login on or off and prints `on` or `off` (no argument: just prints it).
 macOS: `~/Library/LaunchAgents/io.github.samahlstrom.retake.plist`, which runs `open -a <the app>` at login (or
 `retake start --app` when not in an app). Linux: `$XDG_CONFIG_HOME/autostart/retake.desktop` running `retake start
---app`.
+--app`. Windows: the value `Retake` of `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` (no administrator
+needed), `"<folder>\retakew.exe" start --app`: `retakew.exe` is the small launcher next to `retake.exe` that runs it
+without a console window (`retake.exe` itself when it isn't there).
 
 ## Retake's own tools come first
 
@@ -60,14 +62,20 @@ done`) only when the first `retake` on `PATH`, leaving out the bundle folder, is
 install.sh link to it, or a build from source. Otherwise it gives this binary's full path. The bundle folder doesn't
 count because an agent in herdr or tmux, or the person's own shell, doesn't have it on `PATH`. With npm, `retake` on
 `PATH` is the node launcher (`npm/`), so agents get the Go binary inside the platform package by its full path: it
-works whatever node version manager is (or isn't) active, and no node starts on each call.
+works whatever node version manager is (or isn't) active, and no node starts on each call. On Windows, where an
+agent's shell may be PowerShell, cmd or Git Bash, each quoting a path its own way, the prompt says plain `retake` and
+the agent gets this binary's folder first on its `PATH` instead (in the background, and in herdr through the
+session's `--env PATH=…`; spec/automation.md, "Agents outlive Retake").
 
 **The login shell's `PATH`.** An app started from Finder or a desktop menu gets a short `PATH` (`/usr/bin:/bin:…`),
 so `claude` in `~/.local/bin` or `codex` in `/opt/homebrew/bin` would not be found. With `--app`, and on every
 **Check again**, Retake runs `$SHELL -ilc` (else `/bin/sh -lc`) to print `PATH` (5 s at most, no input), and makes its
 own `PATH`: the bundle folder, the shell's, its own, then these when they exist: `~/.local/bin`, `/opt/homebrew/bin`,
 `/usr/local/bin`, `~/.npm-global/bin`, `~/.bun/bin`, `~/.volta/bin`, `~/.claude/local`. Each folder once, in that
-order.
+order. Windows has no login shell: a program started from the Start menu already has the person's `PATH`, which gains
+`%USERPROFILE%\.local\bin` (Claude Code's `claude.exe`), `%APPDATA%\npm` (npm's `claude.cmd`, `codex.cmd`),
+`%USERPROFILE%\.bun\bin` and `%LOCALAPPDATA%\Programs\retake` when they exist. A program next to `retake.exe` is
+found by its name without `.exe`.
 
 ## The setup page
 

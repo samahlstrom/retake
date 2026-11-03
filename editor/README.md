@@ -26,6 +26,12 @@ cargo test --workspace                       # needs ffmpeg and ffprobe on PATH
 cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --check
 ```
 
+On Windows it builds the same way with the MSVC toolchain (`x86_64-pc-windows-msvc`; skia-safe downloads its
+prebuilt Skia for it), into `target\release\retake-edit.exe`; CI's `windows` job builds it there, and
+`scripts/build-windows.ps1` ships it. It needs `ffmpeg.exe` and `ffprobe.exe` on PATH (Retake's Windows package has
+them). Files Retake's server may be reading (the timeline, a playlist) are replaced with a short retry on Windows,
+where a file another program has open can't be replaced for that moment (`retake_timeline::fsx::replace`).
+
 ```sh
 retake-edit validate   <timeline.json>                     # schema, ids, references, anchors
 retake-edit resolve    <timeline.json>                     # anchors → seconds and frames, units

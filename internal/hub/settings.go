@@ -39,6 +39,9 @@ type LocalSettings struct {
 	SetFolder func(dir string) error
 	// Try runs an agent's test (worker.TryAgent); nil: no Test.
 	Try func(ctx context.Context, id string) worker.TryResult
+	// Places are where agents can run on this computer (config.Open*: herdr, tmux when it's installed, background);
+	// nil: all three.
+	Places func() []string
 }
 
 // SettingsView is GET api/settings.
@@ -51,6 +54,8 @@ type SettingsView struct {
 	// OpenIn is where agents run (background, herdr, tmux). On the team server it's each computer's own setting.
 	OpenIn         string `json:"open_in"`
 	OpenInEditable bool   `json:"open_in_editable"`
+	// OpenInChoices are the places to offer here, in order: tmux only where it's installed (never on Windows).
+	OpenInChoices []string `json:"open_in_choices"`
 	// Extensions: the installed ones, on or off. Loaded is whether it's in effect now (a change applies at restart).
 	Extensions         []SettingsExt  `json:"extensions"`
 	ExtensionsEditable bool           `json:"extensions_editable"`
@@ -275,6 +280,13 @@ func (f *Folder) settingsView(ls *LocalSettings) (SettingsView, error) {
 		Test: ls.Try != nil}
 	if v.OpenIn == "" {
 		v.OpenIn = config.OpenBackground
+	}
+	v.OpenInChoices = []string{config.OpenHerdr, config.OpenTmux, config.OpenBackground}
+	if ls.Places != nil {
+		v.OpenInChoices = ls.Places()
+	}
+	if !slices.Contains(v.OpenInChoices, v.OpenIn) {
+		v.OpenInChoices = append(v.OpenInChoices, v.OpenIn) // what the config says, even if it's not here now
 	}
 	v.Sharing = sharingView(c, f.opts.Share.Cloudflared)
 	if ls.Extensions != nil {

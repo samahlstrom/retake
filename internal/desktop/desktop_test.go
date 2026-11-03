@@ -2,6 +2,7 @@ package desktop
 
 import (
 	"context"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -65,6 +66,9 @@ func TestUseBundlePutsItFirst(t *testing.T) {
 }
 
 func TestAppArgs(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("macOS app paths: Windows' filepath writes them with backslashes")
+	}
 	exe := "/Applications/Retake.app/Contents/MacOS/Retake"
 	if AppBundle(exe) != "/Applications/Retake.app" || AppBundle("/usr/local/bin/retake") != "" ||
 		AppBundle("/x/Contents/MacOS/Retake") != "" {
@@ -94,14 +98,18 @@ func TestFindPrefersTheCopyNextToRetake(t *testing.T) {
 		t.Skip("no executable path")
 	}
 	name := "retake-test-tool-" + filepath.Base(t.TempDir())
+	file := name // the file; Windows finds name as name.exe
+	if runtime.GOOS == "windows" {
+		file += ".exe"
+	}
 	elsewhere := t.TempDir()
-	write(t, filepath.Join(elsewhere, name), "#!/bin/sh\n", 0o755)
+	write(t, filepath.Join(elsewhere, file), "#!/bin/sh\n", 0o755)
 	t.Setenv("PATH", elsewhere)
 	p, bundled, err := Find(name)
-	if err != nil || bundled || p != filepath.Join(elsewhere, name) {
+	if err != nil || bundled || p != filepath.Join(elsewhere, file) {
 		t.Errorf("on PATH: %q %v %v", p, bundled, err)
 	}
-	next := filepath.Join(filepath.Dir(exe), name)
+	next := filepath.Join(filepath.Dir(exe), file)
 	write(t, next, "#!/bin/sh\n", 0o755)
 	t.Cleanup(func() { _ = os.Remove(next) })
 	p, bundled, err = Find(name)
@@ -111,6 +119,9 @@ func TestFindPrefersTheCopyNextToRetake(t *testing.T) {
 }
 
 func TestMergePath(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix folders; Windows' common folders are TestCommonDirsWindows")
+	}
 	home := "/home/ana"
 	exists := func(d string) bool { return d == "/home/ana/.local/bin" || d == "/opt/homebrew/bin" }
 	sep := string(os.PathListSeparator)
@@ -194,12 +205,63 @@ func TestAutostart(t *testing.T) {
 		!strings.Contains(string(b), "<key>RunAtLoad</key>") {
 		t.Errorf("plist at %s:\n%s", p, b)
 	}
-	if _, err := (Autostart{GOOS: "windows", Home: home}).Path(); err == nil {
-		t.Error("windows has a path")
+}
+
+// fakeRun is a Run key in memory.
+type fakeRun map[string]string
+
+func (f fakeRun) Value(name string) (string, error) {
+	v, ok := f[name]
+	if !ok {
+		return "", fs.ErrNotExist
+	}
+	return v, nil
+}
+func (f fakeRun) SetValue(name, value string) error { f[name] = value; return nil }
+func (f fakeRun) DeleteValue(name string) error     { delete(f, name); return nil }
+
+// On Windows it's the Run key's Retake value: retakew.exe (no console window) when it's next to retake.exe.
+func TestAutostartWindows(t *testing.T) {
+	dir := t.TempDir()
+	exe := filepath.Join(dir, "retake.exe")
+	write(t, exe, "", 0o755)
+	run := fakeRun{}
+	w := Autostart{GOOS: "windows", Exe: exe, Run: run}
+	if p, err := w.Path(); err != nil || p != RunKeyPath+`\Retake` {
+		t.Fatalf("path %q %v", p, err)
+	}
+	if w.On() {
+		t.Error("on before Set")
+	}
+	if err := w.Set(true); err != nil || !w.On() || run["Retake"] != `"`+exe+`" start --app` {
+		t.Fatalf("Set(true): %v %q", err, run["Retake"])
+	}
+	write(t, filepath.Join(dir, "retakew.exe"), "", 0o755)
+	if err := w.Set(true); err != nil || run["Retake"] != `"`+filepath.Join(dir, "retakew.exe")+`" start --app` {
+		t.Fatalf("with retakew.exe: %v %q", err, run["Retake"])
+	}
+	if err := w.Set(false); err != nil || w.On() || len(run) != 0 {
+		t.Fatalf("Set(false): %v %v", err, run)
+	}
+	if err := w.Set(false); err != nil {
+		t.Errorf("off twice: %v", err)
+	}
+}
+
+func TestCommonDirsWindows(t *testing.T) {
+	env := map[string]string{"APPDATA": filepath.Join("U", "AppData", "Roaming"), "LOCALAPPDATA": filepath.Join("U", "AppData", "Local")}
+	got := commonDirs("windows", "U", func(k string) string { return env[k] })
+	want := []string{filepath.Join("U", ".local", "bin"), filepath.Join("U", "AppData", "Roaming", "npm"),
+		filepath.Join("U", ".bun", "bin"), filepath.Join("U", "AppData", "Local", "Programs", "retake")}
+	if !slices.Equal(got, want) {
+		t.Errorf("commonDirs = %v, want %v", got, want)
 	}
 }
 
 func TestStableExe(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("install.sh's symbolic links; on Windows retake's own folder is on PATH (install.ps1)")
+	}
 	root := t.TempDir()
 	install := filepath.Join(root, "share", "retake", "0.2.0")
 	exe := filepath.Join(install, "retake")

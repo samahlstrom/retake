@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -302,7 +303,7 @@ func TestSetExtension(t *testing.T) {
 				t.Errorf("file:\n%s\nwant:\n%s", b, tc.after)
 			}
 			st, _ := os.Stat(p)
-			if want := map[bool]os.FileMode{true: 0o600, false: 0o640}[tc.before == ""]; st.Mode().Perm() != want {
+			if want := map[bool]os.FileMode{true: 0o600, false: 0o640}[tc.before == ""]; runtime.GOOS != "windows" && st.Mode().Perm() != want { // Windows has no mode bits
 				t.Errorf("mode %v", st.Mode())
 			}
 			if _, _, err := Load(p); err != nil {

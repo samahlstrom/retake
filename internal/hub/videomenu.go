@@ -302,13 +302,14 @@ func (f *Folder) moveToTrash(w http.ResponseWriter, r *http.Request, fp *folderP
 		f.rescan(true)
 	}()
 	moved, err := trash.Move(root, f.opts.Trash)
+	bin := f.opts.Trash.Name() // the Trash, or the Recycle Bin on Windows
 	if errors.Is(err, trash.ErrOtherDisk) {
-		writeJSON(w, r, http.StatusConflict, map[string]string{"error": "Can't move it to the Trash from this disk"})
+		writeJSON(w, r, http.StatusConflict, map[string]string{"error": "Can't move it to the " + bin + " from this disk"})
 		return
 	}
 	if err != nil {
 		f.logf("move to trash: %v", err)
-		writeJSON(w, r, http.StatusInternalServerError, map[string]string{"error": "Couldn't move it to the Trash"})
+		writeJSON(w, r, http.StatusInternalServerError, map[string]string{"error": "Couldn't move it to the " + bin})
 		return
 	}
 	var b [12]byte
@@ -335,7 +336,7 @@ func (f *Folder) restore(w http.ResponseWriter, r *http.Request, id string) {
 			writeJSON(w, r, http.StatusConflict, map[string]string{"error": "Something else is in its place now"})
 			return
 		}
-		writeJSON(w, r, http.StatusNotFound, map[string]string{"error": "It isn't in the Trash any more"})
+		writeJSON(w, r, http.StatusNotFound, map[string]string{"error": "It isn't in the " + f.opts.Trash.Name() + " any more"})
 		return
 	}
 	f.menus.trashMu.Lock()
@@ -377,6 +378,9 @@ func RevealDefault(dir string) error {
 		name, args = "explorer", []string{"/select," + dir}
 	}
 	cmd := exec.Command(name, args...) //nolint:gosec // the platform's opener, on a folder of the home
+	if name == "explorer" {
+		explorerLine(cmd, dir) // explorer reads its own command line: /select,"<folder>", not Go's quoting
+	}
 	if err := cmd.Start(); err != nil {
 		return err
 	}

@@ -103,12 +103,14 @@ func TestFlagDirsAndFolders(t *testing.T) {
 	if got := DataDir("/data"); got != filepath.Join("/data", "extensions") {
 		t.Errorf("DataDir = %q", got)
 	}
-	xdg := map[string]string{"XDG_CONFIG_HOME": "/cfg", "HOME": "/home/u"}
-	if got, _ := UserDir(func(k string) string { return xdg[k] }); got != filepath.Join("/cfg", "retake", "extensions") {
+	// An absolute path on this system: /cfg, or C:\cfg on Windows.
+	abs := func(p string) string { return filepath.Join(filepath.VolumeName(os.TempDir()), filepath.FromSlash(p)) }
+	xdg := map[string]string{"XDG_CONFIG_HOME": abs("/cfg"), "HOME": abs("/home/u")}
+	if got, _ := UserDir(func(k string) string { return xdg[k] }); got != filepath.Join(abs("/cfg"), "retake", "extensions") {
 		t.Errorf("UserDir = %q", got)
 	}
-	home := map[string]string{"XDG_CONFIG_HOME": "relative", "HOME": "/home/u"}
-	if got, _ := UserDir(func(k string) string { return home[k] }); got != filepath.Join("/home/u", ".config", "retake", "extensions") {
+	home := map[string]string{"XDG_CONFIG_HOME": "relative", "HOME": abs("/home/u")}
+	if got, _ := UserDir(func(k string) string { return home[k] }); got != filepath.Join(abs("/home/u"), ".config", "retake", "extensions") {
 		t.Errorf("UserDir from HOME = %q", got)
 	}
 }

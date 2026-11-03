@@ -695,6 +695,7 @@ func (f *Folder) apiHome(w http.ResponseWriter, r *http.Request, role team.Role,
 	res.Machines = []home.Machine{}
 	if role == team.Owner {
 		res.Folder = f.opts.Dir
+		res.Trash = f.opts.Trash.Name()
 		res.Machines = f.machines()
 	}
 	writeJSON(w, r, http.StatusOK, res)

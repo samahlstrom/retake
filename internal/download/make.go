@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/samahlstrom/retake/internal/bridge"
+	"github.com/samahlstrom/retake/internal/userdir"
 )
 
 // Encoders a download's video can be encoded with (the [render] encoder values; qsv and vaapi encode with x264 here).
@@ -64,7 +65,10 @@ func (m *Manager) autoEncoder() string {
 	if file == "" {
 		dir := m.getenv("XDG_CACHE_HOME")
 		if dir == "" || !filepath.IsAbs(dir) {
-			home := m.getenv("HOME")
+			dir = userdir.Local(m.getenv) // Windows: %LOCALAPPDATA%
+		}
+		if dir == "" {
+			home := userdir.Home(m.getenv)
 			if home == "" {
 				return EncoderX264
 			}

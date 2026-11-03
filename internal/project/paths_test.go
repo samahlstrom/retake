@@ -11,9 +11,12 @@ func TestStoredPathsAreRelativeToTheRoot(t *testing.T) {
 	s, _ := newStore(t)
 	root := s.Root()
 	inside := filepath.Join(root, "v6", "demo_v6.review", "snaps", "01.png")
+	// An absolute path outside the project, on the root's own drive (/elsewhere/snap.png on Unix, C:\elsewhere\… on
+	// Windows, where /elsewhere isn't absolute).
+	elsewhere := filepath.Join(filepath.VolumeName(root)+string(filepath.Separator), "elsewhere", "snap.png")
 	for _, c := range []struct{ in, want string }{
 		{inside, "v6/demo_v6.review/snaps/01.png"},
-		{"/elsewhere/snap.png", "/elsewhere/snap.png"},         // outside: kept as given
+		{elsewhere, elsewhere},                                 // outside: kept as given
 		{"v6/already/relative.png", "v6/already/relative.png"}, // relative: as it is
 		{"", ""},
 	} {
@@ -24,7 +27,7 @@ func TestStoredPathsAreRelativeToTheRoot(t *testing.T) {
 	if got := s.Abs("v6/demo_v6.review/snaps/01.png"); got != inside {
 		t.Errorf("Abs = %q, want %q", got, inside)
 	}
-	if got := s.Abs("/elsewhere/snap.png"); got != "/elsewhere/snap.png" {
+	if got := s.Abs(elsewhere); got != elsewhere {
 		t.Errorf("Abs of an absolute path = %q", got)
 	}
 

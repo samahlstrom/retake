@@ -1,7 +1,7 @@
 # Configuration
 
 `retake` reads one optional file: `$XDG_CONFIG_HOME/retake/config.toml`, which is `~/.config/retake/config.toml` by
-default. Every key is optional. Command-line flags override the file. An unknown key is reported as a warning and
+default (on Windows `%APPDATA%\retake\config.toml`). Every key is optional. Command-line flags override the file. An unknown key is reported as a warning and
 otherwise ignored.
 
 ```toml

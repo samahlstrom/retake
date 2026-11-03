@@ -4,6 +4,7 @@
   import { AlertDialog } from 'bits-ui';
   import { trashLine, type TrashInfo, type VideoTarget } from '../../lib/video-menu';
   import { moveToTrash, trashInfo } from '../../lib/video-menu-api';
+  import { menus } from './menus.svelte';
 
   let { target, onclose, onmoved }: { target: VideoTarget; onclose: () => void; onmoved: (id: string) => void } =
     $props();
@@ -32,7 +33,7 @@
       onmoved(r.id);
       onclose();
     } catch (e) {
-      error = e instanceof Error ? e.message : 'Couldn’t move it to the Trash';
+      error = e instanceof Error ? e.message : `Couldn’t move it to the ${menus.bin}`;
     } finally {
       busy = false;
     }
@@ -56,7 +57,7 @@
       }}
     >
       <AlertDialog.Title class="vm-title"
-        >Move <span class="vm-what">{target.title}</span> to the Trash?</AlertDialog.Title
+        >Move <span class="vm-what">{target.title}</span> to the {menus.bin}?</AlertDialog.Title
       >
       <AlertDialog.Description class="vm-desc">
         {#if info}
@@ -65,7 +66,7 @@
           {#if info.ok}
             <span class="vm-note"
               >Its versions, comments and the agent’s work go with it. Undo is there for a few seconds; after that,
-              restore it from the Trash.</span
+              restore it from the {menus.bin}.</span
             >
           {:else}
             <span class="vm-err">{info.why}</span>
@@ -80,7 +81,7 @@
         >
         {#if !info || info.ok}
           <AlertDialog.Action class="vm-btn danger-fill" disabled={!info || busy} onclick={move}
-            >{busy ? 'Moving…' : 'Move to Trash'}</AlertDialog.Action
+            >{busy ? 'Moving…' : `Move to ${menus.bin}`}</AlertDialog.Action
           >
         {/if}
       </div>

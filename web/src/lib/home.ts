@@ -73,6 +73,8 @@ export interface HomeResponse {
   machines?: Machine[];
   /** The signed-in person on a hosted server (the team server). Its presence means hosted mode. */
   user?: { email: string; name: string };
+  /** What this computer calls its trash (a local home's owner): "Trash", or "Recycle Bin" on Windows. */
+  trash?: string;
 }
 
 /** Hosted (the team server, signed in): an owner there connects their computer from the home when none is online.
@@ -170,6 +172,7 @@ export function normalizeHome(body: unknown): HomeResponse {
   const tree = normalizeNode(b.tree, byName, 0) ?? { title, path: '', project: false, videos: projects, children: [] };
   tree.title ||= title;
   const result: HomeResponse = { title, folder: str(b.folder) || undefined, role: str(b.role), projects, tree };
+  if (str(b.trash)) result.trash = str(b.trash);
   if (b.user && typeof b.user === 'object') {
     const u = b.user as Record<string, unknown>;
     result.user = { email: str(u.email), name: str(u.name) };

@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
@@ -69,6 +68,7 @@ printf '{"type":"result","subtype":"success","is_error":false,"result":"Done.","
 // chatFixture is a folder with one idea, jump (its document, an image and footage), and the fake Claude Code.
 func chatFixture(t *testing.T) (dir, root, agent string) {
 	t.Helper()
+	testmedia.NeedShell(t)
 	testmedia.Need(t)
 	scratch, err := filepath.Abs("../../.retake-work")
 	if err == nil {
@@ -100,7 +100,7 @@ func chatFixture(t *testing.T) (dir, root, agent string) {
 func killHung(fake string) {
 	if b, err := os.ReadFile(filepath.Join(fake, "hang.pid")); err == nil {
 		if pid, err := strconv.Atoi(strings.TrimSpace(string(b))); err == nil {
-			_ = syscall.Kill(pid, syscall.SIGKILL)
+			killPID(pid)
 		}
 	}
 }
@@ -230,7 +230,7 @@ func chatStory(t *testing.T, c client, root, fake string, log fmt.Stringer) {
 	}
 	b, _ = os.ReadFile(filepath.Join(fake, "hang.pid"))
 	pid, _ := strconv.Atoi(strings.TrimSpace(string(b)))
-	for deadline := time.Now().Add(10 * time.Second); pid > 0 && syscall.Kill(pid, 0) == nil; time.Sleep(50 * time.Millisecond) {
+	for deadline := time.Now().Add(10 * time.Second); pid > 0 && pidAlive(pid); time.Sleep(50 * time.Millisecond) {
 		if time.Now().After(deadline) {
 			t.Fatal("the turn's process lives on after Stop")
 		}

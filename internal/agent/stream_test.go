@@ -39,6 +39,7 @@ esac
 
 func streamProject(t *testing.T) (p *Project, mark, log string) {
 	t.Helper()
+	testmedia.NeedShell(t)
 	testmedia.Need(t)
 	p, mark = timelineProject(t)
 	bin := filepath.Join(t.TempDir(), "retake-edit")

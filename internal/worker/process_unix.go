@@ -30,8 +30,26 @@ func lockProject(path string) (func(), error) {
 // worker (spec/automation.md, "Agents outlive Retake"), and the group is how a person's stop ends it with its children.
 func detach(c *exec.Cmd) { c.SysProcAttr = &syscall.SysProcAttr{Setsid: true} }
 
+// startOwn starts c detached (detach). It returns c.
+func startOwn(c *exec.Cmd) (*exec.Cmd, error) {
+	detach(c)
+	return c, c.Start()
+}
+
+// track does nothing here: the process group detach made is the agent's group.
+func track(int, string) {}
+
+// withSelfOnPath is env as it is: retake's own folder is on an agent's PATH as the person set it up.
+func withSelfOnPath(env []string) []string { return env }
+
+// sessionEnv is the variables a herdr or tmux session gets on creation: the profile's own, as they are.
+func sessionEnv(profile []string) []string { return profile }
+
 func stopGroup(pid int) error { return syscall.Kill(-pid, syscall.SIGTERM) }
-func killGroup(pid int)       { _ = syscall.Kill(-pid, syscall.SIGKILL) }
+
+// killGroup kills what is left of the process group led by pid. The group outlives its leader, and its id isn't
+// reused while it has members, so start isn't needed here.
+func killGroup(pid int, _ string) { _ = syscall.Kill(-pid, syscall.SIGKILL) }
 
 // procStart is when process pid started, as the system says it, so a reused pid is never taken for it: on Linux the
 // boot's id and its start in clock ticks after boot (/proc/<pid>/stat), elsewhere ps's lstart. "" when there is no such
@@ -80,9 +98,9 @@ func endGroup(pid int, start string) {
 	}
 	for deadline := time.Now().Add(3 * time.Second); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
 		if procStart(pid) != start {
-			killGroup(pid) // what it left in its group
+			killGroup(pid, start) // what it left in its group
 			return
 		}
 	}
-	killGroup(pid)
+	killGroup(pid, start)
 }

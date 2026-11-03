@@ -122,7 +122,7 @@
               class="menu-sep"
             />{/if}
           <DropdownMenu.Item class="menu-item danger" onSelect={() => (menus.trash = target)}
-            >Move to Trash…</DropdownMenu.Item
+            >Move to {menus.bin}…</DropdownMenu.Item
           >
         {/if}
       </DropdownMenu.Content>

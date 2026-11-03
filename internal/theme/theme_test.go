@@ -55,13 +55,15 @@ func TestDir(t *testing.T) {
 		}
 	}
 	getenv := func(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
-	if d, _ := LocalDir(getenv(map[string]string{"XDG_CONFIG_HOME": "/x/conf", "HOME": "/h"})); d != "/x/conf/retake/theme" {
+	// An absolute path on this system: /x/conf, or C:\x\conf on Windows.
+	abs := func(p string) string { return filepath.Join(filepath.VolumeName(os.TempDir()), filepath.FromSlash(p)) }
+	if d, _ := LocalDir(getenv(map[string]string{"XDG_CONFIG_HOME": abs("/x/conf"), "HOME": abs("/h")})); d != filepath.Join(abs("/x/conf"), "retake", "theme") {
 		t.Errorf("LocalDir with XDG = %q", d)
 	}
-	if d, _ := LocalDir(getenv(map[string]string{"XDG_CONFIG_HOME": "relative", "HOME": "/h"})); d != "/h/.config/retake/theme" {
+	if d, _ := LocalDir(getenv(map[string]string{"XDG_CONFIG_HOME": "relative", "HOME": abs("/h")})); d != filepath.Join(abs("/h"), ".config", "retake", "theme") {
 		t.Errorf("LocalDir without an absolute XDG = %q", d)
 	}
-	if d := HostedDir("/data"); d != "/data/theme" {
+	if d := HostedDir("/data"); d != filepath.Join("/data", "theme") {
 		t.Errorf("HostedDir = %q", d)
 	}
 }

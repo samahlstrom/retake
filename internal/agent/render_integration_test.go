@@ -22,6 +22,7 @@ func TestPushRenderWithRetakeEdit(t *testing.T) {
 	if testing.Short() {
 		t.Skip("renders the demo")
 	}
+	testmedia.NeedShell(t) // make-media.sh runs with bash
 	testmedia.Need(t)
 	repo, _ := filepath.Abs(filepath.Join("..", ".."))
 	ed := bridge.Editor{Dir: repo, Exe: filepath.Join(repo, "bin", "retake")}

@@ -17,6 +17,7 @@ import (
 
 	"github.com/samahlstrom/retake/internal/family"
 	"github.com/samahlstrom/retake/internal/home"
+	"github.com/samahlstrom/retake/internal/testmedia"
 )
 
 const fakeTimeline = `{"schema":"timeline/0.1","id":"t","rev":1,"format":{"size":[64,36],"fps":12,"sample_rate":48000},` +
@@ -28,6 +29,7 @@ var jpegBytes = string([]byte{0xff, 0xd8, 0xff, 0xe0, 0, 16, 'J', 'F', 'I', 'F',
 // browser (here: the form's POST), and retake connect, with the line the page shows, puts the folder's timeline
 // projects on the server and runs a worker for each (with a fake agent and renderer). Footage stays here.
 func TestConnectRegistersProjectsAndRunsWorkers(t *testing.T) {
+	testmedia.NeedShell(t)
 	w := newWorld(t)
 	data := filepath.Join(w.root, "data")
 	base, session, line, done := hosted(t, w, data)

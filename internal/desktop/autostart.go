@@ -11,24 +11,40 @@ import (
 )
 
 // Autostart is starting Retake at login (spec/setup.md, `retake autostart`): a LaunchAgent on macOS, an XDG autostart
-// entry on Linux.
+// entry on Linux, a value of the Run key on Windows.
 type Autostart struct {
 	GOOS       string // runtime.GOOS
 	Home       string // the home folder
 	ConfigHome string // $XDG_CONFIG_HOME, "" for ~/.config
 	Exe        string // the retake binary
+	// Run is the person's Run key on Windows (RunKeyPath); nil = this computer's registry.
+	Run RunKey
 }
 
-// Path is the file that turns it on.
+// RunKey is the values of the Run key: the programs Windows starts when the person signs in.
+type RunKey interface {
+	Value(name string) (string, error) // fs.ErrNotExist when it has none of that name
+	SetValue(name, value string) error
+	DeleteValue(name string) error // nil when it had none
+}
+
+// RunKeyPath is the Run key Retake's value is in on Windows, and RunValue its name.
+const (
+	RunKeyPath = `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`
+	RunValue   = "Retake"
+)
+
+// Path is the file that turns it on (on Windows, the registry value).
 func (a Autostart) Path() (string, error) {
+	if a.GOOS == "windows" {
+		return RunKeyPath + `\` + RunValue, nil
+	}
 	if a.Home == "" {
 		return "", errors.New("no home folder")
 	}
 	switch a.GOOS {
 	case "darwin":
 		return filepath.Join(a.Home, "Library", "LaunchAgents", AppID+".plist"), nil
-	case "windows":
-		return "", errors.New("starting at login isn't supported on Windows yet")
 	}
 	cfg := a.ConfigHome
 	if cfg == "" || !filepath.IsAbs(cfg) {
@@ -39,6 +55,10 @@ func (a Autostart) Path() (string, error) {
 
 // On reports whether it's turned on.
 func (a Autostart) On() bool {
+	if a.GOOS == "windows" {
+		v, err := a.runKey().Value(RunValue)
+		return err == nil && v != ""
+	}
 	p, err := a.Path()
 	if err != nil {
 		return false
@@ -49,6 +69,15 @@ func (a Autostart) On() bool {
 
 // Set turns it on (writing the file) or off (removing it).
 func (a Autostart) Set(on bool) error {
+	if a.GOOS == "windows" {
+		if !on {
+			return a.runKey().DeleteValue(RunValue)
+		}
+		if a.Exe == "" {
+			return errors.New("can't find the retake program")
+		}
+		return a.runKey().SetValue(RunValue, a.runCommand())
+	}
 	p, err := a.Path()
 	if err != nil {
 		return err
@@ -98,6 +127,26 @@ func (a Autostart) content() string {
 	}
 	return "[Desktop Entry]\nType=Application\nName=Retake\nComment=Review videos with an AI agent\n" +
 		"Exec=" + desktopQuote(a.Exe) + " start --app\nTerminal=false\nX-GNOME-Autostart-enabled=true\n"
+}
+
+func (a Autostart) runKey() RunKey {
+	if a.Run != nil {
+		return a.Run
+	}
+	return systemRunKey()
+}
+
+// runCommand is the Run value: retakew.exe next to retake.exe (Retake without a console window), else retake.exe,
+// with start --app.
+func (a Autostart) runCommand() string {
+	exe := a.Exe
+	if i := strings.LastIndexAny(exe, `\/`); i >= 0 {
+		w := exe[:i+1] + "retakew.exe"
+		if st, err := os.Stat(w); err == nil && st.Mode().IsRegular() {
+			exe = w
+		}
+	}
+	return `"` + exe + `" start --app`
 }
 
 // desktopQuote quotes an argument for a .desktop file's Exec line when it needs it.

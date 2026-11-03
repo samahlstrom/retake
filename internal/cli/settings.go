@@ -2,9 +2,11 @@ package cli
 
 import (
 	"github.com/samahlstrom/retake/internal/config"
+	"github.com/samahlstrom/retake/internal/desktop"
 	"github.com/samahlstrom/retake/internal/ext"
 	"github.com/samahlstrom/retake/internal/hub"
 	"github.com/samahlstrom/retake/internal/project"
+	"github.com/samahlstrom/retake/internal/userdir"
 )
 
 // localSettings is what retake open <folder>'s settings page reads and writes (spec/home.md, "Settings"): the config
@@ -17,8 +19,18 @@ func localSettings(env Env, cfg config.Config, themeDir string, flagDirs []strin
 	return &hub.LocalSettings{
 		ConfigPath: path,
 		ThemeDir:   themeDir,
-		Home:       env.Getenv("HOME"),
+		Home:       userdir.Home(env.Getenv),
 		Try:        tryAgent(env, cfg),
+		Places: func() []string {
+			find := env.Find
+			if find == nil {
+				find = desktop.Find
+			}
+			if _, _, err := find("tmux"); err != nil {
+				return []string{config.OpenHerdr, config.OpenBackground}
+			}
+			return []string{config.OpenHerdr, config.OpenTmux, config.OpenBackground}
+		},
 		Agents: func() []project.AgentProfile {
 			var out []project.AgentProfile
 			for _, p := range agentProfiles(env, reloadConfig(env, cfg)) {

@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -271,9 +272,11 @@ func TestBackgroundAgentOutlivesItsWorker(t *testing.T) {
 	if proc.Start == "" || !proc.alive() {
 		t.Fatalf("no identity for the agent: %+v", proc)
 	}
-	if sid, err := exec.Command("ps", "-o", "sid=", "-p", fmt.Sprint(proc.PID)).Output(); err != nil ||
-		strings.TrimSpace(string(sid)) != fmt.Sprint(proc.PID) {
-		t.Fatalf("the agent isn't in a session of its own: %q %v", sid, err)
+	if runtime.GOOS != "windows" { // Windows has no sessions to look at: the agent has a console and a job of its own
+		if sid, err := exec.Command("ps", "-o", "sid=", "-p", fmt.Sprint(proc.PID)).Output(); err != nil ||
+			strings.TrimSpace(string(sid)) != fmt.Sprint(proc.PID) {
+			t.Fatalf("the agent isn't in a session of its own: %q %v", sid, err)
+		}
 	}
 	stop()
 	time.Sleep(200 * time.Millisecond)
@@ -412,24 +415,64 @@ func TestChatAgentProcess(t *testing.T) {
 	os.Exit(1)
 }
 
-// TestProcessIdentity: a process is known by its pid and start time, so a pid reused by another process isn't it.
+// TestSleepingProcess is a stand-in agent for TestProcessIdentity: with $SLEEP_PIDS set it starts one more of itself
+// (its child, which writes its pid there too) and sleeps.
+func TestSleepingProcess(t *testing.T) {
+	pids := os.Getenv("SLEEP_PIDS")
+	if pids == "" {
+		return
+	}
+	f, err := os.OpenFile(pids, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		os.Exit(1)
+	}
+	_, _ = fmt.Fprintf(f, "%d %s\n", os.Getpid(), procStart(os.Getpid()))
+	_ = f.Close()
+	if os.Getenv("SLEEP_CHILD") == "" {
+		child := exec.Command(os.Args[0], "-test.run=^TestSleepingProcess$")
+		child.Env = append(os.Environ(), "SLEEP_CHILD=1")
+		if child.Start() != nil {
+			os.Exit(1)
+		}
+	}
+	time.Sleep(60 * time.Second)
+	os.Exit(0)
+}
+
+// TestProcessIdentity: a detached agent is known by its pid and start time, so a pid reused by another process isn't
+// it; and ending it ends what it started too (its process group, or on Windows its job).
 func TestProcessIdentity(t *testing.T) {
-	cmd := exec.Command("sleep", "30")
-	detach(cmd)
-	if err := cmd.Start(); err != nil {
+	bin, err := os.Executable()
+	if err != nil {
 		t.Fatal(err)
 	}
+	pids := filepath.Join(t.TempDir(), "pids")
+	cmd := exec.Command(bin, "-test.run=^TestSleepingProcess$")
+	cmd.Env = append(os.Environ(), "SLEEP_PIDS="+pids)
+	if cmd, err = startOwn(cmd); err != nil {
+		t.Fatal(err)
+	}
+	p := &agentProc{PID: cmd.Process.Pid, Start: procStart(cmd.Process.Pid)}
+	track(p.PID, p.Start)
 	done := make(chan struct{})
 	go func() { _ = cmd.Wait(); close(done) }()
-	p := &agentProc{PID: cmd.Process.Pid, Start: procStart(cmd.Process.Pid)}
 	if p.Start == "" || !p.alive() {
 		t.Fatalf("%+v", p)
 	}
+	var child agentProc
+	waitFor(t, "the child", &syncLog{}, func() bool {
+		ls := lines(t, pids)
+		if len(ls) < 2 {
+			return false
+		}
+		_, err := fmt.Sscanf(ls[1], "%d %s", &child.PID, &child.Start)
+		return err == nil
+	})
 	if (&agentProc{PID: p.PID, Start: p.Start + "0"}).alive() {
 		t.Fatal("another start time counts as the same process")
 	}
 	endGroup(p.PID, p.Start+"0") // not that process: nothing happens
-	if !p.alive() {
+	if !p.alive() || !child.alive() {
 		t.Fatal("ended a process that wasn't the one recorded")
 	}
 	endGroup(p.PID, p.Start)
@@ -437,6 +480,7 @@ func TestProcessIdentity(t *testing.T) {
 	if p.alive() || procStart(p.PID) != "" {
 		t.Fatal("still there")
 	}
+	waitFor(t, "the child to end", &syncLog{}, func() bool { return !child.alive() })
 }
 
 // TestInFlightAndSnapshotState: what makes retake open start a project's worker at once, and an undo snapshot finished

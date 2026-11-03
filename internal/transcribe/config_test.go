@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -122,7 +123,11 @@ func TestFindWhisperCLI(t *testing.T) {
 		t.Errorf("nothing installed: %v", err)
 	}
 	// install-whisper.sh's folder is the last resort.
-	installed := cpuCLI(t, filepath.Join(root, "data", "retake", "whisper.cpp", "bin", "whisper-cli"))
+	exe := ""
+	if runtime.GOOS == "windows" {
+		exe = ".exe" // install-whisper's folder holds whisper-cli.exe there
+	}
+	installed := cpuCLI(t, filepath.Join(root, "data", "retake", "whisper.cpp", "bin", "whisper-cli"+exe))
 	if p, err := FindWhisperCLI("", env); err != nil || p != installed {
 		t.Errorf("install dir: %q %v", p, err)
 	}
@@ -145,10 +150,12 @@ func TestFindWhisperCLI(t *testing.T) {
 }
 
 func TestInstallDir(t *testing.T) {
-	if d := InstallDir(env(map[string]string{"XDG_DATA_HOME": "/x/data", "HOME": "/h"})); d != filepath.Join("/x/data", "retake", "whisper.cpp") {
+	// An absolute path on this system: /x/data, or C:\x\data on Windows.
+	abs := func(p string) string { return filepath.Join(filepath.VolumeName(os.TempDir()), filepath.FromSlash(p)) }
+	if d := InstallDir(env(map[string]string{"XDG_DATA_HOME": abs("/x/data"), "HOME": abs("/h")})); d != filepath.Join(abs("/x/data"), "retake", "whisper.cpp") {
 		t.Errorf("XDG: %q", d)
 	}
-	if d := InstallDir(env(map[string]string{"XDG_DATA_HOME": "rel", "HOME": "/h"})); d != filepath.Join("/h", ".local", "share", "retake", "whisper.cpp") {
+	if d := InstallDir(env(map[string]string{"XDG_DATA_HOME": "rel", "HOME": abs("/h")})); d != filepath.Join(abs("/h"), ".local", "share", "retake", "whisper.cpp") {
 		t.Errorf("HOME: %q", d)
 	}
 }

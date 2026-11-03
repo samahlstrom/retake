@@ -141,7 +141,9 @@ origins, the 401/403/429 answers, rate limits and `Cache-Control: private` are t
 }
 ```
 
-- `title` is the folder's name. `folder` (its path) is sent to the owner only. `role` is the request's role.
+- `title` is the folder's name. `folder` (its path) is sent to the owner only. `role` is the request's role. A local
+  home's owner also gets `trash`, what the computer calls its trash for Move to Trash's words: `"Trash"`, or
+  `"Recycle Bin"` on Windows, where every "Trash" below reads "Recycle Bin".
 - `projects` is every video (the name is older than the tree), sorted **to review first, then by newest push**, then
   by name.
 - A video: `url` and `thumb` are relative to the home. `version` is the newest version's label ("" before the
@@ -334,6 +336,11 @@ The project's server and store are closed before the folder moves, so nothing wr
   folder's name, else `<name>.2`, `<name>.3`, … when one is there.
 - **macOS**: `~/.Trash/<name>` (`<name> 2`, … when taken). Finder's Put Back doesn't know it (only Finder writes its
   records); Undo does.
+- **Windows**: the Recycle Bin of the folder's drive, `<drive>:\$Recycle.Bin\<the person's SID>` (made when the drive
+  has a Recycle Bin but not their folder yet). The folder goes to `$R<id><ext>` and its record `$I<id><ext>` is
+  written first (format 2: its size, the deletion time and its path), as Explorer does, so the Recycle Bin lists it
+  under its own name and its Restore puts it back. `<id>` is 6 random capital letters or digits; `<ext>` the name's
+  extension, if any. A network share or a drive without a Recycle Bin is 409 like another disk below.
 - Nowhere else, and never a copy: a folder the trash can't take by renaming it (another disk without a trash of its
   own) is 409 "Can't move it to the Trash from this disk" and stays.
 
