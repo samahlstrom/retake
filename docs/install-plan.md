@@ -160,8 +160,8 @@ packages small. It bundles it instead, in each `retake-cli-<os>-<cpu>` package, 
   set of archives also stays the single source for npm, Homebrew, the install scripts and the app.
 - **It fits.** npmjs.org has taken a 118 MB package (it documents no limit; a 199 MB one was refused).
   `scripts/npm-pack.sh` stops above 117 MB, so a growing build fails at packaging, not at `npm publish`. The Linux
-  packages are small since they carry our own ffmpeg (above); Windows, about 111 MB, is the one near the limit. The
-  fix when one nears it: our own smaller ffmpeg for that platform too, not fetching.
+  packages are 52–54 MB since they carry our own ffmpeg (above); macOS is 89–100 MB, and Windows, about 112 MB, is
+  the one near the limit. The fix when one nears it: our own smaller ffmpeg for that platform too, not fetching.
 
 ### The npm package for Windows: `retake-cli-win32-x64`
 

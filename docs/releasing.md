@@ -76,11 +76,11 @@ release run's `ffmpeg-linux-amd64` and `ffmpeg-linux-arm64` artifacts into one f
 | Package | Holds | Size (November 2026) |
 |---|---|---|
 | `retake-cli` | `bin/retake.js`, the launcher (npm/retake-cli), and every platform package below as an optional dependency at exactly its version. No install scripts. | 7 KB |
-| `retake-cli-linux-x64` | `bin/`: that platform's archive (the programs and `retake-bundle.json`), with `licenses/` and the notices beside it. `os`, `cpu` (and `libc: glibc` on Linux) make npm install only the one that fits. | 92 MB (240 MB unpacked) |
-| `retake-cli-linux-arm64` | | 71 MB |
-| `retake-cli-darwin-arm64` | | 77 MB without `retake-edit`, about 90 MB with it (CI builds it) |
-| `retake-cli-darwin-x64` | | 87 MB without, about 100 MB with it |
-| `retake-cli-win32-x64` | | 98 MB without (herdr and ConPTY included), about 111 MB with it |
+| `retake-cli-linux-x64` | `bin/`: that platform's archive (the programs and `retake-bundle.json`), with `licenses/` and the notices beside it. `os`, `cpu` (and `libc: glibc` on Linux) make npm install only the one that fits. | 54 MB (131 MB unpacked; ffmpeg and ffprobe 23 MB each) |
+| `retake-cli-linux-arm64` | | 52 MB (119 MB unpacked) |
+| `retake-cli-darwin-arm64` | | 89 MB |
+| `retake-cli-darwin-x64` | | 100 MB |
+| `retake-cli-win32-x64` | | 112 MB (herdr and ConPTY included) |
 
 - **The name** is set in one place, `name` in `npm/retake-cli/package.json`. The platform packages are that name plus
   `-<os>-<cpu>`; the launcher, the pack script and `scripts/npm-claim.sh` all read it from there. Renaming means
@@ -93,9 +93,9 @@ release run's `ffmpeg-linux-amd64` and `ffmpeg-linux-arm64` artifacts into one f
   "How agents are told to run retake"), so `retake ask` costs no node start-up and works in a herdr or tmux pane
   where `nvm` or `mise` isn't active.
 - **Size.** npmjs.org documents no limit, but has refused a 199 MB tarball and taken a 118 MB one. `npm-pack.sh`
-  stops above 117 MB (`NPM_PACK_MAX_BYTES`), so a release can't fail at `npm publish` instead. The biggest, Windows,
-  is about 111 MB: close. ffmpeg and ffprobe are two thirds of every package; building our own ffmpeg with only what
-  Retake uses (docs/install-plan.md) would roughly halve them, and is the next step if a package nears the limit.
+  stops above 117 MB (`NPM_PACK_MAX_BYTES`), so a release can't fail at `npm publish` instead. Linux's packages are
+  about half the others because their ffmpeg is our own lean build (above). The biggest, Windows, is about 112 MB:
+  close. Its ffmpeg and ffprobe are most of it, and the same kind of build for Windows is the next step if it grows.
 - **npx** keeps its install: a second `npx retake-cli` downloads nothing, and npm 11 checks for a newer version each
   time (one small request) and installs only what changed. `npx retake-cli@latest` asks for the newest explicitly.
 

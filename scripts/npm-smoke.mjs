@@ -189,7 +189,10 @@ function run(cmd, args, { env, cwd = S, timeout = 300_000, input } = {}) {
     let err = '';
     child.stdout.on('data', (d) => (out += d));
     child.stderr.on('data', (d) => (err += d));
-    child.stdin.end(input ?? '');
+    // A program that exits before reading closes its stdin: writing then is EPIPE, which Node 18 throws unhandled.
+    child.stdin.on('error', () => {});
+    if (input === undefined) child.stdin.end();
+    else child.stdin.end(input);
     const timer = setTimeout(() => stopTree(child), timeout);
     child.on('close', (code, signal) => {
       clearTimeout(timer);
