@@ -324,7 +324,7 @@ jobs:
           EOF
           extra=()
           case "$VERSION" in *-*) extra+=(--prerelease) ;; esac
-          files=(dist/*.tar.gz dist/*.zip dist/ffmpeg-source-*.tar.xz dist/checksums.txt dist/retake-edit_* install.sh)
+          files=(dist/*.tar.gz dist/*.zip dist/ffmpeg-source-*.tar.xz dist/checksums.txt install.sh)
           [ ! -f install.ps1 ] || files+=(install.ps1)
           gh release create "$TAG" --draft --verify-tag --title "Retake $VERSION" --notes-file notes.md "${extra[@]}" "${files[@]}"
           echo "Draft: $(gh release view "$TAG" --json url --jq .url)" >>"$GITHUB_STEP_SUMMARY"
