@@ -41,7 +41,7 @@ if [ -z "$edit" ]; then
   elif [ -x "$ROOT/editor/target/release/retake-edit" ]; then
     edit="$ROOT/editor/target/release/retake-edit"
   else
-    die "retake-edit not found: install it (scripts/install.sh --with-editor), build it (cd editor && cargo build --release), or pass --edit"
+    die "retake-edit not found: install it (install.sh --with-editor), build it (cd editor && cargo build --release), or pass --edit"
   fi
 fi
 [ -x "$edit" ] || die "$edit is not executable"
