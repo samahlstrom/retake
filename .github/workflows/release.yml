@@ -1,0 +1,396 @@
+name: Release
+
+# Builds Retake for every platform on native runners, tests each install, and publishes it (docs/releasing.md):
+#
+#   push a vX.Y.Z tag      every test (ci.yml), the builds, the npm install tested on each platform, then a DRAFT
+#                          GitHub release with the archives, checksums.txt and the install scripts. Nothing public.
+#   publish that draft     (on GitHub: Releases, Edit, Publish release) the npm packages, with trusted publishing
+#                          and provenance, and the Homebrew formula, both from the release's own archives.
+#   Run workflow, dry_run  (Actions, Release, Run workflow, any branch) the same builds and tests; everything is
+#                          uploaded as this run's artifacts and nothing is published. dry_run off, from a tag: as a push.
+#
+# Normal pushes never run it; ci.yml does.
+
+on:
+  push:
+    tags: ["v*"]
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Build and test everything, publish nothing
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # ------------------------------------------------------------------------------------------------------------------
+  # Build and test: a tag push, or by hand.
+
+  plan:
+    name: What this run does
+    if: github.event_name != 'release'
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.plan.outputs.tag }}
+      version: ${{ steps.plan.outputs.version }}
+      draft: ${{ steps.plan.outputs.draft }}
+    steps:
+      - id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          tag="" draft=false
+          if [ "$EVENT" = push ]; then
+            tag="$GITHUB_REF_NAME" draft=true
+          elif [ "$DRY_RUN" != true ]; then
+            case "$GITHUB_REF" in
+              refs/tags/v*) tag="$GITHUB_REF_NAME" draft=true ;;
+              *) echo "::error::A release runs from a v* tag (choose it under 'Use workflow from'), or turn dry_run on."; exit 1 ;;
+            esac
+          fi
+          version="${tag#v}"
+          {
+            echo "tag=$tag"
+            echo "version=${version:-snapshot}"
+            echo "draft=$draft"
+          } >>"$GITHUB_OUTPUT"
+          echo "Tag: ${tag:-none (a snapshot)}. Draft release at the end: $draft." >>"$GITHUB_STEP_SUMMARY"
+
+  ci:
+    name: Tests
+    needs: [plan]
+    uses: ./.github/workflows/ci.yml
+
+  # retake-edit links prebuilt Skia, so it's built on each system it runs on. Linux on Ubuntu 22.04, so it needs only
+  # glibc 2.35 (Debian 12, Ubuntu 22.04 and newer).
+  editor:
+    name: retake-edit ${{ matrix.os }}/${{ matrix.arch }}
+    needs: [plan]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: ubuntu-22.04, os: linux, arch: amd64 }
+          - { runner: ubuntu-22.04-arm, os: linux, arch: arm64 }
+          - { runner: macos-15, os: darwin, arch: arm64 }
+          - { runner: macos-15-intel, os: darwin, arch: amd64 } # GitHub's last Intel Mac image (until fall 2027)
+          - { runner: windows-latest, os: windows, arch: amd64 }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Rust from mise.toml
+        uses: jdx/mise-action@v5
+        with:
+          install_args: rust
+      - name: Cache cargo builds
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: editor
+          key: release-${{ matrix.os }}-${{ matrix.arch }}
+      - name: Build retake-edit
+        if: matrix.os != 'windows'
+        run: |
+          cargo build --release --locked -p retake-edit --manifest-path editor/Cargo.toml
+          mkdir -p stage
+          cp editor/target/release/retake-edit stage/
+      # Windows: scripts/build-windows.ps1 -OutDir <dir> puts retake-edit.exe (and anything else Windows-only) in <dir>
+      # (docs/releasing.md). Until it exists, cargo alone.
+      - name: Build retake-edit (scripts/build-windows.ps1)
+        if: matrix.os == 'windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force stage | Out-Null
+          if (Test-Path scripts/build-windows.ps1) {
+            ./scripts/build-windows.ps1 -OutDir stage
+          } else {
+            Write-Output "::warning::scripts/build-windows.ps1 isn't in this checkout yet: building retake-edit with cargo"
+            cargo build --release --locked -p retake-edit --manifest-path editor/Cargo.toml
+            Copy-Item editor/target/release/retake-edit.exe stage/
+          }
+          if (-not (Test-Path stage/retake-edit.exe)) { throw "no stage/retake-edit.exe" }
+      - name: It runs here
+        shell: bash
+        run: stage/retake-edit --version
+      - name: Package (named like goreleaser's archives; scripts/bundle-deps.sh puts it in the release archive)
+        shell: bash
+        env:
+          OS: ${{ matrix.os }}
+          ARCH: ${{ matrix.arch }}
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: |
+          name="retake-edit_${VERSION}_${OS}_${ARCH}"
+          mkdir -p dist-editor
+          cp README.md CHANGELOG.md THIRD_PARTY_NOTICES.md LICENSE stage/
+          if [ "$OS" = windows ]; then
+            (cd stage && 7z a -tzip "../dist-editor/$name.zip" .)
+          else
+            if [ "$OS" = darwin ]; then owner=(--uid 0 --gid 0); else owner=(--owner=0 --group=0); fi
+            tar "${owner[@]}" -czf "dist-editor/$name.tar.gz" -C stage .
+          fi
+      - uses: actions/upload-artifact@v7
+        with:
+          name: editor-${{ matrix.os }}-${{ matrix.arch }}
+          path: dist-editor/*
+          retention-days: 14
+
+  package:
+    name: Archives, npm packages, Homebrew formula
+    needs: [plan, ci, editor]
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # goreleaser reads the tags
+      - name: Install Go, node and goreleaser from mise.toml
+        uses: jdx/mise-action@v5
+        with:
+          install_args: go node goreleaser
+      - name: The retake-edit builds
+        uses: actions/download-artifact@v7
+        with:
+          pattern: editor-*
+          path: dist-editor
+          merge-multiple: true
+      - name: The tools that ship with Retake (herdr, ffmpeg, retake-edit), pinned by SHA-256
+        run: scripts/bundle-deps.sh
+      - name: Archives and checksums.txt (goreleaser; it publishes nothing)
+        env:
+          TAG: ${{ needs.plan.outputs.tag }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          if [ -n "$TAG" ]; then
+            goreleaser release --clean --skip=publish,announce --parallelism 2
+          else
+            goreleaser release --snapshot --clean --parallelism 2
+          fi
+      - name: The Mac app (unsigned, universal)
+        run: sudo apt-get install -y llvm zip && scripts/macos-app.sh
+      - name: The npm packages (every platform, each under npm's size limit)
+        run: scripts/npm-pack.sh
+      - name: The Homebrew formula the publish step will push
+        run: |
+          version="$(node -p 'require("./dist/metadata.json").version')"
+          scripts/brew-formula.sh "$version" dist/checksums.txt >dist/retake.rb
+      - name: Sizes
+        run: |
+          {
+            echo '| File | Bytes |'
+            echo '|---|---|'
+            for f in dist/retake_*.tar.gz dist/*.zip dist/npm/*.tgz; do echo "| $(basename "$f") | $(wc -c <"$f") |"; done
+          } >>"$GITHUB_STEP_SUMMARY"
+      - name: The retake-edit archives next to the rest (checksums.txt lists them too)
+        run: cp dist-editor/* dist/
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/checksums.txt
+            dist/metadata.json
+            dist/retake.rb
+          retention-days: 14
+      - uses: actions/upload-artifact@v7
+        with:
+          name: npm
+          path: dist/npm/*.tgz
+          retention-days: 14
+
+  # The npm install, end to end, on each platform with that platform's own package (scripts/npm-smoke.mjs): npm i -g,
+  # the bundled ffmpeg (libx264, zscale), the setup page, Ctrl+C, an agent calling retake with nothing on PATH, npx.
+  # On the Macs also the Homebrew formula, installed from a local tap.
+  smoke:
+    name: Install on ${{ matrix.name }}
+    needs: [package]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: Linux x64, runner: ubuntu-22.04, node: "lts/*" }
+          - { name: Linux x64 (Node 18), runner: ubuntu-22.04, node: "18" }
+          - { name: Linux arm64, runner: ubuntu-22.04-arm, node: "lts/*" }
+          - { name: macOS arm64, runner: macos-15, node: "lts/*", brew: true }
+          - { name: macOS x64, runner: macos-15-intel, node: "lts/*", brew: true }
+          # Windows doesn't block a release until it has passed here once: then drop `experimental`.
+          - { name: Windows x64, runner: windows-latest, node: "lts/*", experimental: true }
+    runs-on: ${{ matrix.runner }}
+    continue-on-error: ${{ matrix.experimental == true }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+      - uses: actions/download-artifact@v7
+        with:
+          name: npm
+          path: dist/npm
+      - name: npm i -g, npx, the bundled tools, an agent (scripts/npm-smoke.mjs)
+        shell: bash
+        env:
+          RETAKE_SMOKE_DIR: ${{ runner.temp }}/npm-smoke
+        run: node scripts/npm-smoke.mjs dist/npm
+      - uses: actions/download-artifact@v7
+        if: matrix.brew
+        with:
+          name: release
+          path: dist
+      - name: brew install from a local tap, brew test
+        if: matrix.brew
+        run: |
+          version="$(node -p 'require("./dist/metadata.json").version')"
+          scripts/brew-formula.sh "$version" dist/checksums.txt "file://$PWD/dist" >retake.rb
+          brew tap-new --no-git local/retake
+          cp retake.rb "$(brew --repository local/retake)/Formula/retake.rb"
+          HOMEBREW_NO_AUTO_UPDATE=1 brew install local/retake/retake
+          brew test local/retake/retake
+          retake --version
+          brew uninstall retake
+          brew untap local/retake
+
+  draft:
+    name: Draft GitHub release
+    needs: [plan, package, smoke]
+    if: needs.plan.outputs.draft == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v7
+        with:
+          name: release
+          path: dist
+      - name: gh release create --draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.plan.outputs.tag }}
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: |
+          # This version's CHANGELOG section, then how to install it.
+          awk -v v="$VERSION" '
+            /^## / { on = ($2 == v || $2 == "[" v "]" || $2 == "v" v) ; next }
+            on { print }
+          ' CHANGELOG.md >notes.md
+          [ -s notes.md ] || echo "See [CHANGELOG.md](https://github.com/$GITHUB_REPOSITORY/blob/$TAG/CHANGELOG.md)." >notes.md
+          cat >>notes.md <<EOF
+
+          ## Install
+
+          \`\`\`
+          npm i -g retake-cli
+          retake
+          \`\`\`
+
+          No Node: \`curl -fsSL https://raw.githubusercontent.com/$GITHUB_REPOSITORY/main/install.sh | sh\` (macOS, Linux),
+          \`irm https://raw.githubusercontent.com/$GITHUB_REPOSITORY/main/install.ps1 | iex\` (Windows), or
+          \`brew install samahlstrom/retake/retake\`. Publishing this release publishes the npm packages and the Homebrew
+          formula (docs/releasing.md).
+          EOF
+          extra=()
+          case "$VERSION" in *-*) extra+=(--prerelease) ;; esac
+          files=(dist/*.tar.gz dist/*.zip dist/checksums.txt dist/retake-edit_* install.sh)
+          [ ! -f install.ps1 ] || files+=(install.ps1)
+          gh release create "$TAG" --draft --verify-tag --title "Retake $VERSION" --notes-file notes.md "${extra[@]}" "${files[@]}"
+          echo "Draft: $(gh release view "$TAG" --json url --jq .url)" >>"$GITHUB_STEP_SUMMARY"
+
+  # ------------------------------------------------------------------------------------------------------------------
+  # Publish: the draft was published on GitHub. Both read the release's own archives, checked against its checksums.
+
+  npm:
+    name: Publish to npm
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write # npm trusted publishing: no npm token anywhere
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install node from mise.toml (npm 11.5+ publishes with trusted publishing)
+        uses: jdx/mise-action@v5
+        with:
+          install_args: node
+      - name: The release's archives, checked
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          gh release download "$TAG" --dir dist --pattern 'retake_*' --pattern checksums.txt
+          (cd dist && sha256sum --check --ignore-missing checksums.txt)
+      - name: The npm packages, from those archives
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: scripts/npm-pack.sh --version "${TAG#v}"
+      - name: npm publish (the platform packages, then the command)
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          v="${TAG#v}"
+          name="$(node -p 'require("./npm/retake-cli/package.json").name')"
+          dist_tag=latest
+          case "$v" in *-*) dist_tag=next ;; esac
+          publish() { # package file
+            if npm view "$1@$v" version >/dev/null 2>&1; then
+              echo "$1@$v is on npm already"
+            else
+              npm publish "$2" --access public --provenance --tag "$dist_tag"
+            fi
+          }
+          for f in dist/npm/*.tgz; do
+            [ "$(basename "$f")" != "$name-$v.tgz" ] || continue
+            publish "$(basename "$f" "-$v.tgz")" "$f"
+          done
+          publish "$name" "dist/npm/$name-$v.tgz"
+
+  homebrew:
+    name: Update the Homebrew tap
+    if: github.event_name == 'release' && !github.event.release.prerelease
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: The formula, from the release's checksums.txt
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          gh release download "$TAG" --dir dist --pattern checksums.txt
+          scripts/brew-formula.sh "${TAG#v}" dist/checksums.txt >retake.rb
+      - name: HOMEBREW_TAP_TOKEN is set
+        env:
+          TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          [ -n "$TOKEN" ] || { echo "::error::Add the HOMEBREW_TAP_TOKEN secret (docs/releasing.md, One-time setup)"; exit 1; }
+      - uses: actions/checkout@v7
+        with:
+          repository: samahlstrom/homebrew-retake
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+      - name: Push Formula/retake.rb
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          mkdir -p tap/Formula
+          cp retake.rb tap/Formula/retake.rb
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/retake.rb
+          if git diff --cached --quiet; then
+            echo "The formula is current"
+          else
+            git commit -m "retake ${TAG#v}"
+            git push
+          fi
