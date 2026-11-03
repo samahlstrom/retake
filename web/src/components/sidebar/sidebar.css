@@ -46,7 +46,8 @@
     min-height: 0;
     overflow: auto;
   }
-  /* Row 1: the speech bubble, the version menu, then search and hide. */
+  /* The header: To do · Done (and an extension's tabs), then search and hide, in one row with a hairline under it; in
+     a phone's drawer on an extension's version, the version menu, search and hide, with the tabs under them. */
   #side header {
     flex: none;
     display: flex;
@@ -55,55 +56,16 @@
     height: 52px;
     padding: 0 8px 0 14px;
   }
+  #side header.one {
+    border-bottom: 1px solid var(--line);
+  }
   #side header .h {
     flex: 1;
   }
-  #side .cicon {
-    flex: none;
-    display: grid;
-    place-items: center;
-    width: 28px;
-    height: 32px;
-    color: var(--text-5);
-  }
-  #side .cicon svg {
-    width: 19px;
-    height: 19px;
-  }
-  /* The version: its label and a chevron, no box (a dot when an earlier version still has something to do). */
-  #side .vmenu {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    gap: 2px;
-    height: 32px;
-    padding: 0 6px;
-    border: 0;
-    border-radius: var(--radius);
-    background: transparent;
-    color: var(--text);
-    font: inherit;
-    font-size: 14px;
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-  }
-  #side button.vmenu:hover,
-  #side .vmenu[data-state='open'] {
-    background: color-mix(in srgb, var(--overlay) 6%, transparent);
-  }
-  #side .vmenu svg {
-    width: 14px;
-    height: 14px;
+  #side header .title {
     color: var(--muted);
-  }
-  #side .vmenu .dot {
-    position: absolute;
-    top: 6px;
-    right: 2px;
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--status-working);
+    font-size: 13px;
+    font-weight: 500;
   }
   #side header .search {
     flex: 1;
@@ -352,11 +314,29 @@
   }
   /* A phone: To do · Done in the header's row (the list needs the height), and the line under the comment box only
      while a comment is pending. */
+  /* In the header the tabs shrink (scrolling sideways) before search and hide would leave the row; an extension's tab
+     on screen is marked like To do · Done's. */
   #side header .tabs {
-    flex: none;
-    margin-left: 6px;
+    flex: 0 1 auto;
+    min-width: 0;
+    gap: 8px;
     padding: 0;
     border: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  #side header .tabs::-webkit-scrollbar {
+    display: none;
+  }
+  #side header .tabs button.ext {
+    flex: none;
+    padding: 0 10px;
+  }
+  #side header .tabs button.ext.on {
+    background: color-mix(in srgb, var(--overlay) 10%, transparent);
+  }
+  #side header .tabs button.ext.on::after {
+    display: none;
   }
   html[data-phone] #side .compose .under:not(.shown) {
     display: none;
@@ -370,9 +350,7 @@
   html[data-phone] #side header {
     height: 56px;
   }
-  html[data-phone] #side .vmenu,
-  html[data-phone] #side .icon,
-  html[data-phone] #side .cicon {
+  html[data-phone] #side .icon {
     height: 44px;
   }
   html[data-phone] #side .icon {

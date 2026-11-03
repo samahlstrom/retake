@@ -208,7 +208,7 @@ describe("an extension's version is never landed on by following or comparing", 
         machine: true,
       },
     ];
-    expect(review.nameOf('v0')).toBe('v0 · Script');
+    expect(review.nameOf('v0')).toBe('Script');
     expect(review.recordHere).toBe(true);
     expect(review.versionExt?.id).toBe('scripts');
     review.shown = 'v1';

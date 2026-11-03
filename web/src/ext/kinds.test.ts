@@ -84,7 +84,8 @@ describe('kinds of versions', () => {
   it('name a version `v0 · <label>`, and find its extension, slot and Record', () => {
     expect(kindOf(exts, 'scripts.doc')?.ext.id).toBe('scripts');
     expect(kindOf(exts, 'other.doc')).toBeNull();
-    expect(versionName(exts, { label: 'v0', kind: 'scripts.doc' })).toBe('v0 · Script');
+    expect(versionName(exts, { label: 'v0', kind: 'scripts.doc' })).toBe('Script');
+    expect(versionName(exts, { label: 'v5-draft2' })).toBe('v5'); // never "draft"
     expect(versionName(exts, { label: 'v0', kind: 'gone.doc' })).toBe('v0'); // its extension isn't on
     expect(versionName(exts, { label: 'v3' })).toBe('v3');
     expect(versionSlot(exts, 'scripts.doc')?.id).toBe('scripts');

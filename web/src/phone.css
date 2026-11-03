@@ -83,31 +83,6 @@
   html[data-phone] #verBtn:hover {
     background: transparent;
   }
-  html[data-phone] #verList {
-    left: auto;
-    right: 0;
-    transform: none;
-    min-width: 150px;
-    overflow-y: auto;
-  }
-  /* Portrait: the list opens downward, over the free space (the video stays in view). Landscape: upward, from the bar. */
-  html[data-layout='portrait'] #verList {
-    top: calc(100% + 8px);
-    bottom: auto;
-    max-height: 50vh;
-  }
-  html[data-layout='landscape'] #verList {
-    bottom: calc(100% + 8px);
-    max-height: calc(100vh - 80px);
-  }
-  html[data-phone] #verList button {
-    align-items: center;
-    min-height: 44px;
-    padding: 0 14px;
-  }
-  html[data-phone] #verList button:hover {
-    background: transparent;
-  }
   #flip {
     flex: none;
     display: inline-flex;

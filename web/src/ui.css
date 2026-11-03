@@ -95,43 +95,47 @@
     color: var(--muted);
     font-size: 11.5px;
   }
-  /* The comments' version menu: each version, where its comments go and what's still to do. */
+  /* The one version menu (spec/notes.md, "The version menu"): a row per version, the one on screen in bold, a small
+     red dot after the name while the agent works on it, one quiet detail at the right; nothing wraps. */
   .vmenu-list {
-    min-width: 220px;
+    min-width: 180px;
+    max-height: var(--bits-dropdown-menu-content-available-height, 70vh);
+    overflow-y: auto;
   }
   .vmenu-list .menu-item {
     font-variant-numeric: tabular-nums;
+    white-space: nowrap;
   }
   .vmenu-list .menu-item.on {
     color: var(--text-strong);
     font-weight: 600;
   }
-  .vmenu-list .into,
-  .vmenu-list .dim {
-    margin-left: 6px;
-    color: var(--muted);
-    font-weight: 400;
-  }
-  /* The live version: a small red dot while the agent works on it (spec/automation.md, "The live version"). */
-  .vmenu-list .live {
-    display: inline-block;
-    width: 6px;
-    height: 6px;
-    margin-left: 7px;
-    border-radius: 50%;
-    background: var(--agent-edge);
-    vertical-align: 2px;
-  }
-  .vmenu-list .n {
+  .vmenu-list .name {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: 7px;
+  }
+  .vmenu-list .live {
+    flex: none;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--record);
+  }
+  .vmenu-list .d {
     color: var(--muted);
     font-size: 12px;
     font-weight: 400;
   }
-  .vmenu-list .check {
-    color: var(--text);
+  html[data-phone] .vmenu-list {
+    min-width: 240px;
+    max-width: calc(100vw - 20px);
+  }
+  html[data-phone] .vmenu-list .menu-item {
+    padding: 0 14px;
+  }
+  html[data-phone] .vmenu-list .d {
+    font-size: 14px;
   }
   /* A phone: every menu row is a thumb's height. */
   html[data-phone] .menu-item {

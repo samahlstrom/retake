@@ -342,6 +342,7 @@ Versioning). Classes and ids are not part of the API and can change in any relea
 | `connect-card` | The "Connect your computer" card | home |
 | `home-grid` | A grid of videos | home |
 | `video-card` | One video; `data-status` is its status | home |
+| `idea-preview` | An idea's picture on its card: its document's first image, or its title and first lines | home |
 | `nav-settings` | Settings, at the bottom of the folder tree (the owner's) | home |
 | `settings` | The settings page | home |
 | `settings-section` | A group of settings (Agent, Computers, Extensions, Theme) | home |

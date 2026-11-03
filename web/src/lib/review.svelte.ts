@@ -130,6 +130,7 @@ import {
   newlyStreamed,
   renderedEnd,
   revisionOf,
+  pageName,
   verName,
   withStream,
 } from './versions';
@@ -1826,7 +1827,7 @@ export class Review {
   #videoFailed(v: Version | undefined): void {
     if (incomplete(v)) {
       // Its render may have just failed (the `failed` event says so): not a file that won't play.
-      if (v) this.toast.say(`Could not play ${v.label} yet`, 3000);
+      if (v) this.toast.say(`Could not play ${verName(v.label)} yet`, 3000);
       return;
     }
     this.fatal = FATAL(this.info.name);
@@ -2338,15 +2339,18 @@ export class Review {
   get sidebar(): SidebarView {
     const n = this.notes,
       rows = this.versionRows;
+    const shown = presence({
+      available: n.available,
+      content: true,
+      everShown: n.everShown,
+      open: n.open,
+      phoneOpen: n.phoneOpen || this.commentsPinned,
+      phone: this.phone,
+    });
     return {
-      ...presence({
-        available: n.available,
-        content: true,
-        everShown: n.everShown,
-        open: n.open,
-        phoneOpen: n.phoneOpen || this.commentsPinned,
-        phone: this.phone,
-      }),
+      ...shown,
+      // Pinned (a phone in portrait, on a video), the comments are always in view: no bubble over the video.
+      toggle: shown.toggle && !this.commentsPinned,
       phone: this.phone,
       rows: rows.filter((row) => {
         const query = this.commentSearch.trim().toLowerCase();
@@ -2686,7 +2690,7 @@ export class Review {
         void this.#checkOffline(v);
         return true;
       }
-      this.toast.say(`Could not load ${label}`, 3000);
+      this.toast.say(`Could not load ${verName(label)}`, 3000);
       return false;
     } finally {
       this.freezeShown = false;
@@ -3331,7 +3335,10 @@ export class Review {
     } catch {
       this.toast.say('Review server not reachable', 8000);
     }
-    document.title = reviewTitle(this.info.name, brandOf());
+    document.title = reviewTitle(
+      pageName({ label: this.info.label ?? '', name: this.info.name }, this.info.versions || []),
+      brandOf(),
+    );
     this.role = this.info.role ?? null;
     // Shown once per browser, then it's behind ?. A viewer's "View only" always shows.
     if (!this.take.id) this.hintGone = this.canRecord && hintSeen();

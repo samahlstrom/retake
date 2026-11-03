@@ -1,5 +1,5 @@
 <script lang="ts">
-  // The bar under the video, left to right: play, time, timeline, version, the pen, Record (your voice), Send and ?
+  // The bar under the video, left to right: play, time, timeline, the version menu (its one place on a computer), the pen, Record (your voice), Send and ?
   // for the keys. Calm: no boxes around icons, Send the only filled control, and every part a fixed width, so nothing
   // moves when recording starts (the bar's top edge turns red, Record shows REC and the time, the pen stays a click
   // away). A viewer's share link has no pen, no Record and no Send. On an extension's kind of version (v0) there is no
@@ -7,7 +7,7 @@
   // agent chat, spec/chat.md, Record is the chat's mic, and R still records a voice message). Where Send
   // can't reach an agent, one quiet line says so over the bar's right end.
   import type { Review } from '../lib/review.svelte';
-  import VersionPicker from './VersionPicker.svelte';
+  import VersionMenu from './VersionMenu.svelte';
   import PlayButton from './PlayButton.svelte';
   import Timeline from './Timeline.svelte';
   import PenButton from './PenButton.svelte';
@@ -29,7 +29,7 @@
     </div>
     <Timeline {review} />
   {/if}
-  <VersionPicker {review} />
+  <VersionMenu {review} />
   {#if review.canRecord}
     {#if !review.kindShown}<PenButton {review} />{/if}
     {#if review.recordHere && !review.chatShown}<RecordButton {review} />{/if}

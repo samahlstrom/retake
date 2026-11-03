@@ -195,69 +195,38 @@
   #verBtn[data-state='open'] {
     background: color-mix(in srgb, var(--overlay) 6%, transparent);
   }
-  #verBtn .version-chevron {
+  #verBtn svg {
+    width: 14px;
+    height: 14px;
     color: var(--muted);
-    font-weight: 400;
   }
   #verBtn.flipped {
     color: var(--flip);
   }
-  #verList {
-    position: absolute;
-    bottom: calc(100% + 12px);
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 5;
-    min-width: 168px;
-    padding: 6px;
-    border-radius: var(--radius-md);
-    background: var(--surface-raised);
-    border: 1px solid var(--line);
-    box-shadow: 0 14px 34px color-mix(in srgb, var(--shadow) 55%, transparent);
-    outline: none;
-  }
-  #verList button {
-    display: flex;
-    justify-content: space-between;
-    gap: 16px;
-    width: 100%;
-    padding: 6px 10px;
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    font-variant-numeric: tabular-nums;
-  }
-  #verList button:hover {
-    background: color-mix(in srgb, var(--overlay) 6%, transparent);
-  }
-  #verList button.on {
-    font-weight: 600;
-  }
-  #verList .d {
-    color: var(--dim);
-    font-weight: 400;
-  }
-  /* A streamed version that isn't complete: a chip after its label in the list ("pending", "rendering 12/50"), a dot on
-     the button while it's shown. The list floats, so the chip only widens it; the dot sits over the button's border, so
-     nothing moves. */
-  #verList .stream {
-    margin-left: 8px;
-    color: var(--voice);
-    font-size: 11px;
-    font-weight: 400;
-  }
-  #verBtn.rendering {
+  /* The button's one dot, over its border so nothing moves: red while the shown version is live, the voice colour while
+     a streamed version renders, a quiet one while an earlier version still has comments to do. */
+  #verBtn.live,
+  #verBtn.rendering,
+  #verBtn.earlier {
     position: relative;
   }
-  #verBtn.rendering::after {
+  #verBtn.live::after,
+  #verBtn.rendering::after,
+  #verBtn.earlier::after {
     content: '';
     position: absolute;
-    top: -3px;
-    right: -3px;
+    top: 4px;
+    right: 2px;
     width: 6px;
     height: 6px;
     border-radius: 50%;
     background: var(--voice);
+  }
+  #verBtn.live::after {
+    background: var(--record);
+  }
+  #verBtn.earlier::after {
+    background: var(--status-working);
   }
   /* The pen: one button, its pen in the colour you draw with (the eraser glyph while that's on). No box. */
   #pen {
@@ -721,30 +690,5 @@
     #timeline .ask-marker {
       animation: none;
     }
-  }
-
-  /* The live version (spec/automation.md, "The live version"): a small red dot, in the list after its name and on the
-     button over its border (nothing moves), while the agent works on it. */
-  #verList .live {
-    display: inline-block;
-    width: 6px;
-    height: 6px;
-    margin-left: 8px;
-    border-radius: 50%;
-    background: var(--agent-edge);
-    vertical-align: 2px;
-  }
-  #verBtn.live {
-    position: relative;
-  }
-  #verBtn.live::after {
-    content: '';
-    position: absolute;
-    top: -3px;
-    right: -3px;
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--agent-edge);
   }
 }

@@ -34,11 +34,11 @@ export const covers = (v: Span, t: number): boolean => {
 
 /** The refusal toast when a version doesn't reach the playhead (C, or the picker, past a preview's end). */
 export const coverMessage = (v: Pick<Version, 'label' | 'duration'>): string =>
-  `${v.label} only covers 0:00–${fmt(v.duration || 0, false)}`;
+  `${verName(v.label)} only covers 0:00–${fmt(v.duration || 0, false)}`;
 
 /** The toast when showing an incomplete stream lands at its start, the moment asked for not being rendered yet. */
 export const fromStartMessage = (v: Pick<Version, 'label' | 'duration' | 'stream'>): string =>
-  `${v.label} is rendering: ${fmt(renderedEnd(v) ?? 0, false)} of ${fmt(v.duration || 0, false)} so far, from the start`;
+  `${verName(v.label)} is rendering: ${fmt(renderedEnd(v) ?? 0, false)} of ${fmt(v.duration || 0, false)} so far, from the start`;
 
 /** The version list's chip for an incomplete stream (`pending`, `rendering 12/50`), or null. */
 export function streamChip(v: Pick<Version, 'stream'>): string | null {
@@ -65,7 +65,7 @@ export const newlyStreamed = <T extends V>(vs: readonly T[], known: ReadonlySet<
 
 /** The toast when a streamed version's render failed (it stays; the next watch tries again). */
 export const failedToast = (label: string, error?: string): string =>
-  error ? `${label}'s render failed: ${error}` : `${label}'s render failed`;
+  error ? `${verName(label)}'s render failed: ${error}` : `${verName(label)}'s render failed`;
 
 /** The newest version or draft that can play the moment `t`: what following the latest shows (spec/automation.md,
  * "Versions versus drafts"). A stopped stream is skipped, and so is an incomplete one that hasn't rendered `t` yet. */
@@ -159,8 +159,25 @@ export function versionTitle(vs: readonly V[], base: string | null, shown: strin
 export const draftOf = (label: string | null | undefined): string | null =>
   /^(v\d+)-draft\d+$/.exec(label ?? '')?.[1] ?? null;
 
-/** How a label reads on screen: "v5" for a version and for each revision of the live v5 (a draft). */
+/** How a label reads on screen: "v5" for a version and for each revision of the live v5 (a draft). The one label
+ * helper: the version menu, toasts, the page's title and the home's cards and tree all name versions with it, so the
+ * word "draft" never shows (spec/automation.md, "The live version"). */
 export const verName = (label: string | null | undefined): string => draftOf(label) ?? label ?? '';
+
+/** A versioned file name's family part (`promo` for `promo_v1.mp4`), as spec/api.md's detection reads it. */
+const familyPart = (name: string): string | null => /^(.+?)[_-]v\d{1,4}(?:[_-].*)?\.[^.]+$/i.exec(name)?.[1] ?? null;
+
+/** The page's title names the opened version by its file (`alpha_v2.mp4`). A revision of the agent's, or any version
+ * whose file doesn't carry the video's name (`video.mp4`, `index.m3u8`), is the family's name and the version's
+ * (`promo_v6`), never "draft". */
+export function pageName(
+  cur: { label: string; name: string },
+  family: readonly { label: string; name: string; kind?: string }[],
+): string {
+  if (!draftOf(cur.label) && !/^(index\.m3u8|video\.mp4)$/i.test(cur.name)) return cur.name;
+  const named = [...family].reverse().find((v) => !v.kind && familyPart(v.name));
+  return named ? `${familyPart(named.name)}_${verName(cur.label)}` : verName(cur.label) || cur.name;
+}
 
 /** The version picker's entries (spec/automation.md, "The live version"): one per version, its newest listed
  * revision (the family lists a version's revisions oldest first), so the live v5 is one "v5". */

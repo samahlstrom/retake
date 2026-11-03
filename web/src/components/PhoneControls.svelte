@@ -9,11 +9,11 @@
   //    Record at the right edge, and a slim bar at the bottom with play, time, the timeline and the version.
   // A viewer's share link has no pen, undo, Record or Send; the hint says "View only". On an extension's kind of
   // version (v0) there is no video: in portrait the slot fills the page down to Record and Send (the version is in the
-  // comments drawer's header); in landscape no timeline, play, time, pen or undo. Record only when the kind records.
+  // comments drawer's header, its one place there); in landscape no timeline, play, time, pen or undo. Record only when the kind records.
   // A kind with the agent chat (spec/chat.md) has the chat's pill in place of Record: tapping it opens the chat with
   // the keyboard up, its mic records a voice message.
   import type { Review } from '../lib/review.svelte';
-  import VersionPicker from './VersionPicker.svelte';
+  import VersionMenu from './VersionMenu.svelte';
   import SendButton from './SendButton.svelte';
   import SendNotice from './SendNotice.svelte';
   import PlayButton from './PlayButton.svelte';
@@ -97,7 +97,7 @@
         <PlayButton paused={review.paused} onclick={review.togglePlay} />
         {@render time()}
       {/if}
-      <VersionPicker {review} />
+      <VersionMenu {review} side="bottom" />
       <span class="grow"></span>
       {#if review.canRecord && !review.kindShown}
         <PenButton {review} side="bottom" />
@@ -145,7 +145,7 @@
       {@render time()}
       <Timeline {review} />
     {/if}
-    <VersionPicker {review} />
+    <VersionMenu {review} />
     {#if review.canRecord}<SendNotice {review} />{/if}
   </div>
 {/if}
