@@ -111,7 +111,7 @@ func Find(name string) (path string, bundled bool, err error) {
 }
 
 func isExec(p string) bool {
-	st, err := os.Stat(p)
+	st, err := os.Stat(p) //nolint:gosec // a program next to retake or on PATH: only whether it runs
 	return err == nil && st.Mode().IsRegular() && st.Mode().Perm()&0o111 != 0
 }
 
