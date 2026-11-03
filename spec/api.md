@@ -202,9 +202,10 @@ Retake holds no YouTube login; uploading stays the person's own business (theirs
 - Otherwise ffmpeg makes the MP4 once, into `<root>/.retake/downloads/<key>.mp4`, and later downloads reuse it. It
   never writes beside the version. H.264 High `yuv420p` is copied (with BT.709 tags written into it when it has
   none); any other video is encoded with this computer's encoder (`[render] encoder` / `RETAKE_ENCODER`, as for
-  renders; `auto` takes what `retake-edit` last picked here, else x264; a hardware encoder that fails falls back to
-  x264). Audio that passes is copied; any other is brought to the target with two-pass `loudnorm` (linear when it can
-  be, aiming at -1.5 dBTP so the encode stays under -1) and encoded as AAC-LC at 384 kb/s. A changed version file has a new key, and so gets a new download.
+  renders; `auto` takes what `retake-edit` last picked here, else x264; `qsv` and `vaapi` encode with x264 here; a
+  hardware encoder that fails falls back to x264). Audio that passes is copied; any other is brought to the target
+  with two-pass `loudnorm` (linear when it can be, aiming at -1.5 dBTP so the encode stays under -1) and encoded as
+  AAC-LC at 384 kb/s. A changed version file has a new key, and so gets a new download.
 - **A rendered version** of a timeline project (a streamed push's playlist, spec/bridge.md, or a worker's render,
   spec/automation.md, drafts included) downloads the renderer's export: `<stem>.export.mp4` beside its playlist
   (`index.export.mp4` for a worker's render). An export that's missing, or that misses the loudness target, is
@@ -253,7 +254,9 @@ screen, `Download v5 (MP4)` (`data-part="download"`, a real `<a href="video/v5/d
   `fetch`).
 - Otherwise the page posts `POST /api/download`, and the entry shows the progress at its right (`Checking…`,
   `42%`, `Preparing…`) while the page asks every second; once `ready`, the download starts by itself (the same link,
-  clicked for the person). Closing the menu doesn't stop it.
+  clicked for the person). Closing the menu doesn't stop it. A ready entry shows the file's size there (`41 MB`).
+  Opening the menu asks `GET /api/download` for the version on screen, so a ready file downloads straight from the
+  link.
 - `failed` or `unavailable`: its `error` is one quiet line under the entry; choosing it again tries again.
 - `license`, when not "": one quiet line under the entry.
 
