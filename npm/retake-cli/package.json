@@ -1,0 +1,30 @@
+{
+  "name": "retake-cli",
+  "version": "0.0.0",
+  "description": "Review a video by talking and drawing over it; your AI agent makes the next version.",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/samahlstrom/retake#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/samahlstrom/retake.git"
+  },
+  "bugs": "https://github.com/samahlstrom/retake/issues",
+  "keywords": [
+    "video",
+    "review",
+    "agent",
+    "claude-code",
+    "codex",
+    "ffmpeg"
+  ],
+  "bin": {
+    "retake": "bin/retake.js"
+  },
+  "files": [
+    "bin/retake.js"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "optionalDependencies": {}
+}

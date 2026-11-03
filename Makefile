@@ -1,8 +1,8 @@
 # Run through mise so the pinned toolchain is used: `mise exec -- make build`, or activate mise in your shell.
-.PHONY: build server web test test-go lint lint-go e2e parity snapshot mac-app version clean
+.PHONY: build server web test test-go lint lint-go e2e parity snapshot mac-app npm-pack npm-smoke version clean
 
 # The binary's name. The product name isn't final: renaming it means changing this, project_name in .goreleaser.yaml
-# and NAME in scripts/install.sh.
+# and NAME in install.sh.
 NAME ?= retake
 # The Go module path, read from go.mod, so a new module path needs no change here.
 MODULE := $(shell go list -m 2>/dev/null)
@@ -23,6 +23,7 @@ web:
 
 test: test-go
 	cd web && npm test && npx vitest run -c vite.scripts.config.ts
+	node --test npm/launcher.test.js
 
 test-go:
 	go test -race ./...
@@ -49,6 +50,16 @@ snapshot:
 # The Mac app (unsigned, universal) from the darwin archives in dist/: dist/Retake.app and its zip (scripts/macos-app.sh).
 mac-app:
 	scripts/macos-app.sh
+
+# The npm packages from the snapshot's archives, into dist/npm/ (scripts/npm-pack.sh). --partial: a local snapshot has
+# no macOS or Windows retake-edit, which only builds on those systems. Publishes nothing.
+npm-pack:
+	scripts/npm-pack.sh --partial
+
+# The npm install end to end against a registry of its own on 127.0.0.1 (scripts/npm-smoke.mjs): npm i -g, the bundled
+# ffmpeg, the setup page, an agent calling retake with nothing on PATH, npx's cache.
+npm-smoke:
+	node scripts/npm-smoke.mjs
 
 version:
 	@echo $(VERSION)
