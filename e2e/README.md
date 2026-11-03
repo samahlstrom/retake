@@ -296,16 +296,23 @@ stubbed and its `resize` or `scroll` sent.
 - Screenshots: `.retake-work/keyboard-shots/` (`chromium-<what>` and `webkit-<what>-<device>`, `<what>` one of
   `video`, `video-keyboard`, `video-after`, `script`, `script-chat-keyboard`, `script-doc-keyboard`).
 
-**`23-progress`** and **`23-progress-webkit`** (new only; spec/automation.md, "Marking progress" and "The live
-version"): a plain video with three typed comments, sent with Send to a fake agent that works them one at a time
-(`retake working`, a different take of the video as its edit, `retake done`) and waits for the test's gate between
-steps (`lib/progress.ts`). Chromium on a desktop and an iPhone 15; WebKit (`RETAKE_E2E_WEBKIT`) on the iPhone 15.
-- v2 is live at once (`v2-draft1`, the page follows it, the picker says `v2`, never "draft"), and the red edge light is
-  on while the agent works.
-- The working comment alone has the sweep (`data-doing`) and its line ("trimming the intro…"); there is no "Agent
-  working on" pill.
-- Each gate moves the counts by exactly one (To do 3 → 2 → 1 → 0, Done 0 → 1 → 2 → 3), the finished card leaves To do,
-  the sweep moves to the next one, and the page follows each new revision of v2 without reloading.
-- Done shows each change with "in v2", which plays v2 at that comment's moment. The report makes v2 final, the edge
-  light goes, and the notes are answered in v2 with the agent's words.
-- Screenshots: `.retake-work/progress-shots/` (`working-<device>`, `mid-batch-<device>`).
+**`23-progress`** and **`23-progress-webkit`** (new only; spec/automation.md, "Marking progress", "While the agent
+works" and "The live version"): a plain video with fifteen typed comments, sent with Send to a fake agent that waits
+for the test's gate before its first mark, then works three of them out of time order (the fifth first: `retake
+working`, a different take of the video as its edit, `retake done`), a gate between steps, and leaves the other twelve
+to its report (`lib/progress.ts`). Chromium on a desktop and an iPhone 15; WebKit (`RETAKE_E2E_WEBKIT`) on the iPhone
+15.
+- v2 is live at once (`v2-draft1`, the page follows it, the picker says `v2`, never "draft"), and its list has the
+  batch under "From v1"; a comment typed on the live v2 sits apart under "On v2" (Open, `→ v3`).
+- Before the first mark the only sign is one quiet line at the top of To do, "The agent is on it · 15 comments": no
+  sweep, and every card of the batch quiet (`→ v2`, no dot, no word).
+- Then the line goes, and the comment the agent is on is first in To do with the Working dot, the sweep
+  (`data-doing`) and its line ("drawing the okay hand in ink…"); the other fourteen stay quiet and in time order.
+  There is no "Agent working on" pill and nothing lights up around the video.
+- Each gate moves the counts by exactly one (To do 16 → 15 → 14 → 13, Done 0 → 1 → 2 → 3), the finished card leaves
+  To do, the next one the agent is on moves to the top, and the page follows each new revision of v2 without
+  reloading. Between marks nothing sweeps.
+- Done shows each change with "in v2", which plays v2 at that comment's moment. The report makes v2 final and
+  finishes the twelve never marked; v2's list is its own comment again, without labels, and every v1 note is
+  answered in v2 (the marked ones with the agent's words).
+- Screenshots: `.retake-work/progress-shots/` (`on-it-<device>`, `working-<device>`, `mid-batch-<device>`).
