@@ -234,6 +234,24 @@ export function rowVersions(rows: readonly Row[]): Map<string, string> {
   return out;
 }
 
+/** A live version's rows (spec/notes.md, "What a version shows"): its own, and while the agent works the comments
+ * whose edits go into it (`notes`, the running batch's) with the agent's questions about them, so the person watches
+ * them land in the version they're watching. In time order. */
+export function withLive(rows: readonly Row[], own: readonly Row[], notes: readonly number[]): Row[] {
+  if (!notes.length) return [...own];
+  const have = new Set(own.map((r) => r.key)),
+    ids = new Set(notes);
+  const extra = rows.filter(
+    (r) =>
+      !have.has(r.key) &&
+      ((r.kind === 'note' && ids.has(r.id)) || (r.kind === 'question' && r.note != null && ids.has(r.note))),
+  );
+  if (!extra.length) return [...own];
+  return [...own, ...extra].sort(
+    (a, b) => a.t0 - b.t0 || (a.kind === b.kind ? a.id - b.id : a.kind === 'note' ? -1 : 1),
+  );
+}
+
 /** The rows of the version on screen (spec/notes.md, "Comments belong to their version"): its comments and the
  * agent's questions about them, and nothing of another version. */
 export function forVersion(rows: readonly Row[], shown: string | null): Row[] {

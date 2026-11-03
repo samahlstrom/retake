@@ -197,7 +197,10 @@ heads for (`v5`), so they are still there once the draft becomes that version.
   that version at that comment's moment). A comment the agent marks done while it works (spec/automation.md,
   "Marking progress") is in Done as soon as its edit is in the live vN, with the agent's words for its change; it
   moves there from To do by itself, fading out and letting the cards under it slide up (transform and opacity only,
-  nothing jumps; nothing moves with `prefers-reduced-motion`). Switching tab, version or search never animates. Timeline markers follow the tab, one per comment, in its status color, at the comment's own time on its own
+  nothing jumps; nothing moves with `prefers-reduced-motion`). Switching tab, version or search never animates.
+  While a version is live (spec/automation.md, "The live version"), its list also has the comments whose edits go
+  into it, the running batch's, so following the latest to the live vN keeps them in view as they land. A Send never
+  moves the list by itself; switching to the live version happens with following the latest (the video), as before. Timeline markers follow the tab, one per comment, in its status color, at the comment's own time on its own
   version; a comment's pen strokes and voice fold into its marker once it is transcribed. Transcription completion is
   independent of resolution. Switching the version, however it is switched (the picker, the strip below, C),
   switches the comments, the markers and the drawings on the video with it; flipped with C, the open take's own

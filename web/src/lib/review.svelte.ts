@@ -51,6 +51,7 @@ import {
   activeKey,
   earlierOpen,
   forVersion,
+  withLive,
   historyLabels,
   intoVersion,
   PHONE_QUERY,
@@ -321,7 +322,18 @@ export class Review {
   );
   /** The rows of the version on screen: the list, the markers, the counts and Send are about these only. During a
    * switch it's the version the notes answer is for, until the new one's is in (its times are on that clock). */
-  readonly versionRows = $derived(forVersion(this.rows, this.notes.res?.version ?? this.shown));
+  readonly versionRows = $derived.by(() => {
+    const label = this.notes.res?.version ?? this.shown;
+    const own = forVersion(this.rows, label);
+    // The live version also lists the comments being worked into it (spec/notes.md, "What a version shows").
+    const t = (this.automation.state?.tasks ?? []).find((x) => x.state === 'running' || x.state === 'stopping');
+    if (!t?.target || !label || verName(label) !== t.target) return own;
+    return withLive(
+      this.rows,
+      own,
+      t.notes.filter((id) => !t.dropped?.includes(id)),
+    );
+  });
   /** The sidebar row under the playhead. */
   historyVoice = $state.raw<VoiceTrack[]>([]);
   transcribedTakes = $state.raw<string[]>([]);
@@ -2464,9 +2476,13 @@ export class Review {
   #announceStreams(): void {
     const fresh = newlyStreamed(this.versions, this.#seenStreams);
     for (const v of fresh) this.#seenStreams.add(v.label);
-    const v = fresh[fresh.length - 1];
+    // A live version's next revision is no news: the edge light says it's updating (spec/automation.md).
+    const v = fresh.filter((f) => !this.#announced.has(verName(f.label))).at(-1);
+    for (const f of fresh) this.#announced.add(verName(f.label));
     if (v) this.toast.say('Updating video…', 2500);
   }
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- bookkeeping, not state
+  #announced = new Set<string>();
 
   /** A line or image of the open take shows on the version it was drawn on only: flipped with C to the other version,
    * the take's lines on the base wait for C back (another version's drawings never show on this one). */
@@ -2726,6 +2742,7 @@ export class Review {
     if (this.switching || (label === this.base && !this.flipped)) return;
     const v = byLabel(this.versions, label);
     if (!v) return;
+    const was = verName(this.shown);
     // A quick check before a recording is stopped for nothing, with the map if it's here already (it's fetched ahead,
     // see #prefetchMaps): showVersion, which starts the switch at once, has the last word.
     const land =
@@ -2749,7 +2766,8 @@ export class Review {
     if (v.kind) return; // an extension's version: no drawings to load, nothing to say
     void this.loadHistory(label);
     const note = this.#landNote;
-    this.toast.say(note ?? 'Video updated', note ? 3200 : 1400);
+    // The live version's next revision (the agent's next edit) comes in quietly: the edge light is its news.
+    if (note || verName(label) !== was) this.toast.say(note ?? 'Video updated', note ? 3200 : 1400);
   }
 
   pickVersion = (label: string): void => {

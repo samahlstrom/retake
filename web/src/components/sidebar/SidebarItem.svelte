@@ -82,12 +82,11 @@
   <span class="status {status.state}" data-part="status"
     ><span class="dot" aria-hidden="true"></span>{STATE_TEXT[status.state]}</span
   >
-  {#if doneIn && doneIn !== verName(review.shown)}<button
+  {#if doneIn}<button
       class="into in"
       data-part="into"
       title="See it in {doneIn} at {row.time}"
       onclick={() => review.showIn(row, doneIn)}>in {doneIn}</button
-    >{:else if doneIn}<span class="into" data-part="into">in {doneIn}</span
     >{:else if row.into && row.kind === 'note' && status.state !== 'done'}<span
       class="into"
       data-part="into"
