@@ -352,6 +352,8 @@ func TestSetTop(t *testing.T) {
 			after:  "default_agent = \"claude\"  # pick\nport = 9000\n"},
 		{name: "empty removes it", key: "fallback_agent", value: "",
 			before: "fallback_agent = \"codex\"\nport = 9000\n", after: "port = 9000\n"},
+		{name: "the videos folder", key: "folder", value: `~/My "Videos"`,
+			before: "port = 9000\n", after: "port = 9000\nfolder = \"~/My \\\"Videos\\\"\"\n"},
 		{name: "a table's own key is another key", key: "default_agent", value: "codex",
 			before: "[extensions.x]\ndefault_agent = \"y\"\n",
 			after:  "default_agent = \"codex\"\n\n[extensions.x]\ndefault_agent = \"y\"\n"},

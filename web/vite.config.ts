@@ -50,7 +50,7 @@ function prerenderShell(): Plugin {
       dev.httpServer?.once('close', () => void ssr?.then((s) => s.close()));
     },
     async transformIndexHtml(html, ctx) {
-      if (!html.includes('<div id="app"></div>')) return html; // home.html: the home screen mounts on its own
+      if (!html.includes('<div id="app"></div>')) return html; // home.html and setup.html mount on their own
       let body: string;
       if (ctx.server) body = await render(await (ssr ??= ssrServer()));
       else {
@@ -75,7 +75,8 @@ export default defineConfig({
   // Relative asset and API URLs: the same build works at / (retake open) and at /p/<name>/ (retake serve).
   base: './',
   // hls.js (about 580 kB) is its own chunk, loaded only for .m3u8 versions in browsers without native HLS.
-  // Two pages: the review page (index.html) and the home screen of retake open <folder> (home.html, spec/home.md).
+  // Three pages: the review page (index.html), the home screen of retake open <folder> (home.html, spec/home.md) and
+  // the first-run setup of retake start (setup.html, spec/setup.md).
   build: {
     outDir: 'dist',
     emptyOutDir: true,
@@ -85,6 +86,7 @@ export default defineConfig({
       input: {
         index: fileURLToPath(new URL('index.html', import.meta.url)),
         home: fileURLToPath(new URL('home.html', import.meta.url)),
+        setup: fileURLToPath(new URL('setup.html', import.meta.url)),
       },
     },
   },

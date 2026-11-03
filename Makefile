@@ -1,5 +1,5 @@
 # Run through mise so the pinned toolchain is used: `mise exec -- make build`, or activate mise in your shell.
-.PHONY: build server web test test-go lint lint-go e2e parity snapshot version clean
+.PHONY: build server web test test-go lint lint-go e2e parity snapshot mac-app version clean
 
 # The binary's name. The product name isn't final: renaming it means changing this, project_name in .goreleaser.yaml
 # and NAME in scripts/install.sh.
@@ -40,12 +40,18 @@ e2e: build
 parity: server
 	scripts/legacy-parity.sh
 
-# Release archives for every platform in dist/, built by .goreleaser.yaml. Publishes nothing.
+# Release archives for every platform in dist/, built by .goreleaser.yaml, with the tools that ship with retake
+# (scripts/bundle-deps.sh; downloads are pinned and cached). Publishes nothing. `make mac-app` then makes Retake.app.
 snapshot:
+	scripts/bundle-deps.sh
 	nice -n 19 goreleaser release --snapshot --clean --parallelism 2
+
+# The Mac app (unsigned, universal) from the darwin archives in dist/: dist/Retake.app and its zip (scripts/macos-app.sh).
+mac-app:
+	scripts/macos-app.sh
 
 version:
 	@echo $(VERSION)
 
 clean:
-	rm -rf bin web/dist dist
+	rm -rf bin web/dist dist dist-bundle

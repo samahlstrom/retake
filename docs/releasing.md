@@ -32,10 +32,25 @@ Archives are named `<binary>_<version>_<os>_<arch>.tar.gz` (`.zip` on Windows). 
 `CHANGELOG.md`, `THIRD_PARTY_NOTICES.md`, and the LICENSE once there is one. One `checksums.txt` (SHA-256) covers all
 of them.
 
+On Linux and macOS the `retake` archive is the whole install (docs/install-plan.md): next to `retake` it has the tools
+that ship with it, which `scripts/bundle-deps.sh` puts in `dist-bundle/<os>_<arch>/` first.
+
+| In the archive | From | Pinned |
+|---|---|---|
+| `herdr` | herdr's GitHub release v0.8.2 (Apache-2.0) | SHA-256 per platform |
+| `ffmpeg`, `ffprobe` | Linux: John Van Sickle's static GPL build 7.0.2. macOS: none yet (the app uses one on `PATH`) | SHA-256 |
+| `retake-edit` | This machine's `editor/target/release/retake-edit` for its own platform, else CI's archives in `dist-editor/` | |
+| `licenses/` | herdr's LICENSE, ffmpeg's GPLv3 text, its build notes and where its source is | herdr's by SHA-256 |
+| `retake-bundle.json` | What's inside, with versions, licenses and sources. It makes `retake` put its folder first on its own `PATH` (spec/setup.md) | |
+
+Downloads are kept in `~/.cache/retake-bundle`, so a second snapshot downloads nothing, and a checksum that doesn't
+match stops the build. Nothing downloaded is run while building.
+
 ## A local snapshot
 
 ```bash
-mise exec -- make snapshot      # goreleaser release --snapshot --clean; archives in dist/, nothing published
+mise exec -- make snapshot      # scripts/bundle-deps.sh, then goreleaser release --snapshot --clean; nothing published
+make mac-app                    # dist/Retake.app (universal, unsigned) and dist/Retake_<version>_macos.zip
 ```
 
 A snapshot of this checkout made these:
@@ -51,6 +66,15 @@ A snapshot of this checkout made these:
 
 The binaries inside are 16–17 MB. Put `retake-edit` archives in `dist-editor/` before running goreleaser, and
 `checksums.txt` covers them too.
+
+With the bundled tools (this checkout, November 2026): `linux_amd64` 92 MB (ffmpeg and ffprobe are 80 MB each
+unpacked), `linux_arm64` 71 MB, `darwin_*` 18 MB (herdr only), and the universal `Retake_<version>_macos.zip` 35 MB.
+
+**The Mac app.** `scripts/macos-app.sh` joins the two darwin archives into one universal `Retake.app` with
+`llvm-lipo`: `Contents/MacOS/Retake` is `retake` itself (with no arguments it runs `retake start --app`), next to
+`herdr` and the other tools both archives have; `Contents/Resources/` has `menubar.js` (the menu-bar item, run with
+`osascript`), `retake-bundle.json`, the licenses and the notices. It isn't signed and has never run on a Mac. Signing,
+notarizing and the `.dmg` need a Mac (docs/install-plan.md).
 
 ## On a tag in CI
 
@@ -76,8 +100,12 @@ The HTTP API's breaking changes are listed the same way, and only in a major rel
 
 ## The installer
 
-`scripts/install.sh` installs the binaries for the current machine into `~/.local/bin`. It never uses sudo. It
-downloads `checksums.txt` and the archive, and refuses to install when the archive's SHA-256 doesn't match.
+`scripts/install.sh` installs the current machine's archive. It never uses sudo. It downloads `checksums.txt` and the
+archive, and refuses to install when the archive's SHA-256 doesn't match. An archive with `retake-bundle.json` is
+unpacked whole into `~/.local/share/retake/<version>/` (older versions' folders are removed), `retake` and
+`retake-edit` are linked into `~/.local/bin`, and on Linux `~/.local/share/applications/retake.desktop` puts
+**Retake** in the app menu (`retake start --app`; `--no-menu` leaves it out). A plain archive is copied into
+`~/.local/bin`.
 
 ```bash
 curl -fsSL <release URL>/install.sh | sh                                 # the latest release
@@ -88,7 +116,8 @@ curl -fsSL <release URL>/install.sh | sh -s -- --version 0.1.0 --with-editor --d
 |---|---|
 | `REPO` (at the top of the script), or `INSTALL_REPO` | The GitHub `owner/repo` the releases come from. Today a placeholder. |
 | `INSTALL_BASE_URL` | Another place for one release's files, `https://` or `file://`; `{version}` is replaced. Needs `--version`. |
-| `INSTALL_DIR`, or `--dir` | Where the binaries go. |
+| `INSTALL_DIR`, or `--dir` | Where the commands go. |
+| `XDG_DATA_HOME` | Where the versions' folders and the app-menu entry go (`~/.local/share`). |
 
 To try it against a local snapshot:
 
@@ -122,6 +151,9 @@ INSTALL_BASE_URL="file://$PWD/dist" sh scripts/install.sh --version 0.0.1-snapsh
       `.golangci.yml`. The Makefile and goreleaser read the module path from `go.mod`.
 - [ ] Set `REPO` in `scripts/install.sh`, and publish the script with each release.
 - [ ] Run CI on GitHub once. The workflow has only been checked with actionlint, and the release jobs have never run.
+- [ ] The decisions in docs/install-plan.md: signing (an Apple Developer account), GPL ffmpeg and its source next to
+      each release, an ffmpeg for macOS, and herdr's version. Then put the app's `.dmg` and `install.sh` in the
+      release.
 - [ ] Decide what the git history publishes. Earlier commits contain the owner's private design notes (the original
       `docs/editor-design.md`), names in test data and the legacy goldens.
 - [ ] Turn publishing on: `release.disable: false` in `.goreleaser.yaml` (keep `draft: true`), then push a tag and

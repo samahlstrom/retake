@@ -157,6 +157,10 @@ whenever you like, open them in [herdr](https://herdr.dev) or tmux instead. In `
 open_agents_in = "herdr"   # or "tmux"; "background" is the default
 ```
 
+The setup page of `retake start` asks this the first time (spec/setup.md), and Settings changes it. herdr comes with
+the Retake app and the Linux install: Retake uses the copy next to its own binary first, then the one on `PATH`. Run
+`herdr` in a terminal to watch.
+
 Each video then gets its own interactive Claude Code or Codex session (not `claude -p` or `codex exec`), named after
 the video:
 

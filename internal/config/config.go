@@ -35,6 +35,9 @@ type Config struct {
 	DefaultAgent  *string `toml:"default_agent"`
 	FallbackAgent *string `toml:"fallback_agent"`
 	Agents        []Agent `toml:"agents"` // [[agents]]: what retake open and retake worker may run
+	// Folder is your videos folder: what retake start (and the app) opens (spec/setup.md). Unset: the setup page.
+	// A leading ~ is the home folder.
+	Folder *string `toml:"folder"`
 
 	Transcribe Transcribe `toml:"transcribe"`
 	Share      Share      `toml:"share"`
@@ -225,6 +228,28 @@ func Parse(s string) (Config, []string, error) {
 	return c, warnings, nil
 }
 
+// FolderPath is the videos folder (folder), with a leading ~ made the home folder; "" when unset.
+func FolderPath(c Config, home string) string {
+	if c.Folder == nil {
+		return ""
+	}
+	return ExpandHome(strings.TrimSpace(*c.Folder), home)
+}
+
+// ExpandHome makes a leading ~ (alone, or before a slash) the home folder.
+func ExpandHome(p, home string) string {
+	if home == "" {
+		return p
+	}
+	if p == "~" {
+		return home
+	}
+	if rest, ok := strings.CutPrefix(p, "~/"); ok {
+		return filepath.Join(home, rest)
+	}
+	return p
+}
+
 // Defaults for settings that neither the file nor a flag set.
 const (
 	DefaultPort     = 8777
@@ -406,7 +431,7 @@ func SetExtension(path, id string, on bool, pin string) error {
 }
 
 // TopKeys are the top-level keys SetTop writes (the settings page's, spec/home.md "Settings").
-var TopKeys = []string{"default_agent", "fallback_agent", "open_agents_in"}
+var TopKeys = []string{"default_agent", "fallback_agent", "open_agents_in", "folder"}
 
 // SetTop sets a top-level string key of the config file at path to value, or removes its line when value is "" (the
 // default). Only TopKeys are written. The rest of the file, comments included, stays as it is; the file and its
@@ -473,6 +498,8 @@ func topValue(c Config, key string) string {
 		p = c.FallbackAgent
 	case "open_agents_in":
 		p = c.OpenAgentsIn
+	case "folder":
+		p = c.Folder
 	}
 	if p == nil {
 		return ""

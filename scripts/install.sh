@@ -1,22 +1,30 @@
 #!/bin/sh
 # Installs retake from a release: downloads the archive for this OS and CPU, checks its SHA-256 against the
-# release's checksums.txt, and copies the binary into ~/.local/bin. It never uses sudo.
+# release's checksums.txt, and installs it. It never uses sudo.
 #
 #   curl -fsSL https://<release host>/install.sh | sh
-#   curl -fsSL https://<release host>/install.sh | sh -s -- --version 0.1.0 --with-editor
+#   curl -fsSL https://<release host>/install.sh | sh -s -- --version 0.1.0
+#
+# An archive with the tools that ship with retake (herdr, ffmpeg, retake-edit and retake-bundle.json) is unpacked
+# whole into ~/.local/share/retake/<version>/, with retake and retake-edit linked into ~/.local/bin and, on Linux, a
+# Retake entry in the app menu that runs `retake start --app`. Older versions' folders are removed. A plain archive
+# (just retake) is copied into ~/.local/bin.
 #
 # Options:
 #   --version X.Y.Z   install this version (default: the latest release)
-#   --dir DIR         install into DIR (default: $INSTALL_DIR, else ~/.local/bin)
-#   --with-editor     also install retake-edit, the timeline editor
+#   --dir DIR         put the commands in DIR (default: $INSTALL_DIR, else ~/.local/bin)
+#   --with-editor     also install retake-edit, when the archive doesn't have it
+#   --no-menu         no app-menu entry (Linux)
 #   -h, --help        show this help
 # Environment:
-#   INSTALL_DIR       the install folder, as --dir
+#   INSTALL_DIR       the commands' folder, as --dir
 #   INSTALL_REPO      the GitHub owner/repo the releases come from
 #   INSTALL_BASE_URL  the folder holding one release's files, instead of GitHub's URL for it ({version} in it is
 #                     replaced by the version; https:// or file://). Needs --version.
+#   XDG_DATA_HOME     where the versions' folders and the menu entry go (default ~/.local/share)
 #
-# Linux and macOS, on x86_64 or arm64. On Windows, download the .zip from the release page instead.
+# Linux and macOS, on x86_64 or arm64. On a Mac, Retake.app is the easier way (docs/install-plan.md). On Windows,
+# download the .zip from the release page instead.
 set -eu
 
 # The product's name isn't final: these are the only places the installer names it.
@@ -31,11 +39,12 @@ die() {
   printf '%s install: %s\n' "$NAME" "$*" >&2
   exit 1
 }
-usage() { sed -n '2,19p' "$0" 2>/dev/null | sed 's/^# \{0,1\}//' || true; }
+usage() { sed -n '2,27p' "$0" 2>/dev/null | sed 's/^# \{0,1\}//' || true; }
 
 version=""
 dir="${INSTALL_DIR:-}"
 with_editor=0
+menu=1
 while [ $# -gt 0 ]; do
   case "$1" in
     --version)
@@ -60,11 +69,15 @@ while [ $# -gt 0 ]; do
       with_editor=1
       shift
       ;;
+    --no-menu)
+      menu=0
+      shift
+      ;;
     -h | --help)
       if [ -f "$0" ]; then
         usage
       else # piped into sh: $0 isn't this file
-        say "usage: sh install.sh [--version X.Y.Z] [--dir DIR] [--with-editor]"
+        say "usage: sh install.sh [--version X.Y.Z] [--dir DIR] [--with-editor] [--no-menu]"
       fi
       exit 0
       ;;
@@ -82,6 +95,11 @@ esac
   [ -n "${HOME:-}" ] || die "HOME isn't set: pass --dir"
   dir="$HOME/.local/bin"
 }
+data="${XDG_DATA_HOME:-}"
+case "$data" in
+  /*) ;;
+  *) data="${HOME:-}/.local/share" ;;
+esac
 
 # This machine, in the archives' naming (goreleaser's: linux|darwin, amd64|arm64).
 os="$(uname -s)"
@@ -143,8 +161,8 @@ say "$NAME $version for $os/$arch"
 fetch "$base/checksums.txt" "$tmp/checksums.txt" ||
   die "no release $version at $base (checksums.txt not found)"
 
-# install_one BIN: download BIN's archive, check it, unpack it and install BIN into $dir.
-install_one() {
+# unpack BIN: download BIN's archive, check it and unpack it into $tmp/BIN.
+unpack() {
   bin="$1"
   archive="${bin}_${version}_${os}_${arch}.tar.gz"
   fetch "$base/$archive" "$tmp/$archive" || die "no $archive in release $version"
@@ -155,6 +173,11 @@ install_one() {
   mkdir -p "$tmp/$bin"
   tar -xzf "$tmp/$archive" -C "$tmp/$bin"
   [ -f "$tmp/$bin/$bin" ] || die "$archive has no $bin binary"
+}
+
+# install_one BIN: copy the unpacked BIN into $dir.
+install_one() {
+  bin="$1"
   mkdir -p "$dir" || die "can't create $dir"
   # Copy next to the target, then rename over it: a running copy keeps working, and nothing is half-written.
   cp "$tmp/$bin/$bin" "$dir/.$bin.new" || die "can't write to $dir"
@@ -163,13 +186,62 @@ install_one() {
   say "installed $dir/$bin (sha256 verified)"
 }
 
-install_one "$NAME"
-if [ "$with_editor" = 1 ]; then
-  install_one "$EDITOR_NAME"
+# link BIN FOLDER: $dir/BIN becomes a link to FOLDER/BIN.
+link() {
+  mkdir -p "$dir" || die "can't create $dir"
+  ln -sfn "$2/$1" "$dir/.$1.new" || die "can't write to $dir"
+  mv -f "$dir/.$1.new" "$dir/$1"
+  say "linked $dir/$1 -> $2/$1"
+}
+
+# install_bundle: the whole archive into $data/$NAME/$version, its commands linked into $dir, a menu entry on Linux.
+install_bundle() {
+  home="$data/$NAME"
+  target="$home/$version"
+  mkdir -p "$home" || die "can't create $home"
+  rm -rf "$home/.new"
+  cp -R "$tmp/$NAME" "$home/.new" || die "can't write to $home"
+  rm -rf "$target"
+  mv "$home/.new" "$target"
+  say "installed $NAME $version into $target (sha256 verified)"
+  link "$NAME" "$target"
+  [ ! -f "$target/$EDITOR_NAME" ] || link "$EDITOR_NAME" "$target"
+  # Older versions: nothing links to them any more. A running one keeps its open files.
+  for old in "$home"/*; do
+    [ -d "$old" ] && [ "$old" != "$target" ] || continue
+    rm -rf "$old"
+    say "removed the older $(basename "$old")"
+  done
+  if [ "$os" = linux ] && [ "$menu" = 1 ]; then
+    apps="$data/applications"
+    mkdir -p "$apps" || die "can't create $apps"
+    printf '%s\n' "[Desktop Entry]" "Type=Application" "Name=Retake" "Comment=Review videos with an AI agent" \
+      "Exec=$dir/$NAME start --app" "Terminal=false" "Categories=AudioVideo;Video;" >"$apps/$NAME.desktop"
+    say "added Retake to the app menu"
+  fi
+}
+
+unpack "$NAME"
+if [ -f "$tmp/$NAME/retake-bundle.json" ]; then
+  install_bundle
+  if [ "$with_editor" = 1 ] && [ ! -f "$tmp/$NAME/$EDITOR_NAME" ]; then
+    unpack "$EDITOR_NAME"
+    install_one "$EDITOR_NAME"
+  fi
+else
+  install_one "$NAME"
+  if [ "$with_editor" = 1 ]; then
+    unpack "$EDITOR_NAME"
+    install_one "$EDITOR_NAME"
+  fi
 fi
 
 case ":${PATH:-}:" in
   *":$dir:"*) ;;
   *) say "note: $dir isn't on your PATH. Add it, e.g. in ~/.profile: export PATH=\"$dir:\$PATH\"" ;;
 esac
-say "run: $NAME version"
+if [ -f "$tmp/$NAME/retake-bundle.json" ]; then
+  say "start it: open Retake from your app menu, or run: $NAME start"
+else
+  say "run: $NAME version"
+fi

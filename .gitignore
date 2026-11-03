@@ -1,6 +1,7 @@
 /bin/
 /dist/
 /dist-editor/
+/dist-bundle/
 /coverage/
 web/node_modules/
 web/dist/
