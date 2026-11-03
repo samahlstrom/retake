@@ -25,10 +25,11 @@ func TestTryAgent(t *testing.T) {
 		t.Skip("shell scripts")
 	}
 	ctx := context.Background()
-	// Claude Code: its flags, then one JSON result line.
+	// Claude Code: its flags, then one JSON result line. printf, not echo: dash's echo (Ubuntu's /bin/sh) turns the
+	// JSON's \n into a real newline.
 	claude := fakeAgent(t, "claude", `case "$*" in *"-p --model haiku --tools  --no-session-persistence --output-format json Reply with the single word: ready"*) ;; *) echo "bad args: $*" >&2; exit 2;; esac
 [ -n "$RETAKE_AGENT_TEST" ] || exit 3
-echo '{"type":"result","is_error":false,"result":"ready\n"}'
+printf '%s\n' '{"type":"result","is_error":false,"result":"ready\n"}'
 `)
 	r := TryAgent(ctx, Profile{Command: []string{claude, "-p"}})
 	if !r.OK || r.Reply != "ready" || r.Error != "" {

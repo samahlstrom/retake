@@ -27,6 +27,8 @@ jobs:
           install_args: go golangci-lint
       - name: go vet
         run: go vet ./...
+      - name: Install ffmpeg (the transcribe and worker tests decode real audio with it)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - name: go test -race
         run: go test -race ./...
       - name: golangci-lint
@@ -132,8 +134,8 @@ jobs:
         uses: jdx/mise-action@v5
         with:
           install_args: rust
-      - name: Install ffmpeg (the engine runs it as a subprocess; the tests generate their media with it)
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - name: Install ffmpeg and Skia's font libraries (the engine runs ffmpeg as a subprocess; Skia links freetype and fontconfig)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg libfreetype-dev libfontconfig1-dev
       - name: Cache cargo builds
         uses: Swatinem/rust-cache@v2
         with:
