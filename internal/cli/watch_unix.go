@@ -3,6 +3,7 @@
 package cli
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"syscall"
@@ -16,3 +17,8 @@ func interrupt(p *os.Process) error { return syscall.Kill(-p.Pid, syscall.SIGINT
 
 // killGroup kills whatever is left of the command's process group.
 func killGroup(p *os.Process) { _ = syscall.Kill(-p.Pid, syscall.SIGKILL) }
+
+// shell returns the command that runs line through the shell.
+func shell(ctx context.Context, line string) *exec.Cmd {
+	return exec.CommandContext(ctx, "/bin/sh", "-c", line) //nolint:gosec // running the user's --exec is the point
+}

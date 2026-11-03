@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"runtime"
 	"strconv"
 	"time"
 
@@ -19,14 +18,6 @@ const DefaultDebounce = 2 * time.Second
 
 // stopGrace is how long a running command gets to exit after an interrupt before it is killed.
 const stopGrace = 5 * time.Second
-
-// shell returns the command that runs line through the platform's shell.
-func shell(ctx context.Context, line string) *exec.Cmd {
-	if runtime.GOOS == "windows" {
-		return exec.CommandContext(ctx, "cmd", "/C", line) //nolint:gosec // running the user's --exec is the point
-	}
-	return exec.CommandContext(ctx, "/bin/sh", "-c", line) //nolint:gosec // running the user's --exec is the point
-}
 
 // watchCmd is `retake watch <video> --exec CMD`: every time notes turn open or answers land, it waits until things
 // have been quiet for the debounce time, then runs CMD through the shell with RETAKE_VIDEO, RETAKE_PROJECT and
