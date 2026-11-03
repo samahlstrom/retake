@@ -190,12 +190,15 @@ type Note struct {
 	Detail     Detail  `json:"-"`
 	Created    string  `json:"created"`
 	Updated    string  `json:"updated"`
+	// Edited says a person changed its words (spec/notes.md, "Editing a comment"): a notes rebuild keeps them.
+	Edited bool `json:"edited,omitempty"`
 }
 
 // ErrNotFound is returned for an unknown note, thread or version.
 var ErrNotFound = errors.New("not found")
 
-const noteCols = `id, key, version, take, seg, t0, t1, text, author, status, answered_in, change, detail, created, updated`
+const noteCols = `id, key, version, take, seg, t0, t1, text, author, status, answered_in, change, detail, created, updated,
+	EXISTS (SELECT 1 FROM note_edits e WHERE e.note = notes.id)`
 
 type scanner interface{ Scan(dest ...any) error }
 
@@ -203,7 +206,7 @@ func scanNote(r scanner) (Note, error) {
 	var n Note
 	var detail string
 	err := r.Scan(&n.ID, &n.Key, &n.Version, &n.Take, &n.Seg, &n.T0, &n.T1, &n.Text, &n.Author, &n.Status,
-		&n.AnsweredIn, &n.Change, &detail, &n.Created, &n.Updated)
+		&n.AnsweredIn, &n.Change, &detail, &n.Created, &n.Updated, &n.Edited)
 	if err != nil {
 		return n, err
 	}
@@ -476,6 +479,9 @@ func (t *tx) syncNote(c Comment, key string, res *SyncResult) error {
 	}
 	if deleted > 0 {
 		return nil // an explicit user deletion must survive final transcription and future rebuilds
+	}
+	if old.Edited {
+		c.Text = old.Text // a person's words survive a rebuild too (spec/notes.md, "Editing a comment")
 	}
 	oldDetail, _ := json.Marshal(old.Detail)
 	if old.Text != c.Text || old.T0 != c.T0 || old.T1 != c.T1 || old.Author != c.Author ||

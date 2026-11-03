@@ -42,10 +42,10 @@ handle() {
 	batch)
 		# One batch in a plain project: the task's line logs a launch in $FAKE_BARRIER/launches, waits for
 		# $FAKE_BARRIER/go, makes the next version (a copy of *_v1.mp4) and reports to the newest report file it has
-		# been given. A "More comments" line only moves the report (the handling above), or reports at once when the
-		# work is done already.
+		# been given. A "More comments" or "Changed comments" line only moves the report (the handling above), or
+		# reports at once when the work is done already.
 		case "$1" in
-		"More comments"*)
+		"More comments"* | "Changed comments"*)
 			if [ -f .fake-agent-done ]; then
 				printf '{"state":"completed","message":"Did the batch and the comments added."}' >"$report"
 			fi

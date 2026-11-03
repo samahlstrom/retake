@@ -1,11 +1,12 @@
 <script lang="ts">
-  // A comment's ⋯: everything you do to a comment now and then (send just this one, retry, switch agent, pause, its
-  // history, reopen, delete). It shows on hover or focus (always on touch), so the list stays words and pictures. No ⋯
-  // at all when there's nothing to do.
+  // A comment's ⋯: everything you do to a comment now and then (edit its words, send just this one, retry, switch
+  // agent, pause, its history, reopen, delete). It shows on hover or focus (always on touch), so the list stays words
+  // and pictures. No ⋯ at all when there's nothing to do.
   import { DropdownMenu, Popover } from 'bits-ui';
   import type { Review } from '../../lib/review.svelte';
   import type { Row } from '../../lib/notes/view';
   import { activeTask } from '../../lib/status';
+  import { canEdit } from '../../lib/notes/edit.svelte';
 
   let { review, row }: { review: Review; row: Row } = $props();
 
@@ -28,7 +29,11 @@
   const canPause = $derived(owner && !!active && (active.state === 'running' || active.state === 'queued'));
   const hasHistory = $derived(!!task?.events.length);
   const canDelete = $derived(row.kind === 'note' && review.canApprove);
-  const any = $derived(canSend || canRetry || canSwitch || canPause || hasHistory || row.reopen || canDelete);
+  // Its words, while it's still to do and the agent isn't on it (spec/notes.md, "Editing a comment"); hidden otherwise.
+  const canEditWords = $derived(review.canRecord && canEdit(row, status, task));
+  const any = $derived(
+    canEditWords || canSend || canRetry || canSwitch || canPause || hasHistory || row.reopen || canDelete,
+  );
 
   let trigger = $state<HTMLElement | null>(null);
   let history = $state(false);
@@ -58,7 +63,20 @@
       >
     </DropdownMenu.Trigger>
     <DropdownMenu.Portal>
-      <DropdownMenu.Content class="menu" data-part="menu" align="end" sideOffset={4} collisionPadding={10}>
+      <DropdownMenu.Content
+        class="menu"
+        data-part="menu"
+        align="end"
+        sideOffset={4}
+        collisionPadding={10}
+        onCloseAutoFocus={(e) => {
+          // Edit put the focus in the field (the card's, or the comment box on a phone): it stays there.
+          if (review.edit.editing(row.id, true)) e.preventDefault();
+        }}
+      >
+        {#if canEditWords}<DropdownMenu.Item class="menu-item" onSelect={() => review.editComment(row)}
+            >Edit</DropdownMenu.Item
+          >{/if}
         {#if canSend}<DropdownMenu.Item class="menu-item" onSelect={send}>Send to agent</DropdownMenu.Item>{/if}
         {#if canRetry}<DropdownMenu.Item
             class="menu-item"
@@ -88,7 +106,7 @@
             >Reopen</DropdownMenu.Item
           >{/if}
         {#if canDelete}
-          {#if canSend || canRetry || canSwitch || canPause || hasHistory || row.reopen}<DropdownMenu.Separator
+          {#if canEditWords || canSend || canRetry || canSwitch || canPause || hasHistory || row.reopen}<DropdownMenu.Separator
               class="menu-sep"
             />{/if}
           <DropdownMenu.Item

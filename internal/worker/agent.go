@@ -452,6 +452,11 @@ func (at *attempt) nextRound(ctx context.Context, settle bool) bool {
 			r.update(rec, func(x *runRecord) {
 				x.Phase, x.Round, x.Proc, x.Snaps = phaseAgent, ids, nil, snaps
 				x.Prompt, x.Context, x.Report, x.Log = rd.promptPath, rd.contextPath, rd.reportPath, rd.logPath
+				for _, e := range rd.edits {
+					// Its words changed after the agent did it: what this round says about it replaces the earlier.
+					delete(x.Changes, e.ID)
+					x.Said = slices.DeleteFunc(x.Said, func(id int64) bool { return id == e.ID })
+				}
 				at.given(x)
 			})
 			return true
@@ -580,7 +585,10 @@ func (at *attempt) waitSession(ctx context.Context) *outcome {
 				x.Prompt, x.Context, x.Report = rd.promptPath, rd.contextPath, rd.reportPath
 				at.given(x)
 			})
-			r.log("%s: gave the agent %d more comments (%s) in %s", v.name, len(rd.ids), noteIDs(rd.ids), mode)
+			if len(rd.ids) > 0 {
+				r.log("%s: gave the agent %d more comments (%s) in %s", v.name, len(rd.ids), noteIDs(rd.ids), mode)
+			}
+			r.logEdits(rd)
 		}
 		if time.Since(checked) < viewCheck {
 			continue

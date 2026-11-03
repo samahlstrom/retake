@@ -70,6 +70,9 @@ export interface Row {
   into: string | null;
   /** A version after `into` that exists already (the server's `later`): the edit updates `into` in place. */
   later: string | null;
+  /** A person changed its words; this page may change them now (the server's `edited` and `editable`). */
+  edited?: boolean;
+  editable?: boolean;
 }
 
 /** The chip of a comment or question about a document: the heading it's under, else its file. */
@@ -190,6 +193,8 @@ export function toRow(item: NoteItem, newest: boolean, ctx: ViewContext): Row {
           ? null
           : intoVersion(item.version || ctx.shown),
     later: typeof item.later === 'string' && item.later ? item.later : null,
+    edited: item.edited === true,
+    editable: item.kind === 'note' && item.editable === true,
   };
 }
 

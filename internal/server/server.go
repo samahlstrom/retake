@@ -769,6 +769,10 @@ func (s *Server) post(w http.ResponseWriter, r *http.Request, parts []string) {
 		s.deleteComment(w, r, parts[2], parts[3] == "restore")
 		return
 	}
+	if len(parts) == 4 && parts[0] == "api" && parts[1] == "notes" && parts[3] == "edit" {
+		s.editComment(w, r, parts[2], body)
+		return
+	}
 	if len(parts) == 4 && parts[0] == "api" && parts[1] == "versions" && parts[3] == "watch" {
 		s.watch(w, r, parts[2], true)
 		return

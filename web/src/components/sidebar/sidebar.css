@@ -560,6 +560,53 @@
   #side .text.quiet {
     color: var(--muted);
   }
+  /* A comment's words being edited (spec/notes.md, "Editing a comment"): a field in their own place, with their font,
+     size and line height, as tall as the words, so nothing around it moves; a faint tint reaching past the words is
+     all that says it's a field. */
+  #side textarea.text.editing {
+    box-sizing: content-box;
+    display: block;
+    width: 100%;
+    margin-right: -6px;
+    margin-left: -6px;
+    padding: 0 6px;
+    border: 0;
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--overlay) 6%, transparent);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--focus) 40%, transparent);
+    color: var(--text);
+    font-family: inherit;
+    resize: none;
+    outline: none;
+    overflow: hidden;
+    user-select: text;
+    -webkit-user-select: text;
+  }
+  #side textarea.text.editing::placeholder {
+    color: var(--faint);
+  }
+  /* Cancel and Save in the ⋯'s place, in the card's first line, as tall as the ⋯. */
+  #side .edit-actions {
+    display: flex;
+    flex: none;
+    gap: 2px;
+    height: 26px;
+  }
+  #side .edit-actions button {
+    padding: 0 6px;
+    border: 0;
+    background: none;
+    color: var(--muted);
+    font: inherit;
+    font-size: 12.5px;
+  }
+  #side .edit-actions button.strong {
+    color: var(--text);
+    font-weight: 600;
+  }
+  #side .edit-actions button:disabled {
+    opacity: 0.4;
+  }
   #side .item.asking .text {
     color: var(--agent-text);
   }

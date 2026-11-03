@@ -49,6 +49,7 @@ import { composeMode } from './viewport';
 import { browserStorage } from './side-width';
 import { closeMic, MIC_BLOCKED, MIC_BLOCKED_TOUCH, openMic, pickMime, recorderMime, type Mic } from './mic';
 import { Notes } from './notes/notes.svelte';
+import { NoteEdit } from './notes/edit.svelte';
 import type { NoteItem } from './notes/types';
 import {
   activeKey,
@@ -328,6 +329,24 @@ export class Review {
     },
   });
   readonly automation = new Automation();
+  /** A comment's words being edited (spec/notes.md, "Editing a comment"): in its card, or in the comment box on a
+   * phone. */
+  readonly edit = new NoteEdit({
+    onSaved: () => this.notes.refresh(),
+    onError: (why) => this.toast.say(why, 5000),
+  });
+  /** ⋯ → Edit, or a double-click (a tap on a phone) on a comment's words: its words become a field in its card; on a
+   * phone the comment box is the field (compose mode) and the video shows the comment's moment. Called in the tap
+   * itself, so iOS raises the keyboard for the box. */
+  editComment = (row: Row): void => {
+    if (!this.touch) {
+      this.edit.start(row);
+      return;
+    }
+    this.edit.start(row, true);
+    this.el.comment?.focus();
+    this.jumpToComment(row);
+  };
   /** Time maps between versions: switching versions lands on the matching moment (spec/bridge.md). */
   readonly maps = new TimeMaps();
   readonly rows = $derived(

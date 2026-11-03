@@ -4,6 +4,19 @@ All notable changes are listed here. Versions follow semver once the first relea
 
 ## Unreleased
 
+### Edit a comment's words while it's still to do
+- ⋯ → **Edit**, or a double-click on a comment's words: they become a field in their own place (same font and size,
+  nothing moves), with Cancel and Save where the ⋯ was. Enter saves, Shift+Enter is a new line, Esc cancels. On a
+  phone, a tap on the words (or ⋯ → Edit) opens compose mode with the words in the comment box, on the keyboard. Works
+  for voice comments (their transcribed words), typed ones and drawing-only ones; the drawing, time, audio and author
+  stay. No badge afterwards, only an `Edited` tooltip (spec/notes.md, "Editing a comment").
+- Open comments only, including ones sent in a batch the agent hasn't reached yet; hidden once the agent marks one
+  working or done. The author, approvers and the owner may edit.
+- `POST /api/notes/<id>/edit {text}` (origin-checked, idempotent, a `notes` event). A notes rebuild (the take's final
+  transcription, an engine change) never overwrites edited words (`note_edits`, store migration 8).
+- The agent reads the new words: a queued task at pick-up, and a running batch as one more round (a `Changed comments`
+  message in herdr or tmux, a follow-up round in the background; spec/automation.md, "Words changed while they wait").
+
 ### Download a version for YouTube
 - The version menu ends with **Download v5 (MP4)** for the version on screen, on a computer and a phone (with a single
   version the menu shows just for this). The file is ready to drag into YouTube Studio: MP4 with faststart, H.264 High

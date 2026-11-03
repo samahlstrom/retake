@@ -327,6 +327,7 @@ Versioning). Classes and ids are not part of the API and can change in any relea
 | `nav-ext-video` | A video in that section (an idea: only an extension's version) | home |
 | `ext-slot` | Where an extension's UI mounts; `data-ext` is its id, `data-slot` the slot | home, review |
 | `comment-line` | The comment box at the bottom of the comments ("Comment at 0:18 · goes into v8…", or "Comment for the agent…" on an extension's version) | review |
+| `comment-edit` | A comment's words being edited, in its card: a field in their place (spec/notes.md, "Editing a comment") | review |
 | `chat` | The chat with the agent, in place of the comments on a script (spec/chat.md) | review |
 | `chat-thread` | Its messages | review |
 | `chat-person` | A message you sent (your words, images, a voice message) | review |

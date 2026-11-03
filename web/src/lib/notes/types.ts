@@ -59,6 +59,9 @@ export interface NoteItem {
    * in place, and the newest version after it that exists already (a comment on v7 while v9 exists: `later` v9). */
   target?: string;
   later?: string;
+  /** A person changed its words, and this page may change them now (spec/notes.md, "Editing a comment"). */
+  edited?: boolean;
+  editable?: boolean;
 }
 
 /** What an agent drew to ask (spec/automation.md, "Questions from inside a task"), normalized 0–1 to the frame. */

@@ -25,7 +25,8 @@ Permissions by route:
 | `GET/POST /api/download`, `GET/HEAD /video/<label>/download` (spec/api.md, "Download") | watch, or record with `[server] downloads = "reviewers"`; nobody with `"off"` |
 | `GET /api/ping` | any role |
 | `POST /api/session/<take>/data`, `/audio`, `/image`, `/done`, unknown POST paths (still 404) | record |
-| `POST /api/notes/<id>/reopen`, `POST /api/versions/<label>/approve` | approve |
+| `POST /api/notes/<id>/reopen`, `/delete`, `/restore`, `POST /api/versions/<label>/approve` | approve |
+| `POST /api/notes/<id>/edit` | record, and the note's author (the request's name is its `author`) or approve (spec/notes.md, "Editing a comment") |
 | `/mcp` (any method) | agent, by Bearer token only, local requests too |
 | `/api/worker/*` | agent, by Bearer token only, local requests too (spec/automation.md) |
 | `GET /api/automation` | watch |
@@ -269,4 +270,6 @@ That `Host` is a shared host, like a tunnel's: every request there needs a token
 has no local-network fallback (503, with the note).
 
 Comment deletion and restoration (`POST /api/notes/<id>/delete|restore`) require approve permission, like reopening
-feedback. Viewers, reviewer-only links and editing agents cannot delete other people's review history.
+feedback. Viewers, reviewer-only links and editing agents cannot delete other people's review history. Editing a
+comment's words (`POST /api/notes/<id>/edit`) also lets its author: a reviewer's link edits the comments made under its
+own label, never another person's.
