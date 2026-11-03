@@ -34,8 +34,8 @@ Toolchain versions are pinned in `mise.toml`, so run Go and node through mise: `
   art, commercial music, or fonts without open licenses. Test media is generated (ffmpeg) or CC0.
 - **Never modify or write into existing videos/renders outside this repo.** Tests make their own fixtures in a scratch
   dir.
-- **No LICENSE file and no publishing** (GitHub, npm, any registry) until the owner decides. The name "retake" isn't
-  final either.
+- **Open source under Apache-2.0** (LICENSE), public on GitHub. Pushing to `main`, cutting releases and publishing to
+  any registry (npm, Homebrew, crates.io) still need the owner's go-ahead. The name "retake" may still change.
 - **Every part has tests.** CI runs tests, type checks and lint on every change.
 
 ## Machine hygiene (tests, agents)

@@ -8,7 +8,7 @@ It runs on your machine: one `retake` binary serves the review page, keeps the n
 and MCP. An optional editor, `retake-edit`, renders videos from a timeline file that an agent changes through
 patches.
 
-> Status: not released yet. The name "retake" and the license aren't decided. Milestones 1 (the player) and 2 (notes,
+> Status: early and moving fast, open source under the Apache License 2.0. The name "retake" may still change. Milestones 1 (the player) and 2 (notes,
 > agent API, questions) are done, and the editor's first slice is in. See [`docs/roadmap.md`](docs/roadmap.md).
 
 ## How it works
@@ -267,5 +267,5 @@ account; the setup page shows how.
 
 ## License
 
-Not decided yet, so there is no LICENSE file. Third-party software in the binaries is listed in
+Retake is licensed under the [Apache License 2.0](LICENSE). Third-party software in the binaries is listed in
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). The sample project in `examples/sample/` is CC0.

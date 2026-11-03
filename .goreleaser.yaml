@@ -53,7 +53,7 @@ archives:
         info: *docinfo
       - src: THIRD_PARTY_NOTICES*
         info: *docinfo
-      - src: LICENSE* # none yet: the license isn't decided
+      - src: LICENSE*
         info: *docinfo
       # The tools that ship with retake (docs/install-plan.md), put in dist-bundle/<os>_<arch>/ by
       # scripts/bundle-deps.sh (make snapshot runs it): herdr, ffmpeg and ffprobe, retake-edit, their licenses and
