@@ -417,6 +417,7 @@ async function main() {
     //    run the global install from step 1 instead.
     env.npm_config_cache = join(S, 'npx-cache');
     env.npm_config_prefix = join(S, 'npx-prefix');
+    mkdirSync(join(env.npm_config_prefix, 'lib'), { recursive: true }); // npm 10 (Node 18) lstats it, and stops if missing
     env.PATH = env.PATH.split(delimiter).slice(1).join(delimiter);
     downloads.length = 0;
     t = Date.now();
