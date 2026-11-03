@@ -52,6 +52,7 @@ async function open(page, name, reduced) {
     const svg = document.documentElement;
     svg.setAttribute('width', String(w));
     svg.setAttribute('height', String(h));
+    await Promise.all([document.fonts.load('500 20px RI'), document.fonts.load('600 20px RI')]);
     await document.fonts.ready;
     const anims = document.getAnimations();
     for (const a of anims) a.pause();
