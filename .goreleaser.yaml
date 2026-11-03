@@ -51,6 +51,8 @@ builds:
 archives:
   - id: retake
     ids: [retake, retakew]
+    # Windows archives also hold retakew.exe (the console-less launcher), so they have one binary more.
+    allow_different_binary_count: true
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     formats: [tar.gz]
     format_overrides:
