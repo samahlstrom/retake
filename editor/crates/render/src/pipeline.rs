@@ -222,7 +222,20 @@ pub(crate) struct AudioOut {
 }
 
 pub(crate) fn audio(e: &Engine, plans: &[UnitPlan]) -> Result<AudioOut> {
+    audio_with(e, plans, None)
+}
+
+/// The audio of an MP4 export: with the export's loudness target when the engine has one (spec/bridge.md, "Download").
+pub(crate) fn export_audio(e: &Engine, plans: &[UnitPlan]) -> Result<AudioOut> {
+    audio_with(e, plans, e.opts.export_loudness)
+}
+
+/// The audio, its master brought to `export` LUFS when the timeline's master sets no loudness of its own.
+pub(crate) fn audio_with(e: &Engine, plans: &[UnitPlan], export: Option<f64>) -> Result<AudioOut> {
     let mut ap = e.audio_plan(plans);
+    if let Some(lufs) = export {
+        crate::audio::export_master(&mut ap, lufs);
+    }
     // Loudness targets measure the whole timeline's mix (cached), so a range sounds as it will in the full render.
     e.audio_levels(&mut ap, true)?;
     let akey = Engine::audio_key(&ap);
@@ -347,7 +360,8 @@ pub fn render(e: &Engine, out: Option<&Path>) -> Result<RenderReport> {
     }
     tick("units", &mut timings);
 
-    let au = audio(e, &plans)?;
+    // The MP4 this writes is an export: it gets the export's level (spec/bridge.md, "Download").
+    let au = if out.is_some() { export_audio(e, &plans)? } else { audio(e, &plans)? };
     tick("audio", &mut timings);
 
     let indexes = unit_indexes(e, &plans)?;

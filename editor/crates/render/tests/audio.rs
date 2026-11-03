@@ -346,3 +346,101 @@ fn a_render_with_a_master_caches_its_audio() {
     let i: f64 = err.rsplit("I:").next().unwrap().split_whitespace().next().unwrap().parse().unwrap();
     assert!((i + 18.0).abs() < 0.7, "{i}");
 }
+
+/// ffmpeg's EBU R128 reading of a file's audio: (integrated LUFS, true peak dBTP).
+fn file_r128(path: &Path) -> (f64, f64) {
+    let out = Command::new("ffmpeg")
+        .args(["-nostdin", "-nostats", "-i"])
+        .arg(path)
+        .args(["-map", "0:a:0", "-af", "ebur128=peak=true", "-f", "null", "-"])
+        .output()
+        .unwrap();
+    let err = String::from_utf8_lossy(&out.stderr);
+    let summary = err.rsplit("Summary:").next().unwrap();
+    let num = |key: &str| -> f64 {
+        let s = summary.split(key).nth(1).unwrap().trim_start();
+        s.split_whitespace().next().unwrap().parse().unwrap()
+    };
+    (num("I:"), num("Peak:"))
+}
+
+#[test]
+fn an_export_is_levelled_unless_the_master_sets_a_loudness() {
+    // A quiet bed and no master: what a review render plays is about -33 LUFS.
+    let mut doc = timeline(json!([{"id": "noise", "asset": "proj:noise", "from": "start:a", "to": "end:b",
+        "gain_db": -20}]));
+    let d = root().join("tl").join("export");
+    std::fs::create_dir_all(&d).unwrap();
+    let path = d.join("timeline.json");
+    std::fs::write(&path, doc.to_string()).unwrap();
+    let cache = root().join("cache-export");
+    let _ = std::fs::remove_dir_all(&cache);
+    let opts = Options { cache: Some(cache), jobs: 2, ..Options::default() };
+    let (plain, _) = mixed(&Engine::open(&path, opts.clone()).unwrap());
+    let (i, _) = ffmpeg_r128(&plain, "export-plain");
+    assert!(i < -25.0, "the review mix isn't levelled: {i} LUFS");
+
+    // The export (-o with the flag): -14 LUFS, true peak at or below -1 dBTP after the AAC encode.
+    let ex = Options { export_loudness: Some(-14.0), ..opts.clone() };
+    let out = d.join("export.mp4");
+    retake_render::render(&Engine::open(&path, ex.clone()).unwrap(), Some(&out)).unwrap();
+    let (i, tp) = file_r128(&out);
+    eprintln!("export, read by ffmpeg: {i} LUFS, {tp} dBTP");
+    assert!((i + 14.0).abs() < 1.0, "export at {i} LUFS");
+    assert!(tp <= -1.0, "export true peak {tp} dBTP");
+    // Tagged BT.709 for YouTube: primaries, transfer and matrix.
+    let o = Command::new("ffprobe")
+        .args(["-v", "error", "-select_streams", "v:0", "-show_entries"])
+        .arg("stream=profile,pix_fmt,color_primaries,color_transfer,color_space,color_range")
+        .args(["-of", "csv=p=0"])
+        .arg(&out)
+        .output()
+        .unwrap();
+    assert_eq!(String::from_utf8_lossy(&o.stdout).trim(), "High,yuv420p,tv,bt709,bt709,bt709");
+
+    // Streamed with an export: the playlist keeps the review mix, only the MP4 is levelled (its own encode).
+    let playlist = d.join("hls").join("clip.m3u8");
+    std::fs::create_dir_all(playlist.parent().unwrap()).unwrap();
+    let mp4 = d.join("hls").join("clip.export.mp4");
+    let quiet = |_: Value| {};
+    let so = retake_render::stream::StreamOptions {
+        playlist: playlist.clone(),
+        mp4: Some(mp4.clone()),
+        unit_delay: vec![],
+        progress: &quiet,
+    };
+    retake_render::stream::render_stream(&Engine::open(&path, ex.clone()).unwrap(), &so).unwrap();
+    let (i, _) = file_r128(&mp4);
+    assert!((i + 14.0).abs() < 1.0, "streamed export at {i} LUFS");
+    let hashes = |p: &Path| -> Vec<String> {
+        let m: Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
+        m["units"].as_array().unwrap().iter().map(|u| u["audio_hash"].as_str().unwrap().to_string()).collect()
+    };
+    let (review, export) =
+        (hashes(&playlist.with_extension("manifest.json")), hashes(&mp4.with_extension("manifest.json")));
+    assert_ne!(review, export, "the export has its own mix");
+
+    // A master loudness of the timeline's own wins over the flag.
+    doc["master"] = json!({"loudness": -18});
+    std::fs::write(&path, doc.to_string()).unwrap();
+    let out = d.join("export-master.mp4");
+    retake_render::render(&Engine::open(&path, ex).unwrap(), Some(&out)).unwrap();
+    let (i, _) = file_r128(&out);
+    assert!((i + 18.0).abs() < 1.0, "the master's own -18, not {i} LUFS");
+}
+
+#[test]
+fn export_master_keeps_the_timelines_own() {
+    let mut ap = mixed(&engine("em", &timeline(json!([])), Options::default()).unwrap()).1;
+    assert!(audio::export_master(&mut ap, -14.0));
+    let m = ap.master.clone().unwrap();
+    assert_eq!((m.loudness, m.true_peak), (Some(-14.0), Some(audio::EXPORT_TRUE_PEAK)));
+    ap.master =
+        Some(audio::MasterPlan { loudness: None, gain_db: None, lowpass: Some(16500.0), true_peak: Some(-2.0) });
+    assert!(audio::export_master(&mut ap, -14.0));
+    let m = ap.master.clone().unwrap();
+    assert_eq!((m.loudness, m.true_peak, m.lowpass), (Some(-14.0), Some(-2.0), Some(16500.0)));
+    ap.master = Some(audio::MasterPlan { loudness: Some(-18.0), gain_db: None, lowpass: None, true_peak: None });
+    assert!(!audio::export_master(&mut ap, -14.0));
+    assert_eq!(ap.master.unwrap().loudness, Some(-18.0));
+}

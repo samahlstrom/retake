@@ -91,6 +91,24 @@ pub struct MasterPlan {
     pub true_peak: Option<f64>,
 }
 
+/// The export's true-peak ceiling when the timeline sets none: under YouTube's -1 dBTP, with room for the AAC encode's
+/// overshoot (spec/bridge.md, "Download").
+pub const EXPORT_TRUE_PEAK: f64 = -1.5;
+
+/// Brings an export's mix to `lufs` (spec/bridge.md, "Download"): as if the master had that loudness and, unless it
+/// sets one, an [`EXPORT_TRUE_PEAK`] ceiling. A timeline whose master sets a loudness keeps it. Reports whether the
+/// plan changed.
+pub fn export_master(plan: &mut AudioPlan, lufs: f64) -> bool {
+    if plan.master.as_ref().is_some_and(|m| m.loudness.is_some()) {
+        return false;
+    }
+    let m = plan.master.get_or_insert(MasterPlan { loudness: None, gain_db: None, lowpass: None, true_peak: None });
+    m.loudness = Some(lufs);
+    m.gain_db = None;
+    m.true_peak = m.true_peak.or(Some(EXPORT_TRUE_PEAK));
+    true
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct AudioPlan {
     pub v: &'static str,
