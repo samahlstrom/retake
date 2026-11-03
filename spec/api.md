@@ -189,7 +189,7 @@ Retake holds no YouTube login; uploading stays the person's own business (theirs
 - Audio, when the version has any: AAC-LC, 48 kHz, stereo, integrated loudness -14 LUFS (within 1 LU) with the true
   peak at or below -1 dBTP. A timeline whose `master` sets a `loudness` keeps its own level (spec/timeline.md, "The
   master bus").
-- Named `<video>_<label>.mp4`: the family's name and the label (`clip_v5.mp4`, `clip_v5-draft2.mp4`); a version
+- Named `<video>_<label>.mp4`: the family's name and the version (`clip_v5.mp4`; a live revision such as `v5-draft2` downloads as `clip_v5.mp4` too, since people never see "draft"); a version
   without a number keeps its stem (`clip.mp4`). `<video>` is the name before `_v<N>` in the family's file names, else
   the opened file's stem, else the project's name.
 

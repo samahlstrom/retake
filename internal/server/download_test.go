@@ -170,6 +170,14 @@ func TestDownloadRoles(t *testing.T) {
 	}
 }
 
+func TestALiveRevisionDownloadsUnderItsVersion(t *testing.T) {
+	for label, want := range map[string]string{"v5": "v5", "v5-draft2": "v5", "V12-draft30": "V12"} {
+		if got := versionOfLabel(label); got != want {
+			t.Errorf("%s: %s, want %s", label, got, want)
+		}
+	}
+}
+
 func TestContentDisposition(t *testing.T) {
 	for name, want := range map[string]string{
 		"clip_v5.mp4":      `attachment; filename="clip_v5.mp4"; filename*=UTF-8''clip_v5.mp4`,

@@ -176,10 +176,11 @@ func (s *Server) downloadOf(ctx context.Context, v family.Version, start bool) (
 	return ds, t, nil
 }
 
-// downloadName is the file a version downloads as: <video>_<label>.mp4, or the stem of a version without a number.
+// downloadName is the file a version downloads as: <video>_<label>.mp4, or the stem of a version without a number. A
+// live revision downloads under its version's name (v5, never v5-draft2): people never see "draft".
 func (s *Server) downloadName(v family.Version) string {
 	if versionLabel.MatchString(v.Label) {
-		return s.videoName() + "_" + v.Label + ".mp4"
+		return s.videoName() + "_" + versionOfLabel(v.Label) + ".mp4"
 	}
 	stem := family.Stem(v.Name)
 	if stem == "" || family.IsPlaylist(v.Name) {
@@ -189,6 +190,12 @@ func (s *Server) downloadName(v family.Version) string {
 }
 
 // versionLabel is a version's or a draft's label: v5, v5-draft2.
+// versionOfLabel is the version a label names: v5 for v5 and for its live revision v5-draft2.
+func versionOfLabel(label string) string {
+	v, _, _ := strings.Cut(label, "-")
+	return v
+}
+
 var versionLabel = regexp.MustCompile(`^[vV]\d{1,4}(-draft\d+)?$`)
 
 // videoName is the family's name: the part before _v<N> of its file names, else the opened file's stem, else the
