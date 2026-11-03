@@ -279,6 +279,8 @@ async function chatLink(page: Page, folder: string): Promise<void> {
   await page.keyboard.press('Enter');
   await expect(composer(page)).toHaveValue('');
   await expect.poll(() => read(docOf(folder)), { timeout: 30_000 }).toMatch(/\n\nhttps:\/\/example\.org\/clip\n$/);
+  // The page has the agent's edit too (hosted, it comes from the computer a moment after the file changed there).
+  await shows(page, /\n\nhttps:\/\/example\.org\/clip\n$/);
   await expect(chat(page).locator('[data-part="chat-agent"]').last()).toContainText('Added the link');
   const line = chat(page).locator('[data-part="chat-tool"]').last();
   await expect(line).toHaveText('Edited the script · read example.org/…', { timeout: 20_000 });

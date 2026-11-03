@@ -5,6 +5,15 @@
     reveal(line: number): void;
     /** Where the caret is (an offset in the document's text), or null while the person hasn't put it anywhere. */
     caret(): number | null;
+    /** Where the person is reading: the first line of text in view, under the top fade. */
+    reading(): Reading | null;
+  }
+
+  /** A place in the text on screen: an offset in the document's text, and how far its line is below the scroller's
+   * top. A new editor (⋯ → Type in the script, Done typing) opens there, so the text doesn't move. */
+  export interface Reading {
+    pos: number;
+    dy: number;
   }
 </script>
 
@@ -29,6 +38,7 @@
     caret,
     focus,
     scroller,
+    reading = null,
     questions = [],
     image,
     preview,
@@ -43,6 +53,8 @@
     caret: number | null;
     /** Put the focus in the text when it shows. */
     focus: boolean;
+    /** Open at this place (the text where the person was reading); a focus without a caret puts it there. */
+    reading?: Reading | null;
     /** The element that scrolls the text. */
     scroller: HTMLElement | undefined;
     /** The agent's open questions about this document, shown under their places. */
@@ -73,6 +85,9 @@
   /** The editor's text as the file holds it. */
   const raw = (): string => view?.state.sliceDoc() ?? '';
 
+  /** The top fade (under the back link and ⋯): the caret is kept below it. */
+  const FADE = 64;
+
   /** Keeps the caret's line in view: inside the scroller, and above an on-screen keyboard (the visual viewport). */
   function keepCaret(): void {
     if (!view || !scroller || !view.hasFocus) return;
@@ -81,7 +96,7 @@
     const box = scroller.getBoundingClientRect();
     const vv = window.visualViewport;
     const bottom = Math.min(box.bottom, vv ? vv.offsetTop + vv.height : box.bottom) - 24;
-    const top = box.top + 64;
+    const top = box.top + FADE;
     if (r.bottom > bottom) scroller.scrollTop += r.bottom - bottom;
     else if (r.top < top) scroller.scrollTop -= top - r.top;
   }
@@ -187,6 +202,19 @@
       flashTimer = setTimeout(() => view?.dispatch({ effects: setFlash.of(null) }), 1600);
     },
     caret: () => (placed && view ? toOffset(view.state.selection.main.head) : null),
+    reading() {
+      const v = view;
+      if (!v || !scroller) return null;
+      const box = scroller.getBoundingClientRect();
+      const x = v.contentDOM.getBoundingClientRect().left + 1;
+      // The first line whose top is under the fade: a caret there stays where it is when the keyboard comes up.
+      for (let y = box.top + FADE + 1; y < box.top + FADE + 120; y += 4) {
+        const pos = v.posAtCoords({ x, y }, false);
+        const c = v.coordsAtPos(pos);
+        if (c && c.top >= box.top + FADE) return { pos: toOffset(pos), dy: c.top - box.top };
+      }
+      return null;
+    },
   };
 
   function create(text: string, at: number): void {
@@ -214,15 +242,23 @@
   }
 
   onMount(() => {
-    const at = Math.min(Math.max(0, caret ?? doc.text.length), doc.text.length);
+    const typing = focus && !readonly;
+    const at = Math.min(Math.max(0, caret ?? (typing ? reading?.pos : null) ?? doc.text.length), doc.text.length);
     create(doc.text, at);
     const v = view!;
-    // The document opens at its top: the focus doesn't scroll to the caret.
-    if (focus && !readonly) {
+    // The document opens at its top, or where the person was reading: the focus doesn't scroll to the caret.
+    if (typing) {
       openingFocus = true;
       v.contentDOM.focus({ preventScroll: true });
     }
     if (caret !== null) v.dispatch({ effects: EditorView.scrollIntoView(toPos(at), { y: 'nearest' }) });
+    else if (reading) {
+      // The same line at the same height as in the editor before (the scroll margin's 72 px above it count too).
+      const r = reading;
+      v.dispatch({
+        effects: EditorView.scrollIntoView(toPos(Math.min(r.pos, doc.text.length)), { y: 'start', yMargin: r.dy - 72 }),
+      });
+    }
     const vv = window.visualViewport;
     vv?.addEventListener('resize', keepSoon);
     vv?.addEventListener('scroll', keepSoon);

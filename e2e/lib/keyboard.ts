@@ -155,7 +155,10 @@ const listScroll = (page: Page) => page.locator('#side .vp').evaluate((el) => el
 export async function videoKeyboard(page: Page, url: string, where: string, shot: (what: string) => Promise<void>): Promise<void> {
   await page.goto(`${url}p/busy/`);
   await page.waitForFunction(() => !!window.__review?.view?.shown && !!window.__review.notes?.available, null, { timeout: 20_000 });
-  await expect(page.locator('#side .item')).toHaveCount(COMMENTS.length, { timeout: 10_000 });
+  // The eight comments, and one per device run before on this server (each saves one with Return, below).
+  const items = page.locator('#side .item');
+  await expect.poll(() => items.count(), { timeout: 10_000 }).toBeGreaterThanOrEqual(COMMENTS.length);
+  const count = await items.count();
   const inner = await page.evaluate(() => innerHeight);
   // The list scrolled part way, as someone reading it would have it.
   await page.locator('#side .vp').evaluate((el) => (el.scrollTop = 60));
@@ -222,7 +225,7 @@ export async function videoKeyboard(page: Page, url: string, where: string, shot
   await page.locator(COMMENT_BOX).press('Enter');
   await expect.poll(() => viewport(page).then((v) => v.compose)).toBe(false);
   await keyboardDown(page);
-  await expect(page.locator('#side .item')).toHaveCount(COMMENTS.length + 1, { timeout: 10_000 });
+  await expect(items).toHaveCount(count + 1, { timeout: 10_000 });
   for (const sel of FADES) await expect.poll(() => hidden(page, sel)).toBe(false);
 }
 
@@ -266,35 +269,70 @@ export async function scriptKeyboard(page: Page, url: string, where: string, sho
   await expect.poll(() => hidden(page, '#precord')).toBe(false);
   expect(moved(before, await places(page, '#side')), `${where}: back after the chat`).toEqual([]);
 
-  // Typing in the document (⋯ → Type in the script): the page ends at the keyboard, the bar hides, and the caret's line
-  // stays above the keyboard.
+  // Typing in the document (⋯ → Type in the script), read part way down: iOS raises the keyboard in that tap (the
+  // stand-in), the page ends at it with the bar hidden, and the text stays where it was (the caret goes to the first
+  // line in view, not the end). The page lays out for the keyboard remembered from the chat at once, before it is up
+  // (spec/notes.md), so the text above it is all that can be tapped now.
+  await page.locator('[data-ext="scripts"] .ig-scroll').evaluate((el) => (el.scrollTop = 400));
+  const reading = () =>
+    page.evaluate(() => {
+      const l = [...document.querySelectorAll('[data-ext="scripts"] .cm-line')].find(
+        (e) => /Part \d/.test(e.textContent ?? '') && e.getBoundingClientRect().top > 64,
+      );
+      return l ? `${/Part \d/.exec(l.textContent!)![0]} at ${Math.round(l.getBoundingClientRect().top)}` : null;
+    });
+  const read = await reading();
+  expect(read).not.toBeNull();
   await page.locator('[data-part~="scripts-more"]').tap();
   await page.locator('[data-part="scripts-type"]').tap();
   await expect(text(page)).toHaveAttribute('contenteditable', 'true');
   await expect.poll(() => viewport(page).then((v) => v.typing), { message: `${where}: typing in the document` }).toBe('doc');
-  // The caret on a line low on the screen, under where the keyboard comes.
-  const low = await page.evaluate((y) => {
-    const lines = [...document.querySelectorAll('[data-ext="scripts"] .cm-line')].map((l) => l.getBoundingClientRect());
-    const l = lines.filter((b) => b.height && b.bottom < y).pop();
-    return l ? { x: l.left + 8, y: l.top + l.height / 2 } : null;
-  }, inner - 110);
-  expect(low).not.toBeNull();
-  await page.mouse.click(low!.x, low!.y);
-  await expect.poll(() => viewport(page).then((v) => v.typing)).toBe('doc');
+  await expect.poll(reading, { message: `${where}: Type in the script keeps the text in place` }).toBe(read);
   await keyboard(page, KB);
   await expect.poll(() => bottomOf(page, '#app'), { message: `${where}: the page ends at the keyboard` }).toBeCloseTo(inner - KB, 0);
   await expect.poll(() => hidden(page, '#precord'), { message: `${where}: the bar hides while typing` }).toBe(true);
-  const caretLine = () =>
+  await page.waitForTimeout(100); // the caret keeping runs in the next frame
+  expect(await reading(), `${where}: the keyboard coming up keeps the text in place`).toBe(read);
+  // The keyboard's Done: the text stays editable, the bar is back.
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await keyboardDown(page);
+  await expect.poll(() => hidden(page, '#precord')).toBe(false);
+  await expect.poll(() => bottomOf(page, '#app')).toBeCloseTo(inner, 0);
+  await expect(text(page)).toHaveAttribute('contenteditable', 'true');
+  // Then a tap in the text low on the screen, under where the keyboard comes (above the bar): the page ends at the
+  // keyboard and the caret is above it.
+  const box = (await text(page).boundingBox())!;
+  const low = await page.evaluate(
+    ({ x, from, to }) => {
+      for (let y = from; y > to; y -= 4) if (document.elementFromPoint(x, y)?.closest('.cm-line')) return { x, y };
+      return null;
+    },
+    { x: box.x + 24, from: inner - 120, to: inner - KB + 20 },
+  );
+  expect(low, `${where}: text under where the keyboard comes`).not.toBeNull();
+  await page.mouse.click(low!.x, low!.y);
+  await expect.poll(() => viewport(page).then((v) => v.typing), { message: `${where}: the tap types in the document` }).toBe('doc');
+  await keyboard(page, KB);
+  await expect.poll(() => bottomOf(page, '#app'), { message: `${where}: the page ends at the keyboard again` }).toBeCloseTo(inner - KB, 0);
+  await expect.poll(() => hidden(page, '#precord'), { message: `${where}: the bar hides again` }).toBe(true);
+  /** The caret's box: its line of text (a paragraph's line, not the whole paragraph). */
+  const caret = () =>
     page.evaluate(() => {
-      const n = getSelection()?.focusNode;
-      const el = (n instanceof Element ? n : n?.parentElement)?.closest('.cm-line');
-      const b = el?.getBoundingClientRect();
+      const s = getSelection();
+      if (!s?.rangeCount) return null;
+      const r = s.getRangeAt(0).cloneRange();
+      r.collapse(false);
+      let b: DOMRect | null = r.getClientRects()[0] ?? null;
+      if (!b?.height) {
+        const n = s.focusNode;
+        b = (n instanceof Element ? n : n?.parentElement)?.closest('.cm-line')?.getBoundingClientRect() ?? null;
+      }
       return b ? { top: b.top, bottom: b.bottom } : null;
     });
   await expect
-    .poll(async () => (await caretLine())?.bottom ?? Infinity, { message: `${where}: the caret's line is above the keyboard` })
+    .poll(async () => (await caret())?.bottom ?? Infinity, { message: `${where}: the caret is above the keyboard` })
     .toBeLessThanOrEqual(inner - KB);
-  expect((await caretLine())!.top).toBeGreaterThanOrEqual(0);
+  expect((await caret())!.top).toBeGreaterThanOrEqual(0);
   await shot('script-doc-keyboard');
   // The keyboard's Done: the bar is back, the page is whole again.
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());

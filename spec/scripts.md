@@ -157,7 +157,9 @@ tokens. No tabs and no toolbar.
   agent…", with its mic) and Send. Tapping the pill opens the chat sheet with the keyboard up; the sheet covers the
   bar and stays above the keyboard, and its header has the version. Reading never raises the keyboard: the document
   is read-only to the keyboard until ⋯ → **Type in the script** (⋯ → **Done typing** goes back; the menu item focuses
-  a stand-in field in the tap, so iOS raises the keyboard). While the text has the focus the page is as tall as the
+  a stand-in field in the tap, so iOS raises the keyboard). Neither moves the text: it stays where it was being read,
+  and the caret starts on the first line in view, so the keyboard coming up doesn't scroll to it (a tap puts it
+  anywhere else). While the text has the focus the page is as tall as the
   visible area above the keyboard, the bar fades out, and the caret's line stays in view above the keyboard; the text
   never moves as a whole (spec/notes.md, "Typing on a phone"). The top row is back on
   the left, and on the right the chat's bubble and ⋯. Text is at least 17 px and wraps inside the screen; nothing

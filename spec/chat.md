@@ -240,7 +240,8 @@ Under a video (`/p/<name>/…` on a server), relative to the page:
 - `{"why": "message", "message": {...}}`: a message was added or changed (an answer, the end of its streaming);
 - `{"why": "text", "id": 12, "at": 120, "text": "…"}`: words added to message 12 at character `at` (the page appends
   them when it has exactly `at` characters, else reads `api/chat` again);
-- `{"why": "turn", "turn": {...} | null}`: the turn started, changed or ended.
+- `{"why": "turn", "turn": {...} | null}`: the turn started, a worker took it (`running`: the activity line stops
+  waiting), it changed, or it ended.
 
 The worker sends text at most every 250 ms, so a reply is a few events a second.
 

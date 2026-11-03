@@ -290,9 +290,10 @@ stubbed and its `resize` or `scroll` sent.
   Return (which saves the comment) each end it, and every box is back where it was, the list's scroll too.
 - A script: the bar's pill opens the chat sheet with its composer focused; with the keyboard up the sheet's bottom is
   the keyboard's top and its top 64 px down, the composer at its bottom, and nothing behind it moved (the bar hidden
-  under it); Done and the keyboard going down bring the sheet back to the bottom. ⋯ → Type in the script, then a tap
-  low in the text: with the keyboard up the page ends at the keyboard, Record and Send are hidden, and the caret's line
-  is above the keyboard; Done brings the bar back.
+  under it); Done and the keyboard going down bring the sheet back to the bottom. With the text read part way down,
+  ⋯ → Type in the script and the keyboard coming up leave it where it is; the page ends at the keyboard and Record and
+  Send are hidden. After Done, a tap in the text under where the keyboard comes: with the keyboard up the page ends
+  at it again and the caret is above it; Done brings the bar back.
 - Screenshots: `.retake-work/keyboard-shots/` (`chromium-<what>` and `webkit-<what>-<device>`, `<what>` one of
   `video`, `video-keyboard`, `video-after`, `script`, `script-chat-keyboard`, `script-doc-keyboard`).
 
