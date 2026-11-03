@@ -198,6 +198,7 @@
 
   // ---------------------------------------------------------------- ⋯
   let menu = $state(false);
+  let standIn = $state<HTMLInputElement>();
   let moreEl = $state<HTMLButtonElement>();
   let menuEl = $state<HTMLDivElement>();
   const canType = $derived(canWrite && phoneLayout && !!doc && !doc.loadError);
@@ -391,6 +392,7 @@
     </div>
   {/if}
 
+  {#if canType}<input class="ig-kb" bind:this={standIn} aria-hidden="true" tabindex="-1" />{/if}
   {#if canType || canUndo}
     <button
       bind:this={moreEl}
@@ -428,6 +430,9 @@
           data-part="scripts-type"
           onclick={() => {
             menu = false;
+            // iOS raises the keyboard only for a field focused in the tap itself: the stand-in takes the focus now,
+            // and the text takes it over when it shows (spec/scripts.md).
+            if (!typing) standIn?.focus({ preventScroll: true });
             typing = !typing;
           }}
         >

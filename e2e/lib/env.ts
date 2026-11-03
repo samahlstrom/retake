@@ -63,6 +63,7 @@ export const PORTS = {
   scriptsHosted: PORT_BASE + 7, // 18, after 07-share's proxy
   batch: PORT_BASE + 1, // 20, after 03-crash-safety
   embeds: PORT_BASE + 5, // 22, after 18-scripts and 19-phone-webkit
+  keyboard: PORT_BASE + 5, // 23, after 22-embeds
 } as const;
 
 /** retake-edit, for the specs that render with the editor: $RETAKE_EDIT, else the repo's release build, else $PATH. */

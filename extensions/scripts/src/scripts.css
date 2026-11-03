@@ -638,6 +638,19 @@
 }
 
 /* ⋯ and its menu, at the top right of the document (clear of core's pills: the editor sets `right`). */
+/* The stand-in field the keyboard comes up for (⋯ → Type in the script on a phone): at the top, never seen. */
+[data-ext='scripts'] .ig-kb {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  font-size: 16px;
+  pointer-events: none;
+}
 [data-ext='scripts'] .ig-more {
   position: absolute;
   top: 12px;

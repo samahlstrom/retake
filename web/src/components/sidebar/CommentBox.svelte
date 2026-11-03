@@ -4,9 +4,13 @@
   // starts a pending comment; the lines drawn meanwhile go with it. Enter saves it (Ctrl/⌘+Enter also sends it), Esc
   // cancels it with its lines. On an extension's version: "Comment for the agent…", anchored where the version's
   // slot says (spec/extensions.md, "Typing one"). One quiet line under it says what Enter does, only while it's in use.
+  // On a phone, while it has the focus on a video, it is compose mode (spec/notes.md, "Typing on a phone"): the box sits
+  // on the keyboard (moved by a transform, --compose-dy) and the video shrinks from its top only when it wouldn't fit
+  // above it (--compose-scale); phone.css hides the rest.
   import type { Review } from '../../lib/review.svelte';
   import { composeKey } from '../../lib/notes/typed';
   import { intoVersion } from '../../lib/notes/view';
+  import { composeLayout } from '../../lib/viewport';
 
   let { review }: { review: Review } = $props();
 
@@ -24,8 +28,43 @@
   const drawings = $derived(lines === 1 ? '1 drawing' : lines ? `${lines} drawings` : '');
 
   let box = $state<HTMLTextAreaElement | null>(null);
+  let form = $state<HTMLFormElement | null>(null);
   $effect(() => {
     review.el.comment = box;
+  });
+
+  // Compose mode: where the box goes and how small the video gets, again whenever the keyboard, the box's height or the
+  // video's frame changes.
+  let boxSize = $state(0);
+  $effect(() => {
+    const el = form;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => (boxSize = el.offsetHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  });
+  $effect(() => {
+    const root = document.documentElement;
+    const vp = review.viewport;
+    const side = form?.parentElement,
+      stage = review.el.stage;
+    if (!review.composing || !form || !side || !stage) {
+      root.style.removeProperty('--compose-dy');
+      root.style.removeProperty('--compose-scale');
+      return;
+    }
+    void boxSize;
+    const f = review.frame;
+    const stageTop = stage.getBoundingClientRect().top; // scaled from its top: the top never moves
+    const { dy, scale } = composeLayout({
+      kbTop: vp.up ? vp.top + vp.height : null,
+      boxBottom: side.getBoundingClientRect().bottom,
+      boxHeight: form.offsetHeight,
+      stageTop,
+      pictureBottom: stageTop + (f.height ? f.top + f.height : stage.offsetHeight),
+    });
+    root.style.setProperty('--compose-dy', `${dy}px`);
+    root.style.setProperty('--compose-scale', String(scale));
   });
   /** The box grows with what's typed, up to a few lines. */
   $effect(() => {
@@ -57,8 +96,10 @@
 </script>
 
 <form
+  bind:this={form}
   class="compose"
   data-part="comment-line"
+  data-typing-as="comment"
   class:pending={shown}
   onsubmit={(e) => {
     e.preventDefault();

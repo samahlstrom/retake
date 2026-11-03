@@ -15,6 +15,10 @@
     }, 5000);
     return () => clearInterval(timer);
   });
+  // Compose mode (spec/notes.md, "Typing on a phone"): phone.css shows only the video and the comment box.
+  $effect(() => {
+    document.documentElement.toggleAttribute('data-compose', review.composing);
+  });
   // A kind's version with the chat (spec/chat.md): its thread and its document, for the column and for Send.
   $effect(() => {
     if (!review.chatShown) return;

@@ -281,15 +281,18 @@
     border-radius: 16px 16px 0 0;
     box-shadow: 0 -16px 48px color-mix(in srgb, var(--shadow) 60%, transparent);
   }
-  /* The chat (spec/chat.md) covers the bar too, its composer at the bottom, and stays above the on-screen keyboard
-     (Chat.svelte keeps --chat-top and --chat-kb, from the visual viewport). */
-  html[data-layout='portrait'] #side.drawer.chatting {
+  /* The chat (spec/chat.md) covers the bar too, its composer at the bottom, and sits on the on-screen keyboard: its
+     bottom is the visible area's (--vv-top and --vv-h, lib/viewport.svelte.ts), so nothing behind it moves. A drawer
+     with a field that has the focus does the same. */
+  html[data-layout='portrait'] #side.drawer.chatting,
+  html[data-layout='portrait'][data-typing] #side.drawer:focus-within {
     position: fixed;
     left: 0;
     right: 0;
-    top: calc(var(--chat-top, 0px) + 64px + env(safe-area-inset-top));
-    bottom: var(--chat-kb, 0px);
-    height: auto;
+    top: calc(var(--vv-top, 0px) + 64px + env(safe-area-inset-top));
+    bottom: auto;
+    height: calc(var(--vv-h, 100dvh) - 64px - env(safe-area-inset-top));
+    max-height: none;
     z-index: 6;
   }
   html[data-layout='portrait'] #side.drawer header {
@@ -604,5 +607,99 @@
     font-size: 13px;
     white-space: normal;
     line-height: 1.2;
+  }
+
+  /* ------------------------------------------------------------------ typing (spec/notes.md, "Typing on a phone") */
+  /* The page never pans: the document can't scroll, and the page's top follows what's left of a pan of the visual
+     viewport (lib/viewport.svelte.ts undoes pans and keeps --vv-top, --kb and --vv-h). */
+  html[data-phone] {
+    overflow: hidden;
+  }
+  html[data-phone] body {
+    top: var(--vv-top, 0px);
+    bottom: calc(0px - var(--vv-top, 0px));
+  }
+  /* The stand-in field the keyboard comes up for (raiseKeyboard): at the top, never seen. */
+  .kb-proxy {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    border: 0;
+    opacity: 0;
+    font-size: 16px;
+    pointer-events: none;
+  }
+  /* What fades while typing: Record and Send whenever a field has the focus, and in compose mode (the comment box on a
+     video) everything but the video and the box. Opacity only; nothing is laid out again. */
+  html[data-phone]
+    :is(
+      #precord,
+      #pbar,
+      #pleft,
+      #pright,
+      #sideToggle,
+      [data-part~='home-nav'],
+      #side > header,
+      #side > .tabs,
+      #side > .list
+    ) {
+    transition:
+      opacity 0.15s ease,
+      visibility 0s linear 0s,
+      box-shadow 0.2s ease;
+  }
+  html[data-phone][data-typing] #precord,
+  html[data-compose]
+    :is(#pbar, #pleft, #pright, #sideToggle, [data-part~='home-nav'], #side > header, #side > .tabs, #side > .list) {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition:
+      opacity 0.15s ease,
+      visibility 0s linear 0.15s,
+      box-shadow 0.2s ease;
+  }
+  /* Compose mode: the box sits on the keyboard, moved by a transform (--compose-dy, CommentBox.svelte), its line (the
+     time, the drawings, Cancel and Save) above the field; the video shrinks from its top only when it wouldn't fit
+     above it (--compose-scale). */
+  html[data-phone] #stage {
+    transform-origin: 50% 0;
+    transition: transform 0.15s ease;
+  }
+  html[data-phone] #side .compose {
+    transition: transform 0.15s ease;
+  }
+  html[data-compose] #stage {
+    transform: scale(var(--compose-scale, 1));
+  }
+  html[data-compose] #side {
+    border-top-color: transparent;
+  }
+  html[data-compose] #side .compose {
+    position: relative;
+    z-index: 7;
+    display: flex;
+    flex-direction: column-reverse;
+    padding-bottom: 8px;
+    border-top-color: transparent;
+    background: var(--surface-raised);
+    transform: translateY(var(--compose-dy, 0px));
+  }
+  /* Typing in the document (a script, spec/scripts.md): the page is as tall as what's visible above the keyboard and
+     the bar's room goes (the bar fades); the text's top stays where it is. */
+  html[data-typing='doc'][data-kb] #app {
+    height: var(--vv-h, 100dvh);
+  }
+  html[data-typing='doc'] #pspace {
+    display: none;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html[data-phone] #stage,
+    html[data-phone] #side .compose {
+      transition: none;
+    }
   }
 }

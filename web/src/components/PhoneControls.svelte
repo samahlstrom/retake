@@ -22,33 +22,16 @@
   import UndoButton from './UndoButton.svelte';
   import PhoneRecord from './PhoneRecord.svelte';
   import Hint from './Hint.svelte';
+  import { raiseKeyboard } from '../lib/viewport.svelte';
 
   let { review }: { review: Review } = $props();
-  let proxy = $state<HTMLInputElement | null>(null);
 
-  // Portrait: Record and Send are fixed to the bottom (phone.css), with a spacer of their height in the grid. `lift`
-  // raises them over whatever the browser lays over the page's bottom edge (the visual viewport ends above the layout
-  // one); while a text field has the focus that's the on-screen keyboard, and the bar stays put behind it.
+  // Portrait: Record and Send are fixed to the bottom (phone.css), with a spacer of their height in the grid. Their
+  // lift raises them over whatever the browser lays over the page's bottom edge (the visual viewport ends above the
+  // layout one); the page's viewport store (lib/viewport.svelte.ts) holds it while a field has the focus and while the
+  // keyboard goes down, so the bar never jumps. While typing it fades out (spec/notes.md, "Typing on a phone").
   let barHeight = $state(0);
-  let lift = $state(0);
-  const EDITABLE = 'input, textarea, select, [contenteditable]:not([contenteditable=false])';
-  $effect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const measure = () => {
-      if ((document.activeElement as Element | null)?.closest?.(EDITABLE)) return;
-      lift = Math.max(0, Math.round(innerHeight - (vv.offsetTop + vv.height)));
-    };
-    measure();
-    vv.addEventListener('resize', measure);
-    vv.addEventListener('scroll', measure);
-    document.addEventListener('focusout', measure);
-    return () => {
-      vv.removeEventListener('resize', measure);
-      vv.removeEventListener('scroll', measure);
-      document.removeEventListener('focusout', measure);
-    };
-  });
+  const lift = $derived(review.viewport.lift);
 </script>
 
 {#snippet space()}
@@ -76,13 +59,12 @@
         {#if review.chatShown}
           <!-- The chat (spec/chat.md): the pill opens it with the keyboard up; its mic sends a voice message. -->
           <div class="chat-pill" class:recording={!!review.seg} data-part="chat-pill">
-            <!-- iOS raises the keyboard only for a field focused in the tap itself: this stand-in takes the focus at
-                 once, then the chat's composer takes it over and the keyboard stays. -->
-            <input class="kb-proxy" bind:this={proxy} aria-hidden="true" tabindex="-1" />
+            <!-- iOS raises the keyboard only for a field focused in the tap itself: the stand-in takes the focus at
+                 once, then the chat's composer takes it over and the keyboard stays (spec/notes.md). -->
             <button
               class="ask"
               onclick={() => {
-                proxy?.focus({ preventScroll: true });
+                raiseKeyboard('chat');
                 review.openChat();
               }}>{review.seg ? `Recording ${review.recElapsed}` : 'Ask the agent…'}</button
             >
@@ -201,18 +183,6 @@
     .chat-pill.recording .ask {
       color: var(--record);
       font-variant-numeric: tabular-nums;
-    }
-    .kb-proxy {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 1px;
-      height: 1px;
-      padding: 0;
-      border: 0;
-      opacity: 0;
-      font-size: 16px;
-      pointer-events: none;
     }
     .chat-pill .mic {
       flex: none;

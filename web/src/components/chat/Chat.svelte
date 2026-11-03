@@ -50,26 +50,6 @@
     box.style.height = `${Math.min(box.scrollHeight, 140)}px`;
   });
 
-  // A phone's chat sheet stays above the on-screen keyboard: where the visible part of the page is (phone.css).
-  $effect(() => {
-    if (!review.kindDrawer || typeof window === 'undefined' || !window.visualViewport) return;
-    const vv = window.visualViewport,
-      root = document.documentElement;
-    const place = () => {
-      root.style.setProperty('--chat-top', `${Math.round(vv.offsetTop)}px`);
-      root.style.setProperty('--chat-kb', `${Math.max(0, Math.round(innerHeight - (vv.offsetTop + vv.height)))}px`);
-    };
-    place();
-    vv.addEventListener('resize', place);
-    vv.addEventListener('scroll', place);
-    return () => {
-      vv.removeEventListener('resize', place);
-      vv.removeEventListener('scroll', place);
-      root.style.removeProperty('--chat-top');
-      root.style.removeProperty('--chat-kb');
-    };
-  });
-
   // Follow the thread to its end while the reader is there.
   let atEnd = true;
   function scrolled() {
@@ -82,6 +62,17 @@
     void status;
     if (!thread || !atEnd) return;
     void tick().then(() => thread?.scrollTo({ top: thread.scrollHeight }));
+  });
+  // The thread changes height (a phone's sheet sits on the keyboard as it comes up and goes down, spec/chat.md): at its
+  // end, it stays at its end.
+  $effect(() => {
+    const el = thread;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => {
+      if (atEnd) el.scrollTop = el.scrollHeight;
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
   });
 
   /** A file of the video's folder, or a link, as the page can show it. */
@@ -270,6 +261,7 @@
     <form
       class="composer"
       data-part="chat-composer"
+      data-typing-as="chat"
       onsubmit={(e) => {
         e.preventDefault();
         void submit();

@@ -277,3 +277,21 @@ preview itself (`lib/embeds.ts`).
   frame element under it.
 - Nothing is wider than the screen. Screenshots: `.retake-work/embeds-shots/` (`chromium-desktop`,
   `chromium-iphone15`, `webkit-<device>` and `webkit-<device>-embeds`).
+
+**`23-keyboard`** and **`23-keyboard-webkit`** (new only; `spec/notes.md`, "Typing on a phone", and `spec/chat.md`):
+`retake open` on a folder with a video with eight comments and a script. Chromium's mobile emulation on the iPhone
+15's viewport; WebKit (`RETAKE_E2E_WEBKIT`) on the iPhone 13 and iPhone 15. No browser here raises a real on-screen
+keyboard, so `lib/keyboard.ts` simulates one the way the page sees it: the visual viewport's `height` and `offsetTop`
+stubbed and its `resize` or `scroll` sent.
+- A video: the comment box takes the focus (compose mode) and, once the keyboard is up, its bottom is the keyboard's
+  top; every other element still on screen keeps its exact box (the video too, paused); the controls, the comments
+  header, the list, Record and Send, back and the bubble are hidden. A 100 px pan of the visible area is followed (the
+  whole page moves with it, the box still on the keyboard). A tap on the video, the keyboard's Done (a blur), and
+  Return (which saves the comment) each end it, and every box is back where it was, the list's scroll too.
+- A script: the bar's pill opens the chat sheet with its composer focused; with the keyboard up the sheet's bottom is
+  the keyboard's top and its top 64 px down, the composer at its bottom, and nothing behind it moved (the bar hidden
+  under it); Done and the keyboard going down bring the sheet back to the bottom. ⋯ → Type in the script, then a tap
+  low in the text: with the keyboard up the page ends at the keyboard, Record and Send are hidden, and the caret's line
+  is above the keyboard; Done brings the bar back.
+- Screenshots: `.retake-work/keyboard-shots/` (`chromium-<what>` and `webkit-<what>-<device>`, `<what>` one of
+  `video`, `video-keyboard`, `video-after`, `script`, `script-chat-keyboard`, `script-doc-keyboard`).

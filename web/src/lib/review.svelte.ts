@@ -44,6 +44,9 @@ import { backPlace, findNode, hashOf, rememberedPlace } from './tree';
 import { Scrubber } from './scrub';
 import { hintSeen, keyAction, markHintSeen, type Action } from './keys';
 import { layoutMode, type LayoutMode } from './layout';
+import { Viewport } from './viewport.svelte';
+import { composeMode } from './viewport';
+import { browserStorage } from './side-width';
 import { closeMic, MIC_BLOCKED, MIC_BLOCKED_TOUCH, openMic, pickMime, recorderMime, type Mic } from './mic';
 import { Notes } from './notes/notes.svelte';
 import type { NoteItem } from './notes/types';
@@ -201,6 +204,16 @@ export interface ReviewHook {
   /** The typed comment being written (spec/notes.md, "Typed comments on a video"): its version, time, how many lines
    * and its words; null when there is none. */
   readonly draft: { version: string; t: number; lines: number; text: string } | null;
+  /** Typing on a phone (spec/notes.md): the visual viewport as the page lays itself out from it, which field has the
+   * focus, and compose mode. */
+  readonly viewport: {
+    top: number;
+    kb: number;
+    height: number;
+    up: boolean;
+    typing: string | null;
+    compose: boolean;
+  };
   serialize(t: Take): TakeData;
   save(t?: Take): Promise<void> | undefined;
 }
@@ -404,6 +417,17 @@ export class Review {
   }
   /** Desktop (the bar), or the phone layout in portrait or landscape. The prerendered page is desktop. */
   layoutMode = $state<LayoutMode>('desktop');
+  /** Typing on a phone (spec/notes.md): the visual viewport and the focus, as the layout needs them. */
+  readonly viewport = new Viewport({ active: () => this.touch, storage: browserStorage });
+  /** Compose mode (spec/notes.md, "Typing on a phone"): the comment box on a video has the focus on a phone. */
+  get composing(): boolean {
+    return composeMode({
+      phone: this.touch,
+      typing: this.viewport.typing,
+      kind: !!this.kindShown,
+      canRecord: this.canRecord,
+    });
+  }
   /** The video's aspect ratio (CSS), for the phone layout's stage. */
   aspect = $state('16 / 9');
   /** What C would say if it were refused now, else null: the phone layout's flip button shows it disabled. */
@@ -1053,6 +1077,10 @@ export class Review {
       get draft() {
         const d = r.draft;
         return d ? { version: d.version, t: r.draftT, lines: r.draftLines.length, text: r.commentDraft } : null;
+      },
+      get viewport() {
+        const v = r.viewport;
+        return { top: v.top, kb: v.kb, height: v.height, up: v.up, typing: v.typing, compose: r.composing };
       },
       serialize: (t: Take) => r.serialize(t),
       save: (t?: Take) => r.save(t),
@@ -1886,7 +1914,11 @@ export class Review {
         t = this.take;
       if (!st) return;
       this.drawing = null;
-      if (isClick(st.points, this.inkW, this.inkH)) return; // a click draws nothing
+      if (isClick(st.points, this.inkW, this.inkH)) {
+        // A click draws nothing. In compose mode a tap on the video ends it (spec/notes.md, "Typing on a phone").
+        if (this.composing) this.el.comment?.blur();
+        return;
+      }
       if (!st.seg) {
         // a line of the pending typed comment
         st.id = this.draftStrokes.length + 1;
@@ -2835,8 +2867,10 @@ export class Review {
       this.layoutMode = layoutMode({ width: innerWidth, height: innerHeight, coarse: coarse.matches });
       document.documentElement.dataset.layout = this.layoutMode;
       document.documentElement.toggleAttribute('data-phone', this.touch);
+      this.viewport.update();
     };
     pick();
+    this.viewport.start();
     addEventListener('resize', pick);
     coarse.addEventListener('change', pick);
     // Safari's pinch gestures: the phone layout never zooms (the pen and the controls are sized for a finger).
