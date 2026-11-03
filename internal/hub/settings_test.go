@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -54,6 +55,25 @@ func automationOf(t *testing.T, root string) project.AutomationConfig {
 
 var testAgents = []project.AgentProfile{{ID: "claude", Name: "Claude Code"}, {ID: "codex", Name: "Codex"}}
 
+// Settings offers the places agents can run on this computer (tmux only where it's installed, so never on Windows),
+// and keeps the configured one on the list even when it isn't here now.
+func TestSettingsOfferThePlacesHere(t *testing.T) {
+	cfgDir := t.TempDir()
+	cfgPath := filepath.Join(cfgDir, "config.toml")
+	if err := os.WriteFile(cfgPath, []byte("open_agents_in = \"tmux\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	x := newFT(t, func(o *FolderOptions) {
+		o.Settings = &LocalSettings{ConfigPath: cfgPath, Home: cfgDir,
+			Agents: func() []project.AgentProfile { return testAgents },
+			Places: func() []string { return []string{"herdr", "background"} }}
+	})
+	v := settingsOf(t, x.get("/api/settings").body)
+	if v.OpenIn != "tmux" || !slices.Equal(v.OpenInChoices, []string{"herdr", "background", "tmux"}) {
+		t.Fatalf("%q %q", v.OpenIn, v.OpenInChoices)
+	}
+}
+
 // The local settings page: the owner reads and writes the config file, and the default agent goes to every project.
 func TestFolderSettings(t *testing.T) {
 	cfgDir := t.TempDir()
@@ -91,6 +111,9 @@ func TestFolderSettings(t *testing.T) {
 		v.Theme != (SettingsTheme{Folder: "~/retake/theme", Used: true, Name: "Studio"}) ||
 		len(v.Extensions) != 1 || v.Extensions[0] != (SettingsExt{ID: "hello", Name: "Hello", Description: "Says hi"}) {
 		t.Fatalf("settings: %+v", v)
+	}
+	if !slices.Equal(v.OpenInChoices, []string{"herdr", "tmux", "background"}) {
+		t.Fatalf("places %q", v.OpenInChoices)
 	}
 
 	r = x.do(http.MethodPost, "/api/settings", `{"agent": "codex", "fallback": "claude", "open_in": "herdr",

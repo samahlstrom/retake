@@ -26,6 +26,8 @@ export interface Settings {
   fallback: string;
   open_in: OpenIn;
   open_in_editable: boolean;
+  /** Where agents can run on this computer, in order (tmux only where it's installed, so never on Windows). */
+  open_in_choices: OpenIn[];
   extensions: SettingsExt[];
   extensions_editable: boolean;
   theme: { folder: string; used: boolean; name?: string };
@@ -87,6 +89,7 @@ export function normalizeSettings(b: unknown): Settings {
     fallback: str(o.fallback),
     open_in: openIn,
     open_in_editable: o.open_in_editable === true,
+    open_in_choices: openInChoices(o.open_in_choices, openIn),
     extensions: list(o.extensions).map((e) => ({
       id: str(e.id),
       name: str(e.name) || str(e.id),
@@ -108,6 +111,18 @@ export function normalizeSettings(b: unknown): Settings {
     test: o.test === true,
     ...sharingOf(o.sharing),
   };
+}
+
+/** The places to offer: the server's that the page knows (all of them from an older server), and the one in effect. */
+function openInChoices(v: unknown, current: OpenIn): OpenIn[] {
+  const known = OPEN_IN.map((x) => x.value);
+  const out = Array.isArray(v) ? known.filter((id) => v.includes(id)) : known;
+  return out.includes(current) ? out : [...out, current];
+}
+
+/** The "Where agents run" menu: the choices offered here, with their labels. */
+export function openInOptions(s: Settings): { value: OpenIn; label: string }[] {
+  return OPEN_IN.filter((o) => s.open_in_choices.includes(o.value)).map((o) => ({ value: o.value, label: o.label }));
 }
 
 function sharingOf(v: unknown): { sharing?: Sharing } {
