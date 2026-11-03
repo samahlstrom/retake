@@ -536,7 +536,8 @@ test.describe('locally', () => {
           );
           const q = question(p);
           await expect(q).toContainText('Which opening?');
-          await expect(p.locator('#side.drawer [data-part~="version-picker"]')).toBeVisible();
+          // An idea has one version (v0): nothing to choose, so no version menu.
+          await expect(p.locator('[data-part~="version-picker"]')).toHaveCount(0);
           // The pictures are stacked on a phone.
           const pics = await q.locator('.choice').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().x));
           expect(Math.abs(pics[0]! - pics[1]!)).toBeLessThan(1);
