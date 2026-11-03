@@ -86,6 +86,8 @@
     "settings-section": "A group of settings (Agent, Computers, Extensions, Theme)",
     "settings-row": "One setting: its name, a line about it, and its control",
     "settings-switch": "An on/off switch (an extension)",
+    "folder-picker": "The folder list that picks your videos folder (setup, settings)",
+    "setup": "The first-run setup page of retake start (spec/setup.md)",
     "ext-slot": "Where an extension's UI mounts (data-ext is its id, data-slot the slot: page, version, sidebar-tab or review-panel)",
     "nav-ext": "An extension's section under the folder tree",
     "nav-ext-title": "Its header row's title, which opens the extension's page",

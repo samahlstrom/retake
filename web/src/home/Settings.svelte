@@ -6,6 +6,8 @@
   import { onMount } from 'svelte';
   import StyledSelect from '../components/ui/Select.svelte';
   import ConnectBlock from '../components/ConnectBlock.svelte';
+  import FolderPicker from '../components/FolderPicker.svelte';
+  import { post, tryLine, waitForHome, type TryResult } from '../setup/setup';
   import { connectCommand } from '../lib/automation.svelte';
   import {
     OPEN_IN,
@@ -14,6 +16,7 @@
     effectiveAgent,
     fallbackOptions,
     loadSettings,
+    normalizeSettings,
     pendingRestart,
     saveSettings,
     type Settings,
@@ -25,6 +28,9 @@
   let saved = $state('');
   let busy = $state(false);
   let command = $state('');
+  let picking = $state(false);
+  let moving = $state(false);
+  let tried = $state<TryResult | 'busy' | null>(null);
   let savedTimer: ReturnType<typeof setTimeout> | null = null;
 
   const online = $derived(s ? s.machines.filter((m) => m.online) : []);
@@ -46,6 +52,37 @@
   $effect(() => {
     if (s?.hosted && !online.length && !command) void connectCommand('api/connect').then((c) => (command = c));
   });
+
+  // A new videos folder: retake start serves it at once, so the home reloads once the server answers for it.
+  async function moveTo(folder: string) {
+    picking = false;
+    const before = s?.folder ?? '';
+    if (folder === before) return; // the same folder: nothing moves
+    await save({ folder });
+    if (error) return;
+    moving = true;
+    if (
+      await waitForHome(
+        fetch,
+        30_000,
+        300,
+        async (r) => normalizeSettings(await r.json()).folder !== before,
+        'api/settings',
+      )
+    )
+      location.replace('./');
+    else error = 'Your videos folder didn’t open. Reload the page.';
+    moving = false;
+  }
+
+  async function test(agent: string) {
+    tried = 'busy';
+    try {
+      tried = await post<TryResult>('api/settings/test', { agent });
+    } catch (e) {
+      tried = { ok: false, error: e instanceof Error ? e.message : 'It didn’t answer.', seconds: 0 };
+    }
+  }
 
   async function save(change: SettingsChange) {
     if (busy) return;
@@ -78,13 +115,46 @@
   {#if error}<p class="err" role="alert">{error}</p>{/if}
 
   {#if s}
+    {#if s.folder && !s.hosted}
+      <div class="group" data-part="settings-section" aria-labelledby="set-videos">
+        <h2 id="set-videos">Your videos</h2>
+        <div class="row" data-part="settings-row">
+          <div class="what">
+            <code class="name path" data-testid="settings-folder">{s.folder}</code>
+            <span class="note"
+              >{#if moving}Opening it…{:else if s.folder_editable}Retake opens this folder when it starts.{:else}Opened
+                with <code>retake open</code>. The app and <code>retake start</code> open the one you chose in setup.{/if}</span
+            >
+          </div>
+          {#if s.folder_editable && !picking}
+            <button class="quiet" disabled={busy || moving} onclick={() => (picking = true)}>Change</button>
+          {/if}
+        </div>
+        {#if picking}
+          <FolderPicker
+            start={s.folder}
+            endpoint="api/settings/folders"
+            onpick={moveTo}
+            oncancel={() => (picking = false)}
+          />
+        {/if}
+      </div>
+    {/if}
+
     <div class="group" data-part="settings-section" aria-labelledby="set-agent">
       <h2 id="set-agent">Agent</h2>
       <div class="row" data-part="settings-row">
         <div class="what">
           <span class="name">Default agent</span>
-          <span class="note">Edits when you press Send, on every video.</span>
+          <span class="note"
+            >{#if tried === 'busy'}Testing…{:else if tried}<span class:ok={tried.ok} class:bad={!tried.ok}
+                >{tryLine(tried)}</span
+              >{:else}Edits when you press Send, on every video.{/if}</span
+          >
         </div>
+        {#if s.agents.length && s.test}
+          <button class="quiet" disabled={tried === 'busy'} onclick={() => test(effectiveAgent(s!))}>Test</button>
+        {/if}
         {#if s.agents.length}
           <StyledSelect
             label="Default agent"
@@ -280,6 +350,41 @@
     .note.pad {
       margin: 10px 0 0;
     }
+    .note .ok {
+      color: var(--status-done);
+    }
+    .note .bad {
+      color: var(--danger);
+    }
+    code.name {
+      font: 13px var(--font-mono);
+      overflow-wrap: anywhere;
+    }
+    .quiet {
+      flex: none;
+      min-height: 32px;
+      margin-left: auto;
+      padding: 0 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: transparent;
+      color: var(--text-3);
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .quiet:hover:not(:disabled) {
+      border-color: var(--border-hover);
+      color: var(--text);
+    }
+    .quiet:disabled {
+      cursor: default;
+      opacity: 0.6;
+    }
+    .quiet:focus-visible {
+      outline: 2px solid var(--focus);
+      outline-offset: 2px;
+    }
     .value {
       flex: none;
       color: var(--text-3);
@@ -368,6 +473,9 @@
       .switch {
         width: 48px;
         height: 30px;
+      }
+      .quiet {
+        min-height: 44px;
       }
       .switch span {
         width: 24px;

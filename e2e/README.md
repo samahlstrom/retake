@@ -34,7 +34,7 @@ Run it through mise (`mise exec -- npm test`) to use the pinned node. Needs `ffm
 
 Ports: the servers use 8831–8840 (scenario 8831, crash safety 8832 behind a proxy on 8834, HLS 8833, sidebar 8835,
 phone layout 8836, sharing 8837 behind a proxy on 8838, time map 8839, the team server 8840; the relay's server
-reuses 8837). The browser talks to
+and `retake start`'s setup (40-setup) reuse 8837). The browser talks to
 Playwright over a pipe, so it opens no devtools port. Each server is started
 for its spec file, waited on
 through `/api/ping`, and always stopped. Its log is in `<work>/logs/`.

@@ -147,6 +147,8 @@ jobs:
           cargo fetch --locked --manifest-path editor/Cargo.toml
       - name: scripts/notices.mjs --check
         run: node scripts/notices.mjs --check
+      - name: The README's motion graphics are current (scripts/build-motion.mjs --check)
+        run: node scripts/build-motion.mjs --check
 
   quickstart:
     name: Quickstart (docs/quickstart.md on the sample project)
@@ -256,8 +258,12 @@ jobs:
           pattern: editor-*
           path: dist-editor
           merge-multiple: true
+      - name: The tools that ship with retake (herdr, ffmpeg, retake-edit), pinned by SHA-256
+        run: scripts/bundle-deps.sh
       - name: goreleaser release --snapshot
         run: goreleaser release --snapshot --clean --parallelism 2
+      - name: The Mac app (unsigned, universal)
+        run: sudo apt-get install -y llvm zip && scripts/macos-app.sh
       - uses: actions/upload-artifact@v7
         with:
           name: release-snapshot

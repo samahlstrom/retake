@@ -94,6 +94,9 @@ type Folder struct {
 
 	contactMu sync.Mutex
 	contact   time.Time
+
+	tryMu  sync.Mutex      // the agent tests running (Settings' Test)
+	trying map[string]bool // by agent id
 }
 
 // folderProject is one project's server, made on first use, and a handle on its store for the cards.
@@ -123,7 +126,7 @@ func NewFolder(opts FolderOptions) *Folder {
 		opts.Thumbs = thumb.Default
 	}
 	f := &Folder{opts: opts, local: map[string]bool{}, origins: map[string]bool{}, allow: map[string]bool{},
-		limiter: team.NewLimiter(), open: map[string]*folderProject{}}
+		trying: map[string]bool{}, limiter: team.NewLimiter(), open: map[string]*folderProject{}}
 	for _, h := range []string{"127.0.0.1", "localhost"} {
 		hp := net.JoinHostPort(h, strconv.Itoa(opts.Port))
 		f.local[hp] = true
@@ -466,7 +469,9 @@ func (f *Folder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case isHomeExt(parts):
 		f.homeExt(w, r, role, parts)
 	case len(parts) == 2 && parts[0] == "api" && parts[1] == "settings":
-		f.settingsRoute(w, r, role)
+		f.settingsRoute(w, r, role, "")
+	case len(parts) == 3 && parts[0] == "api" && parts[1] == "settings":
+		f.settingsRoute(w, r, role, parts[2])
 	case len(parts) == 1 && parts[0] == "favicon.ico" && get:
 		w.Header().Set("Cache-Control", "no-store")
 		w.WriteHeader(http.StatusNoContent)

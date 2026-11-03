@@ -71,6 +71,13 @@ export async function startServer(name: string, video: string, port: number, ext
   return startProcess(name, opts.bin ?? cmd, args, port, opts.env);
 }
 
+/** Starts the retake binary with these arguments (`retake start`, spec/setup.md) and waits until it answers /api/ping
+ * on `port`. `env` goes over the usual environment. */
+export async function startRetake(name: string, args: string[], port: number,
+  env: Record<string, string> = {}): Promise<Server> {
+  return startProcess(name, RETAKE_BIN, args, port, env);
+}
+
 /** Starts `retake serve` (spec/server.md) with these arguments and waits until it answers /api/ping. */
 export async function startTeamServer(name: string, port: number, args: string[]): Promise<Server> {
   return startProcess(name, RETAKE_BIN, ['serve', '--listen', `127.0.0.1:${port}`, ...args], port);

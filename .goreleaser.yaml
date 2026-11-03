@@ -1,5 +1,5 @@
 # Release archives of the `retake` binary (Go, with the review page embedded) for Linux, macOS and Windows on amd64
-# and arm64. The Rust editor, retake-edit, is built separately on native runners (cargo, one runner per platform):
+# and arm64; on Linux and macOS with the tools that ship with it (herdr, ffmpeg, retake-edit; scripts/bundle-deps.sh). The Rust editor, retake-edit, is built separately on native runners (cargo, one runner per platform):
 # it links prebuilt Skia, which goreleaser's rust builder (cargo-zigbuild) can't cross-link for macOS or MSVC.
 #
 #   make snapshot                          # = goreleaser release --snapshot --clean: archives in dist/, nothing published
@@ -54,6 +54,22 @@ archives:
       - src: THIRD_PARTY_NOTICES*
         info: *docinfo
       - src: LICENSE* # none yet: the license isn't decided
+        info: *docinfo
+      # The tools that ship with retake (docs/install-plan.md), put in dist-bundle/<os>_<arch>/ by
+      # scripts/bundle-deps.sh (make snapshot runs it): herdr, ffmpeg and ffprobe, retake-edit, their licenses and
+      # retake-bundle.json, which makes retake put this folder first on its PATH (spec/setup.md). A platform without
+      # them (Windows) gets the plain archive.
+      - src: "dist-bundle/{{ .Os }}_{{ .Arch }}/bin/*"
+        dst: .
+        strip_parent: true
+        info: { owner: root, group: root, mode: 0755 }
+      - src: "dist-bundle/{{ .Os }}_{{ .Arch }}/licenses/*"
+        dst: licenses
+        strip_parent: true
+        info: *docinfo
+      - src: "dist-bundle/{{ .Os }}_{{ .Arch }}/retake-bundle*.json"
+        dst: .
+        strip_parent: true
         info: *docinfo
 
 checksum:

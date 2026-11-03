@@ -16,3 +16,10 @@ declare global {
     };
   }
 }
+
+// The setup page's test hook (window.__setup, spec/setup.md).
+declare global {
+  interface Window {
+    __setup: { loaded: boolean; done: boolean };
+  }
+}
