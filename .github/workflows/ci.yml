@@ -183,7 +183,7 @@ jobs:
         with:
           install_args: go node rust
       - name: Install ffmpeg
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg libfreetype-dev libfontconfig1-dev
       - name: Cache cargo builds
         uses: Swatinem/rust-cache@v2
         with:
