@@ -32,6 +32,11 @@ export interface Settings {
   /** The config file (local). */
   config?: string;
   machines: Machine[];
+  /** The videos folder (local; spec/setup.md), and whether retake start can switch it. */
+  folder: string;
+  folder_editable: boolean;
+  /** Whether the agents can be tested here (POST api/settings/test). */
+  test: boolean;
 }
 
 export type OpenIn = 'background' | 'herdr' | 'tmux';
@@ -42,6 +47,7 @@ export interface SettingsChange {
   fallback?: string;
   open_in?: OpenIn;
   extensions?: Record<string, boolean>;
+  folder?: string;
 }
 
 export const OPEN_IN: { value: OpenIn; label: string; note: string }[] = [
@@ -82,6 +88,9 @@ export function normalizeSettings(b: unknown): Settings {
       online: m.online === true,
       agents: list(m.agents).map((a) => ({ id: str(a.id), name: str(a.name) })),
     })),
+    folder: str(o.folder),
+    folder_editable: o.folder_editable === true,
+    test: o.test === true,
   };
 }
 

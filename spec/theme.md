@@ -343,6 +343,8 @@ Versioning). Classes and ids are not part of the API and can change in any relea
 | `settings-section` | A group of settings (Agent, Computers, Extensions, Theme) | home |
 | `settings-row` | One setting: its name, a line about it, and its control | home |
 | `settings-switch` | An on/off switch (an extension) | home |
+| `folder-picker` | The folder list that picks your videos folder (setup, settings) | setup, home |
+| `setup` | The first-run setup page of retake start (spec/setup.md) | setup |
 
 `data-state` and `data-status` values are part of the API too: a comment's and a marker's `data-state` is `open`,
 `working`, `question` or `done`; a video card's `data-status` is the home's status word (spec/home.md); the chat's
