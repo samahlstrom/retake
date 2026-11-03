@@ -731,7 +731,7 @@
     height: 6px;
     margin-left: 8px;
     border-radius: 50%;
-    background: var(--agent-edge);
+    background: var(--record);
     vertical-align: 2px;
   }
   #verBtn.live {
@@ -745,6 +745,6 @@
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background: var(--agent-edge);
+    background: var(--record);
   }
 }

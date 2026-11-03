@@ -18,8 +18,11 @@ export interface CommentStatus {
   paused: string | null;
   /** A Working comment that hasn't started: why, in one short line ("Waiting for the editing computer"). */
   waiting: string | null;
-  /** The comment the agent is on now (spec/automation.md, "Marking progress"): its line in the agent's words ("" with
-   * none). Null for every other comment: one at a time. */
+  /** The one comment the agent is on now (spec/automation.md, "While the agent works"): first in To do, with the
+   * Working dot, the sweep and its line. Every other Working comment reads quietly (only its `→ v5`). */
+  now?: boolean;
+  /** The line under the comment the agent is on: its words ("" with none), or "Putting it in v5…". Set only with
+   * `now`: one at a time. */
   doing?: string | null;
   /** Done by the agent's mark, its edit in the live version before the report: what changed, in its words. */
   change?: string | null;
@@ -87,33 +90,35 @@ export function commentStatus(
   return is('open');
 }
 
+/** The one note a running task's agent is on (spec/automation.md, "While the agent works"): its `working` note, else
+ * the last note it marked done whose edit is still being put in, else none. */
+export function nowNote(task: Pick<EditingTask, 'working' | 'marked'>): number | null {
+  if (task.working && !task.marked?.some((m) => m.note === task.working!.note && m.ready)) return task.working.note;
+  return task.marked?.findLast((m) => !m.ready)?.note ?? null;
+}
+
 /** A comment of a running task, as the agent marks it (spec/automation.md, "Marking progress"): Done once its edit is in
- * the live version, Working while it's being put in ("Putting it in v5…") or worked on (the agent's words), else plain
- * Working. While the editing computer is offline the one being worked on says it's reconnecting. */
+ * the live version; the one the agent is on (`now`) Working with its line, the agent's words or "Putting it in v5…";
+ * the rest plain Working, which the list draws quietly. While the editing computer is offline the one being worked
+ * on says it's reconnecting. */
 function progress(row: { kind: string; id?: number }, task: EditingTask, ctx: StatusContext): CommentStatus {
   const working: CommentStatus = { state: 'working', paused: null, waiting: null };
   if (row.kind !== 'note' || row.id == null) return working;
   const line = (text: string) => (ctx.agent?.available && !ctx.agent.online ? 'Reconnecting to the agent' : text);
   const mark = task.marked?.find((m) => m.note === row.id);
   if (mark?.ready) return { state: 'done', paused: null, waiting: null, change: mark.change.trim() || null };
-  if (mark) return { ...working, doing: line(task.target ? `Putting it in ${task.target}…` : 'Putting it in…') };
-  if (task.working?.note === row.id) return { ...working, doing: line((task.working.text ?? '').trim()) };
-  return working;
+  if (nowNote(task) !== row.id) return working;
+  if (task.working?.note === row.id) return { ...working, now: true, doing: line((task.working.text ?? '').trim()) };
+  return { ...working, now: true, doing: line(task.target ? `Putting it in ${task.target}…` : 'Putting it in…') };
 }
 
-/** The red light around the video's edge (spec/automation.md, "While the agent works"): a task of this video runs, and
- * not every comment it still has to do waits on a question. Never while recording, nor on an extension's version.
- * `stateOf` is a comment's state, null for one the page doesn't have. */
-export function agentEdge(
-  tasks: readonly EditingTask[] | null | undefined,
-  stateOf: (note: number) => CommentState | null,
-  o: { recording: boolean; kind: boolean },
-): boolean {
-  if (o.recording || o.kind) return false;
-  const t = (tasks ?? []).find((x) => x.state === 'running' || x.state === 'stopping');
-  if (!t) return false;
-  const todo = pendingNotes(t).filter((id) => !t.marked?.some((m) => m.note === id && m.ready));
-  return !todo.length || todo.some((id) => stateOf(id) !== 'question');
+/** The one quiet line at the top of To do while the agent works on the list's comments and hasn't marked any yet (an
+ * agent that doesn't use `retake working`): "The agent is on it · 15 comments". `owners` is the task of each of the
+ * list's Working comments. Null with none running, and as soon as its task has a mark (working or done). */
+export function onItLine(owners: readonly (EditingTask | null | undefined)[]): string | null {
+  const running = owners.filter((t): t is EditingTask => t?.state === 'running' || t?.state === 'stopping');
+  if (!running.length || running.some((t) => t.working || t.marked?.length)) return null;
+  return `The agent is on it · ${running.length === 1 ? '1 comment' : `${running.length} comments`}`;
 }
 
 /** The version a running task of this video makes or updates: the live one (spec/automation.md, "The live version"). */
