@@ -524,20 +524,27 @@ var draftLabel = regexp.MustCompile(`^v(\d+)-draft\d+$`)
 
 // withLeftDrafts is the family plus the drafts it no longer lists that comments were recorded on (older drafts, and a
 // promoted draft's old label), each as version N: those comments belong to the version they headed for (spec/notes.md,
-// "Comments belong to their version"), so they don't vanish once it exists.
+// "Comments belong to their version"), so they don't vanish once it exists, nor while it is live (listed only by its
+// newest revisions: an older revision of the live v7 keeps its comments with v7).
 func (s *Server) withLeftDrafts(st *project.Store, fam []family.Version) []family.Version {
 	notes, err := st.Notes(project.NoteFilter{})
 	if err != nil {
 		return fam
 	}
 	listed := map[string]bool{}
+	versions := map[string]bool{} // v<N> for every version listed itself or by one of its revisions
 	for _, v := range fam {
 		listed[v.Label] = true
+		if m := draftLabel.FindStringSubmatch(v.Label); m != nil {
+			versions["v"+m[1]] = true
+		} else {
+			versions[v.Label] = true
+		}
 	}
 	out := slices.Clone(fam)
 	for _, n := range notes {
 		m := draftLabel.FindStringSubmatch(n.Version)
-		if m == nil || listed[n.Version] || !listed["v"+m[1]] {
+		if m == nil || listed[n.Version] || !versions["v"+m[1]] {
 			continue
 		}
 		listed[n.Version] = true

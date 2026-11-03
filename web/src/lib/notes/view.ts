@@ -252,6 +252,47 @@ export function withLive(rows: readonly Row[], own: readonly Row[], notes: reado
   );
 }
 
+/** One entry of the comments list: a comment, the quiet label over a group of them ("From v4"), or the one line at the
+ * top while the agent works without marking ("The agent is on it · 15 comments"). */
+export type ListItem =
+  | { kind: 'row'; key: string; row: Row }
+  | { kind: 'label'; key: string; text: string }
+  | { kind: 'line'; key: string; text: string };
+
+/** What the list draws, in order (spec/notes.md, "What a version shows"): the agent's line, if any; then the rows, the
+ * one the agent is on (`now`, a row key) first and the rest in their order. On a live version, whose rows include
+ * the batch's from the version before, those come first under "From v4", and its own after them under "On v5"; a
+ * version showing only its own rows has no labels. */
+export function listItems(
+  rows: readonly Row[],
+  o: { shown: string | null; now?: string | null; line?: string | null },
+): ListItem[] {
+  const out: ListItem[] = o.line ? [{ kind: 'line', key: 'line:on-it', text: o.line }] : [];
+  const pinned = (rs: readonly Row[]): ListItem[] => {
+    const i = o.now ? rs.findIndex((r) => r.key === o.now) : -1;
+    const order = i > 0 ? [rs[i]!, ...rs.slice(0, i), ...rs.slice(i + 1)] : rs;
+    return order.map((row) => ({ kind: 'row', key: row.key, row }));
+  };
+  const own = o.shown ? versionOf(o.shown) : null;
+  if (!own) return [...out, ...pinned(rows)];
+  const of = rowVersions(rows);
+  const groups = new Map<string, Row[]>();
+  for (const r of rows) {
+    const v = of.get(r.key) ?? own;
+    groups.set(v, [...(groups.get(v) ?? []), r]);
+  }
+  const others = [...groups.keys()].filter((v) => v !== own);
+  if (!others.length) return [...out, ...pinned(rows)];
+  // Newest first: the batch going into this version is from the one just before it.
+  const num = (v: string) => Number(/^v(\d+)$/.exec(v)?.[1] ?? -1);
+  for (const v of others.sort((a, b) => num(b) - num(a))) {
+    out.push({ kind: 'label', key: `label:${v}`, text: `From ${v}` }, ...pinned(groups.get(v)!));
+  }
+  const mine = groups.get(own);
+  if (mine?.length) out.push({ kind: 'label', key: 'label:own', text: `On ${own}` }, ...pinned(mine));
+  return out;
+}
+
 /** The rows of the version on screen (spec/notes.md, "Comments belong to their version"): its comments and the
  * agent's questions about them, and nothing of another version. */
 export function forVersion(rows: readonly Row[], shown: string | null): Row[] {

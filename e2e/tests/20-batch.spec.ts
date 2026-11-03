@@ -1,7 +1,9 @@
 // A Send is one batch (spec/automation.md, "Batches"): three comments recorded on a plain video (a fake transcriber, a
 // command engine that prints fixed words), then Send, go to one agent run (a fake agent that logs each launch and
-// copies the newest version as its edit) and make exactly one new version. While it works, the comments column says
-// "Agent working on 3 comments" as one line. A screenshot of that goes to .retake-work/batch-shots/.
+// copies the newest version as its edit) and make exactly one new version. The agent never marks a comment (no `retake
+// working`), so while it works the only sign is one quiet line at the top of To do, "The agent is on it · 3 comments":
+// nothing sweeps, and the cards read quietly (no dot, no word; spec/automation.md, "While the agent works"). A
+// screenshot of that goes to .retake-work/batch-shots/.
 import { expect, test } from '@playwright/test';
 import { linkSync, mkdirSync, readdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -86,17 +88,28 @@ test('Send with three comments: one task, one agent run, one new version', async
   await expect(page.locator('#done')).toBeEnabled();
   await page.locator('#done').click();
 
-  // One task with all three, one launch; the column says so as one line while it works.
+  // One task with all three, one launch; one quiet line at the top of To do says so while it works, and the cards are
+  // quiet (still Working to a screen reader), with nothing sweeping and no pill.
   await expect.poll(async () => (await automation()).tasks.map((t) => `${t.state}:${t.notes.length}`), { timeout: 60_000 })
     .toEqual(['running:3']);
-  await expect(page.locator('#side .batch-line')).toHaveText('Agent working on 3 comments', { timeout: 15_000 });
-  for (const row of await items.all()) await expect(row.locator('.status')).toHaveText('Working');
+  const onIt = page.locator('#side [data-part~="agent-on-it"]');
+  await expect(onIt).toHaveText('The agent is on it · 3 comments', { timeout: 15_000 });
+  await expect(items).toHaveCount(3);
+  for (const row of await items.all()) {
+    await expect(row.locator('.status')).toHaveText('Working');
+    await expect(row.locator('.status')).toHaveClass(/quiet/);
+    await expect(row.locator('.status .dot')).toHaveCount(0);
+    await expect(row.locator('[data-part~="into"]')).toHaveText('→ v2');
+  }
+  await expect(page.locator('#side .item[data-doing]')).toHaveCount(0);
+  await expect(page.getByText(/Agent working on/)).toHaveCount(0);
   mkdirSync(SHOTS, { recursive: true });
   await page.screenshot({ path: join(SHOTS, 'working.png') });
   writeFileSync(GATE, '');
 
   await expect.poll(async () => (await automation()).tasks.map((t) => `${t.state}:${t.result ?? ''}`), { timeout: 60_000 })
     .toEqual(['completed:v2']);
+  await expect(onIt).toHaveCount(0, { timeout: 15_000 });
   const launches = readFileSync(LAUNCHES, 'utf8').trim().split('\n');
   expect(launches).toHaveLength(1);
   expect((JSON.parse(launches[0]!) as { notes: number[] }).notes).toHaveLength(3);

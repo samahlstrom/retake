@@ -6,6 +6,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/samahlstrom/retake/internal/family"
 	"github.com/samahlstrom/retake/internal/project"
 )
 
@@ -131,6 +132,22 @@ func TestCommentsOnALeftDraftStayWithTheirVersion(t *testing.T) {
 	}
 	if got := texts("/api/notes?v=v6&scope=review"); got["said on the draft"] != "v6-draft2" {
 		t.Fatalf("review scope of v6: %v", got)
+	}
+	// The live v9 (spec/automation.md, "The live version"): the family lists only its newest revision, and a comment
+	// on an older revision stays with v9 all the same.
+	labels := func(fam []family.Version) []string {
+		var out []string
+		for _, v := range fam {
+			out = append(out, v.Label)
+		}
+		return out
+	}
+	live := append(slices.Clone(h.srv.Family()), family.Version{Label: "v9-draft3", N: 9})
+	if got := labels(h.srv.withLeftDrafts(st, live)); !slices.Contains(got, "v9-draft1") {
+		t.Fatalf("an older revision of the live v9 lost its comment: %v", got)
+	}
+	if got := labels(h.srv.withLeftDrafts(st, h.srv.Family())); slices.Contains(got, "v9-draft1") {
+		t.Fatalf("a draft of nothing listed came back: %v", got)
 	}
 }
 

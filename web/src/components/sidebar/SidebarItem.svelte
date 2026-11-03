@@ -3,9 +3,9 @@
   // you drew, one status (Open, Working, Question, Done) and, until it's done,
   // the version its edit goes into ("→ v8": a comment on v7 becomes an edit in v8). A question from the
   // agent has the reply box under it; a paused one says why once, with Retry; a Working one waiting for its computer
-  // says so. The one the agent is working on has a quiet line in the agent's words under its own; a done one says what
-  // changed and "in v5", which plays v5 at that moment (spec/automation.md, "While the agent works"). Everything else
-  // is in its ⋯.
+  // says so. The one the agent is on has the Working dot and a quiet line in the agent's words under its own; the rest
+  // of its batch read quietly, only their "→ v8" (the word stays for screen readers); a done one says what changed and
+  // "in v5", which plays v5 at that moment (spec/automation.md, "While the agent works"). Everything else is in its ⋯.
   import type { Review } from '../../lib/review.svelte';
   import { anchorText, sketchFrame, type Row } from '../../lib/notes/view';
   import { STATE_TEXT } from '../../lib/status';
@@ -46,6 +46,8 @@
           ? verName(row.answeredIn)
           : null,
   );
+  /** Sent, and the agent isn't on it (yet): no dot and no word, only where it goes. */
+  const quiet = $derived(status.state === 'working' && !status.now);
   /** The agent's line: its words, trailed off ("slowing the mask fade…"). */
   const doing = $derived(status.doing ? (/[.…!?]$/.test(status.doing) ? status.doing : `${status.doing}…`) : '');
 
@@ -79,9 +81,10 @@
   {:else}
     <button class="time jump" title="Go to {row.time}" onclick={() => review.jumpToComment(row)}>{row.time}</button>
   {/if}
-  <span class="status {status.state}" data-part="status"
-    ><span class="dot" aria-hidden="true"></span>{STATE_TEXT[status.state]}</span
+  <span class="status {status.state}" class:quiet data-part="status"
+    >{#if !quiet}<span class="dot" aria-hidden="true"></span>{/if}{STATE_TEXT[status.state]}</span
   >
+  {#if quiet && !row.into}<span class="into" aria-hidden="true">Sent</span>{/if}
   {#if doneIn}<button
       class="into in"
       data-part="into"

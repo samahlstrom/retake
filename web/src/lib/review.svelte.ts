@@ -83,11 +83,11 @@ import {
 import { covers, drawTimeline, pendingStrokes, pendingVoiceBins, tlT, type VoiceTrack } from './timeline';
 import {
   activeTask,
-  agentEdge,
   agentStatus,
   commentStatus,
   liveTarget,
   managesAgent,
+  onItLine,
   pendingNotes,
   sendButton,
   unsent,
@@ -425,15 +425,11 @@ export class Review {
   readonly agent: AgentStatus = $derived(agentStatus(this.automation.state, this.clock));
   /** The version a running task of this video makes or updates, live (spec/automation.md, "The live version"). */
   readonly liveTarget = $derived(liveTarget(this.automation.state?.tasks));
-  /** The red light around the video's edge while the agent works (spec/automation.md, "While the agent works"). */
-  readonly edgeLit = $derived(
-    agentEdge(
-      this.automation.state?.tasks,
-      (id) => {
-        const row = this.rows.find((r) => r.kind === 'note' && r.id === id);
-        return row ? this.statusOf(row).state : null;
-      },
-      { recording: !!this.seg || this.starting, kind: !!this.kindShown },
+  /** "The agent is on it · 15 comments": the one quiet line at the top of To do until the agent marks a comment
+   * (spec/automation.md, "While the agent works"). */
+  readonly onIt = $derived(
+    onItLine(
+      this.versionRows.filter((row) => this.statusOf(row).state === 'working').map((row) => this.tasks[row.key]),
     ),
   );
   /** Runs the agent: chooses it and connects computers. Everyone who can record sends. */
@@ -2512,7 +2508,7 @@ export class Review {
   #announceStreams(): void {
     const fresh = newlyStreamed(this.versions, this.#seenStreams);
     for (const v of fresh) this.#seenStreams.add(v.label);
-    // A live version's next revision is no news: the edge light says it's updating (spec/automation.md).
+    // A live version's next revision is no news: its comments say what landed (spec/automation.md).
     const v = fresh.filter((f) => !this.#announced.has(verName(f.label))).at(-1);
     for (const f of fresh) this.#announced.add(verName(f.label));
     if (v) this.toast.say('Updating video…', 2500);
@@ -2802,7 +2798,7 @@ export class Review {
     if (v.kind) return; // an extension's version: no drawings to load, nothing to say
     void this.loadHistory(label);
     const note = this.#landNote;
-    // The live version's next revision (the agent's next edit) comes in quietly: the edge light is its news.
+    // The live version's next revision (the agent's next edit) comes in quietly: its comment moving to Done is the news.
     if (note || verName(label) !== was) this.toast.say(note ?? 'Video updated', note ? 3200 : 1400);
   }
 
