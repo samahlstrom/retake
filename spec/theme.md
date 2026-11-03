@@ -304,6 +304,10 @@ Versioning). Classes and ids are not part of the API and can change in any relea
 | `sketch` | A comment's drawing, small, on the still of its moment | review |
 | `more` | A ⋯ button | both |
 | `menu` | A menu a ⋯ opens | both |
+| `video-menu` | A video's ⋯ (Share…, Agent for this video, Show in folder, Move to Trash…): on its card, and at the top left of its review page | both |
+| `share-sheet` | The Share sheet: who it's for, access, expiry, the link with Copy, the video's links with Revoke | both |
+| `trash-confirm` | Move to Trash's confirm: the folder, its versions and size | home |
+| `undo-toast` | Moved to Trash · Undo | home |
 | `select` | A dropdown's button (in Settings) | home |
 | `connect` | The "Connect your computer" command line and its Copy button | both |
 | `home` | The home page: the folder tree and the videos | home |

@@ -639,6 +639,7 @@ func (f *Folder) shareLink(w http.ResponseWriter, r *http.Request, tok string) {
 		age = min(age, exp.Sub(f.opts.Now()))
 	}
 	// On the local network the page is plain HTTP, where a browser drops a Secure cookie (spec/team.md).
+	//nolint:gosec // Secure except on the local network's plain HTTP address, where a browser would drop it
 	http.SetCookie(w, &http.Cookie{Name: ShareCookie, Value: tok, Path: "/", MaxAge: max(1, int(age.Seconds())),
 		HttpOnly: true, Secure: !viaLAN(r), SameSite: http.SameSiteStrictMode})
 	to := "/"

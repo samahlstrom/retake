@@ -161,7 +161,7 @@ func moveXDG(path string, o Options) (Moved, error) {
 		if _, err := os.Lstat(to); err == nil {
 			continue
 		}
-		f, err := os.OpenFile(infoPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		f, err := os.OpenFile(infoPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600) //nolint:gosec // in the trash's info/
 		if errors.Is(err, os.ErrExist) {
 			continue
 		}
