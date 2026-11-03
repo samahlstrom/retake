@@ -392,7 +392,15 @@ async function main() {
       check(sent.ok, 'Send');
       await waitFor('the fake agent', () => existsSync(join(out, 'agent.done')) || existsSync(join(out, 'agent.err')));
       const named = readFileSync(join(out, 'command.txt'), 'utf8');
-      check(resolve(named) === bin('retake'), `the prompt names ${PLATFORM}'s Go binary`, `it named: ${named}`);
+      if (WIN) {
+        // Windows: the prompt says plain `retake`, with retake's own folder first on the agent's PATH (spec/setup.md).
+        check(named === 'retake', 'the prompt says plain retake', `it named: ${named}`);
+        const first = readFileSync(join(out, 'path0.txt'), 'utf8');
+        check(resolve(first).toLowerCase() === dirname(bin('retake')).toLowerCase(),
+          `the agent's PATH starts with ${PLATFORM}'s bin folder`, `it starts with: ${first}`);
+      } else {
+        check(resolve(named) === bin('retake'), `the prompt names ${PLATFORM}'s Go binary`, `it named: ${named}`);
+      }
       check(!existsSync(join(out, 'agent.err')), "`retake working` and `retake done` ran with nothing on PATH",
         existsSync(join(out, 'agent.err')) ? readFileSync(join(out, 'agent.err'), 'utf8') : '');
       await waitFor('the comment marked done', async () => {
@@ -472,7 +480,8 @@ async function newerRelease(file, env) {
 }
 
 /** The fake agent: records the command its prompt names for `working`, then runs it with nothing on PATH, as an agent
- * in a herdr or tmux pane without node would. */
+ * in a herdr or tmux pane without node would. On Windows the prompt says plain `retake` and Retake puts its own folder
+ * first on the agent's PATH, so there that folder is all the PATH it keeps. */
 const FAKE_AGENT = `import { copyFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 const out = process.env.SMOKE_OUT;
@@ -486,8 +495,10 @@ try {
   if (cmd.startsWith("'") && cmd.endsWith("'")) cmd = cmd.slice(1, -1).split("'\\\\''").join("'");
   writeFileSync(out + '/command.txt', cmd);
   const win = process.platform === 'win32';
+  const first = (process.env.PATH || '').split(win ? ';' : ':')[0];
+  writeFileSync(out + '/path0.txt', first);
   const env = win
-    ? { SystemRoot: process.env.SystemRoot, TEMP: process.env.TEMP, USERPROFILE: process.env.USERPROFILE, PATH: 'C:\\\\nonexistent' }
+    ? { SystemRoot: process.env.SystemRoot, TEMP: process.env.TEMP, USERPROFILE: process.env.USERPROFILE, PATH: cmd === 'retake' ? first : 'C:\\\\nonexistent' }
     : { HOME: process.env.HOME, PATH: '/nonexistent' };
   execFileSync(cmd, ['working', id, 'checking the npm install'], { env, stdio: ['ignore', 'pipe', 'pipe'] });
   copyFileSync(process.env.SMOKE_VIDEO, process.env.RETAKE_OUTPUT); // the "edit": the video as it was
