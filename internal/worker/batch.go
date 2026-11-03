@@ -344,11 +344,11 @@ func morePrompt(task string, ids []int64, edits []project.WorkNote, answers []pr
 	}
 	video := ""
 	if output != "" {
-		video = fmt.Sprintf("The video still goes to %q, once, with every change in it. ", output)
+		video = fmt.Sprintf("The video still goes to %q, once, with every change in it. ", promptPath(output))
 	}
 	fmt.Fprintf(&b, `The task context is now %q: the same format as before, with task.notes listing every note of the task, old and new. Their saved stills and images are in this task directory, named as before.
 Do this along with the rest, in this same run. %sWhen every note of the task is done or asked about, write your one report to %q, not to the earlier report file, which no longer counts. Use the same JSON as before, covering every note of the task.
-`, contextPath, video, reportPath)
+`, promptPath(contextPath), video, promptPath(reportPath))
 	return b.String()
 }
 
@@ -357,7 +357,7 @@ func followUpPrompt(task string, ids []int64, edits []project.WorkNote, answers 
 	var b strings.Builder
 	fmt.Fprintf(&b, "This is a follow-up round of Retake task %s. You, or an agent before you, already did its other notes in this run: their changes are on disk, so keep them. ", task)
 	if output != "" {
-		fmt.Fprintf(&b, "The video so far, with those changes, is %q: start from it, not from the versions, and write the new result to that same file. ", output)
+		fmt.Fprintf(&b, "The video so far, with those changes, is %q: start from it, not from the versions, and write the new result to that same file. ", promptPath(output))
 	}
 	if len(ids) > 0 {
 		fmt.Fprintf(&b, "Now do the notes sent meanwhile, note IDs %s, in the same new version.", idList(ids))

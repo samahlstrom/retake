@@ -144,9 +144,9 @@ func (r *runner) plainContext(a project.WorkAssignment, vs []family.Version, out
 // has no cut yet, only an extension's version, v0), updating says it is the task's target itself, and into says
 // where the result goes. extra is the extensions' section.
 func plainPrompt(contextPath, from string, updating bool, output, into, reportPath, extra string) string {
-	start := fmt.Sprintf("starting from %q, the version the notes were made on", from)
+	start := fmt.Sprintf("starting from %q, the version the notes were made on", promptPath(from))
 	if updating {
-		start = fmt.Sprintf("starting from %q: the version these notes go in, which exists already with earlier changes to keep (comments on a version become edits in the next one)", from)
+		start = fmt.Sprintf("starting from %q: the version these notes go in, which exists already with earlier changes to keep (comments on a version become edits in the next one)", promptPath(from))
 	}
 	if from == "" {
 		start = "building the video's first cut from what the notes and the video's folder give you (it has no cut yet)"
@@ -156,7 +156,7 @@ Read the project instructions, then the durable task context at %q: the notes, a
 Only the note IDs in task.notes are assigned (minus task.done, finished in an earlier attempt). Other notes are context: check them and prior events for conflicting or already-applied feedback. Each note names the version it was made on and its times. Saved annotated stills, when available, are note-<id>.png in this task directory. Attached reference images are note-<id>-<file>; their boxes and original video times are in the context. A note's "missing" says which of its files couldn't be given to you and what you have instead.
 Make the requested change with the tools you have (ffmpeg, for example), %[2]s. Write the result as one video file to %[3]q (H.264 and AAC in an MP4 play everywhere). Retake puts it in the project as %[4]s. Before each retake done (below), write the whole video so far, with that note's edit, to %[3]q: Retake shows it at once. Never edit, move or delete the existing versions or anyone else's files.
 The next agent may differ from you; leave useful context on disk. Do not delete or edit the worker's identity, lock, logs, context files or ask.json.
-`, contextPath, start, output, into) + extra + askRules(reportPath, "A completed report is only a request: Retake checks that the new video plays before resolving the comment. Do not run retake push or retake note yourself.")
+`, promptPath(contextPath), start, promptPath(output), into) + extra + askRules(reportPath, "A completed report is only a request: Retake checks that the new video plays before resolving the comment. Do not run retake push or retake note yourself.")
 }
 
 // plainPlan is where a plain task's video goes (into, the target's label and file) and where its agent starts (from):

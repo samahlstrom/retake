@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -85,7 +86,7 @@ func TestAskEndpointNeedsTheAttemptsSecret(t *testing.T) {
 	if e != nil || json.Unmarshal(b, &file) != nil || file.URL != url || file.Token != token || !strings.HasPrefix(url, "http://127.0.0.1:") || len(token) != 32 {
 		t.Fatalf("env %q, file %s %v", env, b, e)
 	}
-	if info, _ := os.Stat(filepath.Join(r.dir, AskFile)); info.Mode().Perm() != 0o600 {
+	if info, _ := os.Stat(filepath.Join(r.dir, AskFile)); runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 { // Windows has no mode bits
 		t.Fatalf("ask.json is %v", info.Mode())
 	}
 	post := func(secret, body string) (int, string) {
@@ -161,6 +162,9 @@ func TestAnswersAreToldOnce(t *testing.T) {
 // The prompt names the retake an agent will actually run (spec/setup.md, "Retake's own tools come first"): a bundle's
 // own folder, first on retake's PATH, isn't on the agent's (herdr, tmux, the person's shell), so it doesn't count.
 func TestCommandForNamesTheBinaryAnAgentRuns(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix's rule: on Windows the prompt says plain retake and agents get its folder on PATH (ask_windows.go)")
+	}
 	root, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
 		t.Fatal(err)

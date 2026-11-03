@@ -399,7 +399,7 @@ Work them one note at a time, and say so as you go: the reviewer watches each on
 Then the next note. Both return at once.
 When you have done everything you can, write a JSON object to %[2]q: {"state":"completed","message":"concrete description of the change and checks","notes":{"<note id>":"what you changed for that note"}} ("notes" is optional: each comment shows its own entry, else the message). Write it also when some notes wait on your questions: Retake keeps those open for their answers and finishes the rest. Only if you can't carry on at all, write {"state":"question","message":"your question"} instead.
 %[3]s
-`, askCommand(), reportPath, done)
+`, askCommand(), promptPath(reportPath), done)
 }
 
 // askServer sends a question to the server: like call, but without the client's short timeout, since a question
