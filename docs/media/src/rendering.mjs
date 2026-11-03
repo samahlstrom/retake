@@ -6,7 +6,7 @@ import {
 } from './kit.mjs';
 
 export default function rendering() {
-  const m = new Motion({ duration: 10, stillAt: 4.6 });
+  const m = new Motion({ duration: 10, stillAt: 6.2 });
   const RESET = 9.3;
   const out = [];
   out.push(heading('Renders only what changed.'));
@@ -35,7 +35,7 @@ export default function rendering() {
   // The video you edited: parts 3 and 4 change.
   out.push(rect(52, 112, 728, 440, { r: 22, dash: '1 9' }).replace('<rect', '<rect stroke-linecap="round"') + text(76, 146, 'Your computer', { size: 20, weight: 500, fill: MUTED }));
   const A = { x: 76, y: 204, w: 78, h: 64, gap: 8 };
-  row({ name: 'intro', ...A, count: 8, stale: { 2: [0.8, 1.3, 2.3], 3: [0.8, 2.3, 3.3] }, labels: true });
+  row({ name: 'intro', ...A, count: 8, stale: { 2: [0.8, 1.4, 3.4], 3: [0.8, 3.4, 5.4] }, labels: true });
   // The pencil: the agent's edit lands on those parts.
   const px = A.x + 3 * (A.w + A.gap) - A.gap / 2;
   out.push(at(px, A.y - 6, path('M-6 -40L6 -40L6 -8L0 0L-6 -8Z', { fill: PAPER, sw: 2.5 }) + path('M-6 -32H6', { sw: 2.5 }),
@@ -43,13 +43,13 @@ export default function rendering() {
 
   // Other videos render at the same time.
   const small = { w: 60, h: 40, gap: 8, count: 10 };
-  row({ name: 'promo', x: 76, y: 382, ...small, stale: { 4: [0.9, 1.4, 2.6], 5: [0.9, 2.6, 3.6] } });
-  row({ name: 'tutorial', x: 76, y: 480, ...small, stale: { 1: [1.0, 1.5, 2.5], 7: [1.0, 2.8, 3.8] } });
+  row({ name: 'promo', x: 76, y: 382, ...small, stale: { 4: [0.9, 1.5, 3.3], 5: [0.9, 3.3, 5.1] } });
+  row({ name: 'tutorial', x: 76, y: 480, ...small, stale: { 1: [1.0, 1.6, 3.2], 7: [1.0, 3.6, 5.4] } });
 
   // The browser plays it while it renders.
   const B = { x: 824, y: 166, w: 320, h: 340 };
   out.push(icon.browser(B.x, B.y, B.w, B.h, { r: 16, bar: 40 }));
-  const live = m.a(showKeys(1.2, 3.8, 0.2, 0.3));
+  const live = m.a(showKeys(1.3, 5.4, 0.2, 0.3));
   out.push(g(circle(B.x + B.w - 74, B.y + 20, 6, { fill: RED, stroke: 'none' }) + text(B.x + B.w - 62, B.y + 27, 'live', { size: 18 }), { cls: live }));
   const F = { x: B.x + 18, y: B.y + 58, w: B.w - 36, h: 166 };
   out.push(rect(F.x, F.y, F.w, F.h, { r: 8 }));
@@ -60,12 +60,13 @@ export default function rendering() {
   out.push(path(`M${F.x} ${by}H${F.x + bw}`, { sw: 4, stroke: '#e2e2e2' }));
   const buf = (f) => ({ transform: `scale(${f},1)` });
   out.push(at(F.x, by, path(`M0 0H${bw}`, { sw: 4, stroke: '#9c9c9c' }),
-    m.a([[0, buf(0)], [1.2, buf(0), STEP], [1.21, buf(0.25), LINEAR], [2.3, buf(0.375), LINEAR], [3.3, buf(0.5), STEP], [3.31, buf(1)], [RESET, buf(1), EASE], [RESET + 0.4, buf(0)]])));
-  const PLAY0 = 1.3, PLAY1 = 8.6;
+    m.a([[0, buf(0)], [1.4, buf(0), STEP], [1.41, buf(0.25), LINEAR], [3.4, buf(0.375), LINEAR], [5.4, buf(0.5), STEP], [5.41, buf(1)], [RESET, buf(1), EASE], [RESET + 0.4, buf(0)]])));
+  // The playhead follows close behind what has rendered, then runs on through the cached rest.
+  const PLAY0 = 1.6, MID = 5.4, AT_MID = 0.42, PLAY1 = 8.9;
   out.push(at(F.x, by, path(`M0 0H${bw}`, { sw: 4 }),
-    m.a([[0, buf(0)], [PLAY0, buf(0), LINEAR], [PLAY1, buf(1)], [RESET, buf(1), EASE], [RESET + 0.4, buf(0)]])));
+    m.a([[0, buf(0)], [PLAY0, buf(0), LINEAR], [MID, buf(AT_MID), LINEAR], [PLAY1, buf(1)], [RESET, buf(1), EASE], [RESET + 0.4, buf(0)]])));
   out.push(at(F.x, by, circle(0, 0, 8, { fill: INK, stroke: 'none' }),
-    m.a([[0, { transform: 'translate(0px,0px)' }], [PLAY0, { transform: 'translate(0px,0px)' }, LINEAR], [PLAY1, { transform: `translate(${bw}px,0px)` }], [RESET, { transform: `translate(${bw}px,0px)` }, EASE], [RESET + 0.4, { transform: 'translate(0px,0px)' }]])));
+    m.a([[0, { transform: 'translate(0px,0px)' }], [PLAY0, { transform: 'translate(0px,0px)' }, LINEAR], [MID, { transform: `translate(${bw * AT_MID}px,0px)` }, LINEAR], [PLAY1, { transform: `translate(${bw}px,0px)` }], [RESET, { transform: `translate(${bw}px,0px)` }, EASE], [RESET + 0.4, { transform: 'translate(0px,0px)' }]])));
   out.push(text(B.x + B.w / 2, by + 44, 'plays while it renders', { size: 19, weight: 500, fill: MUTED, anchor: 'middle' }));
   out.push(arrow([[A.x + 8 * (A.w + A.gap) - A.gap + 10, A.y + A.h / 2], [B.x - 10, A.y + A.h / 2]]));
 
