@@ -670,6 +670,8 @@
     transition: transform 0.15s ease;
   }
   html[data-phone] #side .compose {
+    position: relative; /* over the list while it slides back down */
+    background: var(--surface-raised);
     transition: transform 0.15s ease;
   }
   html[data-compose] #stage {
@@ -679,13 +681,11 @@
     border-top-color: transparent;
   }
   html[data-compose] #side .compose {
-    position: relative;
     z-index: 7;
     display: flex;
     flex-direction: column-reverse;
     padding-bottom: 8px;
     border-top-color: transparent;
-    background: var(--surface-raised);
     transform: translateY(var(--compose-dy, 0px));
   }
   /* Typing in the document (a script, spec/scripts.md): the page is as tall as what's visible above the keyboard and
