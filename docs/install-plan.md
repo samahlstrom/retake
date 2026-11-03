@@ -12,7 +12,7 @@ Status of each part is at the end of every section: **built** (in this repo, tes
 | OS | What you download | What you do | Status |
 |---|---|---|---|
 | macOS (Apple silicon and Intel) | `Retake.dmg` with one universal `Retake.app` | Drag it to Applications, open it. A menu-bar icon appears and the browser opens the setup page. | App bundle: built, untested. `.dmg`: not built (needs a Mac or a macOS CI runner for `hdiutil`); a `.zip` of the app is built instead. |
-| Linux (x86_64, arm64) | Nothing; paste one line | `curl -fsSL <release>/install.sh \| sh`, then open **Retake** from the app menu (or run `retake start`). | Built, tested against a local snapshot. |
+| Linux (x86_64, arm64) | Nothing; paste one line | `curl -fsSL <release>/install.sh \| sh`, then open **Retake** from the app menu (or run `retake start`). | Built, tested against a local snapshot (install, links, menu entry, checksum refusal). |
 | Windows | Not yet | | Not built (see below). |
 
 **macOS is a menu-bar app, not a dock app.** Retake is a server plus a browser page; it has no window of its own, so a
@@ -70,8 +70,9 @@ notarized app. A one-click app should work offline the moment it's opened.
   VideoToolbox on Mac (fine) and OpenH264 on Linux (lower quality at the same size), and previews and proxies change.
   Not worth it.
 
-Where static builds come from today: Linux, John Van Sickle's static builds (GPL, x264 and zimg included,
-amd64/arm64; pinned in `scripts/bundle-deps.sh`) or BtbN/FFmpeg-Builds (GPL and LGPL variants, but 130–150 MB and
+Where static builds come from today: Linux, John Van Sickle's static builds (GPL; his site lists x264 and zimg among
+the libraries; amd64/arm64; 7.0.2, pinned by SHA-256 in `scripts/bundle-deps.sh`; check `ffmpeg -buildconf` on a
+real machine before a release) or BtbN/FFmpeg-Builds (GPL and LGPL variants, but 130–150 MB and
 rolling); macOS, Martin Riedl's build server (GPL, arm64 and x86_64, signed) or evermeet.cx (Intel only). For the
 first real release, **build ffmpeg ourselves in CI** from a pinned source tarball with only what Retake uses (x264,
 zimg, opus, the decoders and muxers): smaller (about 20 MB a binary), reproducible, and the source offer is just our
@@ -113,7 +114,7 @@ editors, the $99 is worth it. Linux needs no signing (the install script checks 
 
 ## Updates
 
-- **Now:** the app checks once a day for a newer release (a small JSON file next to the releases: version, date,
+- **First (not built yet):** the app checks once a day for a newer release (a small JSON file next to the releases: version, date,
   notes, download URL) and shows "Retake 0.4 is out" with a link in Settings. The person downloads and replaces the
   app. Nothing changes on its own. On Linux the same note says to run the install line again.
 - **Later, signed:** Sparkle (the standard Mac self-updater, with its own signature on each update) inside a native
@@ -121,7 +122,6 @@ editors, the $99 is worth it. Linux needs no signing (the install script checks 
   quarantined again.
 
 Retake already survives restarts without losing agent work (docs/agents.md), so an update is: quit, replace, open.
-The update check is not built yet.
 
 ## Decisions for Sam
 
@@ -139,3 +139,15 @@ The update check is not built yet.
 6. **Windows:** not now, or plan the week above.
 7. **The app's identifier**, `io.github.samahlstrom.retake` for now (the bundle id and the login item). It's
    hard to change after release, like the name.
+
+## What's built now (this branch)
+
+- `retake start` and the setup page (spec/setup.md), with Go, web unit and end-to-end tests. Settings gained the
+  videos folder and an agent Test.
+- Retake's own tools first: `retake-bundle.json` next to the binary puts its folder first on `PATH`; herdr is looked
+  for next to the binary before `PATH`.
+- `scripts/bundle-deps.sh` (pinned herdr for 4 platforms, ffmpeg for Linux), goreleaser archives with them,
+  `scripts/install.sh` installing a bundle, `scripts/macos-app.sh` making the universal, unsigned `Retake.app` with
+  its menu bar (`scripts/macos/menubar.js`). Nothing downloaded was run here.
+- Not built: the `.dmg`, signing, an ffmpeg for macOS, starting herdr's server when none runs (to check with herdr:
+  whether `herdr workspace create` starts one), the update check, an app icon.

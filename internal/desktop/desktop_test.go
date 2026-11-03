@@ -199,6 +199,31 @@ func TestAutostart(t *testing.T) {
 	}
 }
 
+func TestStableExe(t *testing.T) {
+	root := t.TempDir()
+	install := filepath.Join(root, "share", "retake", "0.2.0")
+	exe := filepath.Join(install, "retake")
+	write(t, exe, "", 0o755)
+	bin := filepath.Join(root, "bin")
+	mkdir := func(p string) {
+		if err := os.MkdirAll(p, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mkdir(bin)
+	if err := os.Symlink(exe, filepath.Join(bin, "retake")); err != nil {
+		t.Fatal(err)
+	}
+	sep := string(os.PathListSeparator)
+	// The bundle's folder is first on PATH; the link the person's PATH names is what a login item should run.
+	if got := stableExe(exe, install+sep+"/usr/bin"+sep+bin); got != filepath.Join(bin, "retake") {
+		t.Errorf("stableExe = %s", got)
+	}
+	if got := stableExe(exe, install+sep+"/usr/bin"); got != exe {
+		t.Errorf("no link: %s", got)
+	}
+}
+
 func TestJoinPath(t *testing.T) {
 	sep := string(os.PathListSeparator)
 	got := filepath.SplitList(JoinPath("a"+sep+"b", "", "b"+sep+sep+"c", "a"))

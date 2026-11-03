@@ -11,9 +11,20 @@ patches.
 > Status: not released yet. The name "retake" and the license aren't decided. Milestones 1 (the player) and 2 (notes,
 > agent API, questions) are done, and the editor's first slice is in. See [`docs/roadmap.md`](docs/roadmap.md).
 
-## Quickstart (5 minutes)
+## Quickstart
 
-You need [mise](https://mise.jdx.dev) (it installs the pinned Go, node and Rust) and ffmpeg.
+1. **Install Retake** ([below](#install)) and open it. On a Mac it's an app; on Linux, **Retake** in your app menu.
+2. **Answer three questions** in the page that opens in your browser: the folder with your videos, your AI agent
+   (Claude Code or Codex; it shows how to install and sign in to one, and **Test** checks it works), and where the
+   agent works. Then **Open my videos**. You can change all of it later in Settings.
+3. **Review.** Open a video, press **R**, say what to change and draw on it, press **R** again, then **Send**. The
+   agent makes the next version on your computer, and the comment turns Done when it plays.
+
+Your videos are files named like `clip_v1.mp4`, `clip_v2.mp4` (or `v2/clip_v2.mp4`): Retake finds the versions by
+name. [docs/quickstart.md](docs/quickstart.md) walks through a whole round on a generated sample project.
+
+**From source (developers).** You need [mise](https://mise.jdx.dev) (it installs the pinned Go, node and Rust) and
+ffmpeg:
 
 ```bash
 mise install
@@ -21,22 +32,13 @@ mise exec -- make build                                  # bin/retake, with the 
 (cd editor && mise exec -- cargo build --release)        # editor/target/release/retake-edit
 export PATH="$PWD/bin:$PWD/editor/target/release:$PATH"
 
-scripts/make-sample.sh ~/retake-sample                   # a short how-to video, v1 and v2, all generated
-cd ~/retake-sample
-retake open how-to/v2/how-to_v2.mp4                      # the review page opens in your browser
+retake start                                             # the setup page the first time, then your videos folder
+retake open ~/Videos                                     # or any folder, no setup (a single video works too)
+scripts/make-sample.sh ~/retake-sample                   # a generated how-to video, v1 and v2, to try it on
 ```
 
-1. Play to step two (about 0:11) and pause.
-2. Press **R**, say "the labels at the bottom are too small", and draw a loop around the label.
-3. Press **R** again, then **Done**.
-4. Run `retake notes sync how-to/v2/how-to_v2.mp4`, then `retake notes list how-to/v2/how-to_v2.mp4`.
-5. Let an agent answer the note and push v3 ([docs/agents.md](docs/agents.md)), or do its part by hand
-   ([docs/quickstart.md](docs/quickstart.md), step 5).
-6. Run `retake open how-to/v3/how-to_v3.mp4` and press **C** to flip between v3 and v2 at the same moment.
-
 No microphone? `scripts/make-sample.sh ~/retake-sample --with-take` adds a recorded take for you. Turning speech into
-text needs whisper.cpp (`scripts/install-whisper.sh`); the sample's take comes with its transcript, so step 4 works
-without it. The full walkthrough is in [docs/quickstart.md](docs/quickstart.md).
+text needs whisper.cpp (`scripts/install-whisper.sh`).
 
 ## Keys
 
@@ -166,14 +168,39 @@ credits. Agents get the same tools over MCP, and plug-ins add domain data. See [
 
 ## Install
 
-There are no releases yet. Once there are, this installs `retake` (and with `--with-editor`, `retake-edit`) into
-`~/.local/bin` after checking the archive's SHA-256:
+> There are no releases yet, so these are the steps once there are. Until then, build from source (Quickstart).
+
+**Mac** (Apple silicon or Intel)
+
+1. Download **Retake** from the releases page and drag it into Applications.
+2. Open it. A Retake icon appears in the menu bar (Open, Start at login, Quit) and your browser opens the setup page.
+3. While Retake isn't signed by Apple yet, the first open is blocked: open **System Settings → Privacy & Security**,
+   click **Open Anyway**, and confirm. Once is enough.
+
+**Linux**
 
 ```bash
-curl -fsSL <release URL>/install.sh | sh -s -- --with-editor
+curl -fsSL <release URL>/install.sh | sh
 ```
 
-Until then, build from source as in the quickstart. `retake version` prints the version.
+Then open **Retake** from your app menu (or run `retake start`). Nothing needs sudo.
+
+**Windows:** not yet.
+
+Everything Retake uses comes with it: [herdr](https://herdr.dev) to watch your agents work, ffmpeg, and `retake-edit`,
+the renderer. The one thing you bring is the AI agent, Claude Code or Codex, installed and signed in with your own
+account; the setup page shows how.
+
+**For developers**
+
+- The install script checks each download against the release's SHA-256 list. It unpacks the release into
+  `~/.local/share/retake/<version>/` and links `retake` and `retake-edit` into `~/.local/bin`. Options: `--version`,
+  `--dir`, `--no-menu`; to try it on a local build, `make snapshot`, then
+  `INSTALL_BASE_URL="file://$PWD/dist" sh scripts/install.sh --version <snapshot version>`.
+- `retake start --app` is what the app runs. `retake autostart on` starts it at login. `retake version` prints the
+  version.
+- How releases are built, and the Mac app: [docs/releasing.md](docs/releasing.md). What ships per OS, signing,
+  updates and the decisions still open: [docs/install-plan.md](docs/install-plan.md).
 
 ## Docs
 
@@ -183,8 +210,9 @@ Until then, build from source as in the quickstart. `retake version` prints the 
 - [docs/hosting.md](docs/hosting.md): hosting Retake for other people, and connecting your computer to it.
 - [deploy/README.md](deploy/README.md): the self-hosting reference (HTTPS, transcription, mail, backups).
 - [docs/timeline.md](docs/timeline.md): the editor's timeline format, as a guide.
+- [docs/install-plan.md](docs/install-plan.md): one-click install per OS, what ships inside, signing and updates.
 - [docs/releasing.md](docs/releasing.md): versions, release archives, the installer and the license notices.
-- [spec/](spec/): the contracts. [api.md](spec/api.md) (HTTP), [take-format.md](spec/take-format.md),
+- [spec/](spec/): the contracts. [setup.md](spec/setup.md) (`retake start` and the setup page), [api.md](spec/api.md) (HTTP), [take-format.md](spec/take-format.md),
   [notes.md](spec/notes.md) (notes, questions, agent API), [team.md](spec/team.md) (sharing),
   [server.md](spec/server.md) (the team server), [timeline.md](spec/timeline.md), [manifest.md](spec/manifest.md).
 - [CONTRIBUTING.md](CONTRIBUTING.md): development setup and tests.

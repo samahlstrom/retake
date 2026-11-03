@@ -46,16 +46,21 @@ func Exe() string {
 
 // StableExe is the retake binary as the person's PATH names it (~/.local/bin/retake, a link into a versioned install
 // folder), so a login item outlives an update; else Exe.
-func StableExe() string {
-	exe := Exe()
+func StableExe() string { return stableExe(Exe(), os.Getenv("PATH")) }
+
+// stableExe is the first link to exe on path, outside exe's own folder (which a bundle puts first); else exe.
+func stableExe(exe, path string) string {
 	if exe == "" {
 		return ""
 	}
-	if p, err := exec.LookPath(filepath.Base(exe)); err == nil {
-		if r, err := filepath.EvalSymlinks(p); err == nil && r == exe {
-			if a, err := filepath.Abs(p); err == nil {
-				return a
-			}
+	own := filepath.Dir(exe)
+	for _, d := range filepath.SplitList(path) {
+		if d == "" || d == own || !filepath.IsAbs(d) {
+			continue
+		}
+		p := filepath.Join(d, filepath.Base(exe))
+		if r, err := filepath.EvalSymlinks(p); err == nil && r == exe && isExec(p) {
+			return p
 		}
 	}
 	return exe
