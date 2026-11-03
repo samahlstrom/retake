@@ -8,7 +8,7 @@
   import { onMount, untrack } from 'svelte';
   import type { Ctx, Edit } from '../types';
   import { Doc } from './doc.svelte';
-  import TextPane, { type PaneApi } from './TextPane.svelte';
+  import TextPane, { type PaneApi, type Reading } from './TextPane.svelte';
   import { resume, talkOut } from './talkout';
   import { anchorAt, findAnchor } from '../lib/doc';
   import { docPathFor, folderOf, isDoc, migrate, OLD, pickDoc } from '../lib/v0';
@@ -99,6 +99,8 @@
   /** On a phone the document is read-only to the keyboard until ⋯ → Type in the script. */
   const phoneLayout = !!phone?.matches;
   let typing = $state(false);
+  /** Where the person was reading when typing turned on or off: the new editor opens there (nothing moves). */
+  let reading = $state.raw<Reading | null>(null);
 
   // ---------------------------------------------------------------- the agent's edits: Undo
   let edit = $state<Edit | null>(null);
@@ -369,6 +371,7 @@
             readonly={!canWrite || (phoneLayout && !typing)}
             caret={fresh ? doc.text.length : null}
             focus={canWrite && !talkOnOpen && (!touch || typing)}
+            {reading}
             {questions}
             image={imageSrc}
             preview={(url) => c.linkPreview(url)}
@@ -433,6 +436,7 @@
             // iOS raises the keyboard only for a field focused in the tap itself: the stand-in takes the focus now,
             // and the text takes it over when it shows (spec/scripts.md).
             if (!typing) standIn?.focus({ preventScroll: true });
+            reading = pane?.reading() ?? null;
             typing = !typing;
           }}
         >
