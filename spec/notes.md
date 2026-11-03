@@ -199,8 +199,14 @@ heads for (`v5`), so they are still there once the draft becomes that version.
   "Marking progress") is in Done as soon as its edit is in the live vN, with the agent's words for its change; it
   moves there from To do by itself, fading out and letting the cards under it slide up (transform and opacity only,
   nothing jumps; nothing moves with `prefers-reduced-motion`). Switching tab, version or search never animates.
+  While the agent works (spec/automation.md, "While the agent works"), the comment it's on is first in To do, the
+  rest in their usual order; the other Working comments of its batch read quietly (no dot or word, only `→ v5`), and
+  before its first mark one quiet line at the top of To do says "The agent is on it · 15 comments".
   While a version is live (spec/automation.md, "The live version"), its list also has the comments whose edits go
-  into it, the running batch's, so following the latest to the live vN keeps them in view as they land. A Send never
+  into it, the running batch's, so following the latest to the live vN keeps them in view as they land. They come
+  first, under one quiet label, muted and small, that says where they came from: "From v4" (one line, no box; there
+  even when v5 has no comments of its own yet). The live version's own comments (they go into v6) sit apart after
+  them, under "On v5". A version that isn't live has no labels. A Send never
   moves the list by itself; switching to the live version happens with following the latest (the video), as before. Timeline markers follow the tab, one per comment, in its status color, at the comment's own time on its own
   version; a comment's pen strokes and voice fold into its marker once it is transcribed. Transcription completion is
   independent of resolution. Switching the version, however it is switched (the picker, the strip below, C),
@@ -244,7 +250,8 @@ heads for (`v5`), so they are still there once the draft becomes that version.
   version its edit goes in, made or updated in place (a comment on v7 goes into v8 even once v8 exists; one on v8
   makes v9), and `later` names a version after the target that exists already. The page says it in the same few
   words everywhere: the comment box `Comment at 0:18 · goes into v8…`, the version menu `v7 → v8 · 3 to do`, a
-  card's `→ v8` next to its status until it's done (its title adds "v9 is newer" with `later`), `in v8` once it is,
+  card's `→ v8` next to its status until it's done (alone, without the status, while it waits in a batch the agent
+  is working; its title adds "v9 is newer" with `later`), `in v8` once it is,
   and after Send
   `Sent to v8.` Without `target` (an older server) the page takes the next number (a draft's comments, `v8-draft2`,
   go into v9). A typed comment on an extension's document has none.
