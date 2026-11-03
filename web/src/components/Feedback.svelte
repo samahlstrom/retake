@@ -104,6 +104,7 @@
       top: calc(50% - 48px);
       right: 0;
       width: 32px;
+      min-width: 0;
       height: 96px;
       padding: 6px 0;
       border: 1px solid var(--line-strong);
