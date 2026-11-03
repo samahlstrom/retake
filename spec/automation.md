@@ -615,9 +615,9 @@ because a comment on the one before asked for changes.
   takes recorded on them still save.
 - **The live version.** During a batch its target `v<N>` is live: people see it as `v<N>`, updated in place as the
   agent finishes each note, and never the word "draft". The drafts are its revisions, internal (their labels stay in
-  URLs and the API); the page shows a draft `v<N>-draft<K>` as `v<N>`, the picker and the comments' version menu have
-  one `v<N>` entry that plays its newest revision, with a quiet live mark while the task runs, and the red edge light
-  ("HTTP and UI") is on the video.
+  URLs and the API); the page shows a draft `v<N>-draft<K>` as `v<N>` everywhere (the version menu, toasts, the page's title, the home's
+  cards and folder tree: one label helper, `verName`), the version menu has one `v<N>` row that plays its newest
+  revision, with a small red live dot while the task runs, and the red edge light ("HTTP and UI") is on the video.
   - **At once.** A task's attempt makes its target's first revision as it starts, so `v<N>` exists before any edit: in
     a timeline project the worker renders the task's source as soon as it has no render of this task (it is the
     starting version's source, so every unit is reused from the cache); in a plain project it registers the version

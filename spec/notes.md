@@ -182,7 +182,7 @@ whisper_cli = ""     # whisper-cli's path; "" = $PATH, then scripts/install-whis
 
 ## Continuous review
 
-The review page opens the newest playable cut. A version picker exposes review checkpoints with their durations; choosing an older cut pins it until another is selected. The latest cut can still stream as it renders. Checkpoints do not require storing media in Git.
+The review page opens the newest playable cut. The version menu ("The version menu", below) exposes review checkpoints; choosing an older cut pins it until another is selected. The latest cut can still stream as it renders. Checkpoints do not require storing media in Git.
 
 `GET /api/notes?v=<label>&scope=review` includes that cut's notes, earlier unresolved notes, and notes resolved in that cut, excluding future cuts. Each note exposes its originating `version`. It stays for integrations; the review page reads `scope=video` (below) and does the per-version split itself.
 
@@ -203,24 +203,42 @@ heads for (`v5`), so they are still there once the draft becomes that version.
   into it, the running batch's, so following the latest to the live vN keeps them in view as they land. A Send never
   moves the list by itself; switching to the live version happens with following the latest (the video), as before. Timeline markers follow the tab, one per comment, in its status color, at the comment's own time on its own
   version; a comment's pen strokes and voice fold into its marker once it is transcribed. Transcription completion is
-  independent of resolution. Switching the version, however it is switched (the picker, the strip below, C),
-  switches the comments, the markers and the drawings on the video with it; flipped with C, the open take's own
+  independent of resolution. Switching the version, however it is switched (the version menu, C, a Done
+  comment's "in vN"), switches the comments, the markers and the drawings on the video with it; flipped with C, the open take's own
   lines show only on the version they were drawn on (spec/bridge.md, "The page").
 - **The page reads the whole family once.** `GET /api/notes?v=<label>&scope=video` returns every version's comments
   with their `version`, also those recorded on a draft the family no longer lists (an older draft, or a promoted
   draft's old label) while its version is listed (with `scope=review`, within the same version limit). The page keeps the shown version's for the list and the markers, and counts the rest per
-  version for the strip and the line below. A switch shows the new version's comments at once, from the same answer.
-- **The comments header.** Two quiet rows over the list. The first: a comments icon (a speech bubble, no word), the
-  shown version as a menu (`v8 ⌄`), then search and hide at the right. The second: a To do · Done toggle (each with
-  its count), then an extension's tabs (on a phone they share the first row). With two or more entries in the family
-  (a second version, or a draft), the version menu lists every version, newest first, each with where its comments go
-  and its To do count (`v7 → v8 · 63 to do`; nothing when none), the shown one checked; a version and its revisions
-  (drafts) are one entry, `v8`, which shows its newest listed revision, with a small red live mark while the agent
-  works on it (spec/automation.md, "The live version"); an extension's version comes first
-  (`v0 · Script`). A pick shows that version, as the bar's picker does (pinned unless it is the newest). While an
-  earlier version still has something to do, the menu's button has a small dot, and its title says what (`Open on
-  earlier versions: v6 · 2, v3 · 91`). A single version shows its label without a menu. This replaced the version
-  strip and the "Open on earlier versions" line; the bar's version picker stays.
+  version for the version menu's rows and its button's dot. A switch shows the new version's comments at once, from the same answer.
+- **The comments header.** One quiet row over the list: To do · Done (each with its count), then an extension's tabs,
+  then search and hide at the right (hide on a computer only). No speech bubble and no version in it: the version is
+  the version menu's (below), in one place per layout. While searching, the field takes the row's left part. On a
+  kind's version with the agent chat (spec/chat.md) the row is the word "Chat" and hide.
+- **The version menu.** One menu, the same everywhere, for every way the page is laid out, and one place to open it
+  per layout: on a computer, the version button in the bar beside the timeline; on a phone in portrait, in the
+  controls row under the video; on a phone in landscape, in the slim bar at the bottom. A phone in portrait on an
+  extension's version has no controls row, so there it is in the drawer's header. It is nowhere else (not in the
+  comments header). It has `data-part="version-picker"`, and its list `version-list`.
+  - **The button** reads the shown version's name (`v8`; `Script` on an extension's version) and a chevron. It has at
+    most one dot: red while the shown version is live (spec/automation.md, "The live version"), else the rendering
+    dot of a streamed version that isn't complete, else a quiet dot while an earlier version still has comments to
+    do, which its title names (`Open on earlier versions: v6 · 2, v3 · 91`). Compared with C, it shows the version on
+    screen, marked as flipped. A single version shows no button (nothing to choose).
+  - **The rows**, newest first, one per version: a version and its revisions (drafts) are one row, `v8`, which shows
+    its newest listed revision, with a small red dot right after the name, on the same line, while the agent works
+    on it. The version on screen is in bold; there is no check mark and no "Latest". Each row has at most one quiet
+    detail at the right: a streamed version's state while it isn't complete and isn't live (`rendering 3/12`), else
+    the number of its comments still to do (`3 to do`), else its length (`0:55`). Where its comments go isn't said
+    here (the comment box and the cards say it). An extension's version (v0) is the last row, set apart by a thin
+    line, named by its kind's label alone (`Script`, never `v0 · Script`), with its to-do count and no length.
+  - A pick shows that version (pinned unless it is the newest), as C and "in vN" do. On a phone each row is at least
+    44 px tall and the menu at least 240 px wide, always within the screen; nothing in it wraps.
+  - Tests. Web unit: the rows (one per version, its revisions folded in, the live dot, the one detail, the bold one,
+    `Script` last and set apart) and the button's one dot. e2e `24-version-menu.spec.ts` (Chromium: a computer and an
+    iPhone 15 in both orientations) and `24-version-menu-webkit.spec.ts` (WebKit, iPhone 15): exactly one version
+    button on screen in each layout and none in the comments header, no speech bubble while the comments are in view,
+    the rows while v3 is live (no "draft", no "Latest", no "→"), 44 px rows inside the screen on the phone, and a pick
+    switching the version.
 - **The column's width.** On a computer (the desktop layout) the column, comments or a script's chat alike, has a
   thin handle on its left edge, as the home's folder tree has on its right (spec/home.md): drag it to make the column
   wider or narrower, or focus it and press ← (wider) or → (narrower), 16 px a press, 48 px with Shift; a double-click
@@ -236,15 +254,14 @@ heads for (`v5`), so they are still there once the draft becomes that version.
   to make one, which replaces the touch hint over Record) or with many. Portrait is compact so the list gets the height:
   the controls row under the timeline is 40 px and sits just under the track, the comments header is one 44 px row,
   the box 44 px, and the cards tight, so at least three one-line comments are in view on an iPhone 15 (393×659) without
-  touching the video's size. The speech bubble over the video (with the to-do count) stays and goes to them: To do,
-  scrolled to the top; it doesn't hide them. In landscape (no room beside the
-  video) they are an overlay the bubble opens and closes, and on an extension's version a drawer over its page, as
-  before. Every control there is at least 40 px, and nothing reaches past the screen's edges.
+  touching the video's size. There is no speech bubble over the video then: the comments are always in view, and
+  To do already counts them. In landscape (no room beside the video) they are an overlay the bubble opens and closes,
+  and on an extension's version a drawer over its page, as before; the bubble's count shows only while they are
+  hidden. On a computer the bubble shows only while the column is hidden, as before. Every control there is at least 40 px, and nothing reaches past the screen's edges.
 - **Where a comment goes.** Comments on vN become edits in vN+1 (spec/automation.md): each comment's `target` is the
   version its edit goes in, made or updated in place (a comment on v7 goes into v8 even once v8 exists; one on v8
   makes v9), and `later` names a version after the target that exists already. The page says it in the same few
-  words everywhere: the comment box `Comment at 0:18 · goes into v8…`, the version menu `v7 → v8 · 3 to do`, a
-  card's `→ v8` next to its status until it's done (its title adds "v9 is newer" with `later`), `in v8` once it is,
+  words everywhere: the comment box `Comment at 0:18 · goes into v8…`, a card's `→ v8` next to its status until it's done (its title adds "v9 is newer" with `later`), `in v8` once it is,
   and after Send
   `Sent to v8.` Without `target` (an older server) the page takes the next number (a draft's comments, `v8-draft2`,
   go into v9). A typed comment on an extension's document has none.
@@ -346,7 +363,7 @@ pan the whole page up until the field shows, and everything jumps. The phone lay
     when it wouldn't fit above the box;
   - the box sits directly on the keyboard, its line (the time, the drawings, Cancel and Save) above the field;
   - everything else fades out: the controls under the video (the timeline, play, the time, the version, the pen and
-    undo), the comments header, To do · Done, the list, Record and Send, back and the speech bubble;
+    undo), the comments header with To do · Done, the list, Record and Send, and back;
   - one transition, 150 ms, transform and opacity only (no movement at all with `prefers-reduced-motion: reduce`).
     Nothing is laid out again: the box moves by a transform and the rest only fades.
 

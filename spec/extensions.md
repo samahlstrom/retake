@@ -46,7 +46,7 @@ action = { title = "New script", route = "new" }   # optional: a + button on the
 id = "doc"                       # its full id is <ext>.<kind>: scripts.doc
 folder = "v0"                    # the version folder it claims; API 1 allows only v0
 marker = "*_v0.md"               # the folder is this kind only when a file matching it is in it (a glob, or a list)
-label = "Script"                 # how the version strip and picker name it: "v0 · Script"
+label = "Script"                 # how the version menu names it: "Script"
 status = "Idea"                  # the home's chip for a video that has only this version
 record = true                    # Record and R on this version record audio for the extension
 chat = true                      # optional: the agent chat in place of the comments on this version (spec/chat.md)
@@ -156,8 +156,9 @@ name or a glob (`*_v0.md`), or a list of them (any one is enough).
   computer sends it in `POST /api/worker/files` as `{"label": "v0", "kind": "scripts.doc", "name": "v0"}`.
 - **Numbering** is unchanged: `v0` comes before every cut, the next cut of a video that has only `v0` is `v1`, and
   following latest, comparing (C) and the push rule never pick `v0`.
-- **The page**: the version strip and the version picker list it first, named `v0 · <label>`. Choosing it shows the
-  extension's `version` slot where the video is. The bar keeps the version picker, Record (when `record = true`),
+- **The page**: the version menu (spec/notes.md, "The version menu") lists it last, set apart, named `<label>`
+  (`Script`). Choosing it shows the
+  extension's `version` slot where the video is. The bar keeps the version menu, Record (when `record = true`),
   Send and the agent's status; the timeline and pen colours aren't there, because there is no video to draw on.
 - **Recording** on it (`record = true`): R and Record work as on a video (R when no text field has focus), REC and the
   level show the same way, the pen is off. Core records the audio and hands it to the slot (`ctx.onRecorded`); it

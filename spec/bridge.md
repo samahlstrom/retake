@@ -247,8 +247,7 @@ A is its own request, not this one inverted.
 mapped time, so they land on the matching moment instead of the same clock time. With no map they keep the time, as
 before.
 
-**C** (the only version key; the legacy `[` and `]` are gone: the version list and the comments' version strip
-switch versions) flips between the base and its partner at the matching moment, and C again flips back. The take
+**C** (the only version key; the legacy `[` and `]` are gone: the version menu switches versions) flips between the base and its partner at the matching moment, and C again flips back. The take
 stays open: what is recorded while flipped belongs to the version on screen (spec/take-format.md, `flip`).
 
 - **The partner** is the next newer version, else the previous one (v6 ⇄ v7; the newest compares with the one before

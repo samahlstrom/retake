@@ -267,8 +267,8 @@ Versioning). Classes and ids are not part of the API and can change in any relea
 | `marker` | A comment's marker on the timeline; `data-state` is its status | review |
 | `ask-marker` | An agent's question ("?") on the timeline | review |
 | `tip` | The tip over the timeline | review |
-| `version-picker` | The version button | review |
-| `version-list` | The list of versions it opens | review |
+| `version-picker` | The version menu's button, the one place to switch versions (spec/notes.md, "The version menu") | review |
+| `version-list` | The versions it lists | review |
 | `pen-button` | The pen: one button, its pen in the colour you draw with (the eraser while that's on); it opens the pens | review |
 | `pens` | The pen's colours and the eraser, in what the pen button opens | review |
 | `pen` | One pen colour; `data-color` is its colour | review |
@@ -291,8 +291,8 @@ Versioning). Classes and ids are not part of the API and can change in any relea
 | `sidebar` | The comments column | review |
 | `sidebar-toggle` | The pill over the video that shows and hides it | review |
 | `sidebar-grip` | The handle on the column's left edge that resizes it (desktop; spec/notes.md, "The column's width") | review |
-| `version-menu` | The version in the comments' header (`v8 ⌄`), a menu when there are more | review |
-| `version-menu-list` | The versions it lists, each with where its comments go and what's still to do (`v7 → v8 · 3 to do`) | review |
+| `version-menu` | The same element as `version-picker` (the comments' header has no version of its own any more) | review |
+| `version-menu-list` | The same element as `version-list` | review |
 | `tabs` | To do · Done (and an extension's tabs) | review |
 | `comment` | One comment; `data-state` is `open`, `working`, `question` or `done` | review |
 | `status` | A status: a dot and a word (in a comment, on a video card) | both |
@@ -355,7 +355,7 @@ activity line's `data-state` is `live` or `done`.
 Renamed before the first release, the old name still on the new element (listed as deprecated in `api.json`, so
 `retake theme check` says what to use): `agent-status` is now `send-notice`, `agent-menu` is `agent-picker`,
 `version-strip` is `version-menu` and `earlier-versions` is `version-menu-list` (the agent's name left the bar, and the
-version strip became the comments' version menu).
+version strip became the comments' version menu, which is now the one version menu, `version-picker`).
 
 `web/src/theme/api.json` is the machine-readable list of parts and of deprecated names
 (`"deprecated": {"tokens": {"--old": {"use": "--new", "since": "2.0.0"}}, "parts": {…}}`); `retake theme init` and

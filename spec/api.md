@@ -77,7 +77,7 @@ A streamed version also has `"stream": {"state": "rendering", "done": 12, "total
 | POST | `/api/versions/<label>/unwatch?viewer=<id>` | The page stopped showing it (`navigator.sendBeacon`). The render stops when the last viewer is gone. Same rules as `watch`. |
 | GET | `/favicon.ico` | 204 |
 | GET | `/s/<token>` | New in milestone 3a: a share link. Sets the share cookie and bounces to `/` (spec/team.md). |
-| GET/HEAD | `/api/poster?v=<label>` | New: a JPEG of the version's first frame (no `v`: the current one), for `<video poster>` and the home's cards (spec/home.md). 404 `{"error":"no poster"}` when there is none. |
+| GET/HEAD | `/api/poster?v=<label>` | New: a JPEG of the version's first frame (no `v`: the current one), for `<video poster>` and the home's cards (spec/home.md). A relayed version's (a live revision `v6-draft11` too) is made from the start of its media through the relay; a version with no frame (yet) answers with the newest version before it that has one. 404 `{"error":"no poster"}` only when no version has one. |
 | POST | `/api/versions/<label>/unwatch?viewer=<id>` | New: the page left that version (spec/home.md, "Close means close"). 204. Needs watch, not record. |
 | GET | `/api/link-preview?url=<address>` | New with a script's embeds (spec/scripts.md, "Embeds"): what a public web page says about itself, for a link card: `{"url", "title", "site", "image", "description"}`. See "Link preview" below. |
 | GET | `/api/chat` | New: the chat with the agent on a kind's version that has one (spec/chat.md): `{"messages", "turn", "busy", "offline", "blocked", "sent"}`. Needs watch. |
