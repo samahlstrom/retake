@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime/debug"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -208,6 +209,9 @@ func TestCommandsAndExitCodes(t *testing.T) {
 		{nil, 0, "usage:", ""},
 		{[]string{"help"}, 0, "retake open <video>", ""},
 		{[]string{"version"}, 0, "retake ", ""},
+		{[]string{"-v"}, 0, "retake ", ""},
+		{[]string{"--port", "x"}, 2, "", `--port "x" is not a port number`}, // options alone are retake start's
+		{[]string{"--bogus"}, 2, "", "unknown option --bogus"},
 		{[]string{"frobnicate"}, 2, "", `unknown command "frobnicate"`},
 		{[]string{"open"}, 2, "", "missing the video file"},
 		{[]string{"open", "--help"}, 0, "usage:", ""},
@@ -232,6 +236,37 @@ func TestCommandsAndExitCodes(t *testing.T) {
 				t.Errorf("stderr = %q, want %q", w.stderr, tc.stderr)
 			}
 		})
+	}
+}
+
+func TestPlainRetakeStartsInATerminal(t *testing.T) {
+	for _, tc := range []struct {
+		args        []string
+		interactive bool
+		want        []string
+	}{
+		{nil, true, []string{"start"}},
+		{nil, false, nil}, // piped, or an agent's shell: the usage, never a server
+		{[]string{"--no-open", "--port", "9200"}, false, []string{"start", "--no-open", "--port", "9200"}},
+		{[]string{"--version"}, true, []string{"--version"}},
+		{[]string{"-h"}, true, []string{"-h"}},
+		{[]string{"ask", "--note", "3"}, true, []string{"ask", "--note", "3"}},
+		{[]string{"open", "-"}, true, []string{"open", "-"}},
+	} {
+		if got := route(tc.args, tc.interactive); !slices.Equal(got, tc.want) {
+			t.Errorf("route(%q, %v) = %q, want %q", tc.args, tc.interactive, got, tc.want)
+		}
+	}
+	if terminal(&bytes.Buffer{}) || terminal(nil) {
+		t.Error("a buffer or nothing counts as a terminal")
+	}
+	f, err := os.Open(os.DevNull)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = f.Close() }()
+	if !terminal(f) {
+		t.Error(os.DevNull + " is a character device, the same test a terminal passes")
 	}
 }
 
