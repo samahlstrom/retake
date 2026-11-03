@@ -45,10 +45,19 @@ func (c *clock) add(d time.Duration) {
 }
 
 type harness struct {
-	t   *testing.T
-	h   *Handler
-	ts  *httptest.Server
-	clk *clock
+	t    *testing.T
+	h    *Handler
+	ts   *httptest.Server
+	clk  *clock
+	busy *atomic.Int64 // requests the server is still handling
+}
+
+// settle waits for the requests the server is still handling: a client that gave up on a cut PATCH returns before the
+// server has written what reached it.
+func (h *harness) settle() {
+	for h.busy.Load() > 0 {
+		time.Sleep(5 * time.Millisecond)
+	}
 }
 
 // newHarness serves a Handler at base. The X-Owner header picks the owner (default "demo"), standing in for the
@@ -57,7 +66,10 @@ func newHarness(t *testing.T) *harness {
 	t.Helper()
 	clk := &clock{t: time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC)}
 	h := &Handler{Dir: filepath.Join(t.TempDir(), "uploads"), Now: clk.now}
+	busy := &atomic.Int64{}
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		busy.Add(1)
+		defer busy.Add(-1)
 		rest, ok := strings.CutPrefix(r.URL.Path, base)
 		if !ok || rest != "" && !strings.HasPrefix(rest, "/") {
 			http.NotFound(w, r)
@@ -70,7 +82,7 @@ func newHarness(t *testing.T) *harness {
 		h.Serve(w, r, base, owner, strings.TrimPrefix(rest, "/"))
 	}))
 	t.Cleanup(ts.Close)
-	return &harness{t: t, h: h, ts: ts, clk: clk}
+	return &harness{t: t, h: h, ts: ts, clk: clk, busy: busy}
 }
 
 func sum(b []byte) string {
@@ -640,6 +652,7 @@ func TestClientResumesAcrossRuns(t *testing.T) {
 	if _, err := c.Upload(context.Background(), h.ts.URL+base, path, meta, ""); err == nil || saved == "" {
 		t.Fatalf("first run: %v, saved %q", err, saved)
 	}
+	h.settle()
 	have := h.offset(strings.TrimPrefix(saved, h.ts.URL))
 	if have <= 0 {
 		t.Fatalf("the server has %d bytes after the first run", have)
