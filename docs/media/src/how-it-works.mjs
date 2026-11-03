@@ -1,8 +1,8 @@
 // 1. How it works: watch v4, press R, talk and draw, Send; one agent edits the files, only the changed parts
 // render, and the notes land in v5 one by one.
 import {
-  Motion, INK, PAPER, RED, MUTED, SW, EASE, IN, LINEAR, STEP, POP,
-  rect, circle, path, g, at, text, arrow, drawOn, showKeys, riseKeys, popKeys, travelKeys, heading, icon, textWidth, n,
+  Motion, INK, PAPER, RED, MUTED, EASE, IN, LINEAR, STEP, POP, rect, circle, path, g, at, text, arrow, drawOn,
+  showKeys, riseKeys, popKeys, travelKeys, heading, icon, textWidth, n,
 } from './kit.mjs';
 
 export default function howItWorks() {

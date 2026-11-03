@@ -6,7 +6,7 @@ import {
 } from './kit.mjs';
 
 export default function pickModel() {
-  const m = new Motion({ duration: 10, stillAt: 4.8 });
+  const m = new Motion({ duration: 10, stillAt: 5.5 });
   const RESET = 9.2;
   const out = [];
   out.push(heading('Any model. Your own account.'));
@@ -21,7 +21,7 @@ export default function pickModel() {
   const rowY = (i) => S.y + 150 + i * 66;
   const RH = 56;
   // The chosen row: outlined, and its radio filled; it moves from the first row to the second when clicked.
-  const PICK = 1.25;
+  const PICK = 1.5;
   const sel = (keysFor) => m.a([[0, keysFor(0)], [PICK, keysFor(0), EASE], [PICK + 0.35, keysFor(1)], [RESET, keysFor(1), EASE], [RESET + 0.5, keysFor(0)]]);
   out.push(at(S.x + 16, rowY(0), rect(0, 0, S.w - 32, RH, { r: 12, sw: 2.5 }), sel((i) => ({ transform: `translate(0px,${i * 66}px)` }))));
   rows.forEach(([main, sub], i) => {
@@ -32,7 +32,7 @@ export default function pickModel() {
 
   // ---- Send, held: pick an agent for this one send ----
   const B = { x: 780, y: 440, w: 300, h: 60 };
-  const HOLD = 3.4, OPEN = 3.95, CLICK = 5.0, SENT = 5.25, BACK = 8.2;
+  const HOLD = 4.0, OPEN = 4.55, CLICK = 5.9, SENT = 6.15, BACK = 8.7;
   out.push(rect(B.x, B.y, B.w, B.h, { r: 30 }));
   const label = (s, cls, fill = INK) => g(text(B.x + B.w / 2, B.y + 39, s, { size: 24, anchor: 'middle', fill }), { cls });
   out.push(label('Send', m.a([[0, { opacity: 1 }], [SENT, { opacity: 1 }, EASE], [SENT + 0.2, { opacity: 0 }], [BACK, { opacity: 0 }, EASE], [BACK + 0.3, { opacity: 1 }]])));
@@ -69,7 +69,7 @@ export default function pickModel() {
   out.push(at(0, 0, cursor, m.a([
     [0, p(700, 250)], [0.4, p(700, 250), EASE], [PICK - 0.05, p(330, r1)], [PICK + 0.6, p(330, r1), EASE],
     [HOLD - 0.1, p(930, B.y + 34)], [OPEN + 0.25, p(930, B.y + 34), EASE], [CLICK - 0.1, p(970, M.y + 14 + 64 + 34)],
-    [SENT + 0.4, p(970, M.y + 14 + 64 + 34), EASE], [6.2, p(1120, 330)], [RESET, p(1120, 330), EASE], [RESET + 0.7, p(700, 250)],
+    [SENT + 0.4, p(970, M.y + 14 + 64 + 34), EASE], [SENT + 1.1, p(1120, 330)], [RESET, p(1120, 330), EASE], [RESET + 0.7, p(700, 250)],
   ])));
   // Its clicks.
   const click = (t, x, y) => at(x, y, circle(0, 0, 18, { fill: 'none', sw: 2.5 }), m.a([[0, { opacity: 0, transform: 'scale(.3)' }], [t, { opacity: 0, transform: 'scale(.3)' }, STEP], [t + 0.01, { opacity: 1, transform: 'scale(.3)' }, EASE], [t + 0.35, { opacity: 0, transform: 'scale(1.2)' }]]));

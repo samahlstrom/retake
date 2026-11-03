@@ -1,8 +1,8 @@
 // 5. Where agents work: herdr (bundled), tmux, or in the background (one per video, ten at once). Jump into a
 // session and talk to the agent; its questions come back to the video at the exact shot.
 import {
-  Motion, INK, PAPER, MUTED, SOFT, EASE, IN, LINEAR, STEP,
-  rect, circle, path, g, at, text, heading, icon, popKeys, travelKeys, textWidth, n,
+  Motion, INK, PAPER, MUTED, EASE, IN, LINEAR, STEP, rect, circle, path, g, at, text, heading, icon, popKeys,
+  travelKeys, textWidth, n,
 } from './kit.mjs';
 
 export default function whereAgentsWork() {
@@ -14,7 +14,16 @@ export default function whereAgentsWork() {
 
   // Which tab: 0 herdr, 1 tmux, 2 background.
   const phase = (v0, v1, v2) => m.a([[0, v0], [TO_TMUX, v0, EASE], [TO_TMUX + X, v1], [TO_BG, v1, EASE], [TO_BG + X, v2], [TO_HERDR, v2, EASE], [TO_HERDR + X, v0]]);
-  const only = (i) => phase(...[0, 1, 2].map((k) => ({ opacity: k === i ? 1 : 0 })));
+  // One window's content at a time: the old one fades out, then the new one fades in.
+  const only = (i) => {
+    const switches = [[TO_TMUX, 0, 1], [TO_BG, 1, 2], [TO_HERDR, 2, 0]];
+    const k = [[0, { opacity: i === 0 ? 1 : 0 }]];
+    for (const [t, from, to] of switches) {
+      if (from === i) k.push([t, { opacity: 1 }, IN], [t + 0.18, { opacity: 0 }]);
+      if (to === i) k.push([t + 0.15, { opacity: 0 }, EASE], [t + 0.45, { opacity: 1 }]);
+    }
+    return m.a(k);
+  };
 
   // ---- the tabs ----
   const T = { x: 500, y: 120, w: 644, h: 50 };
@@ -47,8 +56,8 @@ export default function whereAgentsWork() {
   // You type into it.
   const msg = 'make the intro shorter';
   herdr += rect(P.x - 4, P.y + 112, 396, 46, { r: 10, sw: 2.5 }) + text(P.x + 14, P.y + 142, `› ${msg}`, { size: 20 });
-  const tw = textWidth(msg, 20) + 10;
-  herdr += at(P.x + 32 + tw, P.y + 116, rect(-tw, 0, tw, 38, { fill: PAPER, stroke: 'none', r: 0 }),
+  const tw = textWidth(msg, 20) + 14;
+  herdr += at(P.x + 28 + tw, P.y + 116, rect(-tw, 0, tw, 38, { fill: PAPER, stroke: 'none', r: 0 }),
     m.a([[0, { transform: 'scale(1,1)' }], [1.2, { transform: 'scale(1,1)' }, LINEAR], [2.1, { transform: 'scale(0,1)' }], [RESET, { transform: 'scale(0,1)' }, STEP], [RESET + 0.01, { transform: 'scale(1,1)' }]]));
   // It answers by asking about a shot.
   herdr += g(text(P.x, P.y + 200, 'retake ask --at 1:23', { size: 20 }) + text(P.x, P.y + 228, '"Which logo?"', { size: 20, weight: 500, fill: MUTED }),

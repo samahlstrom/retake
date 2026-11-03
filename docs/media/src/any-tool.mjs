@@ -1,8 +1,8 @@
 // 6. Any tool: an agent reaches any tool it can use, through MCP, a command line or an API (ElevenLabs voices, image
 // generation, Blender, ffmpeg). Retake only watches the files it changes.
 import {
-  Motion, INK, PAPER, MUTED, EASE, IN,
-  rect, circle, path, g, at, text, arrow, heading, icon, riseKeys, travelKeys, pill,
+  Motion, INK, PAPER, MUTED, EASE, rect, circle, path, g, at, text, arrow, heading, icon, riseKeys, travelKeys,
+  pill,
 } from './kit.mjs';
 
 export default function anyTool() {

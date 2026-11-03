@@ -147,6 +147,8 @@ jobs:
           cargo fetch --locked --manifest-path editor/Cargo.toml
       - name: scripts/notices.mjs --check
         run: node scripts/notices.mjs --check
+      - name: The README's motion graphics are current (scripts/build-motion.mjs --check)
+        run: node scripts/build-motion.mjs --check
 
   quickstart:
     name: Quickstart (docs/quickstart.md on the sample project)

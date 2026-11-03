@@ -1,8 +1,8 @@
 // 8. Setup: download, open Retake, pick your videos folder, it finds the agents you have (or helps you sign in),
 // and you review in the browser. Optional: a share link for a phone or a teammate.
 import {
-  Motion, INK, PAPER, RED, MUTED, EASE, IN, STEP, POP,
-  rect, circle, path, g, at, text, arrow, heading, icon, popKeys, showKeys, textWidth,
+  Motion, INK, PAPER, RED, MUTED, EASE, IN, STEP, POP, rect, circle, path, g, at, text, arrow, heading, icon,
+  popKeys, showKeys,
 } from './kit.mjs';
 
 export default function setup() {
