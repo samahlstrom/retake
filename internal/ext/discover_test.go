@@ -4,6 +4,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -160,7 +161,32 @@ func TestDirFS(t *testing.T) {
 	if _, err := fs.ReadFile(fsys, "../secret.txt"); err == nil {
 		t.Error("read ..")
 	}
-	if err := fstest.TestFS(DirFS(copyHello(t, root, "clean")), "extension.toml", "ui/hello.js"); err != nil {
+	clean := copyHello(t, root, "clean")
+	syncDirTimes(t, clean)
+	if err := fstest.TestFS(DirFS(clean), "extension.toml", "ui/hello.js"); err != nil {
 		t.Error(err)
+	}
+}
+
+// syncDirTimes works around NTFS updating a folder's times in its parent's listing lazily: a folder that just had a
+// file written into it lists an older modification time than it stats, which fstest.TestFS reports as a mismatch.
+// Setting the time it stats makes both agree, as Go's own os.DirFS test does (golang.org/issue/42637).
+func syncDirTimes(t *testing.T, root string) {
+	t.Helper()
+	if runtime.GOOS != "windows" {
+		return
+	}
+	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		st, err := os.Stat(p)
+		if err != nil {
+			return err
+		}
+		return os.Chtimes(p, st.ModTime(), st.ModTime())
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 }

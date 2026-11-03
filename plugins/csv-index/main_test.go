@@ -126,7 +126,8 @@ func TestIndexArgs(t *testing.T) {
 		t.Fatalf("lines = %v", lines)
 	}
 	a, b := lines[0], lines[1]
-	if a["path"] != filepath.FromSlash("/abs/a.png") || a["import"] != "metadata" || a["title"] != "Alpha" ||
+	// On Windows /abs/a.png is rooted, on root's drive.
+	if a["path"] != filepath.VolumeName(root)+filepath.FromSlash("/abs/a.png") || a["import"] != "metadata" || a["title"] != "Alpha" ||
 		a["license"].(map[string]any)["status"] != "blocked" {
 		t.Errorf("a = %v", a)
 	}

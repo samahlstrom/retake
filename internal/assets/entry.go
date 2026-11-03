@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -188,9 +189,17 @@ func (d *db) filePath(locator string) string {
 		return p
 	}
 	if u, err := url.Parse(locator); err == nil && u.Scheme == "file" {
-		return filepath.FromSlash(u.Path)
+		return urlPath(u.Path)
 	}
 	return locator
+}
+
+// urlPath turns a file URL's path back into a file path: /C:/x is C:\x on Windows (fileLocator added the slash).
+func urlPath(p string) string {
+	if runtime.GOOS == "windows" && len(p) >= 3 && p[0] == '/' && p[2] == ':' {
+		p = p[1:]
+	}
+	return filepath.FromSlash(p)
 }
 
 // fileLocator makes a file:// locator for an absolute path.

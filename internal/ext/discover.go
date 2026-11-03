@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -16,7 +17,7 @@ import (
 	"github.com/samahlstrom/retake/internal/userdir"
 )
 
-// EnvPath is the variable that adds extension folders for a run, after --ext (":"-separated, like PATH).
+// EnvPath is the variable that adds extension folders for a run, after --ext (separated like PATH: ":", ";" on Windows).
 const EnvPath = "RETAKE_EXT_PATH"
 
 // Sources are the places extensions are found, in spec/extensions.md's order ("Where extensions are found").
@@ -194,9 +195,10 @@ func isDir(p string) bool {
 // Unlike os.DirFS it holds nothing open between calls.
 type DirFS string
 
-// Open opens a file of the folder.
+// Open opens a file of the folder. As in os.DirFS, a \ or : in the name is refused on Windows, where it would
+// separate path elements (or name a drive or stream) instead of being part of a name.
 func (d DirFS) Open(name string) (fs.File, error) {
-	if !fs.ValidPath(name) {
+	if !fs.ValidPath(name) || runtime.GOOS == "windows" && strings.ContainsAny(name, `\:`) {
 		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrInvalid}
 	}
 	r, err := os.OpenRoot(string(d))

@@ -421,7 +421,7 @@ func CheckFolder(p, homeDir string, mayMake bool) (string, error) {
 	if p == "" {
 		return "", errors.New("choose a folder")
 	}
-	p = config.ExpandHome(p, homeDir)
+	p = fullPath(p, homeDir)
 	if !filepath.IsAbs(p) {
 		return "", fmt.Errorf("%q isn't a full path", p)
 	}
@@ -436,6 +436,16 @@ func CheckFolder(p, homeDir string, mayMake bool) (string, error) {
 		return p, nil
 	}
 	return "", fmt.Errorf("there's no folder %s", Tilde(p, homeDir))
+}
+
+// fullPath expands a leading ~ and, on Windows, puts a path rooted on no drive (\Videos, or / for the top) on the home
+// folder's drive.
+func fullPath(p, homeDir string) string {
+	p = config.ExpandHome(p, homeDir)
+	if runtime.GOOS == "windows" && filepath.VolumeName(p) == "" && (strings.HasPrefix(p, `\`) || strings.HasPrefix(p, "/")) {
+		p = filepath.VolumeName(homeDir) + p
+	}
+	return p
 }
 
 // FolderList is GET …/folders.
@@ -453,7 +463,7 @@ func ListFolders(p, homeDir string) (FolderList, error) {
 	if strings.TrimSpace(p) == "" {
 		p = homeDir
 	}
-	dir := filepath.Clean(config.ExpandHome(strings.TrimSpace(p), homeDir))
+	dir := filepath.Clean(fullPath(strings.TrimSpace(p), homeDir))
 	if !filepath.IsAbs(dir) || !isDir(dir) {
 		return FolderList{}, fs.ErrNotExist
 	}

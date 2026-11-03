@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/samahlstrom/retake/internal/sqldb"
@@ -62,10 +63,16 @@ func relTo(root, p string) string {
 }
 
 func absTo(root, p string) string {
-	if p == "" || filepath.IsAbs(p) || root == "" {
+	if p == "" || filepath.IsAbs(p) || root == "" || rooted(p) {
 		return p
 	}
 	return filepath.Join(root, filepath.FromSlash(p))
+}
+
+// rooted reports whether p is a Windows path rooted on the current drive (/x or \x): not absolute there, but not
+// under the project either. Elsewhere only filepath.IsAbs counts.
+func rooted(p string) bool {
+	return runtime.GOOS == "windows" && p != "" && (p[0] == '/' || p[0] == '\\')
 }
 
 // inside returns p relative to root, slash-separated, when p is inside root, also through symlinks on either side.
@@ -110,10 +117,10 @@ func relocate(root, p string, dir bool) string {
 	return p
 }
 
-// isAbsAny reports whether p is absolute here or on another system (/x, C:\x, C:/x, \\host\x), so a path written on
-// another machine is relocated too.
+// isAbsAny reports whether p is absolute here or on another system (/x, \x, C:\x, C:/x, \\host\x), so a path written
+// on another machine is relocated too. On Windows /x and \x are rooted (on the current drive), not relative.
 func isAbsAny(p string) bool {
-	if filepath.IsAbs(p) || strings.HasPrefix(p, "/") || strings.HasPrefix(p, `\\`) {
+	if filepath.IsAbs(p) || strings.HasPrefix(p, "/") || strings.HasPrefix(p, `\`) {
 		return true
 	}
 	return len(p) >= 3 && p[1] == ':' && (p[2] == '\\' || p[2] == '/') &&

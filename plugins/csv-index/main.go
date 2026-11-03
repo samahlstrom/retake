@@ -211,9 +211,14 @@ func index(req request, emit func(any) error) error {
 			}
 			continue
 		}
-		// Paths go out absolute: a relative one is relative to root (default: the CSV's folder).
+		// Paths go out absolute: a relative one is relative to root (default: the CSV's folder). On Windows a rooted
+		// one (\x, /x) is on root's drive.
 		path := filepath.FromSlash(p)
-		if !filepath.IsAbs(path) {
+		switch {
+		case filepath.IsAbs(path):
+		case filepath.VolumeName(path) == "" && strings.HasPrefix(path, string(filepath.Separator)):
+			path = filepath.VolumeName(root) + path
+		default:
 			path = filepath.Join(root, path)
 		}
 		title := strings.TrimSpace(row[m["title"]])
