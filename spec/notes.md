@@ -214,7 +214,7 @@ heads for (`v5`), so they are still there once the draft becomes that version.
   lines show only on the version they were drawn on (spec/bridge.md, "The page").
 - **The page reads the whole family once.** `GET /api/notes?v=<label>&scope=video` returns every version's comments
   with their `version`, also those recorded on a draft the family no longer lists (an older draft, or a promoted
-  draft's old label) while its version is listed (with `scope=review`, within the same version limit). The page keeps the shown version's for the list and the markers, and counts the rest per
+  draft's old label) while its version is listed, itself or, while it's live, by a newer revision (with `scope=review`, within the same version limit). The page keeps the shown version's for the list and the markers, and counts the rest per
   version for the strip and the line below. A switch shows the new version's comments at once, from the same answer.
 - **The comments header.** Two quiet rows over the list. The first: a comments icon (a speech bubble, no word), the
   shown version as a menu (`v8 ⌄`), then search and hide at the right. The second: a To do · Done toggle (each with
