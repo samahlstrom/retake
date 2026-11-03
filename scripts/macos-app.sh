@@ -23,7 +23,8 @@ die() {
   printf 'macos-app: %s\n' "$*" >&2
   exit 1
 }
-LIPO="$(command -v llvm-lipo || command -v lipo || true)"
+# Ubuntu's llvm package names it llvm-lipo-<major>; take the newest one when there's no plain llvm-lipo.
+LIPO="$(command -v llvm-lipo || command -v lipo || ls /usr/bin/llvm-lipo-* /usr/lib/llvm-*/bin/llvm-lipo 2>/dev/null | sort -V | tail -n 1 || true)"
 [ -n "$LIPO" ] || die "needs llvm-lipo or lipo"
 command -v zip >/dev/null 2>&1 || die "needs zip"
 
