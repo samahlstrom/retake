@@ -13,6 +13,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/samahlstrom/retake/internal/desktop"
 )
 
 // EditorName is the editor's binary.
@@ -42,25 +44,23 @@ func (e Editor) getenv(k string) string {
 	return os.Getenv(k)
 }
 
-func isExec(p string) bool {
-	st, err := os.Stat(p)
-	return err == nil && st.Mode().IsRegular() && st.Mode().Perm()&0o111 != 0
-}
-
 // Find returns retake-edit's path: the configured one, else $RETAKE_EDIT, else retake-edit on $PATH, else
-// editor/target/release/retake-edit in the repo the retake binary was built in, or under the current folder.
+// editor/target/release/retake-edit in the repo the retake binary was built in, or under the current folder. On
+// Windows each may leave out .exe (desktop.Program).
 func (e Editor) Find() (string, error) {
 	if p := strings.TrimSpace(e.Configured); p != "" {
-		if !isExec(p) {
+		prog := desktop.Program(p)
+		if prog == "" {
 			return "", fmt.Errorf("%w: [edit] retake_edit is %s, which isn't an executable file", ErrNoEditor, p)
 		}
-		return p, nil
+		return prog, nil
 	}
 	if p := strings.TrimSpace(e.getenv("RETAKE_EDIT")); p != "" {
-		if !isExec(p) {
+		prog := desktop.Program(p)
+		if prog == "" {
 			return "", fmt.Errorf("%w: $RETAKE_EDIT is %s, which isn't an executable file", ErrNoEditor, p)
 		}
-		return p, nil
+		return prog, nil
 	}
 	if p, err := exec.LookPath(EditorName); err == nil {
 		return p, nil
@@ -85,8 +85,8 @@ func (e Editor) Find() (string, error) {
 		tried = append(tried, filepath.Join(dir, rel))
 	}
 	for _, p := range tried {
-		if isExec(p) {
-			return p, nil
+		if prog := desktop.Program(p); prog != "" {
+			return prog, nil
 		}
 	}
 	return "", fmt.Errorf("%w: set [edit] retake_edit in config.toml or $RETAKE_EDIT, put it on $PATH, or build it "+

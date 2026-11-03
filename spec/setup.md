@@ -31,7 +31,9 @@ retake start [--port N] [--no-open] [--idle-exit MIN] [--app] [--verbose]
 `retake autostart [on|off]` turns starting at login on or off and prints `on` or `off` (no argument: just prints it).
 macOS: `~/Library/LaunchAgents/io.github.samahlstrom.retake.plist`, which runs `open -a <the app>` at login (or
 `retake start --app` when not in an app). Linux: `$XDG_CONFIG_HOME/autostart/retake.desktop` running `retake start
---app`.
+--app`. Windows: the value `Retake` of `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` (no administrator
+needed), `"<folder>\retakew.exe" start --app`: `retakew.exe` is the small launcher next to `retake.exe` that runs it
+without a console window (`retake.exe` itself when it isn't there).
 
 ## Retake's own tools come first
 
@@ -52,7 +54,10 @@ so `claude` in `~/.local/bin` or `codex` in `/opt/homebrew/bin` would not be fou
 **Check again**, Retake runs `$SHELL -ilc` (else `/bin/sh -lc`) to print `PATH` (5 s at most, no input), and makes its
 own `PATH`: the bundle folder, the shell's, its own, then these when they exist: `~/.local/bin`, `/opt/homebrew/bin`,
 `/usr/local/bin`, `~/.npm-global/bin`, `~/.bun/bin`, `~/.volta/bin`, `~/.claude/local`. Each folder once, in that
-order.
+order. Windows has no login shell: a program started from the Start menu already has the person's `PATH`, which gains
+`%USERPROFILE%\.local\bin` (Claude Code's `claude.exe`), `%APPDATA%\npm` (npm's `claude.cmd`, `codex.cmd`),
+`%USERPROFILE%\.bun\bin` and `%LOCALAPPDATA%\Programs\retake` when they exist. A program next to `retake.exe` is
+found by its name without `.exe`.
 
 ## The setup page
 
