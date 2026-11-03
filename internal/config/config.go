@@ -35,6 +35,9 @@ type Config struct {
 	DefaultAgent  *string `toml:"default_agent"`
 	FallbackAgent *string `toml:"fallback_agent"`
 	Agents        []Agent `toml:"agents"` // [[agents]]: what retake open and retake worker may run
+	// Folder is your videos folder: what retake start (and the app) opens (spec/setup.md). Unset: the setup page.
+	// A leading ~ is the home folder.
+	Folder *string `toml:"folder"`
 
 	Transcribe Transcribe `toml:"transcribe"`
 	Share      Share      `toml:"share"`
@@ -61,6 +64,9 @@ type Server struct {
 	SMTPURL        *string  `toml:"smtp_url"`
 	SMTPFrom       *string  `toml:"smtp_from"`
 	RelayCache     *string  `toml:"relay_cache"`
+	// Downloads is who may download a version's MP4 (spec/api.md, "Download"): "everyone" who can watch (default),
+	// "reviewers" or "off". retake open and retake share read it too.
+	Downloads *string `toml:"downloads"`
 	// Extensions are the extensions the server allows, for everyone (spec/extensions.md, "Turning them on").
 	Extensions []string `toml:"extensions"`
 }
@@ -107,6 +113,9 @@ type Render struct {
 	// videotoolbox, qsv or vaapi.
 	Encoder *string `toml:"encoder"`
 }
+
+// DownloadsValues are the values [server] downloads takes.
+var DownloadsValues = []string{"everyone", "reviewers", "off"}
 
 // Encoders are the values [render] encoder takes.
 var Encoders = []string{"auto", "x264", "nvenc", "videotoolbox", "qsv", "vaapi"}
@@ -189,6 +198,9 @@ func Parse(s string) (Config, []string, error) {
 	if e := c.Render.Encoder; e != nil && !slices.Contains(Encoders, *e) {
 		return Config{}, warnings, fmt.Errorf("render.encoder %q isn't auto, x264, nvenc, videotoolbox, qsv or vaapi", *e)
 	}
+	if d := c.Server.Downloads; d != nil && !slices.Contains(DownloadsValues, *d) {
+		return Config{}, warnings, fmt.Errorf("server.downloads %q isn't everyone, reviewers or off", *d)
+	}
 	if o := c.OpenAgentsIn; o != nil && !ValidOpenIn(*o) {
 		return Config{}, warnings, fmt.Errorf("open_agents_in %q isn't background, herdr or tmux", *o)
 	}
@@ -223,6 +235,28 @@ func Parse(s string) (Config, []string, error) {
 		}
 	}
 	return c, warnings, nil
+}
+
+// FolderPath is the videos folder (folder), with a leading ~ made the home folder; "" when unset.
+func FolderPath(c Config, home string) string {
+	if c.Folder == nil {
+		return ""
+	}
+	return ExpandHome(strings.TrimSpace(*c.Folder), home)
+}
+
+// ExpandHome makes a leading ~ (alone, or before a slash) the home folder.
+func ExpandHome(p, home string) string {
+	if home == "" {
+		return p
+	}
+	if p == "~" {
+		return home
+	}
+	if rest, ok := strings.CutPrefix(p, "~/"); ok {
+		return filepath.Join(home, rest)
+	}
+	return p
 }
 
 // Defaults for settings that neither the file nor a flag set.
@@ -406,7 +440,7 @@ func SetExtension(path, id string, on bool, pin string) error {
 }
 
 // TopKeys are the top-level keys SetTop writes (the settings page's, spec/home.md "Settings").
-var TopKeys = []string{"default_agent", "fallback_agent", "open_agents_in"}
+var TopKeys = []string{"default_agent", "fallback_agent", "open_agents_in", "folder"}
 
 // SetTop sets a top-level string key of the config file at path to value, or removes its line when value is "" (the
 // default). Only TopKeys are written. The rest of the file, comments included, stays as it is; the file and its
@@ -473,6 +507,8 @@ func topValue(c Config, key string) string {
 		p = c.FallbackAgent
 	case "open_agents_in":
 		p = c.OpenAgentsIn
+	case "folder":
+		p = c.Folder
 	}
 	if p == nil {
 		return ""

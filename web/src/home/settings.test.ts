@@ -35,6 +35,12 @@ describe('settings', () => {
     expect(s.agents).toEqual([{ id: 'x', name: 'x' }]);
     expect(s.extensions).toEqual([]);
     expect(normalizeSettings(null)).toMatchObject({ hosted: false, agents: [], machines: [], theme: { folder: '' } });
+    expect(normalizeSettings(null)).toMatchObject({ folder: '', folder_editable: false, test: false });
+    expect(normalizeSettings({ ...base, folder: '~/Movies', folder_editable: true, test: true })).toMatchObject({
+      folder: '~/Movies',
+      folder_editable: true,
+      test: true,
+    });
   });
 
   it('shows the agent tasks run with, and only other agents as the fallback', () => {

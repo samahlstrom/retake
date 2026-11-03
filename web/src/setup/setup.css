@@ -1,0 +1,271 @@
+/* The first-run setup page (spec/setup.md): one calm column in the review page's look (theme/tokens.css). Every rule
+   is in @layer retake, so a theme's CSS wins over it (spec/theme.md). */
+@layer retake {
+  * {
+    box-sizing: border-box;
+  }
+  html,
+  body {
+    margin: 0;
+    min-height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font: var(--font-size) / 1.5 var(--font-ui);
+    -webkit-font-smoothing: antialiased;
+  }
+  .setup {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 28px 24px 72px;
+  }
+  .setup header {
+    margin: 0 0 56px;
+  }
+  .setup .brand {
+    color: var(--text);
+    font-weight: 700;
+    font-size: 16px;
+    letter-spacing: -0.02em;
+  }
+  .setup .wordmark-dot {
+    color: var(--wordmark-dot);
+  }
+  .setup h1 {
+    margin: 0 0 6px;
+    font-size: 24px;
+    font-weight: 650;
+    letter-spacing: -0.02em;
+  }
+  .setup .lead {
+    margin: 0 0 40px;
+    color: var(--muted);
+  }
+  .setup section {
+    margin: 0 0 36px;
+  }
+  .setup h2 {
+    margin: 0 0 10px;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .setup .row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  .setup .what {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+  }
+  .setup .folder {
+    overflow-wrap: anywhere;
+    font: 14px var(--font-mono);
+    color: var(--text);
+  }
+  .setup .name {
+    color: var(--text);
+    font-weight: 550;
+  }
+  .setup .note {
+    color: var(--muted);
+    font-size: 12.5px;
+  }
+  .setup p.note {
+    margin: 8px 0 0;
+  }
+  .setup .body {
+    margin: 0 0 14px;
+    color: var(--text-5);
+  }
+  .setup .err,
+  .setup .warn {
+    margin: 0 0 24px;
+    padding: 10px 12px;
+    border-radius: var(--radius);
+    background: var(--surface-raised);
+    font-size: 12.5px;
+  }
+  .setup .err {
+    color: var(--danger);
+  }
+  .setup .warn {
+    color: var(--warn);
+  }
+  .setup .warn code,
+  .setup .cmd code {
+    font: 12px var(--font-mono);
+  }
+
+  /* A list of choices: a radio, the name, and its line or result. */
+  .setup .choices {
+    display: grid;
+    border-top: 1px solid var(--line);
+  }
+  .setup .choice {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 48px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .setup .choice label {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+    cursor: pointer;
+  }
+  .setup .choice.place {
+    cursor: pointer;
+  }
+  .setup .choice.off {
+    cursor: default;
+    opacity: 0.5;
+  }
+  .setup input[type='radio'] {
+    flex: none;
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    accent-color: var(--accent);
+  }
+  .setup .result {
+    flex: none;
+    color: var(--muted);
+    font-size: 12.5px;
+    text-align: right;
+  }
+  .setup .result.ok {
+    color: var(--status-done);
+  }
+  .setup .result.bad {
+    flex: 1;
+    min-width: 0;
+    color: var(--danger);
+  }
+
+  /* No agent yet: the makers' install lines, each with Copy. */
+  .setup .installs {
+    display: grid;
+    gap: 18px;
+    margin: 0 0 18px;
+  }
+  .setup .install {
+    display: grid;
+    gap: 6px;
+  }
+  .setup .install strong {
+    font-weight: 600;
+  }
+  .setup .cmd {
+    display: flex;
+    align-items: stretch;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    background: var(--surface-sunken);
+    overflow: hidden;
+  }
+  .setup .cmd code {
+    flex: 1;
+    min-width: 0;
+    padding: 9px 10px;
+    color: var(--text-2);
+    overflow-x: auto;
+    white-space: nowrap;
+    user-select: all;
+  }
+  .setup .cmd button {
+    flex: none;
+    min-width: 64px;
+    padding: 0 12px;
+    border: 0;
+    border-left: 1px solid var(--line-strong);
+    background: color-mix(in srgb, var(--overlay) 4%, transparent);
+    color: var(--text-2);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .setup .cmd button:hover {
+    background: color-mix(in srgb, var(--overlay) 9%, transparent);
+  }
+
+  /* Buttons: one primary (Open my videos), the rest quiet. */
+  .setup button.quiet,
+  .setup button.primary {
+    flex: none;
+    min-height: 34px;
+    padding: 0 14px;
+    border-radius: var(--radius);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .setup button.quiet {
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-3);
+  }
+  .setup button.quiet:hover:not(:disabled) {
+    border-color: var(--border-hover);
+    color: var(--text);
+  }
+  .setup button.small {
+    min-height: 28px;
+    padding: 0 10px;
+    font-size: 12px;
+  }
+  .setup button.primary {
+    min-height: 42px;
+    padding: 0 22px;
+    border: 0;
+    background: var(--accent);
+    color: var(--on-accent);
+    font-size: 14px;
+  }
+  .setup button.primary:hover:not(:disabled) {
+    background: var(--accent-hover);
+  }
+  .setup button:disabled {
+    cursor: default;
+    opacity: 0.6;
+  }
+  .setup button:focus-visible,
+  .setup input:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+  .setup .go {
+    margin-top: 8px;
+  }
+
+  @media (max-width: 760px) {
+    .setup {
+      padding: 20px 16px 56px;
+    }
+    .setup header {
+      margin-bottom: 36px;
+    }
+    .setup button.quiet,
+    .setup button.small,
+    .setup .cmd button {
+      min-height: 44px;
+    }
+    .setup button.primary {
+      width: 100%;
+      min-height: 48px;
+    }
+    .setup input[type='radio'] {
+      width: 20px;
+      height: 20px;
+    }
+  }
+}

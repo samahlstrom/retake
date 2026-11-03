@@ -22,6 +22,7 @@ Permissions by route:
 | Route | Needs |
 |---|---|
 | `GET/HEAD /`, `/index.html`, page files, `/favicon.ico`, `/video...`, `/api/info`, `/api/history`, `/api/notes`, `/api/events`, `/api/takes/...`, `/api/poster`, `/api/link-preview`, unknown GET paths (still 404), `POST /api/versions/<label>/watch` and `/unwatch` (spec/bridge.md, "Streaming") | watch |
+| `GET/POST /api/download`, `GET/HEAD /video/<label>/download` (spec/api.md, "Download") | watch, or record with `[server] downloads = "reviewers"`; nobody with `"off"` |
 | `GET /api/ping` | any role |
 | `POST /api/session/<take>/data`, `/audio`, `/image`, `/done`, unknown POST paths (still 404) | record |
 | `POST /api/notes/<id>/reopen`, `POST /api/versions/<label>/approve` | approve |

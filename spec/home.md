@@ -294,6 +294,9 @@ routes refuse anyone else (403). They replace the agent menu the review page had
   team server they're the server's own (`--extensions`), read-only.
 - **Theme**: the theme folder in effect, its name when a theme is there, else that `retake theme init` makes one
   (read-only).
+- **Your videos** (spec/setup.md): the folder served. Under `retake start` it can be changed, and the home switches to
+  the new folder at once; under `retake open <folder>` it's the argument, read-only. **Test** next to the default
+  agent runs the agent once, as the setup page does.
 
 ### `GET api/settings` and `POST api/settings`
 
@@ -310,7 +313,10 @@ At the home's root (`retake open <folder>`; the team server's `/api/settings`), 
 - `agents` is this computer's agents (locally, the config read again) or every computer's (hosted). `agent` "" means
   none chosen. `loaded` says whether an extension is in effect now; it differs from `on` until a restart. Paths under
   the home folder show as `~/…`. `config` is there locally only.
-- `POST` takes any of `{"agent", "fallback", "open_in", "extensions": {"<id>": true|false}}` and answers like `GET`.
+- `folder` is the videos folder (`~/…`), `folder_editable` whether a `folder` change is taken (`retake start`), and
+  `test` whether `POST api/settings/test {"agent"}` runs an agent's test (spec/setup.md, "The agent test").
+  `GET api/settings/folders?path=` is the setup page's folder list. All three are local only.
+- `POST` takes any of `{"agent", "fallback", "open_in", "extensions": {"<id>": true|false}, "folder"}` and answers like `GET`.
   Everything is checked before anything is written: an unknown key, an agent no computer offers, a fallback that is
   the default agent, an `open_in` other than background, herdr or tmux, or an extension that isn't installed is 400
   with `{"error"}` and changes nothing. On the team server `open_in` and `extensions` are 400 (not its settings).

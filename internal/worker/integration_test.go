@@ -234,7 +234,7 @@ func TestPlainProjectRelaysItsVersionsAndPushesTheAgentsVideo(t *testing.T) {
 	go func() {
 		// No renderer: a plain project doesn't need one.
 		finished <- Run(ctx, Options{URL: ts.URL, Token: token, Root: local, Name: "Test machine", Profiles: profiles,
-			Editor: bridge.Editor{Configured: filepath.Join(base, "no-retake-edit")}})
+			Editor: bridge.Editor{Configured: filepath.Join(base, "no-retake-edit"), Env: []string{"RETAKE_ENCODER=x264"}}})
 	}()
 	defer func() {
 		cancel()
@@ -293,6 +293,50 @@ func TestPlainProjectRelaysItsVersionsAndPushesTheAgentsVideo(t *testing.T) {
 	}
 	if _, e = os.Stat(filepath.Join(hosted, "clip_v2.mp4")); !os.IsNotExist(e) {
 		t.Fatal("a version file was copied to the server")
+	}
+	// Download v2 (spec/api.md, "Download"): the computer makes the MP4 (this clip isn't High profile), the server
+	// relays it as an attachment, and nothing of it is kept on the server but its relay cache.
+	if res, err := http.Post(ts.URL+"/api/download?v=v2", "", nil); err != nil || res.StatusCode != http.StatusOK {
+		t.Fatalf("POST /api/download: %v", err)
+	} else {
+		_ = res.Body.Close()
+	}
+	var ready struct {
+		State string `json:"state"`
+		Size  int64  `json:"size"`
+		Name  string `json:"name"`
+	}
+	for deadline := time.Now().Add(time.Minute); ready.State != "ready"; {
+		if time.Now().After(deadline) {
+			t.Fatalf("the download never got ready: %+v", ready)
+		}
+		_, _, b := fetch("/api/download?v=v2", "")
+		if e = json.Unmarshal(b, &ready); e != nil || ready.State == "failed" {
+			t.Fatalf("%s %v", b, e)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	res, e := http.Get(ts.URL + "/video/v2/download")
+	if e != nil {
+		t.Fatal(e)
+	}
+	got, _ := io.ReadAll(res.Body)
+	_ = res.Body.Close()
+	if res.StatusCode != http.StatusOK || int64(len(got)) != ready.Size || ready.Name != "clip_v2.mp4" ||
+		res.Header.Get("Content-Disposition") != `attachment; filename="clip_v2.mp4"; filename*=UTF-8''clip_v2.mp4` ||
+		res.Header.Get("Content-Length") != strconv.Itoa(len(got)) {
+		t.Fatalf("download through the relay: %d %v, %d bytes of %d", res.StatusCode, res.Header, len(got), ready.Size)
+	}
+	dl := filepath.Join(base, "clip_v2_download.mp4")
+	if e = os.WriteFile(dl, got, 0o600); e != nil {
+		t.Fatal(e)
+	}
+	if out, err := exec.Command("ffprobe", "-v", "error", "-show_entries", "stream=codec_name,profile,sample_rate",
+		"-of", "csv=p=0", dl).Output(); err != nil || strings.TrimSpace(string(out)) != "h264,High\naac,LC,48000" {
+		t.Fatalf("the download: %q %v", out, err)
+	}
+	if _, e = os.Stat(filepath.Join(local, ".retake", "downloads")); e != nil {
+		t.Fatal("the download wasn't made on the computer:", e)
 	}
 
 	// A note on v2, sent to an agent that says it's done without a video: the task pauses, nothing is answered.

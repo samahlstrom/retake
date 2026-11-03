@@ -28,6 +28,7 @@ type fakeWorker struct {
 	asked   []relay.Request
 	hold    chan struct{} // when set, every answer waits for it
 	served  atomic.Int64
+	ready   map[string]bool // by version or render: its download is ready (download_test.go)
 }
 
 func (w *fakeWorker) run(ctx context.Context) {
@@ -66,7 +67,14 @@ func (w *fakeWorker) answer(ctx context.Context, r relay.Request) {
 	if hold != nil {
 		<-hold
 	}
+	if r.Op == "download" {
+		w.answerDownload(ctx, r) // download_test.go
+		return
+	}
 	key := r.Version + r.Render + "/" + r.File
+	if r.Download {
+		key = r.Version + r.Render + "/download"
+	}
 	data, ok := w.files[key]
 	status, length, rng := http.StatusNotFound, int64(0), ""
 	var body []byte

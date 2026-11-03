@@ -100,6 +100,8 @@ export interface Info {
   sessions?: unknown[];
   /** Who the page acts as (spec/team.md). A server without team mode sends none: the owner. */
   role?: Role;
+  /** Whether this page may download a version's MP4 (spec/api.md, "Download"). An older server sends none: no. */
+  downloads?: boolean;
 }
 
 /** A page's role: the owner (local), or a share link's. */

@@ -139,7 +139,7 @@ export function flipPair(vs: readonly V[], base: string | null): [string, string
 }
 
 /** The toast after a successful flip: `v7 (newer)` / `v5 (previous)` while flipped, just the label when back. A
- * draft reads as on screen elsewhere: `v5 draft`. */
+ * draft reads as everywhere: `v5`, never "draft" (verName). */
 export function flipToast(vs: readonly V[], base: string | null, target: V, nowFlipped: boolean): string {
   if (!nowFlipped) return verName(target.label);
   const b = byLabel(vs, base);

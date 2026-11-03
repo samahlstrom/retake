@@ -199,8 +199,14 @@ heads for (`v5`), so they are still there once the draft becomes that version.
   "Marking progress") is in Done as soon as its edit is in the live vN, with the agent's words for its change; it
   moves there from To do by itself, fading out and letting the cards under it slide up (transform and opacity only,
   nothing jumps; nothing moves with `prefers-reduced-motion`). Switching tab, version or search never animates.
+  While the agent works (spec/automation.md, "While the agent works"), the comment it's on is first in To do, the
+  rest in their usual order; the other Working comments of its batch read quietly (no dot or word, only `→ v5`), and
+  before its first mark one quiet line at the top of To do says "The agent is on it · 15 comments".
   While a version is live (spec/automation.md, "The live version"), its list also has the comments whose edits go
-  into it, the running batch's, so following the latest to the live vN keeps them in view as they land. A Send never
+  into it, the running batch's, so following the latest to the live vN keeps them in view as they land. They come
+  first, under one quiet label, muted and small, that says where they came from: "From v4" (one line, no box; there
+  even when v5 has no comments of its own yet). The live version's own comments (they go into v6) sit apart after
+  them, under "On v5". A version that isn't live has no labels. A Send never
   moves the list by itself; switching to the live version happens with following the latest (the video), as before. Timeline markers follow the tab, one per comment, in its status color, at the comment's own time on its own
   version; a comment's pen strokes and voice fold into its marker once it is transcribed. Transcription completion is
   independent of resolution. Switching the version, however it is switched (the version menu, C, a Done
@@ -208,7 +214,7 @@ heads for (`v5`), so they are still there once the draft becomes that version.
   lines show only on the version they were drawn on (spec/bridge.md, "The page").
 - **The page reads the whole family once.** `GET /api/notes?v=<label>&scope=video` returns every version's comments
   with their `version`, also those recorded on a draft the family no longer lists (an older draft, or a promoted
-  draft's old label) while its version is listed (with `scope=review`, within the same version limit). The page keeps the shown version's for the list and the markers, and counts the rest per
+  draft's old label) while its version is listed, itself or, while it's live, by a newer revision (with `scope=review`, within the same version limit). The page keeps the shown version's for the list and the markers, and counts the rest per
   version for the version menu's rows and its button's dot. A switch shows the new version's comments at once, from the same answer.
 - **The comments header.** One quiet row over the list: To do · Done (each with its count), then an extension's tabs,
   then search and hide at the right (hide on a computer only). No speech bubble and no version in it: the version is
@@ -223,7 +229,7 @@ heads for (`v5`), so they are still there once the draft becomes that version.
     most one dot: red while the shown version is live (spec/automation.md, "The live version"), else the rendering
     dot of a streamed version that isn't complete, else a quiet dot while an earlier version still has comments to
     do, which its title names (`Open on earlier versions: v6 · 2, v3 · 91`). Compared with C, it shows the version on
-    screen, marked as flipped. A single version shows no button (nothing to choose).
+    screen, marked as flipped. A single version shows no button (nothing to choose), unless Download is there.
   - **The rows**, newest first, one per version: a version and its revisions (drafts) are one row, `v8`, which shows
     its newest listed revision, with a small red dot right after the name, on the same line, while the agent works
     on it. The version on screen is in bold; there is no check mark and no "Latest". Each row has at most one quiet
@@ -231,6 +237,9 @@ heads for (`v5`), so they are still there once the draft becomes that version.
     the number of its comments still to do (`3 to do`), else its length (`0:55`). Where its comments go isn't said
     here (the comment box and the cards say it). An extension's version (v0) is the last row, set apart by a thin
     line, named by its kind's label alone (`Script`, never `v0 · Script`), with its to-do count and no length.
+  - **Download** (spec/api.md, "Download") is the last entry, under a hairline: `Download v5 (MP4)` for the version
+    on screen (a live revision reads `v5`), a real link to the file, with its progress or size at the right (on a
+    phone on its own line under it) and at most one quiet line under it; with a single version the menu is just that.
   - A pick shows that version (pinned unless it is the newest), as C and "in vN" do. On a phone each row is at least
     44 px tall and the menu at least 240 px wide, always within the screen; nothing in it wraps.
   - Tests. Web unit: the rows (one per version, its revisions folded in, the live dot, the one detail, the bold one,
@@ -261,7 +270,9 @@ heads for (`v5`), so they are still there once the draft becomes that version.
 - **Where a comment goes.** Comments on vN become edits in vN+1 (spec/automation.md): each comment's `target` is the
   version its edit goes in, made or updated in place (a comment on v7 goes into v8 even once v8 exists; one on v8
   makes v9), and `later` names a version after the target that exists already. The page says it in the same few
-  words everywhere: the comment box `Comment at 0:18 · goes into v8…`, a card's `→ v8` next to its status until it's done (its title adds "v9 is newer" with `later`), `in v8` once it is,
+  words everywhere: the comment box `Comment at 0:18 · goes into v8…`, a card's `→ v8` next to its status until it's
+  done (alone, without the status, while it waits in a batch the agent is working; its title adds "v9 is newer" with
+  `later`), `in v8` once it is,
   and after Send
   `Sent to v8.` Without `target` (an older server) the page takes the next number (a draft's comments, `v8-draft2`,
   go into v9). A typed comment on an extension's document has none.

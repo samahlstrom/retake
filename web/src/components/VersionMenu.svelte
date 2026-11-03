@@ -5,8 +5,10 @@
   // chevron, with at most one dot (live, rendering, or earlier comments to do). The rows: newest first, one per version
   // (its revisions folded in, a pick plays the newest), the name with a small red dot right after it while the agent
   // works on it, the one on screen in bold, one quiet detail at the right; an extension's version last, set apart.
-  // Hidden for a single version (nothing to choose). C is handled globally.
+  // Its last entry downloads the version on screen (DownloadItem; spec/api.md, "Download"), so with a single version
+  // the menu is just that; with neither, there is no button. C is handled globally.
   import { DropdownMenu } from 'bits-ui';
+  import DownloadItem from './DownloadItem.svelte';
   import type { Review } from '../lib/review.svelte';
   import { menuDot, menuRows, menuTitle } from '../lib/version-menu';
   import { byLabel, partner, verName } from '../lib/versions';
@@ -21,6 +23,8 @@
   const dot = $derived(
     menuDot({ shownLive, shown: byLabel(review.versions, review.shown), earlier: review.earlierOpen.length }),
   );
+  const shownVersion = $derived(byLabel(review.versions, review.shown));
+  const download = $derived(review.mayDownload && !!shownVersion && !shownVersion.kind);
   const flipTo = $derived(review.kindShown ? null : partner(review.cuts, review.base));
   const title = $derived(
     menuTitle({
@@ -49,7 +53,7 @@
   >
 {/snippet}
 
-{#if rows.length}
+{#if rows.length || download}
   <div id="ver">
     <DropdownMenu.Root bind:open={() => review.verOpen, (v) => (review.verOpen = v)}>
       <DropdownMenu.Trigger
@@ -82,6 +86,7 @@
           {#each cuts as r (r.version)}{@render row(r)}{/each}
           {#if kinds.length && cuts.length}<DropdownMenu.Separator class="menu-sep" />{/if}
           {#each kinds as r (r.version)}{@render row(r)}{/each}
+          {#if download}<DownloadItem {review} />{/if}
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>

@@ -65,6 +65,7 @@ export const PORTS = {
   embeds: PORT_BASE + 5, // 22, after 18-scripts and 19-phone-webkit
   keyboard: PORT_BASE + 5, // 23, after 22-embeds
   progress: PORT_BASE + 3, // 23, after 17-theme
+  setup: PORT_BASE + 6, // 40, after 07-share and 14-relay
 } as const;
 
 /** retake-edit, for the specs that render with the editor: $RETAKE_EDIT, else the repo's release build, else $PATH. */

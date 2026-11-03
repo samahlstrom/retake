@@ -428,6 +428,14 @@ usual URLs: `/video/<label>`, and `/video/<label>/<file>` for a playlist and the
   browser asks for the rest as it plays or seeks. The server sends the browser what the worker sent, with
   `Accept-Ranges: bytes` and `Content-Length`. A request without a range for a file larger than a chunk is answered
   200 with the whole file: the server asks for one chunk after another and streams them in order.
+- **Downloads** (spec/api.md, "Download"). The server asks `{"id", "op": "download", "render" | "version",
+  "start"}`; the worker answers 200 with the download's state as `GET /api/download` has it (without `label`
+  and `name`, which the server adds; `license` from its own asset catalog), plus `modified` (the ready file's mtime, Unix ms), and with `start`
+  first gets it ready as `POST` does: it checks and makes the file itself, with its own ffmpeg and renderer, under its
+  project's `.retake/downloads/` or beside the render's playlist. It answers 404 for a label or render it doesn't
+  have. A media read with `"download": true` (and `render` or `version`) reads that ready file, in chunks as above;
+  404 while it isn't ready. The server caches its chunks under the download's size and mtime, so a download made
+  again is a new file. A render's download needs the render complete (`state.json`) and its `source.json`.
 - **What a worker reads.** Only a render's own directory (`.retake/worker/renders/<id>/`, flat media names), or a
   file of its project's current family: the version's file itself, or for a playlist version a regular file
   directly beside it with a media extension (`.m3u8`, `.m4s`, `.mp4`, `.ts`). Never a path with a separator or
@@ -617,7 +625,9 @@ because a comment on the one before asked for changes.
   agent finishes each note, and never the word "draft". The drafts are its revisions, internal (their labels stay in
   URLs and the API); the page shows a draft `v<N>-draft<K>` as `v<N>` everywhere (the version menu, toasts, the page's title, the home's
   cards and folder tree: one label helper, `verName`), the version menu has one `v<N>` row that plays its newest
-  revision, with a small red live dot while the task runs, and the red edge light ("HTTP and UI") is on the video.
+  revision, with a small red live dot while the task runs, and its comments list shows the batch's comments under a
+  quiet "From v<N-1>", the one being worked on first ("HTTP and UI", "While the agent works"; spec/notes.md, "What a
+  version shows").
   - **At once.** A task's attempt makes its target's first revision as it starts, so `v<N>` exists before any edit: in
     a timeline project the worker renders the task's source as soon as it has no render of this task (it is the
     starting version's source, so every unit is reused from the cache); in a plain project it registers the version
@@ -690,21 +700,25 @@ because a comment on the one before asked for changes.
   (the home's left nav, spec/home.md). Only where Send can't reach an agent does one quiet line say so, over the bar's
   right end: "No editing computer connected · Settings" for the owner of a hosted project with no computer online,
   "The editing computer is offline. Send still queues." for anyone else, and in local mode the `blocked` reason.
-- **While the agent works** ("Marking progress"), on the computer and the phone alike. There is no line or pill over
-  the comments (it covered the list on a phone).
-  - The comment being worked on (the task's `working`) has a soft light sweeping across its card and, under its
-    words, one quiet italic line in the agent's words ("slowing the mask fade…"). One comment at a time. Its marker on
-    the timeline pulses softly. The list never scrolls to it by itself.
+- **While the agent works** ("Marking progress"), on the computer and the phone alike. Nothing floats over the
+  comments, and nothing lights up around the video: the one comment the agent is on is the one thing that stands out.
+  - **The comment it's on** (the task's `working`, else the comment it marked done whose edit is still being put in)
+    is first in To do (it moves up with the same slide as any card; the next one takes its place when the agent moves
+    on; the list never scrolls by itself). It alone has the Working dot, a soft light sweeping across its card, and
+    under its words one quiet italic line in the agent's words ("slowing the mask fade…", or "Putting it in v5…").
+    One comment at a time. Its marker on the timeline pulses softly.
+  - **The rest of the batch reads quietly.** A Working comment the agent isn't on has no dot and no word, only its
+    `→ v5` in the faint color ("Sent" without a target; screen readers still hear "Working"). It is still Working:
+    it counts in To do, and its waiting line shows as before.
+  - **Before the agent marks anything** (an agent that doesn't use `retake working`), no card sweeps. One quiet line
+    at the top of To do, in the list's flow, says "The agent is on it · 15 comments" (that list's Working comments of
+    the running task). It goes as soon as the agent marks a comment (working or done), fading while the cards under
+    it slide up.
   - A comment marked done fades and moves out of To do, and into Done, as its mark arrives: short, transform and
     opacity only, the cards under it sliding up into its place (nothing jumps). In Done it shows its change and "in
     v5", which plays v5 (its newest revision while it's live) at that comment's moment. A comment the report finishes
     without a mark moves the same way then.
-  - While a task of this video runs, a slow light in the record red travels around the edge of the video's frame
-    (part `agent-edge`, token `--agent-edge`, spec/theme.md): a moving segment of light, never a steady border, so it
-    can't be taken for recording. It is the live version's mark ("Versions versus drafts"). It stops when the task
-    ends, when every comment it still has to do waits on a question, while you record, and on an extension's version. With `prefers-reduced-motion` it is a faint, still red
-    hairline instead. While the editing computer is offline, the working comment's line says "Reconnecting to the
-    agent".
+  - While the editing computer is offline, the working comment's line says "Reconnecting to the agent".
   - Each comment's `target` (and `later`) comes from the notes API, and the page says it as "→ v8" (spec/notes.md,
     "Where a comment goes").
 - Per-comment actions are in the card's ⋯ menu: send one, retry, history and delete as the role allows (send one and
@@ -752,6 +766,7 @@ working note at a time, a mark taken back by `working` and by `retake ask`, a re
 report reconciling (a note never marked gets the report's words, a marked one its own unless the report has an entry,
 a marked note held by a question stays Question, a paused attempt finishes nothing); a web unit test of the list's
 states and moves; and an e2e test (Chromium on a computer and a phone, WebKit on a phone) where a fake agent marks
-notes working and done one by one with pauses: they move to Done one at a time, the sweep and the line are on the right
-card, there is no pill, and the edge light is on while it works. Provider adapters are tested with deterministic
-executables; live paid-provider execution is reported separately if it is not exercised.
+notes working and done one by one with pauses, out of time order: before its first mark only the quiet "The agent is
+on it" line shows; then the comment it's on is first in To do with the sweep and the line, the rest of the batch
+quiet, and they move to Done one at a time; there is no pill and no light around the video. Provider adapters are
+tested with deterministic executables; live paid-provider execution is reported separately if it is not exercised.

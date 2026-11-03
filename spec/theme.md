@@ -177,7 +177,6 @@ the toast, the comments toggle, "← Projects") use `--scrim` and `--on-scrim`, 
 | `--record` | `#ff453a` | The record dot, the red edge while recording |
 | `--record-text` | `#ff7a70` | "REC 0:12" and other words in the record red |
 | `--record-wait` | `#d9a441` | The record dot while the mic starts |
-| `--agent-edge` | `var(--record)` | The light that travels around the video's edge while the agent works on its comments (a faint still hairline with reduced motion) |
 | `--voice` | `#5ac8fa` | Your voice on the timeline and the waveform, progress dots |
 | `--voice-text` | `#d6eefa` | "To review" on the home |
 | `--flip` | `#ffcf6e` | The version button while comparing (C) |
@@ -193,7 +192,7 @@ the toast, the comments toggle, "← Projects") use `--scrim` and `--on-scrim`, 
 | `--danger` | `#ff8f86` | Delete, errors |
 | `--warn` | `#e2bd73` | A paused comment, offline warnings |
 | `--change` | `#9ccfb3` | What a done comment changed |
-| `--working-sweep` | `--overlay` at 5% | The light that sweeps across the comment the agent is working on |
+| `--working-sweep` | `--overlay` at 5% | The light that sweeps across the comment the agent is working on (the only one that stands out) |
 | `--scrollbar-thumb` | `--overlay` at 14% | Every scrollbar's thumb: the document, the chat, the comments, the folder tree, the home, Settings |
 | `--scrollbar-thumb-hover` | `--overlay` at 28% | The thumb under the pointer, where a page can style that (Safari on a computer, the comments' list); Chrome and Firefox shade `--scrollbar-thumb` themselves |
 | `--scrollbar-track` | `transparent` | Behind the thumb |
@@ -269,6 +268,8 @@ Versioning). Classes and ids are not part of the API and can change in any relea
 | `tip` | The tip over the timeline | review |
 | `version-picker` | The version menu's button, the one place to switch versions (spec/notes.md, "The version menu") | review |
 | `version-list` | The versions it lists | review |
+| `download` | The version menu's last entry: Download the version on screen as an MP4 (spec/api.md, "Download") | review |
+| `download-note` | The one quiet line under Download: why it failed, or the license note | review |
 | `pen-button` | The pen: one button, its pen in the colour you draw with (the eraser while that's on); it opens the pens | review |
 | `pens` | The pen's colours and the eraser, in what the pen button opens | review |
 | `pen` | One pen colour; `data-color` is its colour | review |
@@ -284,7 +285,6 @@ Versioning). Classes and ids are not part of the API and can change in any relea
 | `home-nav` | The back link and "Next video" over the video | review |
 | `review-back` | The back link over the video: "Project › video", back to the same place on the home | review |
 | `agent-visuals` | The agent's boxes, arrows and lines over the video | review |
-| `agent-edge` | The light that travels around the video's edge while the agent works on this video's comments | review |
 | `offline` | "The editing computer is offline" over the video | review |
 | `undo` | Undo (phone) | review |
 | `flip` | Compare two versions (phone) | review |
@@ -298,6 +298,8 @@ Versioning). Classes and ids are not part of the API and can change in any relea
 | `status` | A status: a dot and a word (in a comment, on a video card) | both |
 | `into` | Where a comment's edit goes (`→ v8`; `→ v8 · rendering`, then `in v8` once done), next to its status | review |
 | `doing` | The agent's line under the comment it's working on ("slowing the mask fade…"); that comment has `data-doing` | review |
+| `agent-on-it` | The one quiet line at the top of To do before the agent marks a comment ("The agent is on it · 15 comments") | review |
+| `comment-group` | On a live version, the quiet label over its batch's comments ("From v4") and over its own ("On v5") | review |
 | `reply-box` | The field to answer the agent | review |
 | `question-card` | The agent's question under its comment (thumbnail, choices) | review |
 | `progress` | The strip at the bottom of the comments (recording, transcribing, undo) | review |
@@ -348,6 +350,8 @@ Versioning). Classes and ids are not part of the API and can change in any relea
 | `settings-section` | A group of settings (Agent, Computers, Extensions, Theme) | home |
 | `settings-row` | One setting: its name, a line about it, and its control | home |
 | `settings-switch` | An on/off switch (an extension) | home |
+| `folder-picker` | The folder list that picks your videos folder (setup, settings) | setup, home |
+| `setup` | The first-run setup page of retake start (spec/setup.md) | setup |
 
 `data-state` and `data-status` values are part of the API too: a comment's and a marker's `data-state` is `open`,
 `working`, `question` or `done`; a video card's `data-status` is the home's status word (spec/home.md); the chat's

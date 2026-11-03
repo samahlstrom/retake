@@ -108,6 +108,12 @@ func TestParse(t *testing.T) {
 			}
 		}},
 		{name: "bad encoder", in: "[render]\nencoder = \"h265\"", wantErr: "render.encoder"},
+		{name: "downloads", in: "[server]\ndownloads = \"reviewers\"\n", check: func(t *testing.T, c Config) {
+			if c.Server.Downloads == nil || *c.Server.Downloads != "reviewers" {
+				t.Errorf("%+v", c.Server)
+			}
+		}},
+		{name: "bad downloads", in: "[server]\ndownloads = \"viewers\"", wantErr: "server.downloads"},
 		{name: "bad open_agents_in", in: `open_agents_in = "kitty"`, wantErr: "open_agents_in"},
 		{name: "bad open_in", in: "[[agents]]\nid = \"a\"\ncommand = [\"x\"]\nopen_in = \"window\"\n", wantErr: "open_in"},
 		{name: "open_in herdr needs interactive", in: "[[agents]]\nid = \"a\"\ncommand = [\"x\"]\nopen_in = \"herdr\"\n",
@@ -352,6 +358,8 @@ func TestSetTop(t *testing.T) {
 			after:  "default_agent = \"claude\"  # pick\nport = 9000\n"},
 		{name: "empty removes it", key: "fallback_agent", value: "",
 			before: "fallback_agent = \"codex\"\nport = 9000\n", after: "port = 9000\n"},
+		{name: "the videos folder", key: "folder", value: `~/My "Videos"`,
+			before: "port = 9000\n", after: "port = 9000\nfolder = \"~/My \\\"Videos\\\"\"\n"},
 		{name: "a table's own key is another key", key: "default_agent", value: "codex",
 			before: "[extensions.x]\ndefault_agent = \"y\"\n",
 			after:  "default_agent = \"codex\"\n\n[extensions.x]\ndefault_agent = \"y\"\n"},

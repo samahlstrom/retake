@@ -34,6 +34,7 @@ Settings come from the flags, else the environment, else `[server]` in config.to
 | SMTP | none (secrets) | `RETAKE_SMTP_URL` | `smtp_url` | none: links are printed |
 | Mail sender | `--smtp-from` | `RETAKE_SMTP_FROM` | `smtp_from` | `retake@<public host>` |
 | Relay cache size | `--relay-cache` | `RETAKE_RELAY_CACHE` | `relay_cache` | `20GB` (`0`: off) |
+| Who may download | none | `RETAKE_DOWNLOADS` | `downloads` | `everyone` (who can watch); `reviewers`, `off` (spec/api.md, "Download"). `retake open` and `retake share` read it too. |
 | Theme folder | `--theme` | `RETAKE_THEME` | none | `<data dir>/theme` (`none`: the built-in look; spec/theme.md) |
 
 - `RETAKE_SMTP_URL` is `smtp://user:password@host:587` (STARTTLS, required) or `smtps://user:password@host:465`

@@ -14,6 +14,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/samahlstrom/retake/internal/desktop"
 )
 
 // Where an agent runs (spec/automation.md, "Watching the agents"). In herdr and tmux it is an interactive session the
@@ -86,8 +88,11 @@ func (r *runner) openIn(p Profile) string {
 	return p.OpenIn
 }
 
+// findView finds herdr or tmux: the copy next to the retake binary, else the one on PATH.
+var findView = desktop.Find
+
 func (r *runner) newView(mode string, p Profile) (*view, error) {
-	bin, e := exec.LookPath(mode)
+	bin, _, e := findView(mode) // herdr that came with retake first (spec/setup.md)
 	if e != nil {
 		return nil, fmt.Errorf("%s isn't installed, but this agent is set to open in it", mode)
 	}

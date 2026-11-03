@@ -390,9 +390,10 @@ func TestInfoAndHistory(t *testing.T) {
 	if r.code != 200 || r.header.Get("Cache-Control") != "no-store" {
 		t.Fatalf("info: %d", r.code)
 	}
-	// Key order matches the legacy server: the current version's fields, then the rest; then role (spec/team.md).
+	// Key order matches the legacy server: the current version's fields, then the rest; then role (spec/team.md) and
+	// downloads (spec/api.md, "Download").
 	wantKeys := []string{"label", "n", "path", "name", "current", "duration", "fps", "width", "height",
-		"versions", "stem", "review_dir", "sessions", "history", "role"}
+		"versions", "stem", "review_dir", "sessions", "history", "role", "downloads"}
 	if got := keyOrder(t, r.body); strings.Join(got, ",") != strings.Join(wantKeys, ",") {
 		t.Errorf("keys = %v\nwant %v", got, wantKeys)
 	}

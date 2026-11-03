@@ -33,10 +33,12 @@ encoder = "auto"
 | `open_agents_in` | `"background"` | Where agents run. `background`: headless, you see the result. `herdr`: each video's agent is an interactive session in its own herdr workspace. `tmux`: a window per video in a tmux session `retake`. You can watch and type into those. [agents.md](agents.md#watch-and-talk-to-your-agents-herdr-tmux). |
 | `default_agent` | none (the first agent found) | The agent that edits when you press Send, by id (`claude`, `codex`, or an `[[agents]]` id). The worker offers it first, so a new project starts with it. The home's **Settings** writes it and sets it on every project. |
 | `fallback_agent` | none: pause and ask | The agent to switch to when the default agent's usage runs out. Settings writes it. |
+| `folder` | none: the setup page | Your videos folder (`~/Movies`): what `retake start` and the app open ([spec/setup.md](../spec/setup.md)). The setup page writes it the first time, and Settings when you change it. |
 
 The home's **Settings** (the gear at the bottom of the folder column, `retake open <folder>`) changes
-`default_agent`, `fallback_agent`, `open_agents_in` and `[extensions] enabled` in this file for you, keeping the rest
-of it, comments included, as it is.
+`default_agent`, `fallback_agent`, `open_agents_in`, `folder` (under `retake start`) and `[extensions] enabled` in this
+file for you, keeping the rest of it, comments included, as it is. The first-run setup page of `retake start` writes
+`folder`, `default_agent` and `open_agents_in` the same way.
 
 The port matters more than it seems: the browser remembers the microphone permission per origin, port included.
 
@@ -130,7 +132,11 @@ s3_insecure = false                      # RETAKE_S3_INSECURE=1, --s3-insecure: 
 smtp_url = ""                            # RETAKE_SMTP_URL: smtp://user:pass@host:587 (STARTTLS) or smtps://...:465
 smtp_from = ""                           # RETAKE_SMTP_FROM, --smtp-from: default retake@<public host>
 relay_cache = "20GB"                     # RETAKE_RELAY_CACHE, --relay-cache: relayed video kept on the server; "0" = none
+downloads = "everyone"                   # RETAKE_DOWNLOADS: who may download a version's MP4: everyone (who can watch), reviewers, off
 ```
+
+`downloads` also applies to `retake open` and `retake share`: with `"reviewers"` a view-only share link has no
+Download entry, with `"off"` nobody has.
 
 Without `public_url` any Host is accepted and the CLI makes links for `http://localhost:<port>`; set it in production.
 Forwarding headers (`X-Forwarded-For`, `-Proto`, `-Host`) are believed only from `trusted_proxies`.
@@ -155,9 +161,10 @@ See [theming.md](theming.md).
 | `XDG_CACHE_HOME` | retake, retake-edit | Where whisper models are downloaded (`retake/models`), and where retake-edit keeps `retake/ffmpeg-caps.json`. |
 | `RETAKE_WHISPER_THREADS` | retake | whisper.cpp's CPU threads. |
 | `RETAKE_DATA`, `RETAKE_LISTEN`, `RETAKE_PUBLIC_URL`, `RETAKE_TRUSTED_PROXIES`, `RETAKE_DATABASE_URL`, `RETAKE_S3_*`, `RETAKE_SMTP_URL`, `RETAKE_SMTP_FROM`, `RETAKE_RELAY_CACHE` | retake serve, user, project | The team server's settings ([server] above). |
+| `RETAKE_DOWNLOADS` | retake open, share, serve | Who may download a version's MP4 ([server] `downloads` above). |
 | `RETAKE_THEME` | retake open, share, serve, theme | The theme folder ([theming.md](theming.md)), or `none` for the built-in look. |
 | `RETAKE_TOKEN` | retake remote add | The agent token, when `--token` isn't given. |
-| `XDG_STATE_HOME` | retake push --remote | Where unfinished uploads are remembered (`retake/uploads.json`). |
+| `XDG_STATE_HOME` | retake push --remote, retake start | Where unfinished uploads are remembered (`retake/uploads.json`), and the running `retake start` (`retake/start.json`). |
 | `RETAKE_PROMPT`, `RETAKE_LANGUAGE` | your command engine | Set by retake for the program it runs. |
 | `RETAKE_CONTEXT`, `RETAKE_REPORT` | your agent | Set by the editing worker for the agent it runs in the background: the task's context file and where to write its report. |
 | `RETAKE_VIDEO`, `RETAKE_PROJECT`, `RETAKE_SINCE` | your `retake watch` command | Set by retake for the command it runs ([agents.md](agents.md#retake-watch)). |
@@ -178,6 +185,8 @@ See [theming.md](theming.md).
 | `<project>/.retake/worker/` | The editing worker's files: its identity and lock, each task's prompt, context, log and report (`tasks/`), the herdr or tmux session it uses (`view.json`), and each render's snapshot and video (`renders/`). Keep `renders/` for older versions to stay playable. |
 | `<timeline folder>/.retake/` | retake-edit's render cache and renders. |
 | `$XDG_CONFIG_HOME/retake/theme/` | Only `retake theme init`, when you run it. Nothing else ever writes your theme. |
+| `$XDG_STATE_HOME/retake/start.json` | `retake start` while it runs: its address, so a second start opens it. |
+| `~/Library/LaunchAgents/io.github.samahlstrom.retake.plist`, `$XDG_CONFIG_HOME/autostart/retake.desktop` | Only `retake autostart on` (the Mac app's Start at login). |
 | `$XDG_CACHE_HOME/retake/ffmpeg-caps.json` | retake-edit: what the ffmpeg in use can do here (zimg, which encoder `auto` picks), probed once a day per ffmpeg build. Safe to delete. On macOS `~/Library/Caches/retake/`, on Windows `%LOCALAPPDATA%\retake\`. |
 | `<data>/server.db`, `<data>/projects/<name>/`, `<data>/uploads/` | `retake serve`: the server store (SQLite), each project's workspace (a retake project folder), and uploads in progress. |
 
