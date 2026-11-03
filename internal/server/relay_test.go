@@ -348,6 +348,13 @@ func TestTheCacheKeepsItsSizeAndAWorkerOnlyChangesItsOwnFiles(t *testing.T) {
 		if r := h.get("/video/v1", map[string]string{"Range": rng}); r.code != 206 {
 			t.Fatal(r.code)
 		}
+		// The rest of a chunk goes to the cache after the browser has its part: wait for it (a slow Windows runner
+		// let the third request in before the second chunk had evicted the first).
+		for deadline := time.Now().Add(10 * time.Second); h.srv.opts.MediaCache.Busy() > 0; time.Sleep(5 * time.Millisecond) {
+			if time.Now().After(deadline) {
+				t.Fatal("the cache never finished a chunk")
+			}
+		}
 	}
 	if n := w.count(); n != 3 {
 		t.Fatalf("the first chunk was evicted by the second: 3 requests, not %d", n)

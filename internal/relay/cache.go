@@ -103,6 +103,14 @@ func (c *Cache) Used() int64 {
 	return c.used
 }
 
+// Busy is how many chunks are being fetched into the cache right now. A served chunk is committed after the browser
+// has its part, so tests wait for 0 before counting on what the cache holds.
+func (c *Cache) Busy() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return len(c.flights)
+}
+
 // validScope accepts a project name: one plain path element.
 func validScope(scope string) bool {
 	return scope != "" && !strings.HasPrefix(scope, ".") && !strings.ContainsAny(scope, "/\\\x00") && filepath.IsLocal(scope)
