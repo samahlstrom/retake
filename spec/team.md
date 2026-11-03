@@ -29,7 +29,8 @@ Permissions by route:
 | `/api/worker/*` | agent, by Bearer token only, local requests too (spec/automation.md) |
 | `GET /api/automation` | watch |
 | `POST /api/automation/tasks`, `POST /api/automation/tasks/<id>/answer` and `/retry` | record |
-| `POST /api/automation`, other `POST /api/automation/tasks/<id>/<action>` | owner only |
+| `POST /api/automation`, `POST /api/automation/agent`, other `POST /api/automation/tasks/<id>/<action>` | owner only |
+| `GET` and `POST /api/shares`, `POST /api/shares/<id>/revoke` ("Sharing a video from the page") | owner only |
 | `GET /s/<token>` | nothing: it is how a token arrives |
 
 A role without the permission gets 403 `{"error":"not allowed"}`.
@@ -189,6 +190,7 @@ Config additions:
 [share]
 cloudflared = ""   # the cloudflared binary; "" = $PATH
 tailscale = ""     # the tailscale binary; "" = $PATH
+tunnel = ""        # "off": a link made in the page never starts a tunnel (it uses the local network); "" = it may
 ```
 
 ## Deferred to milestone 3b
@@ -205,9 +207,63 @@ The list as it stood:
 - Several projects on one server, with per-project share paths and cookies.
 - A named, fixed Cloudflare tunnel (`cloudflared tunnel run`), and an audit log of who used which token.
 
-### Share controls in the review UI
+## Sharing a video from the page
 
-Owners can create viewer/reviewer links from the player, without using the CLI. Links last seven days. A folder link opens the whole folder or one video (`video:<name>`, spec/home.md "Share scopes"); the token's optional `scope` is enforced for every request. Links made for the removed project organization (`project:`/`group:` scopes) are refused with 410 and a page that says why. Older unscoped tokens retain their existing access. Tokens remain hashed and revocable. UI-created tunnels live with the serving process and stop when it stops. A link is reported ready only after the public host is available. No email or invitation is sent automatically.
+The owner shares one video without the CLI: **Share…** in the video's ⋯ (on its card on the home, spec/home.md, and on
+the review page, spec/notes.md) opens one small sheet:
+
+- **Who it's for**: an optional name. It becomes the link's `label`, so that person's comments carry it.
+- **Access**: *Can comment* (`reviewer`, the default) or *Can watch* (`viewer`).
+- **Expires**: 7 days (the default), 30 days or never.
+- **Create link** shows the link with **Copy**. Under it are the video's links that still work (who, access, until
+  when), each with **Revoke**. A token is shown once, so an earlier link can't be shown again, only revoked.
+
+A link made here opens **that video only**. Its token is kept in the video's own store, so on a folder's address it
+counts as `video:<name>` (spec/home.md, "Share scopes"): the home lists only that video, every other video's routes
+answer 403, and `/s/<token>` bounces straight to the video's page. A folder's links (`retake share <folder>`) keep
+opening the whole folder, and `retake share list <video>` lists the links made here.
+
+**Who.** The owner only: locally, the person at the computer; on the team server, a project's owner, or an admin (the
+owner of every project). Approvers, reviewers and viewers can't make, list or revoke links: a link hands out access to
+the video, and that stays with its owner. No email or invitation is sent.
+
+Routes, on the video (`/p/<name>/` in a folder and on the team server, `/` for `retake open <video>`):
+
+| Method | Path | Needs | Does |
+|---|---|---|---|
+| GET | `api/shares` | owner | `{"links": [{"id", "role", "label", "created", "expires"}], "reach": {"kind", "host", "note"}}`: the video's links that work now (not revoked, not expired; agent tokens left out), newest first, and how a new link would reach people ("How a link reaches people"), without starting anything. |
+| POST | `api/shares` | owner | `{"label"?, "role": "reviewer"\|"viewer", "expires": "7d"\|"30d"\|"never"}`: 201 `{"url", "link", "reach"}`. Any other role or expiry is 400. It answers once the address works (it may start a tunnel: at most 60 s); when no address can be had it is 503 `{"error"}` and no token is kept. |
+| POST | `api/shares/<id>/revoke` | owner | The link stops working at once: `{"ok": true}`. 404 for an id that isn't one of the video's links. |
+
+`label` is trimmed, at most 80 characters, without control characters (400 otherwise).
+
+### How a link reaches people
+
+`url` is `<base>s/<token>`, and the base is, in this order:
+
+1. **Hosted** (the team server): its own public address, `https://<host>/p/<name>/`. `reach.kind` is `hosted`.
+2. **A tunnel that already runs for this server**: a host in the folder's (or, for `retake open <video>`, the video's)
+   hosts table whose process is alive (a running `retake share` of the same folder or video, which keeps the server
+   up), else the first `--allow-host` name: `https://<host>/`. Kind `tunnel`.
+3. **A tunnel started now**, when it's allowed: the Cloudflare quick tunnel `retake share --tunnel cloudflare` runs
+   (`cloudflared tunnel --no-autoupdate --url http://127.0.0.1:<port>`; the binary is `[share] cloudflared`, else
+   `cloudflared` on `$PATH`). The server starts it for the first link that needs one, waits for its hostname, adds the
+   hostname to the folder's hosts table with its own pid, and keeps it while it runs. It stops (and its host row goes)
+   when the server stops; a quick tunnel's address is new each time, so a link made through it works again only
+   through the next tunnel on the same address, as with `retake share`. Kind `tunnel`. It's allowed unless config.toml
+   says `[share] tunnel = "off"`; Settings switches it (spec/home.md, "Settings").
+4. **Otherwise the local network**: `http://<this computer's local network address>:<port>/`, kind `lan`, and
+   `reach.note` says how to reach it from outside in one plain line: "Only people on your network can open it. To
+   share it with anyone, install cloudflared." (cloudflared missing) or "… turn on sharing through a tunnel in
+   Settings." (`tunnel = "off"`). With no local network address either, POST is 503.
+
+`reach` in `GET api/shares` says what a POST would do: `kind`, `host` (the host it would use; "" when a tunnel would be
+started), `note` ("" for hosted and tunnel).
+
+**On the local network.** The first `lan` link makes the server also listen on `<that address>:<port>` until it stops.
+That `Host` is a shared host, like a tunnel's: every request there needs a token, its writes must come from
+`http://<that address>:<port>`, and its share cookie is set without `Secure` (plain HTTP; a phone's browser drops a
+`Secure` cookie from an `http://` address). Nothing else changes: `127.0.0.1` stays the owner's.
 
 Comment deletion and restoration (`POST /api/notes/<id>/delete|restore`) require approve permission, like reopening
 feedback. Viewers, reviewer-only links and editing agents cannot delete other people's review history.

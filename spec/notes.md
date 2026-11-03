@@ -273,6 +273,21 @@ The upper lane first displays recorded audio coverage. When a clip’s transcrib
 
 Drawings keep a separate lower lane and do not turn into comment markers. Notes expose their originating `take`, `seg`, and `drawings` (pen colors) so historical annotations can remain represented below the current video. Drawing-only notes appear below, while comments with attached drawings occupy both lanes. Hover previews and click-to-seek remain available.
 
+## The video's ⋯
+
+The review page has one ⋯ for the video itself (part `video-menu`): at the top left of the video, just right of
+"← Project › video" (spec/home.md; alone there outside a home), a quiet round button on the same scrim as the back
+link, 44 px on a phone. It fades with the back link while composing on a phone ("Typing on a phone"). Its items, the
+same as a home card's ⋯ (spec/home.md, "A video's ⋯"), each only where it can work:
+
+1. **Share…**: the share sheet (spec/team.md, "Sharing a video from the page"). The owner.
+2. **Agent for this video ▸**: the agents the editing computer offers, a check on the one this video uses, and **Use
+   my default (<name>)** (spec/automation.md, "An agent for one video"). The owner, while a computer offers an agent.
+3. **Download**: the version menu's Download, when the server offers it (a hook until then).
+
+No ⋯ when nothing applies (a viewer's or reviewer's link today). Nothing about the agent shows on or near Send: the
+video's agent is only in this menu (and the card's), checked.
+
 ## Deleting a comment
 
 Owners and approvers can choose **Delete comment** on a saved comment, including an empty or drawing-only

@@ -97,7 +97,11 @@ and API (spec/api.md, spec/notes.md, spec/bridge.md) under `/p/<name>/`, for its
 | GET | `/api/home` | watch | The projects (below). |
 | GET | `/api/ping` | any role | `{"ok": true}` |
 | GET/HEAD | `/assets/*` and other page files | watch | The page's static files, as at `/p/<name>/`. |
-| GET | `/s/<token>` | nothing | A share link for the whole home (below). |
+| GET | `/s/<token>` | nothing | A share link: the whole home, or one video's page for a video's link (below). |
+| GET | `/api/videos/<name>/trash` | owner | What Move to Trash would move ("A video's ⋯"). |
+| POST | `/api/videos/<name>/trash` | owner | Moves the video's folder to the OS trash. |
+| POST | `/api/trash/<id>/restore` | owner | Puts it back (Undo). |
+| POST | `/api/videos/<name>/reveal` | owner | Shows the video's folder in the computer's file manager. |
 | GET | `/p/<name>` | as below | 308 to `/p/<name>/` |
 | any | `/p/<name>/...` | spec/team.md's table | The project's review page and API, exactly as `retake open <video>` serves them at `/`. |
 | GET | `/favicon.ico` | nothing | 204 |
@@ -244,10 +248,75 @@ nothing more than the videos.
   a fixed box, so nothing moves when it loads), the video's name, the newest version's label and length, and the
   status chip (plus the streaming chip; "Has questions" when the agent waits for an answer). In a folder's view a
   card also names its project when that says more than the video's name.
+- **A card's ⋯** (part `video-menu`) at the right of its name: there on hover or focus on a computer, always there but
+  quiet on a phone ("A video's ⋯" below). Opening it doesn't open the video.
 - With no videos: "No videos here yet", and what a video's file name looks like.
 - It reads `api/home` on load and every 15 s while visible (which also keeps an `--idle-exit` server up).
 - A viewer's link sees the same home; their review pages are view only (spec/team.md).
 - Test hook: `window.__home = { loaded, projects, selected }` (`selected`: the selected path, "" for the top).
+
+## A video's ⋯
+
+Every card has a ⋯ with what you do to a video now and then, in this order; an item shows only where it can work, and
+the ⋯ doesn't show at all when nothing can:
+
+1. **Share…**: the sheet of spec/team.md, "Sharing a video from the page". The owner.
+2. **Agent for this video ▸**: the agents the editing computer offers, a check on the one this video uses, and **Use my
+   default (Claude Code)** (the default agent's name; checked when the video has no agent of its own). Picking one
+   sets the video's agent (spec/automation.md, "An agent for one video"). The owner, while a computer offers an agent.
+3. **Download**: the newest version as a file, when the server can make one (a hook for the version menu's Download;
+   the card has none until then).
+4. **Show in folder**: the video's folder in the file manager of the computer Retake runs on. The owner of a local
+   home only (`retake open <folder>`, `retake start`); never on the team server or through a share link.
+5. **Move to Trash…**: the owner of a local home only, set apart, in the danger color.
+
+The review page's ⋯ has the same Share…, Agent for this video and Download (spec/notes.md, "The video's ⋯").
+
+### Move to Trash
+
+It moves the video's folder (its versions, `.retake/` with its comments, takes, agent work and links, and everything
+else in it) to the operating system's trash. Retake never deletes a video for real.
+
+- **What goes.** The video's folder (`path`) when it is a video's folder (its card's `project` isn't its `path`).
+  A video whose files share a folder with other videos (a project's own video), or the opened folder itself, can't
+  go: the menu shows Move to Trash… disabled, with the reason as its title ("Its folder holds other videos too").
+- **Confirm in the page.** A small dialog names exactly what goes, before anything moves: "Move item-shop to the
+  Trash?", the folder (`~/Videos/deadlock/item-shop`), its size and its number of versions ("6 versions · 2.4 GB"),
+  then **Cancel** (focused) and **Move to Trash**. No browser dialog.
+- **Undo.** After the move the home shows a toast for 8 seconds, "Moved to Trash · Undo"; Undo puts the folder back
+  where it was, with the same name and address. After that it is in the OS trash, and restoring it there brings it
+  back too (the home finds it on its next scan).
+- **While the agent works** on the video (a task running or stopping) it's refused (409, "The agent is working on
+  this video. Stop it first.").
+
+`GET /api/videos/<name>/trash` answers `{"name", "title", "path", "size", "files", "versions", "ok", "why"}`: the
+folder (`~/…` under the home folder), its size in bytes and its number of files (symbolic links not followed; at most
+200 000 files are counted, after which `size` is at least that), the video's versions, and whether it can go (`ok`)
+or why not (`why`, one short sentence). `POST` moves it: `{"id", "path"}`, where `id` names the move for Undo; 409
+with `{"error": why}` when it can't go. `POST /api/trash/<id>/restore` moves it back: `{"ok": true, "name"}` (its name,
+the same as before unless a new video took it meanwhile). An unknown `id`, or one whose folder left the trash, is 404;
+a folder at the old place since is 409 and nothing moves. All four are owner only and origin-checked, and only on
+`retake open <folder>` (the team server has none: 404).
+
+The project's server and store are closed before the folder moves, so nothing writes into it on its way.
+
+**Where the trash is.**
+
+- **Linux and other freedesktop systems**: the home trash, `$XDG_DATA_HOME/Trash` (`~/.local/share/Trash`), when the
+  folder is on the same disk; else the disk's own `<mount point>/.Trash-<uid>`. The folder goes to `files/<name>` and
+  an `info/<name>.trashinfo` (`[Trash Info]`, `Path=` the folder's absolute path, URL-escaped, `DeletionDate=` the
+  local time, `YYYY-MM-DDThh:mm:ss`) is written first, so the file manager's Restore puts it back. `<name>` is the
+  folder's name, else `<name>.2`, `<name>.3`, … when one is there.
+- **macOS**: `~/.Trash/<name>` (`<name> 2`, … when taken). Finder's Put Back doesn't know it (only Finder writes its
+  records); Undo does.
+- Nowhere else, and never a copy: a folder the trash can't take by renaming it (another disk without a trash of its
+  own) is 409 "Can't move it to the Trash from this disk" and stays.
+
+### Show in folder
+
+`POST /api/videos/<name>/reveal` opens the video's folder in the file manager on the computer Retake runs on:
+`xdg-open <folder>` on Linux, `open -R <folder>` on macOS, `explorer /select,<folder>` on Windows. `{"ok": true}`, or
+500 `{"error"}` when the opener can't run. With `RETAKE_REVEAL` set, that program is run with the folder instead (tests).
 
 ## Settings
 
@@ -259,7 +328,8 @@ routes refuse anyone else (403). They replace the agent menu the review page had
   *If its usage runs out*: "Pause and ask me" (the default) or "Switch to <another agent>". Saving them sets every
   project's editing config (`api/automation`'s `config.agent` and `config.fallback`) where that project's computer
   offers the agent; a project no computer polled yet takes the default at its first poll (the worker offers it first).
-  A new default agent that was the fallback leaves no fallback.
+  A new default agent that was the fallback leaves no fallback. One quiet line under them says how else an agent is chosen: "A video's ⋯
+  can give it its own agent, and holding Send picks one for one send."
 - **Where agents run**: background, herdr or tmux (spec/automation.md, "Watching the agents"). Locally it's
   `open_agents_in`, used by agents started after retake restarts. On the team server it's each computer's own setting,
   shown read-only.
@@ -268,6 +338,11 @@ routes refuse anyone else (403). They replace the agent menu the review page had
 - **Extensions**: the installed ones, each with an on/off switch (locally `[extensions] enabled`, as `retake ext
   enable` does, with a project extension's pin). A change applies when retake restarts, and the row says so. On the
   team server they're the server's own (`--extensions`), read-only.
+- **Sharing** (locally): how a link made in the page reaches people (spec/team.md, "How a link reaches people"):
+  *Through a Cloudflare tunnel* (the default) or *On my network only* (`[share] tunnel = "off"`). When cloudflared
+  isn't found, one line says so with the command that installs it (`brew install cloudflared` on macOS; on Linux a
+  download of Cloudflare's own binary into `~/.local/bin`) and **Copy**. Not on the team server (its links use its own
+  address).
 - **Theme**: the theme folder in effect, its name when a theme is there, else that `retake theme init` makes one
   (read-only).
 - **Your videos** (spec/setup.md): the folder served. Under `retake start` it can be changed, and the home switches to
@@ -292,12 +367,13 @@ At the home's root (`retake open <folder>`; the team server's `/api/settings`), 
 - `folder` is the videos folder (`~/…`), `folder_editable` whether a `folder` change is taken (`retake start`), and
   `test` whether `POST api/settings/test {"agent"}` runs an agent's test (spec/setup.md, "The agent test").
   `GET api/settings/folders?path=` is the setup page's folder list. All three are local only.
-- `POST` takes any of `{"agent", "fallback", "open_in", "extensions": {"<id>": true|false}, "folder"}` and answers like `GET`.
+- `sharing` (local only): `{"tunnel": "cloudflare"|"off", "cloudflared": true|false, "install": "<command>"}`.
+- `POST` takes any of `{"agent", "fallback", "open_in", "extensions": {"<id>": true|false}, "folder", "share_tunnel": "cloudflare"|"off"}` and answers like `GET`.
   Everything is checked before anything is written: an unknown key, an agent no computer offers, a fallback that is
   the default agent, an `open_in` other than background, herdr or tmux, or an extension that isn't installed is 400
   with `{"error"}` and changes nothing. On the team server `open_in` and `extensions` are 400 (not its settings).
 - **Locally** the change goes to `$XDG_CONFIG_HOME/retake/config.toml` (`default_agent`, `fallback_agent`,
-  `open_agents_in`, `[extensions] enabled`; docs/config.md), line by line: the rest of the file, comments included,
+  `open_agents_in`, `[extensions] enabled`, `[share] tunnel`; docs/config.md), line by line: the rest of the file, comments included,
   stays as it is, and a default value removes its line. **Hosted** the agent and fallback are kept in the server's
   database (the `settings/agents` setting).
 
@@ -363,6 +439,9 @@ One link for the whole home, as `retake share <video>` makes one for a review (s
   the next ones: its `GET /api/home` names the folder), or starts one like `open --no-open --idle-exit 0`. It starts
   the tunnel, adds the host to the folder's hosts table, makes a token and prints `https://<host>/s/<token>` with a QR
   code. The link sets `retake_share` (`Path=/`) and bounces to `/`, the home.
+- A video's link (its token in the video's own store: `retake share <video>`, or Share… in the page, spec/team.md
+  "Sharing a video from the page") opened on the folder's address sets the same cookie and bounces to that video's
+  page, `/p/<name>/`, not to the home.
 - `share list`, `share revoke` and `token create` take the folder in place of a video and work on the folder's store.
 
 ## Tests
@@ -374,10 +453,18 @@ One link for the whole home, as `retake share <video>` makes one for a review (s
   `/api/home` (status, thumbnail URL, newest version, order, the tree, local and hosted alike), `retake connect`
   sending each video's path, `api/poster` and unwatch, share tokens scoped to the folder or to one video, and retired
   `project:`/`group:` links refused with 410 and a page (the migration that drops the organization keeps their rows).
-- Web unit tests: the tree's rows (opened, filtered, dots), the hash, and the remembered state.
+- Go: Move to Trash on a scratch folder with a scratch `XDG_DATA_HOME` (the folder and its info file in the trash,
+  Undo putting it back, a taken name, a video that can't go, an agent at work), a video's link bouncing to its page,
+  and Show in folder through `RETAKE_REVEAL`.
+- Web unit tests: the tree's rows (opened, filtered, dots), the hash, and the remembered state. A video's ⋯: which items show for whom, the size and
+  versions line, the agent list and its check.
 - e2e `e2e/tests/12-home.spec.ts`: a folder with three generated projects. The home lists them with thumbnails and
   statuses; a card opens its review page with the poster; a take and Done make it Reviewed; "Next video" and `>` go
   to the next one to review; the home and the controls work on a phone.
+- e2e `e2e/tests/24-menus.spec.ts` (Chromium on a computer and an iPhone 15) and `24-menus-webkit.spec.ts` (WebKit
+  on an iPhone 15): a card's ⋯ (on hover on a computer, always on a phone), Share… making a link that a fresh browser
+  opens to that video only and comments on with the link's name, Move to Trash with its confirm and Undo, and an agent
+  for one video.
 - e2e `e2e/tests/16-nav.spec.ts`: a nested folder. The tree opens, a project shows its videos, a video opens, its
   back link returns to the same place, a hash link opens it, and on a phone the drawer does the same.
 
