@@ -45,15 +45,27 @@ func (c *clock) add(d time.Duration) {
 }
 
 type harness struct {
-	t    *testing.T
-	h    *Handler
-	ts   *httptest.Server
-	clk  *clock
-	busy *atomic.Int64 // requests the server is still handling
+	t       *testing.T
+	h       *Handler
+	ts      *httptest.Server
+	clk     *clock
+	busy    *atomic.Int64 // requests the server is still handling
+	patched *atomic.Int64 // PATCH requests the server has finished handling
 }
 
 // settle waits for the requests the server is still handling: a client that gave up on a cut PATCH returns before the
 // server has written what reached it.
+// settlePatches waits until the server has finished n PATCH requests: a cut PATCH can reach the handler after the
+// client has already given up, so busy alone can read 0 too early.
+func (h *harness) settlePatches(n int) {
+	h.t.Helper()
+	for deadline := time.Now().Add(10 * time.Second); h.patched.Load() < int64(n) || h.busy.Load() > 0; time.Sleep(5 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			h.t.Fatalf("the server finished %d of %d PATCHes", h.patched.Load(), n)
+		}
+	}
+}
+
 func (h *harness) settle() {
 	for h.busy.Load() > 0 {
 		time.Sleep(5 * time.Millisecond)
@@ -66,10 +78,13 @@ func newHarness(t *testing.T) *harness {
 	t.Helper()
 	clk := &clock{t: time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC)}
 	h := &Handler{Dir: filepath.Join(t.TempDir(), "uploads"), Now: clk.now}
-	busy := &atomic.Int64{}
+	busy, patched := &atomic.Int64{}, &atomic.Int64{}
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		busy.Add(1)
 		defer busy.Add(-1)
+		if r.Method == http.MethodPatch {
+			defer patched.Add(1)
+		}
 		rest, ok := strings.CutPrefix(r.URL.Path, base)
 		if !ok || rest != "" && !strings.HasPrefix(rest, "/") {
 			http.NotFound(w, r)
@@ -82,7 +97,7 @@ func newHarness(t *testing.T) *harness {
 		h.Serve(w, r, base, owner, strings.TrimPrefix(rest, "/"))
 	}))
 	t.Cleanup(ts.Close)
-	return &harness{t: t, h: h, ts: ts, clk: clk, busy: busy}
+	return &harness{t: t, h: h, ts: ts, clk: clk, busy: busy, patched: patched}
 }
 
 func sum(b []byte) string {
@@ -652,7 +667,7 @@ func TestClientResumesAcrossRuns(t *testing.T) {
 	if _, err := c.Upload(context.Background(), h.ts.URL+base, path, meta, ""); err == nil || saved == "" {
 		t.Fatalf("first run: %v, saved %q", err, saved)
 	}
-	h.settle()
+	h.settlePatches(len(ct.offsets))
 	have := h.offset(strings.TrimPrefix(saved, h.ts.URL))
 	if have <= 0 {
 		t.Fatalf("the server has %d bytes after the first run", have)
