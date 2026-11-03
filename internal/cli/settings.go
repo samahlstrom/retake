@@ -18,6 +18,8 @@ func localSettings(env Env, cfg config.Config, themeDir string, flagDirs []strin
 		ConfigPath: path,
 		ThemeDir:   themeDir,
 		Home:       env.Getenv("HOME"),
+		Folder:     folder,
+		Try:        tryAgent(env, cfg),
 		Agents: func() []project.AgentProfile {
 			var out []project.AgentProfile
 			for _, p := range agentProfiles(env, reloadConfig(env, cfg)) {

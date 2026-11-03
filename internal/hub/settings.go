@@ -1,6 +1,7 @@
 package hub
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,10 +11,13 @@ import (
 
 	"github.com/samahlstrom/retake/internal/config"
 	"github.com/samahlstrom/retake/internal/ext"
+	"github.com/samahlstrom/retake/internal/family"
 	"github.com/samahlstrom/retake/internal/home"
 	"github.com/samahlstrom/retake/internal/project"
+	"github.com/samahlstrom/retake/internal/setup"
 	"github.com/samahlstrom/retake/internal/team"
 	"github.com/samahlstrom/retake/internal/theme"
+	"github.com/samahlstrom/retake/internal/worker"
 )
 
 // The settings page (spec/home.md, "Settings"): GET and POST api/settings at the home, for the owner only. Locally
@@ -30,6 +34,12 @@ type LocalSettings struct {
 	Extensions func() []*ext.Ext
 	// Home is the user's home folder, which paths show as ~ ("" = none).
 	Home string
+	// Folder is the videos folder served. SetFolder makes retake start serve another one (spec/setup.md); nil under
+	// retake open <folder>, where the folder is its argument (read-only).
+	Folder    string
+	SetFolder func(dir string) error
+	// Try runs an agent's test (worker.TryAgent); nil: no Test.
+	Try func(ctx context.Context, id string) worker.TryResult
 }
 
 // SettingsView is GET api/settings.
@@ -48,6 +58,11 @@ type SettingsView struct {
 	Theme              SettingsTheme  `json:"theme"`
 	Config             string         `json:"config,omitempty"` // the config file (local)
 	Machines           []home.Machine `json:"machines"`
+	// Folder is the videos folder (local; spec/setup.md). FolderEditable: retake start can switch it.
+	Folder         string `json:"folder,omitempty"`
+	FolderEditable bool   `json:"folder_editable"`
+	// Test says the agents can be tested here (POST api/settings/test).
+	Test bool `json:"test"`
 }
 
 // SettingsExt is one extension on the settings page.
@@ -72,6 +87,7 @@ type settingsChange struct {
 	Fallback   *string         `json:"fallback"`
 	OpenIn     *string         `json:"open_in"`
 	Extensions map[string]bool `json:"extensions"`
+	Folder     *string         `json:"folder"`
 }
 
 // readChange decodes a POST body: JSON, no unknown keys, at most 16 KiB.
@@ -80,7 +96,7 @@ func readChange(w http.ResponseWriter, r *http.Request) (settingsChange, error) 
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&c); err != nil {
-		return c, errors.New(`give {"agent", "fallback", "open_in", "extensions": {"<id>": true|false}}`)
+		return c, errors.New(`give {"agent", "fallback", "open_in", "extensions": {"<id>": true|false}, "folder"}`)
 	}
 	if dec.More() {
 		return c, errors.New("one JSON object")
@@ -176,8 +192,9 @@ func tilde(p, homeDir string) string {
 
 // --- retake open <folder>
 
-// settingsRoute is GET and POST api/settings of retake open <folder>: the owner's own config file.
-func (f *Folder) settingsRoute(w http.ResponseWriter, r *http.Request, role team.Role) {
+// settingsRoute is GET and POST api/settings of retake open <folder>: the owner's own config file. sub is "",
+// "test" (POST: an agent's test) or "folders" (GET: the folder list of spec/setup.md).
+func (f *Folder) settingsRoute(w http.ResponseWriter, r *http.Request, role team.Role, sub string) {
 	ls := f.opts.Settings
 	switch {
 	case role != team.Owner:
@@ -185,6 +202,15 @@ func (f *Folder) settingsRoute(w http.ResponseWriter, r *http.Request, role team
 		return
 	case ls == nil:
 		writeJSON(w, r, http.StatusNotFound, map[string]string{"error": "no settings here"})
+		return
+	case sub == "test" && r.Method == http.MethodPost && ls.Try != nil:
+		setup.TryRoute(w, r, profilesOf(f.localAgents(ls)), ls.Try, f.trying, &f.tryMu)
+		return
+	case sub == "folders" && (r.Method == http.MethodGet || r.Method == http.MethodHead):
+		setup.FoldersRoute(w, r, ls.Home)
+		return
+	case sub != "":
+		writeJSON(w, r, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
 	case r.Method == http.MethodPost:
 		if err := f.changeSettings(w, r, ls); err != nil {
@@ -242,7 +268,8 @@ func (f *Folder) settingsView(ls *LocalSettings) (SettingsView, error) {
 	v := SettingsView{Agents: f.localAgents(ls), Agent: str(c.DefaultAgent), Fallback: str(c.FallbackAgent),
 		OpenIn: str(c.OpenAgentsIn), OpenInEditable: ls.ConfigPath != "", ExtensionsEditable: ls.ConfigPath != "",
 		Theme: themeInfo(ls.ThemeDir, ls.Home), Config: tilde(ls.ConfigPath, ls.Home), Machines: f.machines(),
-		Extensions: []SettingsExt{}}
+		Extensions: []SettingsExt{}, Folder: tilde(f.opts.Dir, ls.Home), FolderEditable: ls.SetFolder != nil,
+		Test: ls.Try != nil}
 	if v.OpenIn == "" {
 		v.OpenIn = config.OpenBackground
 	}
@@ -301,6 +328,15 @@ func (f *Folder) changeSettings(w http.ResponseWriter, r *http.Request, ls *Loca
 			return fmt.Errorf("no extension %q is installed", id)
 		}
 	}
+	folder := ""
+	if c.Folder != nil {
+		if ls.SetFolder == nil {
+			return errors.New("this folder was opened with retake open; the videos folder is retake start's")
+		}
+		if folder, err = setup.CheckFolder(*c.Folder, ls.Home, false); err != nil {
+			return err
+		}
+	}
 	// Valid: write it.
 	if c.Agent != nil || c.Fallback != nil {
 		if err := config.SetTop(ls.ConfigPath, "default_agent", agent); err != nil {
@@ -333,6 +369,11 @@ func (f *Folder) changeSettings(w http.ResponseWriter, r *http.Request, ls *Loca
 			return err
 		}
 	}
+	if folder != "" {
+		if err := config.SetTop(ls.ConfigPath, "folder", tilde(folder, ls.Home)); err != nil {
+			return err
+		}
+	}
 	if c.Agent != nil || c.Fallback != nil {
 		for _, fd := range f.rescan(false) {
 			fp := f.projectOf(fd)
@@ -346,7 +387,20 @@ func (f *Folder) changeSettings(w http.ResponseWriter, r *http.Request, ls *Loca
 			}
 		}
 	}
+	if folder != "" && !family.SamePath(folder, f.opts.Dir) {
+		// retake start serves the new folder once this answer is out (the page reloads to it).
+		go func() { _ = ls.SetFolder(folder) }()
+	}
 	return nil
+}
+
+// profilesOf are the agents as profiles (their id and name).
+func profilesOf(as []home.MachineAgent) []project.AgentProfile {
+	out := make([]project.AgentProfile, 0, len(as))
+	for _, a := range as {
+		out = append(out, project.AgentProfile{ID: a.ID, Name: a.Name})
+	}
+	return out
 }
 
 // --- the team server
@@ -401,6 +455,9 @@ func (h *Hub) settingsRoute(w http.ResponseWriter, r *http.Request, s *session) 
 		c, err := readChange(w, r)
 		if err == nil && c.OpenIn != nil {
 			err = errors.New("where agents run is each computer's own setting (open_agents_in in its config.toml)")
+		}
+		if err == nil && c.Folder != nil {
+			err = errors.New("the videos folder is each computer's own setting")
 		}
 		if err == nil && len(c.Extensions) > 0 {
 			err = errors.New("the server's extensions are set where it runs (--extensions, RETAKE_EXTENSIONS)")

@@ -7,11 +7,13 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"runtime/debug"
 	"strings"
 	"time"
 
 	"github.com/samahlstrom/retake/internal/config"
+	"github.com/samahlstrom/retake/internal/desktop"
 	"github.com/samahlstrom/retake/internal/family"
 	"github.com/samahlstrom/retake/internal/jobs"
 	"github.com/samahlstrom/retake/internal/server"
@@ -47,6 +49,20 @@ type Env struct {
 	Agents func() []worker.Profile
 	// ConnectEvery is how often `retake connect` looks for new projects; 0 = DefaultConnectEvery.
 	ConnectEvery time.Duration
+	// RefreshPath reads the login shell's PATH into this process's (retake start --app, the setup page's Check
+	// again); nil = desktop.RefreshPath. Tests give a no-op.
+	RefreshPath func(context.Context)
+	// Find finds herdr, tmux and ffprobe for the setup page: next to retake, then on PATH; nil = desktop.Find.
+	Find func(name string) (path string, bundled bool, err error)
+	// GOOS is the operating system the app parts act for; "" = runtime.GOOS.
+	GOOS string
+}
+
+func (e Env) goos() string {
+	if e.GOOS != "" {
+		return e.GOOS
+	}
+	return runtime.GOOS
 }
 
 func (e Env) withDefaults() Env {
@@ -65,12 +81,28 @@ func (e Env) withDefaults() Env {
 	if e.OpenURL == nil {
 		e.OpenURL = openURL
 	}
+	if e.RefreshPath == nil {
+		e.RefreshPath = func(ctx context.Context) {
+			if _, err := desktop.RefreshPath(ctx); err != nil {
+				_, _ = fmt.Fprintf(e.Stderr, "retake: reading your shell's PATH: %v\n", err)
+			}
+		}
+	}
+	if e.Find == nil {
+		e.Find = desktop.Find
+	}
 	return e
 }
 
 const usage = `retake: review a video by talking over it. Press R, talk and draw, press R again.
 
 usage:
+  retake start [--port N] [--no-open] [--idle-exit MIN] [--app]
+      open your videos folder (folder in config.toml); the first time, a setup page in the browser picks it, your
+      agent and where it works (spec/setup.md). One at a time: a second start opens the first one's page.
+      --app: started by the app (reads your login shell's PATH; on a Mac it never idle-exits)
+  retake autostart [on|off]
+      start Retake when you log in (macOS LaunchAgent, Linux autostart entry); prints on or off
   retake open <video> [--versions a.mp4 b.mp4 ...] [--port N] [--no-open] [--idle-exit MIN] [--ui-dir DIR] [--theme DIR]
               [--ext DIR]... [--allow-host H]... [--verbose]
       serve the review page for <video> and its version family (clip_v5, v6/clip_v6, ...)
@@ -209,6 +241,10 @@ func Main(ctx context.Context, args []string, env Env) int {
 	switch args[0] {
 	case "open":
 		return openCmd(ctx, args[1:], env)
+	case "start":
+		return startCmd(ctx, args[1:], env)
+	case "autostart":
+		return autostartCmd(args[1:], env)
 	case "sessions":
 		return sessionsCmd(args[1:], env)
 	case "notes":
