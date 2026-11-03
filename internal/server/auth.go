@@ -102,6 +102,9 @@ func permFor(method string, parts []string) team.Perm {
 	if len(parts) >= 2 && parts[0] == "api" && parts[1] == "worker" {
 		return team.PermAgent
 	}
+	if len(parts) >= 2 && parts[0] == "api" && parts[1] == "shares" {
+		return team.PermManage // the owner's links (spec/team.md, "Sharing a video from the page")
+	}
 	if method == http.MethodPost && len(parts) >= 2 && parts[0] == "api" && parts[1] == "automation" {
 		// Anyone who records sends, answers and retries (spec/automation.md); the rest is the owner's.
 		if is(parts, "api", "automation", "tasks") || len(parts) == 5 && (parts[4] == "answer" || parts[4] == "retry") {

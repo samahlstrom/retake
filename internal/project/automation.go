@@ -192,6 +192,27 @@ type AutomationState struct {
 	Submissions []ReviewSubmission `json:"submissions,omitempty"`
 	// Chat is the video's chat with the agent: its turn and session (spec/chat.md). Its messages are the chat table.
 	Chat *ChatState `json:"chat,omitempty"`
+	// VideoAgent is the agent the owner picked for this video ("" = the configured one, Config.Agent): a task queued
+	// without an agent takes it at its claim (spec/automation.md, "An agent for one video").
+	VideoAgent string `json:"video_agent,omitempty"`
+}
+
+// queueAgent is the agent a send without one queues its task with: the video's own agent while the selected worker
+// (or, before one is selected, any worker) offers it, else the configured one.
+func (a *AutomationState) queueAgent() string {
+	if a.VideoAgent != "" && a.offers(a.VideoAgent) {
+		return a.VideoAgent
+	}
+	return a.Config.Agent
+}
+
+// agentFor is the agent a task (or a chat turn) without one runs with on w: the video's own agent when w offers it,
+// else the configured one.
+func (a *AutomationState) agentFor(w *EditingWorker) string {
+	if a.VideoAgent != "" && w.HasAgent(a.VideoAgent) {
+		return a.VideoAgent
+	}
+	return a.Config.Agent
 }
 
 // NewWorkID returns an unguessable identifier for an attempt or media revision.
@@ -756,7 +777,7 @@ func (s *Store) QueueFeedback(ids []int64, agent string) ([]EditingTask, error) 
 		a.mergeQueued(now) // an older store's
 		picked := agent
 		if agent == "" {
-			agent = a.Config.Agent
+			agent = a.queueAgent()
 		}
 		// The notes, by target: comments on vN become edits in vN+1.
 		fresh := map[string][]int64{}
@@ -1124,7 +1145,7 @@ func (s *Store) PollWorkerChat(p WorkPoll) (task, next *EditingTask, chat *ChatT
 			if c.State != ChatQueued {
 				return changed, nil // the video's agent is replying in the chat
 			}
-			if c.claim(w, a.Config.Agent, now) {
+			if c.claim(w, a.agentFor(&w), now) {
 				clone := *c
 				chat = &clone
 				return true, nil
@@ -1147,7 +1168,7 @@ func (s *Store) PollWorkerChat(p WorkPoll) (task, next *EditingTask, chat *ChatT
 				continue
 			}
 			if j.Agent == "" {
-				j.Agent = a.Config.Agent
+				j.Agent = a.agentFor(&w)
 			}
 			if !w.HasAgent(j.Agent) {
 				continue

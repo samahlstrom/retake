@@ -148,6 +148,10 @@ type Options struct {
 	RemoteFiles     bool
 	ExtWatchEvery   time.Duration
 
+	// Sharing gives the share links the owner makes in the page their address (spec/team.md, "Sharing a video from
+	// the page"); nil: GET api/shares lists the links, and making one is 503.
+	Sharing Sharing
+
 	// Links reads the pages of a script's link cards (GET /api/link-preview, spec/api.md "Link preview"); nil is
 	// linkcard.Default(), which never connects to an address that isn't public.
 	Links *linkcard.Reader
@@ -500,6 +504,10 @@ func (s *Server) route(w http.ResponseWriter, r *http.Request, parts []string) {
 	}
 	if len(parts) >= 2 && parts[0] == "api" && parts[1] == "chat" {
 		s.chatRoute(w, r, parts)
+		return
+	}
+	if len(parts) >= 2 && parts[0] == "api" && parts[1] == "shares" {
+		s.sharesRoute(w, r, parts)
 		return
 	}
 	if isExtRoute(parts) {
