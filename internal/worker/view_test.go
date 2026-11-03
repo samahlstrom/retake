@@ -11,11 +11,11 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"testing"
 	"time"
 
 	"github.com/samahlstrom/retake/internal/project"
+	"github.com/samahlstrom/retake/internal/testmedia"
 )
 
 // syncLog is a worker log the test can read while the worker writes it.
@@ -40,6 +40,8 @@ func (l *syncLog) String() string {
 // The real herdr and tmux, were they ever run, would find no server: HERDR_SOCKET_PATH and TMUX_TMPDIR point here.
 func fakeViews(t *testing.T) string {
 	t.Helper()
+	testmedia.NeedShell(t) // the fake herdr, tmux and agent; herdr on Windows is covered by CI's smoke test
+
 	testdata, e := filepath.Abs("testdata")
 	if e != nil {
 		t.Fatal(e)
@@ -72,7 +74,9 @@ func fakeViews(t *testing.T) string {
 				b, _ := os.ReadFile(f)
 				for _, pid := range strings.Fields(string(b)) {
 					if n, e := strconv.Atoi(pid); e == nil {
-						_ = syscall.Kill(n, syscall.SIGKILL)
+						if p, e := os.FindProcess(n); e == nil {
+							_ = p.Kill()
+						}
 					}
 				}
 			}
@@ -222,7 +226,7 @@ func TestStoppingAHerdrTaskClosesItsPane(t *testing.T) {
 		t.Fatalf("last call %q", last)
 	}
 	time.Sleep(100 * time.Millisecond)
-	if syscall.Kill(pid, 0) == nil {
+	if procStart(pid) != "" {
 		t.Fatal("the agent kept running after its pane was closed")
 	}
 

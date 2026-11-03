@@ -521,7 +521,7 @@ func (at *attempt) background(ctx context.Context) *outcome {
 	var exit error
 	if proc != nil && proc.own {
 		exit = proc.err
-		killGroup(proc.PID) // what it left running in its group
+		killGroup(proc.PID, proc.Start) // what it left running in its group
 	}
 	usage, limited := telemetry(tailOf(rec.Log, 128<<10))
 	r.update(rec, func(x *runRecord) { x.Proc, x.Usage = nil, addUsage(x.Usage, usage) })

@@ -19,17 +19,12 @@ import (
 // tool is off (spec/automation.md, "Permissions").
 func TestBuiltInProfilesNeverAskPermission(t *testing.T) {
 	bin := t.TempDir()
-	for _, name := range []string{"claude", "codex"} {
-		if e := os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\nexit 1\n"), 0o700); e != nil {
-			t.Fatal(e)
-		}
-	}
+	claude, codex := fakeProgram(t, bin, "claude"), fakeProgram(t, bin, "codex")
 	t.Setenv("PATH", bin)
 	got := map[string]Profile{}
 	for _, p := range DefaultProfiles() {
 		got[p.ID] = p
 	}
-	claude, codex := filepath.Join(bin, "claude"), filepath.Join(bin, "codex")
 	for _, tc := range []struct {
 		name      string
 		got, want []string

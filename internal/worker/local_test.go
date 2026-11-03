@@ -88,11 +88,7 @@ func TestBlockedReasonsAreShortSentences(t *testing.T) {
 	if got := Reason(Check(o)); got != "retake-edit isn't installed, so edits can't be rendered." {
 		t.Fatal(got)
 	}
-	editor := filepath.Join(root, "retake-edit")
-	if e := os.WriteFile(editor, []byte("#!/bin/sh\n"), 0o700); e != nil {
-		t.Fatal(e)
-	}
-	o.Editor.Configured = editor
+	o.Editor.Configured = fakeProgram(t, root, "retake-edit")
 	if got := Reason(Check(o)); got != "No agent found. Install Claude Code or Codex." {
 		t.Fatal(got)
 	}
@@ -139,11 +135,8 @@ func TestBlockedReasonsAreShortSentences(t *testing.T) {
 
 func TestConfiguredProfilesReplaceTheOnesFoundOnPath(t *testing.T) {
 	bin := t.TempDir()
-	for _, name := range []string{"claude", "codex"} {
-		if e := os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\nexit 1\n"), 0o700); e != nil {
-			t.Fatal(e)
-		}
-	}
+	fakeProgram(t, bin, "claude")
+	fakeProgram(t, bin, "codex")
 	t.Setenv("PATH", bin)
 	mine := Profile{AgentProfile: project.AgentProfile{ID: "claude", Name: "Claude Code (OpenRouter)"}, Command: []string{"claude", "-p"},
 		Env: map[string]string{"ANTHROPIC_BASE_URL": "https://openrouter.ai/api"}}

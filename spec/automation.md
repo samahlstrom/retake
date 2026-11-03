@@ -98,6 +98,13 @@ Where a worker runs its agent is a user setting: `open_agents_in` in the user co
   argument, so the agent reads it once the person has answered; the worker logs, once per session, that a new agent
   may stop at such a question. A missing `herdr` or `tmux` binary, or a herdr or tmux error, pauses the task with that
   error.
+- **Windows.** herdr runs there and ships with Retake (`herdr.exe`, with the ConPTY it brings in `conpty/` next to it;
+  the same herdr version as on Linux and macOS); tmux doesn't, so Windows offers herdr and the background (the setup
+  page shows tmux only where it's installed). The commands are the same. herdr starts the agent by its kind in the
+  pane's shell (PowerShell), so `--kind` is the interactive command's file name, which herdr takes with or without
+  `.exe` or `.cmd`, and the agent must be on PATH there as in any terminal. A session is created with `--env
+  PATH=<retake's folder>;<PATH>` when retake's folder isn't on PATH and the profile doesn't set PATH, so the agent's
+  `retake ask` is this retake.
 
 ## Agents outlive Retake
 
@@ -113,11 +120,21 @@ them; it doesn't hold the agent. Restarting or updating Retake never stops an ag
   pipes: an attempt's stdout and stderr to `tasks/<task>/agent-<n>[-<k>].log`, a turn's stdout to
   `chat/<turn>-<i>.out` and its stderr to `chat/<turn>-<i>.log`. The worker reads them from where it had got to: a
   turn's words and tool lines as they come, an attempt's usage and usage limit from the end of its log.
+- **On Windows**, which has no sessions or signals for another console's program, the agent gets a hidden console of
+  its own (`CREATE_NO_WINDOW`: Ctrl+C in retake's console, or closing it, doesn't reach the agent), a process group of
+  its own, leaves any job object retake runs in when that job allows it, and goes into a job object of its own named
+  `retake-agent-<pid>-<start>`, without kill-on-close, so it lives as long as its processes. The job is the agent's
+  group: a person's stop terminates it, the agent with everything it started (without one, `taskkill /T /F` on its
+  process tree), and a later worker opens it by its name. The stop is immediate: Windows can't ask a console program
+  in another console to quit. retake's folder goes first on the agent's PATH and the prompt names plain `retake`, so
+  `retake ask`, `working` and `done` need no quoting in PowerShell, cmd or Git Bash. The worker's project lock and the
+  job runner's lock are `LockFileEx` locks, released when their process ends, as `flock` is elsewhere.
 - **The record.** While an attempt runs, `tasks/<task>/run.json` (0600) says what a later worker needs to take it
   back: task, attempt, lease, agent, mode (and pane), the report file that counts now, the round, the notes the agent
   has had, the per-note changes and messages of its finished rounds, its `retake ask` secret, what to put back at the
   end (an older target's checkout, the extensions' undo snapshots), and for a background agent its pid and start time
-  (Linux: the boot id and `/proc/<pid>/stat` start ticks; elsewhere `ps -o lstart=`), so a reused pid is never taken
+  (Linux: the boot id and `/proc/<pid>/stat` start ticks; Windows: its creation time from `GetProcessTimes`; elsewhere
+  `ps -o lstart=`), so a reused pid is never taken
   for it. A turn's is `chat/turn.json`, with how far into its output the server has the words. A record goes once its
   end reached the server.
 - **Taking work back.** A worker, before its first poll, reads its records: the newest attempt's `run.json`. A folder

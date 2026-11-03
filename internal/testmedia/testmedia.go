@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -21,6 +22,15 @@ func Need(t testing.TB) {
 		if _, err := exec.LookPath(bin); err != nil {
 			t.Skipf("%s not installed", bin)
 		}
+	}
+}
+
+// NeedShell skips the test on Windows, where its fake programs (POSIX shell scripts run as executables) can't run.
+// The behaviour they stand in for is covered there by the tests that don't need them and by CI's Windows smoke test.
+func NeedShell(t testing.TB) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("its fake programs are POSIX shell scripts, which Windows can't run")
 	}
 }
 

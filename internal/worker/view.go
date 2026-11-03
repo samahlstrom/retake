@@ -97,7 +97,7 @@ func (r *runner) newView(mode string, p Profile) (*view, error) {
 		return nil, fmt.Errorf("%s isn't installed, but this agent is set to open in it", mode)
 	}
 	v := &view{mode: mode, bin: bin, root: r.opts.Root, name: filepath.Base(r.opts.Root), path: filepath.Join(r.dir, "view.json"),
-		env: profileEnv(os.Environ(), p.Env), log: r.log}
+		env: sessionEnv(profileEnv(os.Environ(), p.Env)), log: r.log}
 	b, e := os.ReadFile(v.path)
 	if e == nil && json.Unmarshal(b, &v.state) == nil && v.state.Mode != mode {
 		v.state = viewState{} // the person changed where agents open: start afresh there
