@@ -26,7 +26,8 @@
 
   function choose(e: MouseEvent) {
     if (dl?.state === 'ready') {
-      review.verOpen = false; // the link downloads it
+      // The link downloads it; the menu closes after the click is done (a link that's gone can't follow itself).
+      setTimeout(() => (review.verOpen = false), 0);
       return;
     }
     e.preventDefault();
