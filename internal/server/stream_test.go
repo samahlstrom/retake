@@ -12,6 +12,7 @@ import (
 	"github.com/samahlstrom/retake/internal/bridge"
 	"github.com/samahlstrom/retake/internal/family"
 	"github.com/samahlstrom/retake/internal/project"
+	"github.com/samahlstrom/retake/internal/testmedia"
 )
 
 // slowEditor stands in for retake-edit's streamed render: it resumes after the playlist's last unit mark and
@@ -33,6 +34,7 @@ echo '{"ok": true}'
 // A streamed version (spec/bridge.md, "Streaming"): pending in /api/info with its poster; watching it renders it,
 // which the page hears about; unwatching stops it.
 func TestStreamedVersionWatch(t *testing.T) {
+	testmedia.NeedShell(t)
 	root := t.TempDir()
 	v6 := filepath.Join(root, "v6", "clip_v6.mp4")
 	writeFile(t, v6, "six")

@@ -14,6 +14,7 @@ import (
 	"github.com/samahlstrom/retake/internal/bridge"
 	"github.com/samahlstrom/retake/internal/family"
 	"github.com/samahlstrom/retake/internal/project"
+	"github.com/samahlstrom/retake/internal/testmedia"
 )
 
 // fakeEditor stands in for `retake-edit render <timeline> --doc <snapshot> --hls <playlist> --progress --json`: it
@@ -93,6 +94,7 @@ func write(t *testing.T, p, body string) {
 // newFixture is a project with a pending streamed v7 and a fake retake-edit; it returns a Manager on it.
 func newFixture(t *testing.T, lease time.Duration, env ...string) (*fixture, *Manager) {
 	t.Helper()
+	testmedia.NeedShell(t)
 	root := t.TempDir()
 	f := &fixture{t: t, root: root, log: filepath.Join(root, "editor.log"), events: &eventLog{}}
 	write(t, filepath.Join(root, "edit", "timeline.json"), `{"rev": 3}`)

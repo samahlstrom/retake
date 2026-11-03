@@ -16,7 +16,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
@@ -176,6 +175,7 @@ printf '{"state":"completed","message":"Asked which colour."}' > "$RETAKE_REPORT
 // askFixture is a folder with one plain project, promo (clip_v1, clip_v2), a choice's image and askAgent.
 func askFixture(t *testing.T) (dir, root, agentPath, option string) {
 	t.Helper()
+	testmedia.NeedShell(t)
 	testmedia.Need(t)
 	scratch, err := filepath.Abs("../../.retake-work")
 	if err == nil {
@@ -422,7 +422,7 @@ func TestAnswersReachTheAgentsSession(t *testing.T) {
 					b, _ := os.ReadFile(f)
 					for _, pid := range strings.Fields(string(b)) {
 						if n, e := strconv.Atoi(pid); e == nil {
-							_ = syscall.Kill(n, syscall.SIGKILL)
+							killPID(n)
 						}
 					}
 				}

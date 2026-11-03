@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/samahlstrom/retake/internal/testmedia"
 )
 
 func write(t *testing.T, path, data string, mode os.FileMode) {
@@ -156,6 +158,7 @@ func TestReadPushRecord(t *testing.T) {
 }
 
 func TestEditorFind(t *testing.T) {
+	testmedia.NeedShell(t)
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "bin", "retake-edit")
 	write(t, bin, "#!/bin/sh\n", 0o755)
@@ -198,6 +201,7 @@ func TestEditorFind(t *testing.T) {
 }
 
 func TestEditorRender(t *testing.T) {
+	testmedia.NeedShell(t)
 	dir := t.TempDir()
 	args := filepath.Join(dir, "args")
 	ok := filepath.Join(dir, "ok.sh")

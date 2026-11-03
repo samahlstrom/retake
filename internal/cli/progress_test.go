@@ -40,6 +40,7 @@ printf '{"state":"completed","message":"Both done","notes":{"2":"Moved the bell 
 // progressFixture is a folder with one plain project, promo (clip_v1, clip_v2), the gates' folder and progressAgent.
 func progressFixture(t *testing.T) (dir, root, agentPath, gates string) {
 	t.Helper()
+	testmedia.NeedShell(t)
 	testmedia.Need(t)
 	scratch, err := filepath.Abs("../../.retake-work")
 	if err == nil {

@@ -28,6 +28,7 @@ printf '{"state":"completed","message":"Made the first shot %s."}' "$SHOT_COLOUR
 // in-process worker runs the agent, renders drafts and makes one new version, with nothing else to start. A restart
 // with unchanged source makes no new version.
 func TestOpenFolderEditsWithItsOwnWorker(t *testing.T) {
+	testmedia.NeedShell(t)
 	editor, err := filepath.Abs("../../editor/target/release/retake-edit")
 	if err != nil {
 		t.Fatal(err)
@@ -174,6 +175,7 @@ printf '{"state":"completed","message":"Made v2 again as v3."}' > "$RETAKE_REPOR
 // its worker anyway, Send reaches the agent, and the agent's video becomes the next version file, which answers the
 // comment.
 func TestOpenPlainFolderSendsToItsAgent(t *testing.T) {
+	testmedia.NeedShell(t)
 	testmedia.Need(t)
 	scratch, err := filepath.Abs("../../.retake-work")
 	if err == nil {

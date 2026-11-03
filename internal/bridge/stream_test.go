@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/samahlstrom/retake/internal/testmedia"
 )
 
 func TestLineWriterSplitsLinesAcrossWrites(t *testing.T) {
@@ -30,6 +32,7 @@ func TestLineWriterSplitsLinesAcrossWrites(t *testing.T) {
 }
 
 func TestRenderStreamReportsProgressAsItComes(t *testing.T) {
+	testmedia.NeedShell(t)
 	bin := filepath.Join(t.TempDir(), "retake-edit")
 	script := `#!/bin/sh
 echo "$@" > "$ARGS"

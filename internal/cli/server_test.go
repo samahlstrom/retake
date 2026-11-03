@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -124,7 +125,7 @@ func TestServeAdminRemotePush(t *testing.T) {
 		t.Fatalf("remote add: %s", w.stderr)
 	}
 	rp := filepath.Join(w.env["XDG_CONFIG_HOME"], "retake", "remotes.toml")
-	if st, err := os.Stat(rp); err != nil || st.Mode().Perm() != 0o600 {
+	if st, err := os.Stat(rp); err != nil || runtime.GOOS != "windows" && st.Mode().Perm() != 0o600 { // Windows has no mode bits
 		t.Fatalf("remotes file: %v %v", st, err)
 	}
 	if code := w.run("remote", "add", "x", "https://review.example.com/notaproject", "--token", "t"); code !=

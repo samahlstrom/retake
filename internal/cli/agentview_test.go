@@ -7,7 +7,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
@@ -22,6 +21,7 @@ import (
 // each video's fake agent waits until the other's has started. Each completes from its report file and render alone,
 // in its own workspace, with nothing read from the agent's terminal.
 func TestVideosEditAtTheSameTimeInTheirOwnHerdrWorkspaces(t *testing.T) {
+	testmedia.NeedShell(t)
 	editor, err := filepath.Abs("../../editor/target/release/retake-edit")
 	if err != nil {
 		t.Fatal(err)
@@ -78,7 +78,7 @@ func TestVideosEditAtTheSameTimeInTheirOwnHerdrWorkspaces(t *testing.T) {
 			b, _ := os.ReadFile(f)
 			for _, pid := range strings.Fields(string(b)) {
 				if n, e := strconv.Atoi(pid); e == nil {
-					_ = syscall.Kill(n, syscall.SIGKILL)
+					killPID(n)
 				}
 			}
 		}
@@ -168,6 +168,7 @@ func TestVideosEditAtTheSameTimeInTheirOwnHerdrWorkspaces(t *testing.T) {
 // TestOpenAgentsInComesFromTheUserConfig: open_agents_in reaches the agents found on PATH and the configured ones
 // that don't say, and an entry's own open_in wins.
 func TestOpenAgentsInComesFromTheUserConfig(t *testing.T) {
+	testmedia.NeedShell(t)
 	bin := t.TempDir()
 	for _, name := range []string{"claude", "codex"} {
 		if err := os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\nexit 1\n"), 0o700); err != nil {
