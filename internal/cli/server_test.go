@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/samahlstrom/retake/internal/testmedia"
 	"github.com/samahlstrom/retake/internal/tus"
 )
 
@@ -40,7 +41,7 @@ func writeVideo(t *testing.T, name string, size int, seed byte) string {
 	for i := range b {
 		b[i] = byte(i*13) ^ seed
 	}
-	p := filepath.Join(t.TempDir(), name)
+	p := filepath.Join(testmedia.TempDir(t), name) // as retake resolves it: the upload state names the file
 	if err := os.WriteFile(p, b, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -221,8 +222,16 @@ func TestServeSettings(t *testing.T) {
 	w := newWorld(t)
 	w.config(t, "[server]\ndata = \"/srv/retake\"\nlisten = \"9000\"\ntrusted_proxies = [\"10.0.0.0/8\"]\n")
 	env := w.environment(nil)
+	// The data folder is made absolute: on Windows "/srv/retake" is on the current drive (D:\srv\retake).
+	abs := func(p string) string {
+		a, err := filepath.Abs(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return a
+	}
 	s, err := resolveServer(env, loadConfig(env), serverFlags{})
-	if err != nil || s.Data != "/srv/retake" || s.Listen != ":9000" || len(s.Proxies) != 1 || s.S3 != nil {
+	if err != nil || s.Data != abs("/srv/retake") || s.Listen != ":9000" || len(s.Proxies) != 1 || s.S3 != nil {
 		t.Fatalf("%+v %v", s, err)
 	}
 	w.env["RETAKE_DATA"] = "/env/data"
@@ -233,7 +242,7 @@ func TestServeSettings(t *testing.T) {
 	}
 	w.env["RETAKE_S3_ACCESS_KEY"], w.env["RETAKE_S3_SECRET_KEY"], w.env["RETAKE_S3_INSECURE"] = "a", "b", "1"
 	s, err = resolveServer(env, loadConfig(env), serverFlags{data: "/flag/data"})
-	if err != nil || s.Data != "/flag/data" || s.S3 == nil || s.S3.Bucket != "retake" || !s.S3.Insecure ||
+	if err != nil || s.Data != abs("/flag/data") || s.S3 == nil || s.S3.Bucket != "retake" || !s.S3.Insecure ||
 		s.S3.Region != "us-east-1" {
 		t.Fatalf("%+v %v", s, err)
 	}

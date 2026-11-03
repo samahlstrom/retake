@@ -129,8 +129,11 @@ func TestLibraryToolsForARemoteAgent(t *testing.T) {
 	if tools["lib_search"] == nil || tools["component_describe"] == nil || tools["lint"] == nil {
 		t.Fatalf("tools = %v", tools)
 	}
-	// A timeline outside the project is refused.
-	if text, isErr := call(t, cs, "lint", map[string]any{"timeline": "/etc/hostname"}, nil); !isErr ||
+	// A timeline outside the project is refused (a file that exists everywhere: /etc/hostname isn't on Windows or
+	// macOS).
+	outside := filepath.Join(t.TempDir(), "timeline.json")
+	write(t, outside, `{}`)
+	if text, isErr := call(t, cs, "lint", map[string]any{"timeline": outside}, nil); !isErr ||
 		!strings.Contains(text, "inside the project folder") {
 		t.Fatalf("lint outside: %s", text)
 	}

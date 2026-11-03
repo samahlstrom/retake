@@ -20,6 +20,7 @@ import (
 
 	"github.com/samahlstrom/retake/internal/probe"
 	"github.com/samahlstrom/retake/internal/store"
+	"github.com/samahlstrom/retake/internal/testmedia"
 	"github.com/samahlstrom/retake/internal/worker"
 )
 
@@ -66,10 +67,11 @@ type world struct {
 	mu          sync.Mutex
 }
 
-// newWorld makes a v5/v6/v7 family (fake video bytes) and an empty config folder.
+// newWorld makes a v5/v6/v7 family (fake video bytes) and an empty config folder. Its root is spelled as retake
+// resolves it (no links, no Windows short names), so the paths retake prints compare equal.
 func newWorld(t *testing.T) *world {
 	t.Helper()
-	w := &world{root: t.TempDir(), stdout: &buffer{}, stderr: &buffer{}}
+	w := &world{root: testmedia.TempDir(t), stdout: &buffer{}, stderr: &buffer{}}
 	for _, rel := range []string{"v5/clip_v5.mp4", "v6/clip_v6.mp4", "v7/clip_v7.mp4"} {
 		p := filepath.Join(w.root, filepath.FromSlash(rel))
 		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
@@ -83,6 +85,10 @@ func newWorld(t *testing.T) *world {
 	w.env = map[string]string{"XDG_CONFIG_HOME": filepath.Join(w.root, "config"), "HOME": w.root, "USER": "osuser"}
 	return w
 }
+
+// tomlPath is p as a TOML literal string: a Windows path's backslashes stay as they are ("C:\Users" in a basic
+// string is an escape).
+func tomlPath(p string) string { return "'" + p + "'" }
 
 func (w *world) config(t *testing.T, toml string) {
 	t.Helper()

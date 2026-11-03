@@ -98,7 +98,7 @@ func setupCase(t *testing.T, name string, withImages bool) (string, goldenCase, 
 			return err
 		}
 		if strings.HasSuffix(p, ".json") {
-			data = bytes.ReplaceAll(data, []byte("@ROOT@"), []byte(root))
+			data = bytes.ReplaceAll(data, []byte("@ROOT@"), []byte(jsonText(root)))
 		}
 		return os.WriteFile(dst, data, 0o644)
 	})
@@ -125,6 +125,28 @@ func setupCase(t *testing.T, name string, withImages bool) (string, goldenCase, 
 		}
 	}
 	return root, gc, opts
+}
+
+// jsonText is s as it is written inside a JSON string (a Windows root's backslashes doubled).
+func jsonText(s string) string {
+	b, _ := json.Marshal(s)
+	return string(b[1 : len(b)-1])
+}
+
+var rootPath = regexp.MustCompile(`@ROOT@[^\s"]*`)
+
+// rootless puts @ROOT@ back for the case folder in an output (also JSON-escaped or slash-separated), and writes the
+// rest of such a path with slashes, as the goldens (made on Linux) have it.
+func rootless(s, root string) string {
+	for _, r := range []string{jsonText(root), root, filepath.ToSlash(root)} {
+		s = strings.ReplaceAll(s, r, "@ROOT@")
+	}
+	if filepath.Separator == '\\' {
+		s = rootPath.ReplaceAllStringFunc(s, func(p string) string {
+			return strings.ReplaceAll(strings.ReplaceAll(p, `\\`, "/"), `\`, "/")
+		})
+	}
+	return s
 }
 
 // makeVideo writes the same video regen-goldens.sh makes: testsrc2, H.264, no audio (so the duration is exact).
@@ -231,13 +253,13 @@ func TestGolden(t *testing.T) {
 				t.Fatal(err)
 			}
 			who := caseReviewer(t, name)
-			gotMD := legacyMD(strings.ReplaceAll(string(md), root, "@ROOT@"))
+			gotMD := legacyMD(rootless(string(md), root))
 			wantMD := legacyReviewer(readGolden(t, name, "notes.md"), who)
 			if gotMD != wantMD {
 				t.Errorf("notes.md differs from legacy:\n%s", lineDiff(wantMD, gotMD))
 			}
 			var got, want any
-			if err := json.Unmarshal(bytes.ReplaceAll(raw, []byte(root), []byte("@ROOT@")), &got); err != nil {
+			if err := json.Unmarshal([]byte(rootless(string(raw), root)), &got); err != nil {
 				t.Fatalf("notes.json: %v", err)
 			}
 			if err := json.Unmarshal([]byte(legacyReviewer(readGolden(t, name, "notes.json"), who)), &want); err != nil {

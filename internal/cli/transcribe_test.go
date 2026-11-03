@@ -50,7 +50,7 @@ func fakeEngine(t *testing.T) string {
 func TestTranscribeCmd(t *testing.T) {
 	testmedia.Need(t)
 	w := newWorld(t)
-	w.config(t, "[transcribe]\nengine = \"command\"\ncommand = \""+fakeEngine(t)+"\"\n")
+	w.config(t, "[transcribe]\nengine = \"command\"\ncommand = "+tomlPath(fakeEngine(t))+"\n")
 	take := filepath.Join(w.root, "v6", "clip_v6.review", "2026-10-30_12-00-00")
 	if err := os.MkdirAll(take, 0o755); err != nil {
 		t.Fatal(err)

@@ -514,11 +514,12 @@ func TestRecipeExportWithPlaceholdersAndTheLicenseGate(t *testing.T) {
 		t.Fatal(err)
 	}
 	tl := filepath.Join(root, "edit", "timeline.json")
+	logoJSON := jsonString(logo) // C:\Users\... on Windows: its backslashes escaped
 	write(t, tl, `{"schema": "timeline/0.1", "id": "how-to", "rev": 1, "format": {"size": [1280, 720], "fps": 30},
-		"assets": {"proj:logo": {"path": "`+logo+`"}, "proj:vo": {"path": "../voice/vo.ogg", "words": "../voice/vo.words.json"}},
+		"assets": {"proj:logo": {"path": `+logoJSON+`}, "proj:vo": {"path": "../voice/vo.ogg", "words": "../voice/vo.words.json"}},
 		"spine": [], "scenes": []}`)
 	write(t, strings.TrimSuffix(tl, ".json")+".patches.jsonl",
-		`{"id": "p1", "rev": 1, "base": 0, "answers": [], "summary": "logo", "ops": [{"op": "set", "path": "assets/proj:logo", "value": {"path": "`+logo+`"}}], "inverse": [], "applied": "2026-10-30T00:00:00Z"}`+"\n")
+		`{"id": "p1", "rev": 1, "base": 0, "answers": [], "summary": "logo", "ops": [{"op": "set", "path": "assets/proj:logo", "value": {"path": `+logoJSON+`}}], "inverse": [], "applied": "2026-10-30T00:00:00Z"}`+"\n")
 	if _, err := Add(ctx, AddArgs{Ref: "pop-text", Registry: registryPath(t), Timeline: tl}); err != nil {
 		t.Fatal(err)
 	}
@@ -548,8 +549,10 @@ func TestRecipeExportWithPlaceholdersAndTheLicenseGate(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if strings.Contains(string(b), media) || strings.Contains(string(b), root) {
-			t.Fatalf("%s names a local path:\n%s", f, b)
+		for _, local := range []string{media, root} {
+			if strings.Contains(string(b), local) || strings.Contains(string(b), strings.Trim(jsonString(local), `"`)) {
+				t.Fatalf("%s names a local path:\n%s", f, b)
+			}
 		}
 	}
 	if !fileExists(filepath.Join(out, "components", "pop-text@1.0.0", "component.json")) {
@@ -587,6 +590,12 @@ func TestRecipeExportWithPlaceholdersAndTheLicenseGate(t *testing.T) {
 	if _, err := ExportRecipe(ctx, RecipeArgs{Timeline: tl, Out: filepath.Join(root, "busy"), Catalog: cat}); code(err) != CodeConflict {
 		t.Fatalf("busy folder: %v", err)
 	}
+}
+
+// jsonString is s as a JSON string, quotes included.
+func jsonString(s string) string {
+	b, _ := json.Marshal(s)
+	return string(b)
 }
 
 func TestVersions(t *testing.T) {

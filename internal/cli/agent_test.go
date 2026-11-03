@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -236,6 +237,12 @@ func TestWatch(t *testing.T) {
 	// Each run logs its start and end; while the gate file exists a run takes long.
 	hook := fmt.Sprintf(`echo "start $RETAKE_SINCE $RETAKE_VIDEO $RETAKE_PROJECT" >> %[1]q; `+
 		`if [ -e %[2]q ]; then sleep 30; fi; sleep 0.2; echo end >> %[1]q`, log, gate)
+	if runtime.GOOS == "windows" {
+		// The same through cmd.exe, which watch runs the command with there. ping waits: cmd has no sleep, and timeout
+		// wants a console.
+		hook = fmt.Sprintf(`echo start %%RETAKE_SINCE%% %%RETAKE_VIDEO%% %%RETAKE_PROJECT%% >> "%[1]s" & `+
+			`(if exist "%[2]s" ping -n 31 127.0.0.1 >nul) & ping -n 2 127.0.0.1 >nul & echo end >> "%[1]s"`, log, gate)
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	env := w.environment(nil)

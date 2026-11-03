@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -29,9 +30,12 @@ func (w *world) startEnv() Env {
 		}
 		return "", false, errors.New("not found")
 	}
+	ok := []string{"/bin/true"} // an agent that answers the agent test
+	if runtime.GOOS == "windows" {
+		ok = []string{"cmd.exe", "/c", "rem"}
+	}
 	env.Agents = func() []worker.Profile {
-		return []worker.Profile{{AgentProfile: project.AgentProfile{ID: "claude", Name: "Claude Code"},
-			Command: []string{"/bin/true"}}}
+		return []worker.Profile{{AgentProfile: project.AgentProfile{ID: "claude", Name: "Claude Code"}, Command: ok}}
 	}
 	return env
 }
@@ -91,7 +95,8 @@ func TestStartFirstRunSetsUpThenServesTheFolder(t *testing.T) {
 	}
 
 	// Done: the same address becomes the folder's home.
-	if code := postTest(t, url+"api/setup/done", `{"folder":"`+dir+`","open_in":"background"}`, nil); code != 200 {
+	body, _ := json.Marshal(map[string]string{"folder": dir, "open_in": "background"}) // a Windows path has backslashes
+	if code := postTest(t, url+"api/setup/done", string(body), nil); code != 200 {
 		t.Fatalf("done: %d", code)
 	}
 	h := waitHome(t, url, dir)
@@ -146,7 +151,7 @@ func TestStartFirstRunSetsUpThenServesTheFolder(t *testing.T) {
 
 func TestStartWithAFolderAndAStaleState(t *testing.T) {
 	w, dir := newFolderWorld(t)
-	w.config(t, "idle_exit_minutes = 0\nfolder = \""+dir+"\"\n")
+	w.config(t, "idle_exit_minutes = 0\nfolder = "+tomlPath(dir)+"\n")
 	env := w.startEnv()
 	// A state file from a retake that's gone is ignored.
 	state := filepath.Join(w.root, "state", "retake", "start.json")

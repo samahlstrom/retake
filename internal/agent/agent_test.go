@@ -28,6 +28,10 @@ func (fakeProber) Probe(p string) probe.Info {
 	return probe.Info{Duration: &d, FPS: 30}
 }
 
+// outsideSnap is an absolute path outside the project (/snap/1.png, C:\snap\1.png on Windows): the store keeps it
+// as it is.
+var outsideSnap = filepath.Join(filepath.VolumeName(os.TempDir())+string(filepath.Separator), "snap", "1.png")
+
 const (
 	take6 = "2026-10-28_10-00-00" // recorded on v6
 	take7 = "2026-10-29_20-48-01" // recorded on v7
@@ -71,7 +75,7 @@ func newProject(t *testing.T) *Project {
 	}
 	first := c(take7, "S1", 0, 1, "make the title bigger", "")
 	first.Detail = project.Detail{Strokes: []project.Stroke{{Shape: "circle", Color: "red", Box: [4]float64{0.1, 0.1, 0.2, 0.2}}},
-		Snapshot: "/snap/1.png"}
+		Snapshot: outsideSnap}
 	if _, err := p.Store.Sync(project.Run{Version: "v7", Comments: []project.Comment{
 		first, c(take7, "S1", 1, 3, "cut the pause", ""), c(take7, "S2", 0, 6, "music too loud", ""),
 		c(take6, "S1", 0, 5, "carried over", "v6"), c(take6, "S1", 1, 50, "not carried", "v6"),
@@ -109,7 +113,7 @@ func TestNotesList(t *testing.T) {
 	}
 	n := res.Notes[0]
 	if n.Text != "make the title bigger" || n.Author != "Ana" || n.T0 != 1 || n.Status != project.StatusOpen ||
-		len(n.Strokes) != 1 || n.Strokes[0].Shape != "circle" || n.Snapshot != "/snap/1.png" || len(n.Images) != 1 ||
+		len(n.Strokes) != 1 || n.Strokes[0].Shape != "circle" || n.Snapshot != outsideSnap || len(n.Images) != 1 ||
 		n.Images[0].Path != filepath.Join(p.Root, "v7", "clip_v7.review", take7, "img_01.png") ||
 		n.Images[0].Box != [4]float64{0.1, 0.2, 0.3, 0.4} {
 		t.Fatalf("note 1 = %+v", n)

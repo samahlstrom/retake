@@ -215,13 +215,24 @@ func TestCancellingAgentStopsItsChildBeforeHandoff(t *testing.T) {
 		done <- r.execute(ctx, project.WorkAssignment{Task: &project.EditingTask{ID: "task", Agent: "slow", Attempt: 1}})
 	}()
 	heartbeat := filepath.Join(root, "child-heartbeat")
-	deadline := time.Now().Add(5 * time.Second)
+	agentLog := func() string {
+		b, _ := os.ReadFile(filepath.Join(r.dir, "tasks", "task", "agent-1.log"))
+		_, started := os.Stat(filepath.Join(root, "agent-started"))
+		return fmt.Sprintf("agent started: %v\nagent log:\n%s", started == nil, b)
+	}
+	// Two starts of the test binary can take a while on a busy (Windows) runner.
+	deadline := time.Now().Add(30 * time.Second)
 	for {
 		if _, e = os.Stat(heartbeat); e == nil {
 			break
 		}
+		select {
+		case o := <-done:
+			t.Fatalf("the attempt ended before the agent's child started: %+v\n%s", o, agentLog())
+		default:
+		}
 		if time.Now().After(deadline) {
-			t.Fatal("child never started")
+			t.Fatalf("child never started\n%s", agentLog())
 		}
 		time.Sleep(20 * time.Millisecond)
 	}

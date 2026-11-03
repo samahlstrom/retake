@@ -2,13 +2,20 @@ package worker
 
 import (
 	"bufio"
+	"bytes"
+	"encoding/json"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/samahlstrom/retake/internal/project"
 )
+
+// workRoot is the captured streams' video folder, /work/video, as an absolute path here (C:\work\video on Windows,
+// where an agent names files by such paths).
+var workRoot = filepath.Join(filepath.VolumeName(os.TempDir())+string(filepath.Separator), "work", "video")
 
 // streamOf reads a captured stream (internal/worker/testdata: claude-ok and codex-ok are the real CLIs' output for
 // "reply OK", the -resume ones the next turn in the same session; the -tools ones are built in the same shapes).
@@ -19,12 +26,14 @@ func streamOf(t *testing.T, name string) (*chatStream, []project.ChatEvent) {
 		t.Fatal(err)
 	}
 	defer func() { _ = f.Close() }()
-	c := newChatStream("/work/video", "v0/jump_v0.md", "script")
+	c := newChatStream(workRoot, "v0/jump_v0.md", "script")
+	root, _ := json.Marshal(workRoot)
+	root = root[1 : len(root)-1] // as it is inside a JSON string
 	var all []project.ChatEvent
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 1<<20), 1<<20)
 	for sc.Scan() {
-		c.line(append(sc.Bytes(), '\n'))
+		c.line(append(bytes.ReplaceAll(sc.Bytes(), []byte("/work/video"), root), '\n'))
 		all = append(all, c.take()...)
 	}
 	return c, all
@@ -92,13 +101,14 @@ func TestChatStreamTools(t *testing.T) {
 }
 
 func TestChatToolLines(t *testing.T) {
-	c := newChatStream("/work/video", "v0/jump_v0.md", "script")
+	c := newChatStream(workRoot, "v0/jump_v0.md", "script")
 	for in, want := range map[[2]string]string{
-		{"v0/jump_v0.md", "w"}:               "Editing the script",
-		{"./v0/jump_v0.md", "r"}:             "Reading the script",
-		{"/work/video/v0/images/a.png", "w"}: "Saving an image",
-		{"v0/images/a.png", "r"}:             "Looking at an image",
-		{"/elsewhere/notes.txt", "w"}:        "Editing notes.txt",
+		{"v0/jump_v0.md", "w"}:                                               "Editing the script",
+		{"./v0/jump_v0.md", "r"}:                                             "Reading the script",
+		{filepath.Join(workRoot, "v0", "images", "a.png"), "w"}:              "Saving an image",
+		{filepath.ToSlash(filepath.Join(workRoot, "v0", "jump_v0.md")), "w"}: "Editing the script", // C:/… on Windows
+		{"v0/images/a.png", "r"}:                                             "Looking at an image",
+		{"/elsewhere/notes.txt", "w"}:                                        "Editing notes.txt",
 	} {
 		if got := c.fileLine(in[0], in[1] == "w"); got != want {
 			t.Errorf("%v: %q, want %q", in, got, want)

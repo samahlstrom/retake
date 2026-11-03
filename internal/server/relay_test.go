@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -382,7 +383,7 @@ func TestTakesOnAVersionFileAreKeptOnTheServer(t *testing.T) {
 		t.Fatalf("history: %d %s", r.code, r.body)
 	}
 	v, ok := h.srv.version("v1")
-	if !ok || !strings.Contains(v.Path, ".retake/remote/v1/") {
+	if !ok || !strings.Contains(filepath.ToSlash(v.Path), ".retake/remote/v1/") {
 		t.Fatalf("v1's takes go under .retake/remote: %+v", v)
 	}
 }

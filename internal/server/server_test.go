@@ -86,6 +86,9 @@ func start(t *testing.T, opts Options) *harness {
 	srv := New(opts)
 	ts.Config.Handler = srv
 	ts.Start()
+	// Closed at the end (after the HTTP server), so the project store is too: Windows can't remove an open
+	// project.db from the test's temp folder. A second Close is harmless.
+	t.Cleanup(func() { _ = srv.Close() })
 	t.Cleanup(ts.Close)
 	return &harness{t: t, srv: srv, ts: ts, url: ts.URL}
 }

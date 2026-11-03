@@ -8,13 +8,15 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/samahlstrom/retake/internal/testmedia"
 )
 
 // copyFixture copies a notes golden-test case (internal/notes/testdata/<name>) into a temp folder.
 func copyFixture(t *testing.T, name string) string {
 	t.Helper()
 	src := filepath.Join("..", "notes", "testdata", name)
-	root := t.TempDir()
+	root := testmedia.TempDir(t) // as retake resolves it, so the paths it writes compare equal
 	err := filepath.Walk(src, func(p string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err

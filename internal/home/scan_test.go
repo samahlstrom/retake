@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/samahlstrom/retake/internal/testmedia"
 )
 
 // places lists what a scan found as "name path project anchor-file", one per video.
@@ -154,7 +156,7 @@ func outline(n *Node, indent string) string {
 }
 
 func TestScanLinks(t *testing.T) {
-	base := t.TempDir()
+	base := testmedia.TempDir(t) // ScanDir takes a folder with its links resolved (Windows' RUNNER~1 included)
 	top := filepath.Join(base, "top")
 	elsewhere := filepath.Join(base, "elsewhere")
 	touch(t, filepath.Join(top, "real", "real_v1.mp4"), time.Now())

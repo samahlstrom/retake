@@ -239,6 +239,7 @@ func TestTakeWithoutAudio(t *testing.T) {
 }
 
 func TestCompletedClipsSkipGrowingAudioAndReuseFinalTranscript(t *testing.T) {
+	testmedia.Need(t) // ffmpeg decodes the recorded clips
 	dir := newTake(t)
 	f := &fakeTranscriber{name: "fake"}
 	writeFile(t, filepath.Join(dir, "segments.json"), `[{"file":"seg_01.webm","recording":false},{"file":"seg_02.ogg","recording":true}]`)

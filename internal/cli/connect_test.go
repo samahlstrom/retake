@@ -267,8 +267,15 @@ func TestConnectProjects(t *testing.T) {
 		}
 		got = append(got, s)
 	}
-	if strings.Join(got, " ") != "a=a@a:+timeline b=b@b:b 2026-jump=jump@2026/jump:2026 "+
-		"b-shorts=shorts@b/shorts:b a-2=A@A:+timeline drafts-next=next@drafts/next:drafts+timeline" {
+	want := "a=a@a:+timeline b=b@b:b 2026-jump=jump@2026/jump:2026 b-shorts=shorts@b/shorts:b " +
+		"a-2=A@A:+timeline drafts-next=next@drafts/next:drafts+timeline"
+	// On a case-insensitive disk (Windows, macOS by default) "A" is the folder "a": there's no second project.
+	if a, err := os.Stat(filepath.Join(dir, "a")); err == nil {
+		if upper, err := os.Stat(filepath.Join(dir, "A")); err == nil && os.SameFile(a, upper) {
+			want = strings.Replace(want, " a-2=A@A:+timeline", "", 1)
+		}
+	}
+	if strings.Join(got, " ") != want {
 		t.Fatalf("%v", got)
 	}
 }

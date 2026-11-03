@@ -220,7 +220,7 @@ func TestInheritRelativeDirs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b = bytes.ReplaceAll(b, []byte(root+"/"), []byte("../../"))
+	b = bytes.ReplaceAll(b, []byte(jsonText(root)+"/"), []byte("../../"))
 	if err := os.WriteFile(p, b, 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -232,7 +232,7 @@ func TestInheritRelativeDirs(t *testing.T) {
 		t.Errorf("takes %+v", res.Doc.Takes)
 	}
 	want := legacyReviewer(readGolden(t, "inherit", "notes.md"), caseReviewer(t, "inherit"))
-	if got := legacyMD(strings.ReplaceAll(res.Markdown, root, "@ROOT@")); got != want {
+	if got := legacyMD(rootless(res.Markdown, root)); got != want {
 		t.Errorf("relative inherit dirs changed the notes:\n%s", lineDiff(want, got))
 	}
 }
@@ -303,7 +303,7 @@ func TestBuild(t *testing.T) {
 		t.Errorf("notes in %s", res.Dir)
 	}
 	video, _ := jsonx.Marshal(res.Doc.Video)
-	if want := `{"path":"` + v.Path + `","name":"clip_v2.mp4","duration":30.0,"fps":29.97,"width":1280,"height":720}`; string(video) != want {
+	if want := `{"path":"` + jsonText(v.Path) + `","name":"clip_v2.mp4","duration":30.0,"fps":29.97,"width":1280,"height":720}`; string(video) != want {
 		t.Errorf("video %s, want %s", video, want)
 	}
 	if !reflect.DeepEqual(res.Doc.Family, []string{"v1", "v2"}) {

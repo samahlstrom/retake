@@ -63,7 +63,7 @@ func TestOpenFolderEditsWithItsOwnWorker(t *testing.T) {
 	t.Setenv("RETAKE_TEST_COLOUR", "blue")
 	w := &world{root: dir, stdout: &buffer{}, stderr: &buffer{}}
 	w.env = map[string]string{"XDG_CONFIG_HOME": filepath.Join(dir, "config"), "HOME": dir, "USER": "osuser"}
-	w.config(t, "idle_exit_minutes = 0\n[edit]\nretake_edit = \""+editor+"\"\n")
+	w.config(t, "idle_exit_minutes = 0\n[edit]\nretake_edit = "+tomlPath(editor)+"\n")
 	env := w.environment(nil)
 	env.Agents = func() []worker.Profile {
 		return []worker.Profile{{AgentProfile: project.AgentProfile{ID: "fake", Name: "Fake agent"}, Command: []string{agentPath},
