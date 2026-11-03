@@ -53,22 +53,14 @@ type harness struct {
 	patched *atomic.Int64 // PATCH requests the server has finished handling
 }
 
-// settle waits for the requests the server is still handling: a client that gave up on a cut PATCH returns before the
-// server has written what reached it.
 // settlePatches waits until the server has finished n PATCH requests: a cut PATCH can reach the handler after the
-// client has already given up, so busy alone can read 0 too early.
+// client has already given up, so "no request in flight" alone can read 0 too early.
 func (h *harness) settlePatches(n int) {
 	h.t.Helper()
 	for deadline := time.Now().Add(10 * time.Second); h.patched.Load() < int64(n) || h.busy.Load() > 0; time.Sleep(5 * time.Millisecond) {
 		if time.Now().After(deadline) {
 			h.t.Fatalf("the server finished %d of %d PATCHes", h.patched.Load(), n)
 		}
-	}
-}
-
-func (h *harness) settle() {
-	for h.busy.Load() > 0 {
-		time.Sleep(5 * time.Millisecond)
 	}
 }
 
