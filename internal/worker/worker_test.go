@@ -421,7 +421,9 @@ func TestAgentProcess(t *testing.T) {
 		if e = os.WriteFile("agent-started", []byte("running"), 0o600); e != nil {
 			t.Fatal(e)
 		}
-		<-context.Background().Done()
+		// Wait to be stopped. A sleep, not a receive that never ends: with no timer pending, Go's runtime calls that a
+		// deadlock and exits (it does on Windows, where nothing else keeps the process looking busy).
+		time.Sleep(time.Hour)
 	}
 	b, e = os.ReadFile("timeline.json")
 	if e != nil {
