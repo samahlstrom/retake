@@ -13,7 +13,7 @@ the Go standard library and these modules:
 
 | Module | Version | License |
 |---|---|---|
-| the Go standard library | go1.27.1 | BSD-3-Clause |
+| the Go standard library | go1.27.3 | BSD-3-Clause |
 | `github.com/BurntSushi/toml` | v1.6.0 | MIT |
 | `github.com/cespare/xxhash/v2` | v2.3.0 | MIT |
 | `github.com/dustin/go-humanize` | v1.1.0 | MIT |
@@ -41,9 +41,9 @@ the Go standard library and these modules:
 | `github.com/yosida95/uritemplate/v3` | v3.0.2 | BSD-3-Clause |
 | `github.com/zeebo/xxh3` | v1.1.0 | BSD-2-Clause |
 | `go.yaml.in/yaml/v3` | v3.0.5 | Apache-2.0 AND MIT |
-| `golang.org/x/crypto` | v0.57.0 | BSD-3-Clause |
+| `golang.org/x/crypto` | v0.58.1-0.20261009181718-2f1f834330b2 | BSD-3-Clause |
 | `golang.org/x/image` | v0.47.0 | BSD-3-Clause |
-| `golang.org/x/net` | v0.60.0 | BSD-3-Clause |
+| `golang.org/x/net` | v0.62.0 | BSD-3-Clause |
 | `golang.org/x/oauth2` | v0.35.0 | BSD-3-Clause |
 | `golang.org/x/sync` | v0.24.0 | BSD-3-Clause |
 | `golang.org/x/sys` | v0.49.0 | BSD-3-Clause |
@@ -234,7 +234,7 @@ This software is based in part on the work of the Independent JPEG Group.
 These npm packages build and test the page and run the end-to-end tests. None of them is in a release. The packages
 bundled into the page are listed above.
 
-### web/ (224 packages)
+### web/ (225 packages)
 
 | Package | Version | License |
 |---|---|---|
@@ -265,6 +265,7 @@ bundled into the page are listed above.
 | `@humanwhocodes/module-importer` | 1.0.1 | Apache-2.0 |
 | `@humanwhocodes/retry` | 0.4.3 | Apache-2.0 |
 | `@internationalized/date` | 3.12.4 | Apache-2.0 |
+| `@isaacs/nonrecursive-glob-match` | 1.0.3 | BlueOak-1.0.0 |
 | `@jridgewell/gen-mapping` | 0.3.13 | MIT |
 | `@jridgewell/remapping` | 2.3.5 | MIT |
 | `@jridgewell/resolve-uri` | 3.1.2 | MIT |
@@ -406,7 +407,7 @@ bundled into the page are listed above.
 | `lz-string` | 1.5.0 | MIT |
 | `magic-string` | 0.30.21 | MIT |
 | `magic-string` | 1.4.5 | MIT |
-| `minimatch` | 10.2.6 | BlueOak-1.0.0 |
+| `minimatch` | 11.0.4 | BlueOak-1.0.0 |
 | `mri` | 1.2.0 | MIT |
 | `ms` | 2.1.3 | MIT |
 | `nanoid` | 3.3.20 | MIT |
@@ -2329,15 +2330,15 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ### 13. BSD-3-Clause
 
-- Go module `golang.org/x/crypto` v0.57.0: Copyright 2009 The Go Authors.
+- Go module `golang.org/x/crypto` v0.58.1-0.20261009181718-2f1f834330b2: Copyright 2009 The Go Authors.
 - Go module `golang.org/x/image` v0.47.0: Copyright 2009 The Go Authors.
-- Go module `golang.org/x/net` v0.60.0: Copyright 2009 The Go Authors.
+- Go module `golang.org/x/net` v0.62.0: Copyright 2009 The Go Authors.
 - Go module `golang.org/x/oauth2` v0.35.0: Copyright 2009 The Go Authors.
 - Go module `golang.org/x/sync` v0.24.0: Copyright 2009 The Go Authors.
 - Go module `golang.org/x/sys` v0.49.0: Copyright 2009 The Go Authors.
 - Go module `golang.org/x/text` v0.43.0: Copyright 2009 The Go Authors.
 - Go module `golang.org/x/time` v0.15.0: Copyright 2009 The Go Authors.
-- the Go standard library go1.27.1: Copyright 2009 The Go Authors.
+- the Go standard library go1.27.3: Copyright 2009 The Go Authors.
 
 ```text
 Redistribution and use in source and binary forms, with or without

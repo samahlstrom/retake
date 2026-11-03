@@ -19,7 +19,7 @@ COPY web/ ./
 RUN npm run build
 
 # --- 2. the Go binary: static (pure-Go SQLite, Postgres and S3 clients), with the page embedded (-tags webdist)
-FROM golang:1.27.1-trixie AS go
+FROM golang:1.27.3-trixie AS go
 ARG VERSION=dev
 ARG JOBS
 WORKDIR /src
