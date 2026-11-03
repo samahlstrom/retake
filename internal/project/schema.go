@@ -122,6 +122,14 @@ CREATE TABLE workspace (
  state   TEXT NOT NULL DEFAULT '',           -- '', 'waiting' (a person's) or 'streaming' (an agent's)
  created TEXT NOT NULL
 );`,
+	// 8: a person's edits of a comment's words survive notes rebuilds (spec/notes.md, "Editing a comment"). The note's
+	// text holds the edited words; this keeps that it was edited, the words before the first edit, who and when.
+	`CREATE TABLE note_edits (
+ note     INTEGER PRIMARY KEY REFERENCES notes (id),
+ original TEXT NOT NULL,
+ by       TEXT NOT NULL DEFAULT '',
+ updated  TEXT NOT NULL
+);`,
 }
 
 // pgMigrations are the same schema for Postgres (spec/server.md, "Storage drivers"): one schema per project, the
@@ -246,6 +254,13 @@ CREATE TABLE workspace (
  data    TEXT NOT NULL DEFAULT '{}',
  state   TEXT NOT NULL DEFAULT '',
  created TEXT NOT NULL
+);`,
+	// 8: a person's edits of a comment's words (spec/notes.md, "Editing a comment").
+	`CREATE TABLE note_edits (
+ note     BIGINT PRIMARY KEY REFERENCES notes (id),
+ original TEXT NOT NULL,
+ by       TEXT NOT NULL DEFAULT '',
+ updated  TEXT NOT NULL
 );`,
 }
 

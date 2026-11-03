@@ -21,7 +21,7 @@ API all build against it. Change it here first.
   | `jobs` | `id`, `kind`, `args`, `state` (`queued`, `running`, `done`, `failed`), `attempts`, `error`, `hint` (a failure's one-line fix), `created`, `updated` |
   | `events` | `seq` (monotonic), `kind`, `data`, `created`. This feeds SSE and `notes_wait` cursors. |
   | `note_deletions` | `note`, `previous_status`: a person deleted it ("Deleting a comment"). |
-  | `note_edits` | `note`, `original` (its words before the first edit), `by`, `at`: a person changed its words ("Editing a comment"). |
+  | `note_edits` | `note`, `original` (its words before the first edit), `by`, `updated`: a person changed its words ("Editing a comment"). |
 
   Milestone 3a adds `tokens` and `hosts`, for sharing (spec/team.md).
 

@@ -38,6 +38,10 @@ type Item struct {
 	// (spec/automation.md, "Comments on vN become edits in vN+1"). The notes route sets them.
 	TargetVersion string `json:"target,omitempty"`
 	Later         string `json:"later,omitempty"`
+	// Edited says a person changed its words, and Editable that this request may change them now (spec/notes.md,
+	// "Editing a comment"); the notes route sets Editable.
+	Edited   bool `json:"edited,omitempty"`
+	Editable bool `json:"editable,omitempty"`
 
 	imagesOf *Note // the note whose images this item shows
 }
@@ -72,7 +76,7 @@ type CarriedFrom struct {
 func ItemOf(n Note) Item {
 	t0, t1 := n.T0, n.T1
 	it := Item{ID: n.ID, Kind: "note", Status: n.Status, T0: &t0, T1: &t1, Text: n.Text, By: n.Author,
-		Targets: n.Detail.Targets, Take: n.Take, Seg: n.Seg, Version: n.Version}
+		Targets: n.Detail.Targets, Take: n.Take, Seg: n.Seg, Version: n.Version, Edited: n.Edited}
 	for _, stroke := range n.Detail.Strokes {
 		if !slices.Contains(it.Drawings, stroke.Color) {
 			it.Drawings = append(it.Drawings, stroke.Color)

@@ -515,6 +515,7 @@ func (s *Server) sidebar(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		resp.Items = s.attachAsks(st, v, resp.Items, automation)
+		s.markEditable(r, resp.Items, automation)
 	}
 	s.json(w, r, http.StatusOK, resp)
 }

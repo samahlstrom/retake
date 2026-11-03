@@ -90,6 +90,23 @@ func (r *runner) joined(ids []int64) {
 	r.batch.unsent = slices.DeleteFunc(r.batch.unsent, func(id int64) bool { return slices.Contains(ids, id) })
 }
 
+// edited is the notes of the attempt's task whose words the latest poll has changed since its agent got them (a person
+// edited them while they waited: spec/automation.md, "Words changed while they wait"), with the words as they are now.
+func (r *runner) edited(a project.WorkAssignment) []project.WorkNote {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []project.WorkNote
+	for _, g := range a.Notes {
+		if a.Task == nil || !slices.Contains(a.Task.Notes, g.ID) {
+			continue // another open note, there only as context
+		}
+		if n, ok := r.batch.notes[g.ID]; ok && n.Text != g.Text {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
 // withGiven is t with the notes given to its session since the attempt started.
 func (r *runner) withGiven(t *project.EditingTask) *project.EditingTask {
 	r.mu.Lock()
@@ -143,7 +160,8 @@ type addition struct {
 
 // round is one more part of an attempt: what the agent is given and where it reports.
 type round struct {
-	ids                                                  []int64 // notes it gets
+	ids                                                  []int64            // notes it gets
+	edits                                                []project.WorkNote // its notes whose words changed: the new words
 	answers                                              []project.TaskQuestion
 	notes                                                []project.WorkNote // their details, with stills
 	next                                                 project.WorkAssignment
@@ -151,23 +169,24 @@ type round struct {
 	contextPath, reportPath, promptPath, logPath, prompt string
 }
 
-// prepare writes the next round's files, when there is anything to give: the next batch's notes not given yet, and
-// with answers, the answers to the task's questions that haven't reached the agent. Their stills and images, a
-// context with every note of the task, and a prompt with a new report file (follow-up: the whole task prompt, for a
-// new process of the agent). nil when there is nothing to give.
+// prepare writes the next round's files, when there is anything to give: the next batch's notes not given yet, the
+// new words of its notes a person edited meanwhile, and with answers, the answers to the task's questions that
+// haven't reached the agent. Their stills and images, a context with every note of the task, and a prompt with a new
+// report file (follow-up: the whole task prompt, for a new process of the agent). nil when there is nothing to give.
 func (r *runner) prepare(ctx context.Context, m *addition, answers, followUp bool) (*round, error) {
 	add := r.offered(m.doc)
+	edits := r.edited(m.a)
 	var told []project.TaskQuestion
 	if answers {
 		told = r.untold()
 	}
-	if len(add) == 0 && len(told) == 0 {
+	if len(add) == 0 && len(told) == 0 && len(edits) == 0 {
 		return nil, nil
 	}
 	t := m.a.Task
 	task := *t
 	task.Notes = slices.Clone(t.Notes)
-	rd := &round{answers: told, k: m.k + 1}
+	rd := &round{answers: told, edits: edits, k: m.k + 1}
 	for _, n := range add {
 		rd.ids = append(rd.ids, n.ID)
 		if !slices.Contains(task.Notes, n.ID) {
@@ -181,6 +200,11 @@ func (r *runner) prepare(ctx context.Context, m *addition, answers, followUp boo
 	rd.next.Task = &task
 	rd.next.Notes = slices.DeleteFunc(slices.Clone(m.a.Notes), func(n project.WorkNote) bool { return slices.Contains(rd.ids, n.ID) })
 	rd.next.Notes = append(rd.next.Notes, sub.Notes...)
+	for _, e := range edits { // the words as they are now; its stills stay as the worker saved them
+		if i := slices.IndexFunc(rd.next.Notes, func(n project.WorkNote) bool { return n.ID == e.ID }); i >= 0 {
+			rd.next.Notes[i].Text, rd.next.Notes[i].Edited = e.Text, e.Edited
+		}
+	}
 	r.mu.Lock()
 	if len(r.ask.questions) > 0 {
 		rd.next.Questions = slices.Clone(r.ask.questions) // with the answers that came meanwhile
@@ -193,9 +217,9 @@ func (r *runner) prepare(ctx context.Context, m *addition, answers, followUp boo
 	if err := m.write(rd.next, rd.contextPath); err != nil {
 		return nil, fmt.Errorf("can't save the context of the added comments: %w", err)
 	}
-	rd.prompt = morePrompt(t.ID, rd.ids, told, rd.contextPath, rd.reportPath, m.output)
+	rd.prompt = morePrompt(t.ID, rd.ids, edits, told, rd.contextPath, rd.reportPath, m.output)
 	if followUp {
-		rd.prompt = followUpPrompt(t.ID, rd.ids, told, m.output) + m.full(rd.contextPath, rd.reportPath)
+		rd.prompt = followUpPrompt(t.ID, rd.ids, edits, told, m.output) + m.full(rd.contextPath, rd.reportPath)
 	}
 	if err := os.WriteFile(rd.promptPath, []byte(rd.prompt), 0o600); err != nil {
 		return nil, fmt.Errorf("can't save the prompt of the added comments: %w", err)
@@ -229,10 +253,15 @@ func (r *runner) more(ctx context.Context, v *view, m *addition, answers bool) (
 		return nil, err
 	}
 	t := m.a.Task
-	line := fmt.Sprintf("More comments for Retake task %s (attempt %d): follow the instructions in %s", t.ID, t.Attempt, rd.promptPath)
-	if len(rd.ids) == 0 {
-		line = fmt.Sprintf("Answers for Retake task %s (attempt %d): follow the instructions in %s", t.ID, t.Attempt, rd.promptPath)
+	what := "More comments"
+	switch {
+	case len(rd.ids) > 0:
+	case len(rd.edits) > 0:
+		what = "Changed comments"
+	default:
+		what = "Answers"
 	}
+	line := fmt.Sprintf("%s for Retake task %s (attempt %d): follow the instructions in %s", what, t.ID, t.Attempt, rd.promptPath)
 	if err = v.say(ctx, line); err != nil {
 		return nil, err
 	}
@@ -250,7 +279,10 @@ func (r *runner) nextRound(ctx context.Context, mode string, v *view, m *additio
 		if err != nil || rd == nil {
 			return nil, nil, err
 		}
-		r.log("%s: gave the agent %d more comments (%s) after its report", filepath.Base(r.opts.Root), len(rd.ids), noteIDs(rd.ids))
+		if len(rd.ids) > 0 {
+			r.log("%s: gave the agent %d more comments (%s) after its report", filepath.Base(r.opts.Root), len(rd.ids), noteIDs(rd.ids))
+		}
+		r.logEdits(rd)
 		return rd.ids, rd, nil
 	}
 	rd, err := r.prepare(ctx, m, true, true)
@@ -264,16 +296,49 @@ func (r *runner) nextRound(ctx context.Context, mode string, v *view, m *additio
 			ids = append(ids, q.Note)
 		}
 	}
-	r.log("%s: the agent carries on with %d more comments (%s) in the same version", filepath.Base(r.opts.Root), len(rd.ids), noteIDs(rd.ids))
+	for _, e := range rd.edits {
+		if !slices.Contains(ids, e.ID) {
+			ids = append(ids, e.ID)
+		}
+	}
+	if len(rd.ids) > 0 {
+		r.log("%s: the agent carries on with %d more comments (%s) in the same version", filepath.Base(r.opts.Root), len(rd.ids), noteIDs(rd.ids))
+	}
+	r.logEdits(rd)
 	return ids, rd, nil
 }
 
-// morePrompt is the prompt of comments (and answers) added to a running task in its session.
-func morePrompt(task string, ids []int64, answers []project.TaskQuestion, contextPath, reportPath, output string) string {
+// logEdits says which notes' new words a round gave the agent.
+func (r *runner) logEdits(rd *round) {
+	if len(rd.edits) == 0 {
+		return
+	}
+	ids := make([]int64, len(rd.edits))
+	for i, e := range rd.edits {
+		ids[i] = e.ID
+	}
+	r.log("%s: the agent got the new words of %s", filepath.Base(r.opts.Root), noteIDs(ids))
+}
+
+// editLines says, one line each, which notes a person reworded meanwhile and what they say now.
+func editLines(b *strings.Builder, edits []project.WorkNote) {
+	for _, e := range edits {
+		words := strconv.Quote(e.Text)
+		if strings.TrimSpace(e.Text) == "" {
+			words = "nothing (only its drawing)"
+		}
+		fmt.Fprintf(b, "The person changed the words of note %d while it waited. It now says: %s. Do it as it says now; if you already did it, check that your change still fits these words, and change it if not.\n", e.ID, words)
+	}
+}
+
+// morePrompt is the prompt of comments (and answers, and new words of its notes) added to a running task in its
+// session.
+func morePrompt(task string, ids []int64, edits []project.WorkNote, answers []project.TaskQuestion, contextPath, reportPath, output string) string {
 	var b strings.Builder
 	if len(ids) > 0 {
 		fmt.Fprintf(&b, "More comments were sent while you work. They are part of this same Retake task (%s), one batch with the notes you have, and go in the same new version: note IDs %s.\n", task, idList(ids))
 	}
+	editLines(&b, edits)
 	for _, q := range answers {
 		fmt.Fprintf(&b, "%s.\n", answerLine(q))
 	}
@@ -288,7 +353,7 @@ Do this along with the rest, in this same run. %sWhen every note of the task is 
 }
 
 // followUpPrompt starts the prompt of a background follow-up round: what is new, before the whole task prompt.
-func followUpPrompt(task string, ids []int64, answers []project.TaskQuestion, output string) string {
+func followUpPrompt(task string, ids []int64, edits []project.WorkNote, answers []project.TaskQuestion, output string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "This is a follow-up round of Retake task %s. You, or an agent before you, already did its other notes in this run: their changes are on disk, so keep them. ", task)
 	if output != "" {
@@ -298,6 +363,7 @@ func followUpPrompt(task string, ids []int64, answers []project.TaskQuestion, ou
 		fmt.Fprintf(&b, "Now do the notes sent meanwhile, note IDs %s, in the same new version.", idList(ids))
 	}
 	b.WriteString("\n")
+	editLines(&b, edits)
 	for _, q := range answers {
 		fmt.Fprintf(&b, "%s. Use it for that note now.\n", answerLine(q))
 	}
