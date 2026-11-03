@@ -199,6 +199,22 @@ func TestRoutes(t *testing.T) {
 	}
 }
 
+func TestFeedbackRoute(t *testing.T) {
+	t.Setenv("RETAKE_FEEDBACK_TOKEN", "")
+	f := newFixture(t)
+	h := start(t, Options{Video: f.video, Version: "0.1.0"})
+
+	state := h.get("/api/feedback", nil)
+	if state.code != http.StatusOK || state.json(t)["enabled"] != false {
+		t.Fatalf("feedback availability = %d %s, want enabled false", state.code, state.body)
+	}
+	post := h.post("/api/feedback", `{"type":"bug","title":"Broken","description":"It broke."}`,
+		map[string]string{"Content-Type": "application/json"})
+	if post.code != http.StatusServiceUnavailable || !strings.Contains(post.json(t)["error"].(string), "GitHub") {
+		t.Errorf("disabled feedback post = %d %s, want clear 503", post.code, post.body)
+	}
+}
+
 func TestPageNotBuilt(t *testing.T) {
 	f := newFixture(t)
 	h := start(t, Options{Video: f.video})

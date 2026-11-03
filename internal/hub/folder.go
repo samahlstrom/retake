@@ -19,6 +19,7 @@ import (
 
 	"github.com/samahlstrom/retake/internal/ext"
 	"github.com/samahlstrom/retake/internal/family"
+	"github.com/samahlstrom/retake/internal/feedback"
 	"github.com/samahlstrom/retake/internal/home"
 	"github.com/samahlstrom/retake/internal/jobs"
 	"github.com/samahlstrom/retake/internal/project"
@@ -82,11 +83,12 @@ type FolderOptions struct {
 
 // Folder serves a folder of projects.
 type Folder struct {
-	opts    FolderOptions
-	local   map[string]bool // 127.0.0.1:<port>, localhost:<port>
-	origins map[string]bool // http://127.0.0.1:<port>, http://localhost:<port>
-	allow   map[string]bool
-	limiter *team.Limiter
+	opts     FolderOptions
+	local    map[string]bool // 127.0.0.1:<port>, localhost:<port>
+	origins  map[string]bool // http://127.0.0.1:<port>, http://localhost:<port>
+	allow    map[string]bool
+	limiter  *team.Limiter
+	feedback http.Handler
 
 	mu      sync.Mutex
 	found   []home.Found // the videos
@@ -134,7 +136,8 @@ func NewFolder(opts FolderOptions) *Folder {
 		opts.Thumbs = thumb.Default
 	}
 	f := &Folder{opts: opts, local: map[string]bool{}, origins: map[string]bool{}, allow: map[string]bool{},
-		trying: map[string]bool{}, limiter: team.NewLimiter(), open: map[string]*folderProject{}}
+		feedback: feedback.New(opts.Version),
+		trying:   map[string]bool{}, limiter: team.NewLimiter(), open: map[string]*folderProject{}}
 	for _, h := range []string{"127.0.0.1", "localhost"} {
 		hp := net.JoinHostPort(h, strconv.Itoa(opts.Port))
 		f.local[hp] = true
@@ -484,6 +487,8 @@ func (f *Folder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.apiHome(w, r, role, scope)
 	case len(parts) == 2 && parts[0] == "api" && parts[1] == "ping" && get:
 		writeJSON(w, r, http.StatusOK, map[string]bool{"ok": true})
+	case len(parts) == 2 && parts[0] == "api" && parts[1] == "feedback":
+		f.feedback.ServeHTTP(w, r)
 	case isHomeExt(parts):
 		f.homeExt(w, r, role, parts)
 	case isVideoMenu(parts):

@@ -19,6 +19,7 @@ import (
 	"github.com/samahlstrom/retake/internal/blob"
 	"github.com/samahlstrom/retake/internal/ext"
 	"github.com/samahlstrom/retake/internal/family"
+	"github.com/samahlstrom/retake/internal/feedback"
 	"github.com/samahlstrom/retake/internal/jobs"
 	"github.com/samahlstrom/retake/internal/jsonx"
 	"github.com/samahlstrom/retake/internal/relay"
@@ -70,6 +71,7 @@ type Hub struct {
 
 	tokenFails  *team.Limiter // bad Bearer tokens, share links and cookies, sign-in and setup codes
 	signinMails *team.Limiter // POST /signin
+	feedback    http.Handler
 
 	setupMu   sync.Mutex
 	setupCode string // the first-run setup code while there are no users; "" before SetupURL and once used
@@ -118,6 +120,7 @@ func New(opts Options) (*Hub, error) {
 	h.uploads.Log = opts.Log
 	h.tokenFails = team.NewLimiter()
 	h.signinMails = newLimiter(5)
+	h.feedback = feedback.New(opts.Version)
 	h.ctx, h.cancel = context.WithCancel(context.Background())
 	if opts.RelayCache > 0 {
 		if h.cache, err = relay.OpenCache(opts.Stores.RelayCacheDir(), opts.RelayCache); err != nil {

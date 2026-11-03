@@ -13,6 +13,7 @@
   import Settings from './Settings.svelte';
   import VideoMenuHost from '../components/menus/VideoMenuHost.svelte';
   import { brandOf, homeTitle } from '../lib/brand';
+  import Feedback from '../components/Feedback.svelte';
 
   let { home }: { home: Home } = $props();
   let command = $state('');
@@ -177,6 +178,7 @@
   </main>
   <div class="toast" data-part="toast" class:show={home.toast.show} role="status">{home.toast.msg}</div>
   <VideoMenuHost say={(msg) => home.toast.say(msg, 3000)} onchanged={() => void home.refresh()} />
+  <Feedback />
 </div>
 
 <style>

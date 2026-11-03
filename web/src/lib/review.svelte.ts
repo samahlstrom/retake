@@ -3131,6 +3131,7 @@ export class Review {
    * leaves the text (then R talks), and the video's keys go to the page as plain keys. */
   onKeydown = (e: KeyboardEvent): void => {
     const target = e.target as Element | null;
+    if (target?.closest?.('[data-part~="feedback"]')) return;
     if (target?.closest?.(TYPING) && !((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's')) {
       if (e.key === 'Escape' && this.kindShown && target.closest(TEXT)) (target as HTMLElement).blur?.();
       return;
@@ -3166,6 +3167,7 @@ export class Review {
   /** Clicking a button must not focus it, so Space and the other keys keep working. */
   onDocMousedown = (e: MouseEvent): void => {
     const target = e.target as Element | null;
+    if (target?.closest?.('[data-part~="feedback"]')) return;
     if (target?.closest?.('[data-select-trigger], [data-select-content]')) return;
     // Player buttons deliberately keep focus off themselves. Release a previously focused menu
     // so clicking Record or a timecode also restores the player's keyboard shortcuts.

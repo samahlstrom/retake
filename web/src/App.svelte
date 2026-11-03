@@ -4,6 +4,7 @@
   import Bar from './components/Bar.svelte';
   import Sidebar from './components/sidebar/Sidebar.svelte';
   import PhoneControls from './components/PhoneControls.svelte';
+  import Feedback from './components/Feedback.svelte';
   import type { Review } from './lib/review.svelte';
 
   let { review }: { review: Review } = $props();
@@ -37,3 +38,4 @@
   <PhoneControls {review} />
 {/if}
 <Sidebar {review} />
+<Feedback />

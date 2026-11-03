@@ -26,6 +26,7 @@ import (
 	"github.com/samahlstrom/retake/internal/download"
 	"github.com/samahlstrom/retake/internal/ext"
 	"github.com/samahlstrom/retake/internal/family"
+	"github.com/samahlstrom/retake/internal/feedback"
 	"github.com/samahlstrom/retake/internal/jobs"
 	"github.com/samahlstrom/retake/internal/jsonx"
 	"github.com/samahlstrom/retake/internal/linkcard"
@@ -171,6 +172,7 @@ type Server struct {
 	local      map[string]bool // the local Host headers: 127.0.0.1:<port>, localhost:<port>
 	allow      map[string]bool // AllowHosts, lower case; with the hosts table, the shared ones. Any other Host is refused.
 	limiter    *team.Limiter
+	feedback   http.Handler
 	fam        atomic.Pointer[[]family.Version]
 	writeMu    sync.Mutex // serializes every take write
 
@@ -216,7 +218,7 @@ func New(opts Options) *Server {
 	if opts.Limiter == nil {
 		opts.Limiter = team.NewLimiter()
 	}
-	s := &Server{opts: opts, origins: map[string]bool{
+	s := &Server{opts: opts, feedback: feedback.New(opts.Version), origins: map[string]bool{
 		fmt.Sprintf("http://127.0.0.1:%d", opts.Port): true,
 		fmt.Sprintf("http://localhost:%d", opts.Port): true,
 	}, local: map[string]bool{
@@ -500,6 +502,10 @@ func (s *Server) serveGranted(w http.ResponseWriter, r *http.Request) {
 
 // route sends an authorized request to its handler.
 func (s *Server) route(w http.ResponseWriter, r *http.Request, parts []string) {
+	if is(parts, "api", "feedback") {
+		s.feedback.ServeHTTP(w, r)
+		return
+	}
 	if len(parts) >= 2 && parts[0] == "api" && (parts[1] == "automation" || parts[1] == "worker") {
 		s.automationRoute(w, r, parts)
 		return

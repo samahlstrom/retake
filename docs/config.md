@@ -141,6 +141,13 @@ Download entry, with `"off"` nobody has.
 Without `public_url` any Host is accepted and the CLI makes links for `http://localhost:<port>`; set it in production.
 Forwarding headers (`X-Forwarded-For`, `-Proto`, `-Host`) are believed only from `trusted_proxies`.
 
+### Public feedback
+
+Set `RETAKE_FEEDBACK_TOKEN` only in the environment of the Retake server to let signed-in reviewers create public
+GitHub feedback issues. It is read when the server starts, never goes to the browser, and is not a `config.toml` key.
+Use a fine-grained GitHub token limited to `samahlstrom/retake` with only the repository **Issues: Read and write**
+permission. Without it, the page offers a GitHub sign-in handoff instead.
+
 `retake remote add` keeps remotes (a project URL and an agent token) in `$XDG_CONFIG_HOME/retake/remotes.toml`, readable
 only by you. `retake push --remote` remembers unfinished uploads in `$XDG_STATE_HOME/retake/uploads.json`
 (`~/.local/state/retake/uploads.json`), so the next push of the same file resumes them.
@@ -173,6 +180,7 @@ See [theming.md](theming.md).
 | `RETAKE_WHISPER_THREADS` | retake | whisper.cpp's CPU threads. |
 | `RETAKE_DATA`, `RETAKE_LISTEN`, `RETAKE_PUBLIC_URL`, `RETAKE_TRUSTED_PROXIES`, `RETAKE_DATABASE_URL`, `RETAKE_S3_*`, `RETAKE_SMTP_URL`, `RETAKE_SMTP_FROM`, `RETAKE_RELAY_CACHE` | retake serve, user, project | The team server's settings ([server] above). |
 | `RETAKE_DOWNLOADS` | retake open, share, serve | Who may download a version's MP4 ([server] `downloads` above). |
+| `RETAKE_FEEDBACK_TOKEN` | retake open, share, serve | Server-only GitHub token for public feedback issues; use only `samahlstrom/retake` with **Issues: Read and write**. |
 | `RETAKE_THEME` | retake open, share, serve, theme | The theme folder ([theming.md](theming.md)), or `none` for the built-in look. |
 | `RETAKE_REVEAL` | retake open, start | The program Show in folder runs with the video's folder, instead of the file manager (tests). |
 | `RETAKE_TOKEN` | retake remote add | The agent token, when `--token` isn't given. |

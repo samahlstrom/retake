@@ -76,6 +76,12 @@ watches the files they change and renders what changed.
 Run it on your computer, or host it for a team and review from anywhere, phones included. Footage stays on the
 machine it lives on and renders there; the browser gets the stream. Share one video with a link from its ⋯ menu.
 
+## Public feedback
+
+Set `RETAKE_FEEDBACK_TOKEN` on the Retake server to send the in-app feedback form to GitHub. Use a fine-grained token
+limited to `samahlstrom/retake` with only **Issues: Read and write**; the token never reaches the browser. Without it,
+the form opens a prefilled GitHub issue instead. See [Config](docs/config.md#public-feedback).
+
 ## Docs
 
 - [Quickstart](docs/quickstart.md): the whole loop on a sample project

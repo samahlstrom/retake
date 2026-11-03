@@ -282,6 +282,9 @@ Versioning). Classes and ids are not part of the API and can change in any relea
 | `keys-sheet` | The keys it shows | review |
 | `hint` | The one-line hint | review |
 | `toast` | A short message over the video | review |
+| `feedback` | The product feedback control, both its launcher and its panel | both |
+| `feedback-tab` | The slim Feedback tab on the right edge | both |
+| `feedback-panel` | The Feedback panel with its public report form | both |
 | `home-nav` | The back link and "Next video" over the video | review |
 | `review-back` | The back link over the video: "Project › video", back to the same place on the home | review |
 | `agent-visuals` | The agent's boxes, arrows and lines over the video | review |
