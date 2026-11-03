@@ -235,13 +235,23 @@ func (m *Manager) render(ctx context.Context, j *job, t Target) {
 		emit(project.WhyComplete, "")
 	case ctx.Err() != nil:
 		s.State = family.StatePending
+		published(t.Playlist, s)
 		m.write(t, rec)
 		emit(project.WhyStopped, "")
 	default:
 		s.State, s.Error = family.StatePending, err.Error()
+		published(t.Playlist, s)
 		m.write(t, rec)
 		m.logf("retake: rendering %s: %v\n", t.Label, err)
 		emit(project.WhyFailed, err.Error())
+	}
+}
+
+// published sets a stopped render's progress to what its playlist holds: the editor can publish a unit and be stopped
+// before its progress line about it is read.
+func published(playlist string, s *family.StreamRecord) {
+	if pl, err := family.ReadPlaylist(playlist); err == nil {
+		s.Done, s.Seconds = pl.Units, pl.Seconds
 	}
 }
 
