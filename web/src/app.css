@@ -722,10 +722,18 @@
   #verList .download:hover {
     background: color-mix(in srgb, var(--overlay) 6%, transparent);
   }
+  /* Room for the longest progress text, so the list keeps its width while the text changes. */
+  #verList .download .d {
+    min-width: 10ch;
+    text-align: right;
+  }
+  /* The note wraps inside the list's width instead of widening it (it adds nothing to the width the list takes). */
   #verList .download-note {
+    box-sizing: border-box;
+    width: 0;
+    min-width: 100%;
     margin: 0;
     padding: 0 10px 4px;
-    max-width: 240px;
     color: var(--dim);
     font-size: 11px;
     line-height: 1.4;
