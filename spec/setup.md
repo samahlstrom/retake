@@ -62,7 +62,10 @@ done`) only when the first `retake` on `PATH`, leaving out the bundle folder, is
 install.sh link to it, or a build from source. Otherwise it gives this binary's full path. The bundle folder doesn't
 count because an agent in herdr or tmux, or the person's own shell, doesn't have it on `PATH`. With npm, `retake` on
 `PATH` is the node launcher (`npm/`), so agents get the Go binary inside the platform package by its full path: it
-works whatever node version manager is (or isn't) active, and no node starts on each call.
+works whatever node version manager is (or isn't) active, and no node starts on each call. On Windows, where an
+agent's shell may be PowerShell, cmd or Git Bash, each quoting a path its own way, the prompt says plain `retake` and
+the agent gets this binary's folder first on its `PATH` instead (in the background, and in herdr through the
+session's `--env PATH=…`; spec/automation.md, "Agents outlive Retake").
 
 **The login shell's `PATH`.** An app started from Finder or a desktop menu gets a short `PATH` (`/usr/bin:/bin:…`),
 so `claude` in `~/.local/bin` or `codex` in `/opt/homebrew/bin` would not be found. With `--app`, and on every

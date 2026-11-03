@@ -3,11 +3,18 @@
 Builds Retake for Windows x64 into one folder and one zip, with the tools that ship with it (docs/install-plan.md).
 
 .DESCRIPTION
-Run it on Windows x64 (CI's windows-latest; the release workflow calls it there). It needs git, Go and node (the
-versions in mise.toml) and, unless -SkipEditor, Rust with the MSVC toolchain. Downloads are pinned by SHA-256 and kept
-in a cache folder, so a second run downloads nothing. Nothing downloaded is run here.
+Run it on Windows x64. Two uses:
 
-What it makes, in -OutDir (default: <repo>\dist):
+- The release workflow (.github/workflows/release.yml) runs `build-windows.ps1 -OutDir <dir>` on windows-latest in a
+  job that has only Rust: it puts what must be built on Windows itself in <dir>, which is retake-edit.exe (it links
+  prebuilt Skia with MSVC, so it can't be cross-compiled). goreleaser builds the rest of the release's Windows zip on
+  Linux (retake.exe, retakew.exe), and scripts/bundle-deps.sh adds herdr, ffmpeg and that retake-edit.exe to it.
+- Without -OutDir (CI's windows job, or by hand) it builds the whole Windows package in one folder and one zip, as the
+  release's, so it can be smoke-tested on Windows. That needs git, Go and node (the versions in mise.toml) and, unless
+  -SkipEditor, Rust with the MSVC toolchain. Downloads are pinned by SHA-256 and kept in a cache folder, so a second
+  run downloads nothing. Nothing downloaded is run here.
+
+What the whole package is, in -DistDir (default: <repo>\dist):
 
   windows\retake.exe            the server, the page (embedded, -tags webdist) and the worker
   windows\retakew.exe           the same program's window-less launcher (cmd\retakew): the Start menu entry and the
@@ -22,7 +29,8 @@ What it makes, in -OutDir (default: <repo>\dist):
   checksums-windows.txt         "<sha256>  <zip name>", the line to add to the release's checksums.txt
 
 Examples:
-  pwsh scripts/build-windows.ps1                       # everything; the version from git tags (scripts/version.sh)
+  pwsh scripts/build-windows.ps1 -OutDir stage         # the release workflow: stage\retake-edit.exe only
+  pwsh scripts/build-windows.ps1                       # the whole package; the version from git tags (scripts/version.sh)
   pwsh scripts/build-windows.ps1 -Version 0.4.0
   pwsh scripts/build-windows.ps1 -SkipEditor -SkipFfmpeg   # just retake.exe and retakew.exe (quick)
 
@@ -30,7 +38,11 @@ Examples:
 The version, without a leading v. Default: worked out from the newest vX.Y.Z git tag, as scripts/version.sh does.
 
 .PARAMETER OutDir
-Where windows\, the zip and checksums-windows.txt go. Default: <repo>\dist.
+The release workflow's: build only retake-edit.exe (cargo, MSVC) and put it in this folder. The other options don't
+apply then.
+
+.PARAMETER DistDir
+Where the whole package's windows\, its zip and checksums-windows.txt go. Default: <repo>\dist.
 
 .PARAMETER SkipWeb
 Use web\dist as it is (the page must have been built already) instead of npm ci and npm run build.
@@ -45,6 +57,7 @@ Leave out ffmpeg.exe, ffprobe.exe and herdr.exe (no downloads).
 param(
     [string]$Version = '',
     [string]$OutDir = '',
+    [string]$DistDir = '',
     [switch]$SkipWeb,
     [switch]$SkipEditor,
     [switch]$SkipFfmpeg
@@ -77,11 +90,14 @@ $HerdrLicenseUrl = "https://raw.githubusercontent.com/herdrdev/herdr/v$HerdrVers
 $HerdrLicenseSha = 'c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4'
 
 $Root = Split-Path -Parent $PSScriptRoot
-if (-not $OutDir) { $OutDir = Join-Path $Root 'dist' }
-$OutDir = [System.IO.Path]::GetFullPath($OutDir)
-$Stage = Join-Path $OutDir 'windows'
 
 function Say([string]$Text) { Write-Host "build-windows: $Text" }
+
+# FullPath is Path from the current location (.NET's own current folder isn't PowerShell's).
+function FullPath([string]$Path) {
+    if (-not [System.IO.Path]::IsPathRooted($Path)) { $Path = Join-Path (Get-Location).Path $Path }
+    return [System.IO.Path]::GetFullPath($Path)
+}
 
 # Exec runs a program and stops the build when it fails. Its stderr isn't redirected, so Windows PowerShell doesn't
 # turn the progress lines cargo and npm print there into errors.
@@ -96,6 +112,20 @@ function Exec {
         if ($Dir) { Pop-Location }
     }
 }
+
+# The release workflow's part: retake-edit.exe, built natively, into -OutDir. Nothing else (that job has only Rust).
+if ($OutDir) {
+    $OutDir = FullPath $OutDir
+    New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
+    Exec cargo @('build', '--release', '--locked', '-p', $EditorName, '--manifest-path', (Join-Path $Root 'editor\Cargo.toml'))
+    Copy-Item -LiteralPath (Join-Path $Root "editor\target\release\$EditorName.exe") -Destination $OutDir
+    Say "made $(Join-Path $OutDir "$EditorName.exe")"
+    exit 0
+}
+
+if (-not $DistDir) { $DistDir = Join-Path $Root 'dist' }
+$DistDir = FullPath $DistDir
+$Stage = Join-Path $DistDir 'windows'
 
 # Output runs a program for its output (trimmed), "" when it fails; its stderr is dropped.
 function Output {
@@ -271,7 +301,7 @@ foreach ($f in @('README.md', 'CHANGELOG.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md
 
 # 6. The zip (entries with / between names, at the top, as goreleaser's are) and its checksum line.
 $zipName = "${Name}_${Version}_windows_amd64.zip"
-$zipPath = Join-Path $OutDir $zipName
+$zipPath = Join-Path $DistDir $zipName
 if (Test-Path -LiteralPath $zipPath) { Remove-Item -LiteralPath $zipPath -Force }
 Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
 $stream = [System.IO.File]::Open($zipPath, [System.IO.FileMode]::CreateNew)
@@ -288,7 +318,7 @@ try {
     $stream.Dispose()
 }
 $line = "$(Get-Sha256 $zipPath)  $zipName"
-Write-Text (Join-Path $OutDir 'checksums-windows.txt') "$line`n"
+Write-Text (Join-Path $DistDir 'checksums-windows.txt') "$line`n"
 Say "made $zipPath"
 Say $line
 Get-ChildItem -LiteralPath $Stage -File | ForEach-Object { Say ("  {0,-24} {1,12:N0} bytes" -f $_.Name, $_.Length) }

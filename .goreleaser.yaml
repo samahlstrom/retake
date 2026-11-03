@@ -34,10 +34,23 @@ builds:
     ldflags:
       - -s -w -X {{ .ModulePath }}/internal/cli.version={{ .Version }}
     mod_timestamp: "{{ .CommitTimestamp }}" # reproducible: file times come from the commit
+  # Windows only: retake's launcher without a console window (cmd/retakew, a GUI-subsystem program). The Start menu
+  # entry (install.ps1) and the login item (retake autostart) run `retakew.exe start --app`.
+  - id: retakew
+    main: ./cmd/retakew
+    binary: "{{ .ProjectName }}w"
+    env:
+      - CGO_ENABLED=0
+    goos: [windows]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w -H=windowsgui
+    mod_timestamp: "{{ .CommitTimestamp }}"
 
 archives:
   - id: retake
-    ids: [retake]
+    ids: [retake, retakew]
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     formats: [tar.gz]
     format_overrides:

@@ -40,7 +40,8 @@ Linux: the install script unpacks the release into `~/.local/share/retake/<versi
 sudo. An AppImage would add a double-clickable file but no tray or autostart for free; it's not worth it before
 there are Linux users who aren't developers.
 
-**Windows** is a folder and a Start menu entry, not an installer. `scripts/install.ps1` (`irm …/install.ps1 | iex`)
+**Windows** is a folder and a Start menu entry, not an installer. `install.ps1` at the repo's top (`irm …/install.ps1 |
+iex`; the release also carries it)
 downloads `retake_<version>_windows_amd64.zip`, checks its SHA-256 against the release's `checksums.txt`, unpacks it
 into `%LOCALAPPDATA%\Programs\retake` (an older install there is replaced file by file; a running Retake keeps going),
 adds that folder to the user's PATH and makes a **Retake** Start menu shortcut. No administrator rights, no MSI or
@@ -52,9 +53,14 @@ user's page.
   `retake.exe` beside it hidden, so a person never sees a console they could close by mistake. `retake.exe` stays a
   console program for the terminal. No tray icon: Retake lives in the browser, and opening it again from the Start
   menu finds the one that runs.
-- `scripts/build-windows.ps1` makes the zip on a Windows runner: the page, `retake.exe` and `retakew.exe` (Go, as
-  goreleaser builds them), `retake-edit.exe` (cargo, MSVC), and the pinned downloads (ffmpeg, herdr), into
-  `dist/windows/`, plus `dist/retake_<version>_windows_amd64.zip` and its line in `dist/checksums-windows.txt`.
+- The release's Windows zip is made like the others: goreleaser cross-builds `retake.exe` and `retakew.exe` on Linux,
+  and `scripts/bundle-deps.sh` adds herdr, ffmpeg and `retake-edit.exe`, which the release workflow builds on
+  `windows-latest` with `scripts/build-windows.ps1 -OutDir <dir>` (it links prebuilt Skia with MSVC, so it can't be
+  cross-compiled).
+- `scripts/build-windows.ps1` without `-OutDir` builds that same package natively in one go, for CI and by hand: the
+  page, `retake.exe`, `retakew.exe`, `retake-edit.exe` and the pinned downloads (ffmpeg, herdr, the same pins as
+  `bundle-deps.sh`) in `dist/windows/`, plus `dist/retake_<version>_windows_amd64.zip` and its line in
+  `dist/checksums-windows.txt`. That zip is for testing; the release uses goreleaser's.
 - CI's `windows` job (`.github/workflows/ci.yml`) runs the Go tests and the page's unit tests on `windows-latest`,
   builds `retake-edit`, runs `build-windows.ps1`, and smoke-tests the result (`scripts/windows-smoke.ps1`):
   `retake start` on a scratch folder of generated clips, the page and a poster, then a typed comment sent to a fake
@@ -121,9 +127,9 @@ packages small. It bundles it instead, in each `retake-cli-<os>-<cpu>` package, 
 
 ### The npm package for Windows: `retake-cli-win32-x64`
 
-The NPM worker's packaging makes it from `scripts/build-windows.ps1`'s `dist/windows/` (or the zip, which holds the
-same files), the same way as the other platform packages: the programs and `retake-bundle.json` side by side in `bin/`,
-so Retake finds its own tools first, and the license files at the package's top.
+`scripts/npm-pack.sh` makes it from the release's `retake_<version>_windows_amd64.zip` (goreleaser's, above), the same
+way as the other platform packages: the programs and `retake-bundle.json` side by side in `bin/`, so Retake finds its
+own tools first, and the license files with them.
 
 ```
 retake-cli-win32-x64/            os: ["win32"], cpu: ["x64"]
@@ -211,12 +217,7 @@ Retake already survives restarts without losing agent work (docs/agents.md), so 
    browser. Azure Trusted Signing (about $10 a month, needs a verifiable organization or individual identity) or an
    OV certificate signs `retake.exe`, `retakew.exe` and `retake-edit.exe` in CI; SmartScreen reputation then builds up
    per certificate.
-7. **One way to build the Windows zip.** Two paths exist and their zips have the same name: `scripts/build-windows.ps1`
-   on `windows-latest` (builds everything natively, including `retakew.exe`), or goreleaser's cross-built `retake.exe`
-   plus `scripts/bundle-deps.sh windows_amd64` and the `retake-edit` archive from CI's editor matrix. The release
-   workflow should use one; with goreleaser, its build list needs `retakew` (`-H=windowsgui`) too, and its own Windows
-   archive must go (`ignore: [{goos: windows}]`) when `build-windows.ps1`'s zip is used.
-8. **The app's identifier**, `io.github.samahlstrom.retake` for now (the bundle id and the login item). It's
+7. **The app's identifier**, `io.github.samahlstrom.retake` for now (the bundle id and the login item). It's
    hard to change after release, like the name.
 
 ## What's built now (this branch)
@@ -233,8 +234,9 @@ Retake already survives restarts without losing agent work (docs/agents.md), so 
   Windows and herdr for Windows in the archives, and `.github/workflows/release.yml`, which builds every platform on
   its own runner, tests each install, drafts the GitHub release and, once it's published, publishes npm and Homebrew
   (docs/releasing.md).
-- Windows: `scripts/build-windows.ps1` (the zip, with herdr's and ffmpeg's Windows builds pinned), `scripts/install.ps1`
-  (installs it for the user: folder, PATH, Start menu; `-Uninstall`), `cmd/retakew` (the console-less launcher), and
-  CI's `windows` job with `scripts/windows-smoke.ps1`. Nothing downloaded was run on Linux; CI runs it on Windows.
+- Windows: `install.ps1` (installs a release for the user: folder, PATH, Start menu; `-Uninstall`), `cmd/retakew`
+  (the console-less launcher, in the goreleaser build), `scripts/build-windows.ps1` (`-OutDir` for the release's
+  `retake-edit.exe`, else the whole package), and CI's `windows` job with `scripts/windows-smoke.ps1`. Nothing
+  downloaded was run on Linux; CI runs it on Windows.
 - Not built: the `.dmg`, signing, starting herdr's server when none runs (to check with herdr: whether `herdr
   workspace create` starts one), the update check, an app icon.

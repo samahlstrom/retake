@@ -1,10 +1,10 @@
 # Installs Retake on Windows from a GitHub release, for the current user only (no administrator rights):
 #
-#   irm https://github.com/samahlstrom/retake/releases/latest/download/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/samahlstrom/retake/main/install.ps1 | iex
 #
 # or, saved (when security software blocks the line above, or to pick a version):
 #
-#   curl.exe -fsSLo install.ps1 https://github.com/samahlstrom/retake/releases/latest/download/install.ps1
+#   curl.exe -fsSLo install.ps1 https://raw.githubusercontent.com/samahlstrom/retake/main/install.ps1
 #   powershell -ExecutionPolicy Bypass -File install.ps1 [-Version X.Y.Z] [-Uninstall]
 #
 # It downloads retake_<version>_windows_amd64.zip and the release's checksums.txt, refuses the zip unless its SHA-256
@@ -39,6 +39,7 @@ function Install-Retake {
     $repo = if ($env:INSTALL_REPO) { $env:INSTALL_REPO } else { 'samahlstrom/retake' }
     $releases = "https://github.com/$repo/releases"
     $dir = if ($env:INSTALL_DIR) { $env:INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA "Programs\$name" }
+    if (-not [System.IO.Path]::IsPathRooted($dir)) { $dir = Join-Path (Get-Location).Path $dir }
     $dir = [System.IO.Path]::GetFullPath($dir)
     $shortcut = Join-Path ([Environment]::GetFolderPath('Programs')) "$title.lnk"
 

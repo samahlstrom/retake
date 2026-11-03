@@ -260,6 +260,14 @@ jobs:
         if: ${{ !cancelled() && steps.tools.outcome == 'success' }}
         working-directory: editor
         run: cargo build --release --locked -p retake-edit
+      # What release.yml runs on its Windows runner: retake-edit.exe alone into the folder (cargo's build is cached by now).
+      - name: The release workflow's part (scripts/build-windows.ps1 -OutDir)
+        if: ${{ !cancelled() && steps.editor.outcome == 'success' }}
+        run: |
+          ./scripts/build-windows.ps1 -OutDir release-stage
+          if (-not (Test-Path release-stage/retake-edit.exe)) { throw "no release-stage/retake-edit.exe" }
+          ./release-stage/retake-edit.exe --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Package (scripts/build-windows.ps1)
         id: package
         if: ${{ !cancelled() && steps.editor.outcome == 'success' }}

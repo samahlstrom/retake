@@ -8,7 +8,7 @@ server on your computer and the page in your browser. This page is what's differ
 In PowerShell (no administrator rights needed):
 
 ```powershell
-irm https://github.com/samahlstrom/retake/releases/latest/download/install.ps1 | iex
+irm https://raw.githubusercontent.com/samahlstrom/retake/main/install.ps1 | iex
 ```
 
 It checks the download against the release's SHA-256 list, installs into `%LOCALAPPDATA%\Programs\retake`, adds that
@@ -19,7 +19,7 @@ new terminal.
   script first, then run it:
 
   ```powershell
-  curl.exe -fsSLo install.ps1 https://github.com/samahlstrom/retake/releases/latest/download/install.ps1
+  curl.exe -fsSLo install.ps1 https://raw.githubusercontent.com/samahlstrom/retake/main/install.ps1
   powershell -ExecutionPolicy Bypass -File install.ps1
   ```
 

@@ -37,12 +37,14 @@ $ProgressPreference = 'SilentlyContinue'
 
 $Root = Split-Path -Parent $PSScriptRoot
 if (-not $Bin) { $Bin = Join-Path $Root 'dist\windows' }
+if (-not [System.IO.Path]::IsPathRooted($Bin)) { $Bin = Join-Path (Get-Location).Path $Bin }
 $Bin = [System.IO.Path]::GetFullPath($Bin)
 if (-not $Dir) {
     $t = $env:RUNNER_TEMP
     if (-not $t) { $t = [System.IO.Path]::GetTempPath() }
     $Dir = Join-Path $t 'retake-smoke'
 }
+if (-not [System.IO.Path]::IsPathRooted($Dir)) { $Dir = Join-Path (Get-Location).Path $Dir }
 $Dir = [System.IO.Path]::GetFullPath($Dir)
 $retake = Join-Path $Bin 'retake.exe'
 $ffmpeg = Join-Path $Bin 'ffmpeg.exe'
