@@ -696,6 +696,19 @@ because a comment on the one before asked for changes.
   send's `/done` body and its `POST /api/automation/tasks` (any role that can record; the server takes it only when
   the selected worker offers it, else the configured agent; a send that joins a task already waiting keeps that
   task's agent). With one agent, holding Send is a plain Send.
+- **An agent for one video.** The owner can give a video its own agent: **Agent for this video ▸** in the video's ⋯
+  (on its card on the home and on its review page; spec/home.md, "A video's ⋯") lists the agents the editing
+  computer offers, a check on the one in use, and **Use my default (<the default agent's name>)**. The choice is the
+  project's `video_agent` (in its store, `.retake/project.db`, with the rest of `api/automation`'s state; "" = none),
+  and `GET /api/automation` returns it. `POST /api/automation/agent {"agent": "<id>" | ""}` (owner only,
+  origin-checked) sets or clears it: an agent the selected worker (before one is selected, any worker) doesn't offer
+  is 400 and changes nothing. Settings' default agent never touches it.
+  - **Which agent a task gets**, first to last: the agent picked by holding Send (that one send only) > the video's
+    agent > the default agent (Settings, which is `config.agent`). A send without a held pick queues its task with the
+    video's agent while the computer offers it, else `config.agent` (a task an older store queued without an agent
+    takes it when a worker claims it). A task keeps the agent it was queued with (Switch agent in a comment's ⋯
+    changes that). The chat on a video's script (spec/chat.md) uses the video's agent the same way.
+  - Nothing about the agent shows on or near Send, and Settings explains the choice in one line.
 - **No agent menu in the bar.** The agent, its fallback, where agents run and connecting a computer are in Settings
   (the home's left nav, spec/home.md). Only where Send can't reach an agent does one quiet line say so, over the bar's
   right end: "No editing computer connected · Settings" for the owner of a hosted project with no computer online,
@@ -732,7 +745,9 @@ because a comment on the one before asked for changes.
 
 ## Required verification
 
-Use disposable native timelines and generated media. Test persistence, single claim, lease fencing, cancellation
+Use disposable native timelines and generated media. For "An agent for one video": the order (a held Send's agent, then the video's,
+then `config.agent`), a queued task keeping its agent, an agentless one taking the video's at its claim, an agent the worker doesn't offer refused,
+only the owner setting it, and Settings' default leaving it alone. Test persistence, single claim, lease fencing, cancellation
 before switching, rate-limit handoff, final submission versus incremental transcription, questions and replies,
 role restrictions, revoked tokens, bounded relay, path safety, server/worker reconnect, cached incremental
 rendering and actual browser playback after source changes. Exercise both existing saved comments and new

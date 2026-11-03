@@ -1,0 +1,392 @@
+/* A video's ⋯, its share sheet, Move to Trash's confirm and Undo (spec/home.md, "A video's ⋯"). The home and the review
+   page both use them, so the look is here, in the page's tokens. */
+@layer retake {
+  /* ---------------------------------------------------------------- the ⋯ */
+  /* On a card: at the right of its name (the frame is 16:9 of the card's width), there on hover or focus, always there
+     but quiet on a phone. Showing it moves nothing. */
+  .video-card {
+    container-type: inline-size;
+  }
+  .vm-more.card {
+    position: absolute;
+    right: -6px;
+    top: calc(100cqw * 9 / 16 + 4px);
+    opacity: 0;
+    transition: opacity 0.15s ease;
+  }
+  .video-card:hover .vm-more.card,
+  .video-card:focus-within .vm-more.card,
+  .vm-more.card[data-state='open'] {
+    opacity: 1;
+  }
+  @media (hover: none) {
+    .vm-more.card {
+      top: calc(100cqw * 9 / 16 - 1px);
+      width: 44px;
+      height: 44px;
+      opacity: 0.6;
+    }
+  }
+  /* Over the review page's video: round, on the back link's scrim, quiet until hovered. */
+  .vm-more.review {
+    width: 34px;
+    height: 34px;
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--scrim) 72%, transparent);
+    color: var(--on-scrim);
+    opacity: 0.6;
+    backdrop-filter: blur(10px);
+    transition:
+      opacity 0.2s ease,
+      color 0.2s ease;
+  }
+  .vm-more.review:hover,
+  .vm-more.review:focus-visible,
+  .vm-more.review[data-state='open'] {
+    opacity: 1;
+    color: var(--on-scrim-strong);
+    background: color-mix(in srgb, var(--scrim) 72%, transparent);
+  }
+  html[data-phone] .vm-more.review {
+    width: 44px;
+    height: 44px;
+    opacity: 0.8;
+  }
+  /* The review page has no .more of its own: the glyph's box. */
+  .vm-more {
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .vm-more svg {
+    width: 20px;
+    height: 20px;
+    fill: currentColor;
+  }
+  .vm-menu {
+    min-width: 200px;
+  }
+  .vm-agents {
+    min-width: 220px;
+  }
+  .vm-menu .menu-item,
+  .vm-agents .menu-item {
+    color: var(--text-2);
+  }
+  .vm-menu .menu-item.danger {
+    color: var(--danger);
+  }
+  .vm-agents .check {
+    min-width: 1em;
+    color: var(--text);
+    text-align: right;
+  }
+
+  /* ---------------------------------------------------------------- the sheets */
+  .vm-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 130;
+    background: color-mix(in srgb, var(--scrim) 55%, transparent);
+  }
+  .vm-sheet {
+    position: fixed;
+    z-index: 131;
+    top: min(14vh, 120px);
+    left: 50%;
+    transform: translateX(-50%);
+    display: grid;
+    gap: 14px;
+    width: min(440px, calc(100vw - 24px));
+    max-height: calc(100dvh - min(14vh, 120px) - 24px);
+    overflow-y: auto;
+    padding: 18px 20px 20px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-lg);
+    background: var(--surface-popover);
+    color: var(--text-2);
+    box-shadow: 0 24px 80px color-mix(in srgb, var(--shadow) 60%, transparent);
+    font: 14px/1.45 var(--font-ui);
+    outline: none;
+  }
+  html[data-phone] .vm-sheet,
+  .vm-sheet:where(:not(.vm-confirm)) {
+    max-width: calc(100vw - 24px);
+  }
+  @media (max-width: 760px) {
+    .vm-sheet {
+      top: 12px;
+      max-height: calc(100dvh - 24px);
+    }
+  }
+  .vm-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .vm-title {
+    margin: 0;
+    color: var(--text);
+    font-size: 15px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .vm-confirm .vm-title {
+    white-space: normal;
+  }
+  .vm-what {
+    color: var(--text-strong);
+  }
+  .vm-x {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 32px;
+    height: 32px;
+    min-height: 0;
+    margin: -6px -8px -6px 0;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .vm-x:hover {
+    color: var(--text);
+  }
+  .vm-x svg {
+    width: 18px;
+    height: 18px;
+  }
+  .vm-form {
+    display: grid;
+    gap: 12px;
+  }
+  .vm-sheet input {
+    width: 100%;
+    min-height: 40px;
+    padding: 8px 12px;
+    border: 1px solid color-mix(in srgb, var(--overlay) 11%, transparent);
+    border-radius: var(--radius);
+    background: var(--surface-control);
+    color: var(--text);
+    font: inherit;
+  }
+  .vm-sheet input:focus {
+    outline: none;
+    border-color: color-mix(in srgb, var(--focus) 60%, transparent);
+  }
+  .vm-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .vm-label {
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .vm-seg {
+    display: inline-flex;
+    padding: 2px;
+    border-radius: var(--radius);
+    background: var(--surface-control);
+  }
+  .vm-seg button {
+    min-height: 32px;
+    padding: 4px 12px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--muted);
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .vm-seg button.on {
+    background: var(--surface-control-hover);
+    color: var(--text);
+  }
+  .vm-btn {
+    min-height: 38px;
+    padding: 8px 16px;
+    border: 1px solid color-mix(in srgb, var(--overlay) 11%, transparent);
+    border-radius: var(--radius);
+    background: var(--surface-control);
+    color: var(--text);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .vm-btn:hover {
+    border-color: color-mix(in srgb, var(--overlay) 27%, transparent);
+  }
+  .vm-btn:disabled {
+    opacity: 0.55;
+    cursor: default;
+  }
+  .vm-btn.primary {
+    border-color: transparent;
+    background: var(--accent);
+    color: var(--on-accent);
+  }
+  .vm-btn.primary:hover:not(:disabled) {
+    background: var(--accent-hover);
+  }
+  .vm-btn.danger-fill {
+    border-color: transparent;
+    background: var(--danger);
+    color: var(--on-accent);
+  }
+  .vm-create {
+    justify-self: end;
+  }
+  .vm-link {
+    display: flex;
+    gap: 8px;
+  }
+  .vm-link input {
+    flex: 1;
+    min-width: 0;
+    font: 13px var(--font-mono);
+    color: var(--text-2);
+  }
+  .vm-note {
+    margin: 0;
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .vm-err {
+    margin: 0;
+    color: var(--danger);
+    font-size: 13px;
+  }
+  .vm-text {
+    justify-self: start;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--text-3);
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .vm-text:hover {
+    color: var(--text);
+  }
+  .vm-text.danger:hover {
+    color: var(--danger);
+  }
+  .vm-links h3 {
+    margin: 4px 0 6px;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .vm-links ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .vm-links li {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 12px;
+    padding: 8px 0;
+    border-top: 1px solid var(--line);
+  }
+  .vm-who {
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .vm-detail {
+    grid-row: 2;
+    color: var(--muted);
+    font-size: 12.5px;
+  }
+  .vm-links .vm-text {
+    grid-row: 1 / 3;
+    grid-column: 2;
+    align-self: center;
+    min-height: 32px;
+  }
+  .vm-desc {
+    display: grid;
+    gap: 6px;
+    margin: 0;
+  }
+  .vm-path {
+    color: var(--text);
+    font: 13px var(--font-mono);
+    word-break: break-all;
+  }
+  .vm-sum {
+    color: var(--text-2);
+    font-variant-numeric: tabular-nums;
+  }
+  .vm-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+  html[data-phone] .vm-btn,
+  html[data-phone] .vm-seg button {
+    min-height: 44px;
+  }
+  @media (max-width: 760px) {
+    .vm-btn,
+    .vm-seg button {
+      min-height: 44px;
+    }
+  }
+
+  /* ---------------------------------------------------------------- Undo */
+  .vm-undo {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    z-index: 140;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-popover);
+    border: 1px solid var(--line-strong);
+    color: var(--text-2);
+    font-size: 13.5px;
+    opacity: 0;
+    transform: translateX(-50%);
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+  }
+  .vm-undo.show {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .vm-undo .vm-dot {
+    color: var(--dim);
+  }
+  .vm-undo .vm-text {
+    min-height: 32px;
+    color: var(--text);
+    font-weight: 600;
+  }
+}

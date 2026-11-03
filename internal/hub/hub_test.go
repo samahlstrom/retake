@@ -794,3 +794,39 @@ func TestAnchorAndFirstVersion(t *testing.T) {
 }
 
 func b64(s string) string { return base64.StdEncoding.EncodeToString([]byte(s)) }
+
+func TestHostedShareLinkFromThePage(t *testing.T) {
+	x := newTH(t, Config{}, nil)
+	demo := x.project("demo", false)
+	owner := x.user("owner@example.com", true)
+	ana := x.user("ana@example.com", false)
+	x.member(demo, ana, team.Approver)
+	r := x.post("/p/demo/api/shares", `{"label":"Alex","role":"reviewer","expires":"7d"}`,
+		cookie(SessionCookie, x.session(owner)), origin(x.url))
+	if r.code != http.StatusCreated {
+		t.Fatalf("an admin makes a link: %d %s", r.code, r.body)
+	}
+	var m struct {
+		URL   string `json:"url"`
+		Reach struct{ Kind, Host string }
+	}
+	_ = json.Unmarshal([]byte(r.body), &m)
+	base := x.url + "/p/demo/s/"
+	if m.Reach.Kind != "hosted" || !strings.HasPrefix(m.URL, base) || !team.WellFormed(strings.TrimPrefix(m.URL, base)) {
+		t.Fatalf("hosted link: %s", r.body)
+	}
+	tok := strings.TrimPrefix(m.URL, base)
+	if info := x.do(http.MethodGet, "/p/demo/api/info", "", cookie(ShareCookie, tok)); info.code != 200 ||
+		info.json(t)["role"] != "reviewer" {
+		t.Fatalf("the link: %d %s", info.code, info.body)
+	}
+	// An approver (a member, not an owner) can too; a reviewer can't.
+	if r := x.post("/p/demo/api/shares", `{}`, cookie(SessionCookie, x.session(ana)), origin(x.url)); r.code != 201 {
+		t.Fatalf("an approver's link: %d %s", r.code, r.body)
+	}
+	bo := x.user("bo@example.com", false)
+	x.member(demo, bo, team.Reviewer)
+	if r := x.post("/p/demo/api/shares", `{}`, cookie(SessionCookie, x.session(bo)), origin(x.url)); r.code != 403 {
+		t.Fatalf("a reviewer made a link: %d", r.code)
+	}
+}

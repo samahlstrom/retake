@@ -1,10 +1,29 @@
 <script lang="ts">
   // In a home (retake open <folder>, spec/home.md): "← Project › video" at the top left of the video, back to the
   // home at the place the reviewer came from, and after Done "Next video →" at the bottom right, where players put
-  // their next episode. Nothing at all outside a home.
+  // their next episode. Right of the back link (alone outside a home), the video's ⋯ (spec/notes.md, "The video's ⋯").
   import type { Review } from '../lib/review.svelte';
+  import { videoName } from '../lib/home';
+  import VideoMenu from './menus/VideoMenu.svelte';
+  import VideoMenuHost from './menus/VideoMenuHost.svelte';
+  import { downloadLine } from '../lib/video-menu-api';
 
   let { review }: { review: Review } = $props();
+  const target = $derived({
+    name: review.homeCtx?.project ?? review.info.name,
+    title: review.homeMe ? videoName(review.homeMe) : review.info.name,
+    api: '',
+    home: review.homeCtx?.home ?? null,
+  });
+  // The version menu's Download (spec/api.md, "Download"), for the version on screen, in the ⋯ too.
+  const dlLabel = $derived(review.mayDownload && review.shown && !review.kindShown ? review.shown : '');
+  async function download() {
+    const label = dlLabel;
+    if (!label) return;
+    await review.downloads.get(label);
+    const line = downloadLine(review.downloads.byLabel[label]);
+    if (line) review.toast.say(line, 3200);
+  }
   const SEP = ' › '; // its spaces stay (text at a tag's edges is trimmed)
 
   const next = (e: MouseEvent) => {
@@ -13,29 +32,44 @@
   };
 </script>
 
+<div class="topleft">
+  {#if review.homeAvailable}<a
+      id="allVideos"
+      data-part="home-nav review-back"
+      class="navpill back"
+      href={review.homeBack.href}
+      title={`Back to ${review.homeBack.title}`}
+      aria-label={`Back to ${review.homeBack.title}`}
+      ><svg viewBox="0 0 24 24" aria-hidden="true"
+        ><path
+          d="M14.5 6 8.5 12l6 6"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        /></svg
+      ><span class="label"
+        >{#each review.homeCrumb as part, i (i)}{#if i}<span class="sep" aria-hidden="true">{SEP}</span>{/if}<span
+            class="part">{part}</span
+          >{/each}</span
+      ></a
+    >{/if}
+  <VideoMenu
+    {target}
+    context={{
+      owner: review.role === 'owner',
+      approver: review.role === 'approver',
+      local: false,
+      page: 'review',
+      download: dlLabel ? { label: `Download ${review.nameOf(dlLabel)} (MP4)` } : null,
+    }}
+    variant="review"
+    ondownload={download}
+  />
+</div>
+<VideoMenuHost say={(msg) => review.toast.say(msg, 2600)} />
 {#if review.homeAvailable}
-  <a
-    id="allVideos"
-    data-part="home-nav review-back"
-    class="navpill back"
-    href={review.homeBack.href}
-    title={`Back to ${review.homeBack.title}`}
-    aria-label={`Back to ${review.homeBack.title}`}
-    ><svg viewBox="0 0 24 24" aria-hidden="true"
-      ><path
-        d="M14.5 6 8.5 12l6 6"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      /></svg
-    ><span class="label"
-      >{#each review.homeCrumb as part, i (i)}{#if i}<span class="sep" aria-hidden="true">{SEP}</span>{/if}<span
-          class="part">{part}</span
-        >{/each}</span
-    ></a
-  >
   {#if review.doneSaved && review.homeNext}
     <a
       id="nextVideo"
@@ -74,9 +108,21 @@
     .navpill:focus-visible {
       color: var(--on-scrim-strong);
     }
-    .back {
+    /* The back link and the video's ⋯, side by side at the top left of the video. */
+    .topleft {
+      position: absolute;
+      z-index: 3;
       top: 14px;
       left: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      max-width: calc(100% - 28px);
+    }
+    .topleft .navpill {
+      position: static;
+    }
+    .back {
       padding-left: 9px;
       opacity: 0.6;
     }
@@ -115,9 +161,12 @@
       min-width: 44px;
       justify-content: center;
     }
-    :global(html[data-phone]) .back {
+    :global(html[data-phone]) .topleft {
       top: 8px;
       left: 8px;
+      gap: 4px;
+    }
+    :global(html[data-phone]) .back {
       padding: 0;
       opacity: 0.8;
     }

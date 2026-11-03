@@ -66,6 +66,8 @@ export const PORTS = {
   keyboard: PORT_BASE + 5, // 23, after 22-embeds
   progress: PORT_BASE + 3, // 23, after 17-theme
   setup: PORT_BASE + 6, // 40, after 07-share and 14-relay
+  menus: PORT_BASE + 6, // 24, after 07-share and 14-relay; its link's tunnel stand-in on the next one
+  menusProxy: PORT_BASE + 7,
 } as const;
 
 /** retake-edit, for the specs that render with the editor: $RETAKE_EDIT, else the repo's release build, else $PATH. */

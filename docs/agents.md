@@ -50,6 +50,10 @@ to the others). The comment turns Done once that video plays.
   "From v3", so you watch them land. Comments you make on the live `v4` (under "On v4") go into `v5`. When the task
   finishes, `v4` is final; restarting `retake open` makes nothing new. (Under the hood each update is a revision,
   `v4-draft2` and so on, playable by its URL.)
+- **Which agent.** The default agent is in Settings. To use another one for one video, open the video's ⋯ (its card,
+  or the top left of its page) and pick it under **Agent for this video**; **Use my default** goes back. To use
+  another one for a single send, hold Send and pick it. A held Send wins over the video's agent, which wins over the
+  default.
 - Anyone you share the review with (`retake share`) has the same Send button, and their comments go to this agent.
 - Each task's prompt, context, log and report are in `.retake/worker/tasks/<task>/` (no log in herdr or tmux: the
   session is the log).

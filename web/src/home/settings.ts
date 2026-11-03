@@ -37,7 +37,21 @@ export interface Settings {
   folder_editable: boolean;
   /** Whether the agents can be tested here (POST api/settings/test). */
   test: boolean;
+  /** How a link made in the page reaches people (local only; spec/home.md, "Settings"). */
+  sharing?: Sharing;
 }
+
+/** Settings' Sharing: whether a link may start a Cloudflare tunnel, whether cloudflared is here, its install line. */
+export interface Sharing {
+  tunnel: 'cloudflare' | 'off';
+  cloudflared: boolean;
+  install: string;
+}
+
+export const SHARE_TUNNEL: { value: Sharing['tunnel']; label: string }[] = [
+  { value: 'cloudflare', label: 'Through a Cloudflare tunnel' },
+  { value: 'off', label: 'On my network only' },
+];
 
 export type OpenIn = 'background' | 'herdr' | 'tmux';
 
@@ -48,6 +62,7 @@ export interface SettingsChange {
   open_in?: OpenIn;
   extensions?: Record<string, boolean>;
   folder?: string;
+  share_tunnel?: Sharing['tunnel'];
 }
 
 export const OPEN_IN: { value: OpenIn; label: string; note: string }[] = [
@@ -91,6 +106,19 @@ export function normalizeSettings(b: unknown): Settings {
     folder: str(o.folder),
     folder_editable: o.folder_editable === true,
     test: o.test === true,
+    ...sharingOf(o.sharing),
+  };
+}
+
+function sharingOf(v: unknown): { sharing?: Sharing } {
+  if (!v || typeof v !== 'object') return {};
+  const o = v as Record<string, unknown>;
+  return {
+    sharing: {
+      tunnel: o.tunnel === 'off' ? 'off' : 'cloudflare',
+      cloudflared: o.cloudflared === true,
+      install: str(o.install),
+    },
   };
 }
 

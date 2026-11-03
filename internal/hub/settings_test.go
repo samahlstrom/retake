@@ -234,3 +234,45 @@ func TestHubSettings(t *testing.T) {
 		t.Errorf("another origin: %d %s", r.code, r.body)
 	}
 }
+
+// Settings' Sharing: whether a link may start a tunnel, cloudflared, and its install line.
+func TestFolderSettingsSharing(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "retake", "config.toml")
+	bin, _ := fakeCloudflared(t, "never-used.trycloudflare.com")
+	x := newFT(t, func(o *FolderOptions) {
+		o.AllowHosts = nil
+		o.Share = FolderShare{Cloudflared: bin, LANAddr: func() string { return "127.0.0.2" }}
+		o.Settings = &LocalSettings{ConfigPath: cfgPath, Agents: func() []project.AgentProfile { return testAgents }}
+	})
+	v := settingsOf(t, x.get("/api/settings").body)
+	if v.Sharing == nil || v.Sharing.Tunnel != ShareTunnelOn || !v.Sharing.Cloudflared || v.Sharing.Install == "" {
+		t.Fatalf("sharing: %+v", v.Sharing)
+	}
+	r := x.do(http.MethodPost, "/api/settings", `{"share_tunnel":"off"}`, origin(x.url))
+	if r.code != 200 || settingsOf(t, r.body).Sharing.Tunnel != ShareTunnelOff {
+		t.Fatalf("off: %d %s", r.code, r.body)
+	}
+	b, _ := os.ReadFile(cfgPath)
+	if !strings.Contains(string(b), "[share]\ntunnel = \"off\"") {
+		t.Fatalf("config: %s", b)
+	}
+	// It applies at once: the next link uses the local network.
+	if r := x.get("/p/alpha/api/shares"); !strings.Contains(r.body, `"kind":"lan"`) {
+		t.Fatalf("after off: %s", r.body)
+	}
+	if r := x.do(http.MethodPost, "/api/settings", `{"share_tunnel":"sometimes"}`, origin(x.url)); r.code != 400 {
+		t.Fatalf("a bad value: %d", r.code)
+	}
+	if r := x.do(http.MethodPost, "/api/settings", `{"share_tunnel":"cloudflare"}`, origin(x.url)); r.code != 200 {
+		t.Fatal(r.code)
+	}
+	if r := x.get("/p/alpha/api/shares"); !strings.Contains(r.body, `"kind":"tunnel"`) {
+		t.Fatalf("back on: %s", r.body)
+	}
+	if got := cloudflaredInstall("darwin", "arm64"); got != "brew install cloudflared" {
+		t.Fatal(got)
+	}
+	if got := cloudflaredInstall("linux", "arm64"); !strings.Contains(got, "cloudflared-linux-arm64") {
+		t.Fatal(got)
+	}
+}

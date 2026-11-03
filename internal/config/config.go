@@ -99,6 +99,14 @@ func ValidOpenIn(s string) bool { return s == OpenBackground || s == OpenHerdr |
 type Share struct {
 	Cloudflared *string `toml:"cloudflared"` // unset or "" = cloudflared on $PATH
 	Tailscale   *string `toml:"tailscale"`   // unset or "" = tailscale on $PATH
+	// Tunnel is "off" when a link made in the page must never start a tunnel (it uses the local network instead);
+	// unset or "" = it may start a Cloudflare quick tunnel (spec/team.md, "How a link reaches people").
+	Tunnel *string `toml:"tunnel"`
+}
+
+// TunnelOff reports [share] tunnel = "off".
+func (s Share) TunnelOff() bool {
+	return s.Tunnel != nil && strings.EqualFold(strings.TrimSpace(*s.Tunnel), "off")
 }
 
 // Edit is the [edit] table (spec/bridge.md): the editor engine that renders timeline projects.

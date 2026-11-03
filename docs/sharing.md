@@ -6,7 +6,34 @@ you choose. Agents on another machine connect the same way, with a token of thei
 
 The contract (routes, cookies, tokens) is [`spec/team.md`](../spec/team.md). This page is how to use it.
 
-## Share a link
+## Share a video from the page
+
+The quickest way: open the video's **⋯** (on its card on the home, or at the top left of the review page) and choose
+**Share…**.
+
+- **Who it's for** is optional. It's the name their comments carry ("alex").
+- **Access**: *Can comment* lets them talk and draw over the video and send their comments to your agent. *Can
+  watch* only plays it.
+- **Expires**: 7 days, 30 days or never.
+
+**Create link** gives you the link and a **Copy** button. It opens that one video, nothing else in your folder. The
+sheet also lists the video's links that still work, each with **Revoke**.
+
+How the link gets to them, without you setting anything up:
+
+- **Hosted Retake**: it's your server's own address.
+- **On your computer**: if a tunnel already runs for Retake (`retake share` in another terminal, or `--allow-host`),
+  the link uses it. Otherwise Retake starts a [Cloudflare quick tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/)
+  for you with `cloudflared` (no account needed) and keeps it while Retake runs. A quick tunnel's address changes each
+  time Retake starts, so make a new link after a restart.
+- **No cloudflared** (or tunnels turned off in Settings): the link uses your computer's address on your network
+  (`http://192.168.…`), so people on the same Wi-Fi can open it. To share with anyone, install cloudflared (Settings
+  shows the command) and make the link again.
+
+You (the owner) and anyone with an approver's link can make links; reviewers and viewers can't. To turn the automatic tunnel off, choose *On my network only* under Sharing in
+Settings, or write `tunnel = "off"` under `[share]` in config.toml.
+
+## Share a link from the command line
 
 ```bash
 retake share clip_v6.mp4 --label alex

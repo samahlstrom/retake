@@ -333,3 +333,19 @@ Chromium on a desktop and an iPhone 15; WebKit (`RETAKE_E2E_WEBKIT`) on the iPho
   poster is a JPEG; the cards' images load (the video's frame, the other video's, an idea's own image) and the other
   idea shows its title and first lines.
 - Screenshots: `.retake-work/version-menu-shots/` (`menu-<device>`, `landscape-<device>`, `home-<device>`).
+
+**`24-menus`** and **`24-menus-webkit`** (new only; spec/home.md, "A video's ⋯", spec/team.md, "Sharing a video from
+the page", spec/automation.md, "An agent for one video"): a folder of two videos with its own config (two fake agents
+that never edit, a stand-in for cloudflared that prints a quick tunnel's address), a scratch `XDG_DATA_HOME` (its
+trash) and `RETAKE_REVEAL` (Show in folder writes the folder down; no file manager opens) (`lib/menus.ts`). Chromium on
+a desktop and an iPhone 15; WebKit (`RETAKE_E2E_WEBKIT`) on the iPhone 15. It uses the share ports (07's).
+- A card's ⋯ shows on hover on a computer and always (44 px) on a phone, and lists Share…, Agent for this video,
+  Download v1 (MP4), Show in folder and Move to Trash…; Show in folder runs the stand-in, Download downloads
+  `alpha_v1.mp4`.
+- Share… makes a link through the stand-in tunnel; a fresh browser opening it (a proxy with the tunnel's Host) lands on
+  that video, its home lists only that video, another video is 403, and its typed comment carries the link's name.
+- Move to Trash names the folder, its versions and size, with Cancel focused; the folder goes to the scratch trash and
+  the card goes; Undo puts both back.
+- Agent for this video checks the default, then Agent Two; the review page's ⋯ shows it checked, nothing near Send
+  names an agent, and a Send's task is Agent Two's.
+- Screenshots: `.retake-work/menus-shots/`.

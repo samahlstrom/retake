@@ -9,8 +9,10 @@
   import FolderPicker from '../components/FolderPicker.svelte';
   import { post, tryLine, waitForHome, type TryResult } from '../setup/setup';
   import { connectCommand } from '../lib/automation.svelte';
+  import { copyText } from '../lib/video-menu-api';
   import {
     OPEN_IN,
+    SHARE_TUNNEL,
     agentChange,
     agentOptions,
     effectiveAgent,
@@ -31,6 +33,7 @@
   let picking = $state(false);
   let moving = $state(false);
   let tried = $state<TryResult | 'busy' | null>(null);
+  let copiedInstall = $state(false);
   let savedTimer: ReturnType<typeof setTimeout> | null = null;
 
   const online = $derived(s ? s.machines.filter((m) => m.online) : []);
@@ -200,7 +203,49 @@
           />
         {/if}
       </div>
+      <p class="note pad" data-testid="agent-choice">
+        A video’s ⋯ can give it its own agent, and holding Send picks one for one send.
+      </p>
     </div>
+
+    {#if s.sharing && !s.hosted}
+      {@const sh = s.sharing}
+      <div class="group" data-part="settings-section" aria-labelledby="set-sharing">
+        <h2 id="set-sharing">Sharing</h2>
+        <div class="row" data-part="settings-row">
+          <div class="what">
+            <span class="name">Links reach people</span>
+            <span class="note"
+              >{#if sh.tunnel === 'off'}Only on your network (Wi-Fi), while Retake runs.{:else if sh.cloudflared}Anywhere,
+                through a Cloudflare tunnel Retake starts when you share.{:else}On your network until cloudflared is
+                installed.{/if}</span
+            >
+          </div>
+          <StyledSelect
+            label="Links reach people"
+            value={sh.tunnel}
+            options={SHARE_TUNNEL.map((o) => ({ value: o.value, label: o.label }))}
+            disabled={busy}
+            onValueChange={(v) => save({ share_tunnel: v as 'cloudflare' | 'off' })}
+          />
+        </div>
+        {#if sh.tunnel !== 'off' && !sh.cloudflared && sh.install}
+          <div class="row stack install" data-part="settings-row">
+            <span class="note">cloudflared isn’t installed. This installs it:</span>
+            <div class="cmd">
+              <code>{sh.install}</code>
+              <button
+                class="quiet"
+                onclick={async () => {
+                  copiedInstall = await copyText(sh.install);
+                  setTimeout(() => (copiedInstall = false), 1600);
+                }}>{copiedInstall ? 'Copied' : 'Copy'}</button
+              >
+            </div>
+          </div>
+        {/if}
+      </div>
+    {/if}
 
     <div class="group" data-part="settings-section" aria-labelledby="set-computers">
       <h2 id="set-computers">{s.hosted ? 'Computers' : 'This computer'}</h2>
@@ -325,6 +370,23 @@
     }
     .row.stack {
       display: block;
+    }
+    .install {
+      display: grid;
+      gap: 8px;
+    }
+    .install .cmd {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .install code {
+      flex: 1;
+      min-width: 0;
+      overflow-x: auto;
+      white-space: nowrap;
+      font: 12px var(--font-mono);
+      color: var(--text-2);
     }
     .what {
       display: grid;

@@ -11,6 +11,7 @@
   import ConnectBlock from '../components/ConnectBlock.svelte';
   import ExtSlot from '../ext/ExtSlot.svelte';
   import Settings from './Settings.svelte';
+  import VideoMenuHost from '../components/menus/VideoMenuHost.svelte';
   import { brandOf, homeTitle } from '../lib/brand';
 
   let { home }: { home: Home } = $props();
@@ -175,6 +176,7 @@
     {/if}
   </main>
   <div class="toast" data-part="toast" class:show={home.toast.show} role="status">{home.toast.msg}</div>
+  <VideoMenuHost say={(msg) => home.toast.say(msg, 3000)} onchanged={() => void home.refresh()} />
 </div>
 
 <style>

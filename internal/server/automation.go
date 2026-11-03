@@ -92,6 +92,12 @@ func (s *Server) automationRoute(w http.ResponseWriter, r *http.Request, p []str
 			a.Config = b.AutomationConfig
 			return true, nil
 		})
+	case is(p, "api", "automation", "agent"):
+		// The owner's agent for this video (spec/automation.md, "An agent for one video"); only owners reach here.
+		if err = st.SetVideoAgent(b.Agent); err != nil {
+			s.fail(w, r, 400, err.Error())
+			return
+		}
 	case is(p, "api", "automation", "tasks"):
 		// Anyone who sends may pick one of the agents the editing computer offers, for this send (spec/automation.md,
 		// "Choosing the agent for one send"); commands still come only from that computer's own profiles.

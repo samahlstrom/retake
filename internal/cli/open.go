@@ -275,8 +275,10 @@ func openCmd(ctx context.Context, args []string, env Env) int {
 		return ExitUsage
 	}
 	port := ln.Addr().(*net.TCPAddr).Port
+	share := videoSharing(env, cfg, video, port, a.allow)
+	defer func() { _ = share.Close() }() // the tunnel a link in the page started stops with the server
 	srv := newServer(env, cfg, st, server.Options{Video: video, Explicit: explicit, Port: port, UI: page,
-		IdleExit: idleDuration(st.IdleExit), Verbose: a.verbose, AllowHosts: a.allow, Exts: exts})
+		IdleExit: idleDuration(st.IdleExit), Verbose: a.verbose, AllowHosts: a.allow, Exts: exts, Sharing: share})
 
 	url := fmt.Sprintf("http://127.0.0.1:%d/", port)
 	printStartup(env.Stdout, srv, video, url, st.IdleExit)
