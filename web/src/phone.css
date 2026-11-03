@@ -563,6 +563,7 @@
     justify-self: end;
     align-self: stretch;
     width: min(320px, 70%);
+    max-height: none; /* the overlay is the stage's height (a phone in landscape is often under 760 px wide) */
     z-index: 5;
   }
 
