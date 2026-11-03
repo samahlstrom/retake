@@ -20,6 +20,8 @@ API all build against it. Change it here first.
   | `versions` | `label`, `path`, `sha256`, `parent`, `by`, `created`, `changelog` (JSON `[{note, summary}]`) |
   | `jobs` | `id`, `kind`, `args`, `state` (`queued`, `running`, `done`, `failed`), `attempts`, `error`, `hint` (a failure's one-line fix), `created`, `updated` |
   | `events` | `seq` (monotonic), `kind`, `data`, `created`. This feeds SSE and `notes_wait` cursors. |
+  | `note_deletions` | `note`, `previous_status`: a person deleted it ("Deleting a comment"). |
+  | `note_edits` | `note`, `original` (its words before the first edit), `by`, `at`: a person changed its words ("Editing a comment"). |
 
   Milestone 3a adds `tokens` and `hosts`, for sharing (spec/team.md).
 
@@ -39,8 +41,8 @@ API all build against it. Change it here first.
 - **Note keys.** A note key is `<take>/<seg>/<n>`, where n is the comment's index within that segment from the notes
   engine. `take` is the take's folder name, `seg` the segment's own id in that take (`S2`, not the S-number notes.md
   renumbers across takes; `no-audio` for marks outside every segment), and n counts from 1, before inherited ranges
-  apply, so a carried-over comment keeps its key. Rebuilding notes keeps existing ids and states. A key the engine
-  no longer produces is marked `retracted`, never deleted.
+  apply, so a carried-over comment keeps its key. Rebuilding notes keeps existing ids and states, and the words a
+  person edited ("Editing a comment"). A key the engine no longer produces is marked `retracted`, never deleted.
 
 ## Note states
 
@@ -70,7 +72,8 @@ that aren't done (`{id, kind, state, attempts, error?, hint?, take?}`), so a pag
 - **On an older version:** that version's notes in their final state. Each has `status`, `text`, `t0`, `t1`, `by`, and
   then `change` and `answered_in` for answered ones, or the question text for asked ones.
 - **Item fields:** `{id, kind: "note"|"question", status, t0, t1, text, by, change?, answered_in?, question?, options?,
-  images?: [{url, box}], snapshot?, ask?, key?, strokes?}`. A typed comment (`doc/<n>`) has its `key`, and on a
+  images?: [{url, box}], snapshot?, ask?, key?, strokes?, edited?, editable?}`. `edited: true` says a person changed
+  its words, and `editable: true` that this request may change them now ("Editing a comment"). A typed comment (`doc/<n>`) has its `key`, and on a
   video its pen lines as `strokes: [{color, points, t}]` ("Typed comments on a video"). A note's `snapshot` is the URL of the still of its moment with its strokes
   drawn on it (`GET /api/notes/<id>/snapshot?m=<file time>`), only when that file is in the project. A comment card
   draws its drawing's thumbnail over it, else over the first frame of the version it was left on (that version's
@@ -113,6 +116,8 @@ that aren't done (`{id, kind, state, attempts, error?, hint?, take?}`), so a pag
 | POST | `/api/session/<take>/done?v=` | Marks the take closed and queues `transcribe` then `notes` jobs for it. Idempotent. An optional JSON body `{"send": true}` also sends the take's notes to the agent once those jobs finish (spec/automation.md, "Submission and comment state"), with `"agent"` the agent it goes to ("Choosing the agent for one send"); an empty or other body doesn't. |
 | GET | `/api/notes?v=<label>` | The sidebar items (above). |
 | POST | `/api/notes/<id>/reopen`, `/api/versions/<label>/approve` | Reviewer actions. Origin-checked. |
+| POST | `/api/notes/<id>/delete`, `/restore` | "Deleting a comment" below. |
+| POST | `/api/notes/<id>/edit` | `{"text"}`: new words for a comment that is still to do ("Editing a comment" below). |
 | GET | `/api/events?since=<seq>` | Server-sent events: `notes` (the sidebar should refresh), `job` (`{id, kind, state, error?, hint?}`; a failed job's `hint` is a one-line fix, such as how to set up transcription), `version` (the family changed: `{why, label, parent?, path?, stream?, error?}`, where `why` is `push`, or for a streamed version `rendering`, `progress`, `stopped`, `complete` and `failed`, with its `stream` state; spec/bridge.md, "Streaming"). |
 | GET | `/api/takes/<take>/<file>?v=` | Serves an image of a take, for the sidebar thumbnails. |
 | GET | `/api/notes/<id>/snapshot` | Serves a note's snapshot, for its card's drawing. Only a regular file inside the project (through `os.Root`); else 404. Same viewing permissions as `/api/takes/…`. |
@@ -290,6 +295,47 @@ The original audio, drawings and video files are retained. Deletion removes the 
 comment markers; it does not undo an already-rendered video edit. Queued work for deleted feedback is cancelled,
 and running work is asked to stop. Restoring feedback does not automatically restart cancelled editing work.
 
+## Editing a comment
+
+A comment's words can be changed while it is still to do and the agent hasn't started on it: its status is `open`,
+and it isn't the comment the running task's agent says it is on (`working`) or has marked done (`marked`,
+spec/automation.md, "Marking progress"). That includes a comment sent in a batch the agent hasn't reached yet (a quiet
+Working card, `→ v8`): the agent gets the new words (spec/automation.md, "Words changed while they wait"). A Question,
+a Done or a deleted comment isn't editable, and its ⋯ has no Edit (hidden, not disabled). Every kind of comment is
+edited the same way: a voice note (the words its recording was transcribed to), a typed comment, and a drawing-only
+one (it gets words). Only the words change: its drawing, time, snapshot, author, audio, version and where its edit
+goes stay as they are.
+
+- **Who.** The comment's author (the request's name is the note's `author`: a signed-in member's or a guest's, a share
+  link's label, or locally the server's own), approvers and the owner. Anyone else gets 403.
+- **On a computer.** ⋯ → **Edit**, or a double-click on its words. The words become a field in their own place, with
+  the same text, font and size, so nothing around them moves; one quiet line under it says `Enter saves · Esc cancels`
+  with Cancel and Save. Shift+Enter is a new line. A drawing-only comment's field starts empty (`Add words…`). Keys
+  typed in it never reach the player (Space, R and the rest type). Saving the same words, or Esc, ends it with nothing
+  changed. Undo is Cancel before saving; after saving, editing again is enough.
+- **On a phone** (a touch screen), ⋯ → **Edit** or a tap on its words opens compose mode ("Typing on a phone") with
+  the comment box as the field: the comment's words in the box, which sits on the keyboard, and its line saying
+  `Editing 0:18` with Cancel and Save; the video shows the comment's moment, paused. Return saves; Cancel ends it with
+  nothing changed. The keyboard's Done or a tap on the video only puts the keyboard away: the words stay in the box,
+  with Cancel and Save, as a new comment's do. A new comment you were writing waits: its words are back in the box
+  after.
+- **Saved.** The card shows the new words in place, with no badge or other mark; the words' tooltip says `Edited`.
+- **`POST /api/notes/<id>/edit`** `{"text"}` (origin-checked; needs record, and being the note's author or approve).
+  The text is trimmed, at most 4000 characters, and may be empty only when the comment has a drawing or an image
+  (400 otherwise). 404 for an unknown note, 409 with the reason when it isn't editable now ("deleted", "isn't to do
+  any more", "the agent is working on it"). The words it already has: 200, and nothing changes (idempotent). Else the
+  note's `text` becomes the new words, `note_edits` keeps the edit (the original words, who, when), a `notes` event
+  (`why: "edit"`) goes out, and a queued or running task that holds the note adds `Edited #12` to its history. It
+  answers `{"ok": true, "text"}`.
+- **Durable.** A notes rebuild (a new transcription, a changed engine, a final pass) never overwrites edited words; it
+  still updates the rest of the note (times, drawing, snapshot). Deleting and restoring the comment keeps them.
+- **What the agent reads.** The note's `text` is the edited words wherever an agent reads notes: the task context, the
+  poll's `notes`, `notes_list` and `notes_wait`, with `edited: true` on the note.
+- **Tests.** Go: the route (who may, origin, idempotent, 409s, a deleted note), the words surviving a rebuild, the
+  agent's context carrying them, and an edit while queued in a running batch reaching the agent. Web unit: the card's
+  edit state. e2e: a voice note and a typed one edited on a computer, kept after a reload; on a phone (Chromium's
+  iPhone 15, and WebKit) the field sits on the keyboard.
+
 ## Typed comments on a video
 
 Draw, type or record a comment at any moment. Recording adds your voice (a take, as above); a typed comment needs
@@ -317,8 +363,8 @@ none.
   snapshot. Without it the worker makes the still (spec/automation.md, "A note's stills and images"). 201 with its
   item; 400 with the reason for anything invalid.
 - **After it is saved** it is a comment like any other: Open, then Working, Question and Done; Send sends it; its
-  card shows its words, its time and its drawing; its lines show on the video around its time; the ⋯ menu deletes
-  it. A notes rebuild never retracts it. The eraser leaves a saved typed comment's lines alone (delete the comment
+  card shows its words, its time and its drawing; its lines show on the video around its time; the ⋯ menu edits its
+  words while it's to do ("Editing a comment") and deletes it. A notes rebuild never retracts it. The eraser leaves a saved typed comment's lines alone (delete the comment
   instead).
 
 ## Typing on a phone

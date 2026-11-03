@@ -25,7 +25,8 @@ Permissions by route:
 | `GET/POST /api/download`, `GET/HEAD /video/<label>/download` (spec/api.md, "Download") | watch, or record with `[server] downloads = "reviewers"`; nobody with `"off"` |
 | `GET /api/ping` | any role |
 | `POST /api/session/<take>/data`, `/audio`, `/image`, `/done`, unknown POST paths (still 404) | record |
-| `POST /api/notes/<id>/reopen`, `POST /api/versions/<label>/approve` | approve |
+| `POST /api/notes/<id>/reopen`, `/delete`, `/restore`, `POST /api/versions/<label>/approve` | approve |
+| `POST /api/notes/<id>/edit` | record, and the note's author (the request's name is its `author`) or approve (spec/notes.md, "Editing a comment") |
 | `/mcp` (any method) | agent, by Bearer token only, local requests too |
 | `/api/worker/*` | agent, by Bearer token only, local requests too (spec/automation.md) |
 | `GET /api/automation` | watch |
@@ -211,4 +212,6 @@ The list as it stood:
 Owners can create viewer/reviewer links from the player, without using the CLI. Links last seven days. A folder link opens the whole folder or one video (`video:<name>`, spec/home.md "Share scopes"); the token's optional `scope` is enforced for every request. Links made for the removed project organization (`project:`/`group:` scopes) are refused with 410 and a page that says why. Older unscoped tokens retain their existing access. Tokens remain hashed and revocable. UI-created tunnels live with the serving process and stop when it stops. A link is reported ready only after the public host is available. No email or invitation is sent automatically.
 
 Comment deletion and restoration (`POST /api/notes/<id>/delete|restore`) require approve permission, like reopening
-feedback. Viewers, reviewer-only links and editing agents cannot delete other people's review history.
+feedback. Viewers, reviewer-only links and editing agents cannot delete other people's review history. Editing a
+comment's words (`POST /api/notes/<id>/edit`) also lets its author: a reviewer's link edits the comments made under its
+own label, never another person's.

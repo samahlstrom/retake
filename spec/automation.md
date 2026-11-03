@@ -345,6 +345,9 @@ retake done <note> "what changed" [--json]
   (`GET /api/automation` shows both). A question about a note (`retake ask`) takes back its mark and, when it's the
   working one, clears `working`. A note that drops out of the task (retracted, answered elsewhere) leaves both. A new
   attempt starts with neither.
+- **A marked note keeps its words.** Once the agent says `working` or `done` on a note, a person can't change its
+  words any more (spec/notes.md, "Editing a comment"); taking the mark back (a question) makes them editable again
+  once the note is open.
 - **What it changes.** What the page shows while the attempt runs: a note marked done shows Done, with its change,
   "in v5", once its mark is `ready` (its edit is in the live v5); until then it stays Working, its line saying "Putting
   it in v5…". The note itself stays `open` in the store, and no version is made or finished by a mark.
@@ -541,6 +544,19 @@ because a comment on the one before asked for changes.
     session`, and drops the queued task once it is empty. A note that is no longer in a queued task of that target is
     skipped. A task of only typed comments (spec/extensions.md) takes only typed comments that way, so a report alone
     still finishes it.
+- **Words changed while they wait.** A person may change a comment's words while it waits in a batch the agent
+  hasn't reached (spec/notes.md, "Editing a comment"): not once the agent marks it working or done. The agent always
+  works from the words as they are now:
+  - A queued task (not started) reads its notes when a worker picks it up, so its context has the new words.
+  - A running attempt: every poll's `notes` carries the words as they are now. When a note of the attempt (its own, or
+    one it was given from the next batch) has other words than the ones its agent was given, the worker gives them as
+    a round, as for comments sent meanwhile: a new `context-<n>-<k>.json` with the new words, and a
+    `prompt-<n>-<k>.md` that names the changed notes, quotes their new words and moves the report to
+    `report-<n>-<k>.json`. In herdr or tmux the session gets `Changed comments for Retake task <id> (attempt <n>):
+    follow the instructions in <prompt file>` (`More comments …` when new comments come in the same round); in the
+    background it is a follow-up round once the run ends, which tells the agent to check what it did for those notes
+    against their new words. The worker logs `the agent got the new words of #12`.
+  - Nothing else changes: no join, and the note keeps its place in the task.
 - **Per comment.** Each note still ends on its own: Done from the completed report (shown as soon as the agent marks
   it with `retake done`, "Marking progress"), Question from `retake ask`. A
   report may say what changed for each note: `{"state": "completed", "message": "summary", "notes": {"12": "Cut the
@@ -720,7 +736,8 @@ because a comment on the one before asked for changes.
   - While the editing computer is offline, the working comment's line says "Reconnecting to the agent".
   - Each comment's `target` (and `later`) comes from the notes API, and the page says it as "→ v8" (spec/notes.md,
     "Where a comment goes").
-- Per-comment actions are in the card's ⋯ menu: send one, retry, history and delete as the role allows (send one and
+- Per-comment actions are in the card's ⋯ menu: edit its words while it's to do (spec/notes.md, "Editing a
+  comment"), send one, retry, history and delete as the role allows (send one and
   retry add to their target's task, as any send); switch agent and pause for the owner; reopen for approvers. A
   question an agent asked from inside its task (`retake ask`) shows under its comment, with a reply box that takes
   typed words or a tapped choice (`…/answer` with `question`) or a recorded answer (`answer_to`), and as a marker on
