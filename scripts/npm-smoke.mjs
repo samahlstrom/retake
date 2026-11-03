@@ -435,7 +435,13 @@ async function main() {
     results.npxPlainAfterRelease = npxVersion(env.npm_config_cache, NAME, NAME);
     log(`plain npx after ${next} came out runs ${results.npxPlainAfterRelease}`);
     r = await run('npx', ['--yes', `${NAME}@latest`, '--version'], { env, cwd: join(S, 'empty') });
-    check(r.code === 0 && npxVersion(env.npm_config_cache, NAME, `${NAME}@latest`) === next, `npx ${NAME}@latest runs ${next}`, r.out + r.err);
+    // npm 11 looks up @latest each time; npm 10 (Node 18) runs the copy it has. Both are fine for Retake.
+    const npmMajor = Number((await run('npm', ['--version'], { env })).out.trim().split('.')[0]);
+    if (npmMajor >= 11) {
+      check(r.code === 0 && npxVersion(env.npm_config_cache, NAME, `${NAME}@latest`) === next, `npx ${NAME}@latest runs ${next}`, r.out + r.err);
+    } else {
+      check(r.code === 0, `npx ${NAME}@latest runs (npm ${npmMajor} keeps the copy it has: ${r.out.trim()})`, r.out + r.err);
+    }
     check(downloads.filter((f) => f === platformFile).length === 1, `and npx downloaded ${PLATFORM} only once in all`, downloads.join(', '));
     results.downloadsDuringNpx = [...downloads];
     results.packumentRequests = packuments;
@@ -467,7 +473,8 @@ function npxVersion(cache, name, spec) {
 async function newerRelease(file, env) {
   const dir = join(S, 'next');
   mkdirSync(dir, { recursive: true });
-  let r = await run('tar', ['-xzf', file, '-C', dir], { env });
+  // From the tarball's folder, by its bare name: GNU tar (Git's, on Windows) reads "D:/…" as a remote host.
+  let r = await run('tar', ['-xzf', basename(file), '-C', dir], { env, cwd: dirname(file) });
   if (r.code !== 0) throw new Error(`untar ${file}: ${r.err}`);
   const pj = join(dir, 'package', 'package.json');
   const p = JSON.parse(readFileSync(pj, 'utf8'));
