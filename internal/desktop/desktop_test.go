@@ -66,9 +66,6 @@ func TestUseBundlePutsItFirst(t *testing.T) {
 }
 
 func TestAppArgs(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("macOS app paths: Windows' filepath writes them with backslashes")
-	}
 	exe := "/Applications/Retake.app/Contents/MacOS/Retake"
 	if AppBundle(exe) != "/Applications/Retake.app" || AppBundle("/usr/local/bin/retake") != "" ||
 		AppBundle("/x/Contents/MacOS/Retake") != "" {

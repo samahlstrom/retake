@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -398,9 +399,10 @@ func menuBar(env Env, url string) func() {
 	return func() { _ = cmd.Process.Kill() }
 }
 
-// menuCommand is the menu-bar item's command line.
+// menuCommand is the menu-bar item's command line. It's a macOS command, so its paths are /-separated wherever it's
+// built (path, not filepath).
 func menuCommand(app string, pid int, url, exe string) []string {
-	return []string{"/usr/bin/osascript", "-l", "JavaScript", filepath.Join(app, "Contents", "Resources", "menubar.js"),
+	return []string{"/usr/bin/osascript", "-l", "JavaScript", path.Join(app, "Contents", "Resources", "menubar.js"),
 		strconv.Itoa(pid), url, exe}
 }
 

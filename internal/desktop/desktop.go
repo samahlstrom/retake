@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 )
@@ -110,12 +111,14 @@ func Find(name string) (path string, bundled bool, err error) {
 	return p, false, err
 }
 
-// AppBundle is the .app folder when exe is a Mac app's main program (X.app/Contents/MacOS/<exe>), else "".
+// AppBundle is the .app folder when exe is a Mac app's main program (X.app/Contents/MacOS/<exe>), else "". A Mac
+// app's path is /-separated, so this reads it with path, not filepath (which would write it with backslashes on
+// Windows, where no exe is in an .app).
 func AppBundle(exe string) string {
-	macos := filepath.Dir(exe)
-	contents := filepath.Dir(macos)
-	app := filepath.Dir(contents)
-	if filepath.Base(macos) == "MacOS" && filepath.Base(contents) == "Contents" && strings.HasSuffix(app, ".app") {
+	macos := path.Dir(exe)
+	contents := path.Dir(macos)
+	app := path.Dir(contents)
+	if path.Base(macos) == "MacOS" && path.Base(contents) == "Contents" && strings.HasSuffix(app, ".app") {
 		return app
 	}
 	return ""
