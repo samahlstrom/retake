@@ -192,6 +192,7 @@ window.__review = {
   sidebar,       // getter, new in milestone 2: {panel, toggle, phone, rows, active}, what the sidebar shows
   home,          // getter, new: {available, next} when the page is a project of a home (spec/home.md)
   draft,         // getter, new: the typed comment being written, {version, t, lines, text}, or null (spec/notes.md)
+  viewport,      // getter, new: {top, kb, height, up, typing, compose}, typing on a phone (spec/notes.md)
 }
 ```
 

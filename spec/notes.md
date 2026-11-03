@@ -303,3 +303,54 @@ none.
   card shows its words, its time and its drawing; its lines show on the video around its time; the ⋯ menu deletes
   it. A notes rebuild never retracts it. The eraser leaves a saved typed comment's lines alone (delete the comment
   instead).
+
+## Typing on a phone
+
+On a phone, raising the keyboard must not move the screen. The browser's own answer to a field near the bottom is to
+pan the whole page up until the field shows, and everything jumps. The phone layout doesn't let it.
+
+- **The page never pans.** The document never scrolls (the page is the screen). Whatever the browser still scrolls to
+  reveal a field is undone at once (back to 0, on focus and on every visual-viewport resize or scroll), and what's
+  left of a pan of the visual viewport is followed: the page's top is the visible area's top. The screen is laid out
+  from the visual viewport instead.
+- **One place tracks it** (`web/src/lib/viewport.svelte.ts`, its math in `lib/viewport.ts`): the visual viewport's
+  offset and height and what covers the layout viewport's bottom, as CSS variables on `<html>`: `--vv-top` (the pan,
+  normally 0), `--kb` (the on-screen keyboard's height: `innerHeight − (offsetTop + height)`, while a text field has
+  the focus and it is 80 px or more; else 0) and `--vv-h` (the height left above the keyboard, or above a toolbar
+  the browser lays over the page). `<html data-typing="comment|chat|doc|field">` says while a text field has the
+  focus and which (the comment box, the chat's composer, the document in the version slot, any other), and
+  `<html data-kb>` while the keyboard is up. Nothing else listens to the visual viewport, apart from an extension's
+  own caret keeping (spec/scripts.md). The test hook has it as `viewport` (`{top, kb, height, up, typing, compose}`).
+- **The keyboard's height is remembered** (`localStorage` `retake.kb`, by orientation and window height). The next
+  time a field takes the focus the page lays out for that keyboard at once, while it is still coming up, so the field
+  is never under it and the browser has nothing to pan. When no keyboard comes within a second (a hardware keyboard)
+  the guess is dropped. The first time, the page waits for the keyboard and then moves once.
+- **A stand-in field.** iOS raises the keyboard only for a field focused in the tap itself. A control that opens a
+  field that isn't there yet (the chat's pill) focuses a hidden stand-in in the tap, and the real field takes the
+  focus over when it shows; the keyboard stays up.
+- **Record and Send** fade out while a field has the focus and come back in the same place when it loses it. Their
+  lift over a toolbar Safari lays over the page's bottom is held while a field has the focus and while the keyboard
+  goes down, so they never jump up over a closing keyboard.
+- **Compose mode on a video.** While the comment box has the focus, the screen is only what typing needs:
+  - the video stays where it is, on the comment's frame (the box paused it), and only shrinks (scaled from its top)
+    when it wouldn't fit above the box;
+  - the box sits directly on the keyboard, its line (the time, the drawings, Cancel and Save) above the field;
+  - everything else fades out: the controls under the video (the timeline, play, the time, the version, the pen and
+    undo), the comments header, To do · Done, the list, Record and Send, back and the speech bubble;
+  - one transition, 150 ms, transform and opacity only (no movement at all with `prefers-reduced-motion: reduce`).
+    Nothing is laid out again: the box moves by a transform and the rest only fades.
+
+  Return (which saves the comment), Done on the keyboard, or a tap on the video (a tap draws nothing) ends it:
+  everything is back exactly where it was, and the list keeps its scroll. A line drawn on the video while composing
+  goes with the comment, and the box keeps the focus. `<html data-compose>` is set meanwhile.
+- **Other fields** (searching the comments): the page stays still and Record and Send fade out.
+- **A drawer on an extension's version** sits on the keyboard while a field in it has the focus, as the chat sheet
+  does (spec/chat.md, "Where it shows").
+- **Tests.** Web unit: the keyboard's height from `innerHeight` and the visual viewport (a toolbar is not a keyboard,
+  pinch zoom is not either), the layout while typing (measured, remembered, dropped), the bar's lift held while the
+  keyboard goes down, the remembered heights, which field is which, and compose mode's move and scale. e2e
+  (`23-keyboard.spec.ts` in Chromium, `23-keyboard-webkit.spec.ts` on the iPhone 13 and 15 in WebKit): the keyboard
+  is simulated (the visual viewport's height and offset stubbed and its events sent); on a video the comment box
+  sits on the keyboard, the video and the top bar don't move, the rest is hidden, and leaving restores every place
+  and the list's scroll; a pan is undone; on a script the chat sheet sits on the keyboard with nothing behind it
+  moving, and typing in the document keeps the caret's line above the keyboard with the bar hidden.

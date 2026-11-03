@@ -15,6 +15,12 @@ instructions come from that kind's extension.
 - A kind with `chat = true` (spec/extensions.md, "Version kinds") has a chat in place of the comments column on its
   version: no To do, no Done, no comment line. On a computer its width is the column's, which its left edge resizes
   (spec/notes.md, "The column's width"). On a phone it is the sheet the comments use.
+- **On a phone, the sheet and the keyboard.** The bar's pill opens the sheet with the keyboard up (its stand-in field
+  takes the focus in the tap, spec/notes.md "Typing on a phone"). The sheet covers the bar: its top is 64 px under
+  the visible area's top, its bottom the keyboard's top (`--vv-top`, `--vv-h`), with no gap and no overlap, from the
+  first frame when the keyboard's height is remembered. Nothing behind it moves: the document and the bar stay where
+  they are (the bar fades out under it). When the keyboard goes down the sheet reaches the bottom again, and while the
+  thread is at its end it stays at its end as the sheet changes height.
 - Other versions keep their comments. A video's chat is one thread for the whole video, shown on its kind's version.
 
 ## The thread

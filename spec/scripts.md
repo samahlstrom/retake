@@ -155,7 +155,10 @@ tokens. No tabs and no toolbar.
 - **A phone** shows the document from the top of the screen to the bottom bar, which holds the chat's pill ("Ask the
   agent…", with its mic) and Send. Tapping the pill opens the chat sheet with the keyboard up; the sheet covers the
   bar and stays above the keyboard, and its header has the version. Reading never raises the keyboard: the document
-  is read-only to the keyboard until ⋯ → **Type in the script** (⋯ → **Done typing** goes back). The top row is back on
+  is read-only to the keyboard until ⋯ → **Type in the script** (⋯ → **Done typing** goes back; the menu item focuses
+  a stand-in field in the tap, so iOS raises the keyboard). While the text has the focus the page is as tall as the
+  visible area above the keyboard, the bar fades out, and the caret's line stays in view above the keyboard; the text
+  never moves as a whole (spec/notes.md, "Typing on a phone"). The top row is back on
   the left, and on the right the chat's bubble and ⋯. Text is at least 17 px and wraps inside the screen; nothing
   scrolls sideways. The bottom bar stays above Safari's toolbar and the home indicator (`viewport-fit=cover`, the
   safe-area insets, `dvh`). Phone checks run in Chromium and in WebKit (iPhone device descriptors).
