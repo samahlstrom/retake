@@ -26,7 +26,7 @@ import { createRequire } from 'node:module';
 import { createServer as netServer } from 'node:net';
 import { basename, delimiter, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createGunzip } from 'node:zlib';
+import { createGunzip, gunzipSync } from 'node:zlib';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const TARBALLS = resolve(process.argv[2] || join(ROOT, 'dist', 'npm'));
@@ -469,19 +469,40 @@ function npxVersion(cache, name, spec) {
   return '';
 }
 
+/** Unpacks a small .tgz (the command's own package) into dir. Not with tar: on Windows the tar on PATH is often Git's,
+ * which reads "D:\\…" as a remote host and mangles backslashes. */
+function untar(file, dir) {
+  const data = gunzipSync(readFileSync(file));
+  for (let o = 0; o + 512 <= data.length; ) {
+    const h = data.subarray(o, o + 512);
+    const field = (a, b) => h.subarray(a, b).toString('utf8').replace(/\0.*$/s, '');
+    const name = field(0, 100);
+    if (!name) break;
+    const size = parseInt(field(124, 136).trim() || '0', 8);
+    const type = field(156, 157);
+    const prefix = field(345, 500);
+    const body = data.subarray(o + 512, o + 512 + size);
+    o += 512 + Math.ceil(size / 512) * 512;
+    const path = join(dir, ...(prefix ? `${prefix}/${name}` : name).split('/'));
+    if (type === '5') mkdirSync(path, { recursive: true });
+    else if (type === '0' || type === '') {
+      mkdirSync(dirname(path), { recursive: true });
+      writeFileSync(path, body);
+    } // anything else (pax headers, links): npm doesn't put them in this package
+  }
+}
+
 /** A newer release of the command alone (same platform packages): the main tarball with its patch version bumped. */
 async function newerRelease(file, env) {
   const dir = join(S, 'next');
   mkdirSync(dir, { recursive: true });
-  // From the tarball's folder, by its bare name: GNU tar (Git's, on Windows) reads "D:/…" as a remote host.
-  let r = await run('tar', ['-xzf', basename(file), '-C', dir], { env, cwd: dirname(file) });
-  if (r.code !== 0) throw new Error(`untar ${file}: ${r.err}`);
+  untar(file, dir);
   const pj = join(dir, 'package', 'package.json');
   const p = JSON.parse(readFileSync(pj, 'utf8'));
   const [a, b, c] = p.version.split(/[.+-]/).map(Number);
   p.version = `${a}.${b}.${c + 1}-smoke`;
   writeFileSync(pj, JSON.stringify(p, null, 2));
-  r = await run('npm', ['pack', join(dir, 'package'), '--pack-destination', EXTRA, '--silent'], { env });
+  const r = await run('npm', ['pack', join(dir, 'package'), '--pack-destination', EXTRA, '--silent'], { env });
   if (r.code !== 0) throw new Error(`npm pack: ${r.err}`);
   log(`published ${p.name} ${p.version} to the test registry`);
   return p.version;
