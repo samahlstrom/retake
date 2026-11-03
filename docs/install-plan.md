@@ -142,8 +142,8 @@ Retake already survives restarts without losing agent work (docs/agents.md), so 
 
 ## What's built now (this branch)
 
-- `retake start` and the setup page (spec/setup.md), with Go, web unit and end-to-end tests. Settings gained the
-  videos folder and an agent Test.
+- `retake start` and the setup page (spec/setup.md), with Go and web unit tests, and end-to-end specs
+  (`e2e/tests/40-setup*.spec.ts`, Chromium and WebKit). Settings gained the videos folder and an agent Test.
 - Retake's own tools first: `retake-bundle.json` next to the binary puts its folder first on `PATH`; herdr is looked
   for next to the binary before `PATH`.
 - `scripts/bundle-deps.sh` (pinned herdr for 4 platforms, ffmpeg for Linux), goreleaser archives with them,
