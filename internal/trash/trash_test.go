@@ -168,3 +168,77 @@ func TestMoveRefusesARelativeOrMissingPath(t *testing.T) {
 		t.Fatal("a missing path")
 	}
 }
+
+func TestMoveAndRestoreRecycleBin(t *testing.T) {
+	o, video := scratch(t, "windows")
+	bin := filepath.Join(filepath.Dir(o.Home), "$Recycle.Bin", "S-1-5-21-1-2-3-1001")
+	if err := os.MkdirAll(bin, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	o.RecycleBin = func(string) (string, error) { return bin, nil }
+	if o.Name() != "Recycle Bin" {
+		t.Fatalf("name %q", o.Name())
+	}
+	m, err := Move(video, o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := filepath.Base(m.To)
+	if filepath.Dir(m.To) != bin || len(base) != 8 || !strings.HasPrefix(base, "$R") ||
+		m.Info != filepath.Join(bin, "$I"+base[2:]) || m.From != video {
+		t.Fatalf("moved to %+v", m)
+	}
+	if got := read(t, filepath.Join(m.To, "v2", "item_v2.mp4")); got != "v2/item_v2.mp4" {
+		t.Fatal("contents changed", got)
+	}
+	size := int64(len("v1/item_v1.mp4") + len("v2/item_v2.mp4") + len(".retake/project.db"))
+	if got, want := read(t, m.Info), string(recycleRecord(video, size, o.Now())); got != want {
+		t.Fatalf("$I record %x, want %x", got, want)
+	}
+	if err := Restore(m); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(filepath.Join(video, "v1", "item_v1.mp4")); err != nil {
+		t.Fatal("not restored", err)
+	}
+	if _, err := os.Lstat(m.Info); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("the $I record stayed")
+	}
+	// A file keeps its extension; a drive without a Recycle Bin keeps the folder where it is.
+	clip := filepath.Join(video, "v1", "item_v1.mp4")
+	if m, err = Move(clip, o); err != nil || filepath.Ext(m.To) != ".mp4" || filepath.Ext(m.Info) != ".mp4" {
+		t.Fatalf("a file: %+v %v", m, err)
+	}
+	o.RecycleBin = func(string) (string, error) { return "", ErrOtherDisk }
+	if _, err := Move(video, o); !errors.Is(err, ErrOtherDisk) {
+		t.Fatalf("no Recycle Bin: %v", err)
+	}
+	if _, err := os.Lstat(video); err != nil {
+		t.Fatal("it moved anyway", err)
+	}
+}
+
+// TestRecycleRecord is the $I file byte for byte: format 2, size, FILETIME, path length with the NUL, UTF-16 path.
+func TestRecycleRecord(t *testing.T) {
+	at := time.Date(2026, 11, 2, 21, 30, 5, 0, time.UTC)
+	got := recycleRecord(`C:\Vidéos\a`, 1234, at)
+	want := []byte{
+		2, 0, 0, 0, 0, 0, 0, 0, // format 2
+		0xd2, 0x04, 0, 0, 0, 0, 0, 0, // 1234 bytes
+	}
+	ft := uint64(at.Unix())*10_000_000 + 116444736000000000
+	for i := range 8 {
+		want = append(want, byte(ft>>(8*i)))
+	}
+	want = append(want, 12, 0, 0, 0) // 11 characters and the NUL
+	for _, c := range `C:\Vidéos\a` {
+		want = append(want, byte(c), byte(c>>8))
+	}
+	want = append(want, 0, 0)
+	if string(got) != string(want) {
+		t.Fatalf("record\n%x\nwant\n%x", got, want)
+	}
+	if (Options{GOOS: "linux"}).Name() != "Trash" || (Options{GOOS: "darwin"}).Name() != "Trash" {
+		t.Fatal("Trash elsewhere")
+	}
+}

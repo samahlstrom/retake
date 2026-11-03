@@ -58,7 +58,7 @@
 {/if}
 <div class="vm-undo" data-part="undo-toast" class:show={!!menus.undo} role="status" aria-live="polite">
   {#if menus.undo}
-    <span>Moved to Trash</span><span class="vm-dot" aria-hidden="true">·</span><button
+    <span>Moved to {menus.bin}</span><span class="vm-dot" aria-hidden="true">·</span><button
       class="vm-text"
       disabled={undoing}
       onclick={undo}>Undo</button

@@ -6,12 +6,14 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/samahlstrom/retake/internal/project"
 	"github.com/samahlstrom/retake/internal/team"
+	"github.com/samahlstrom/retake/internal/testmedia"
 	"github.com/samahlstrom/retake/internal/trash"
 )
 
@@ -113,13 +115,17 @@ func TestFolderVideoLinkOpensThatVideoOnly(t *testing.T) {
 	}
 }
 
-// fakeCloudflared stands in for cloudflared: it prints a quick tunnel's address and waits to be stopped.
+// fakeCloudflared stands in for cloudflared: it prints a quick tunnel's address and waits to be stopped. It's a
+// shell script (a test that runs it calls testmedia.NeedShell); on Windows it's named .exe so that it's found.
 func fakeCloudflared(t *testing.T, host string) (bin, pidFile string) {
 	t.Helper()
 	dir := t.TempDir()
 	pidFile = filepath.Join(dir, "pid")
 	script := "#!/bin/sh\necho $$ > \"" + pidFile + "\"\necho \"INF |  https://" + host + "  |\" >&2\nexec sleep 30\n"
 	bin = filepath.Join(dir, "cloudflared")
+	if runtime.GOOS == "windows" {
+		bin += ".exe"
+	}
 	if err := os.WriteFile(bin, []byte(script), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -127,6 +133,7 @@ func fakeCloudflared(t *testing.T, host string) (bin, pidFile string) {
 }
 
 func TestFolderStartsATunnelForALink(t *testing.T) {
+	testmedia.NeedShell(t)
 	bin, _ := fakeCloudflared(t, "quick-words.trycloudflare.com")
 	x := newFT(t, func(o *FolderOptions) {
 		o.AllowHosts = nil
@@ -234,7 +241,7 @@ func TestFolderMoveToTrashAndUndo(t *testing.T) {
 	if r.code != 200 || json.Unmarshal([]byte(r.body), &v) != nil {
 		t.Fatalf("preview: %d %s", r.code, r.body)
 	}
-	if !v.OK || v.Versions != 2 || v.Files != 2 || v.Size == 0 || !strings.HasSuffix(v.Path, "Shows/alpha") {
+	if !v.OK || v.Versions != 2 || v.Files != 2 || v.Size == 0 || !strings.HasSuffix(filepath.ToSlash(v.Path), "Shows/alpha") {
 		t.Fatalf("preview %+v", v)
 	}
 	// Somebody else can't.
@@ -247,6 +254,10 @@ func TestFolderMoveToTrashAndUndo(t *testing.T) {
 		t.Fatalf("an approver's move: %d", r.code)
 	}
 
+	// The page says what this computer calls its trash.
+	if r := x.get("/api/home"); !strings.Contains(r.body, `"trash":"Trash"`) {
+		t.Fatalf("home: %s", r.body)
+	}
 	// Open it first, so it has a server and a store to close.
 	if r := x.get("/p/alpha/api/info"); r.code != 200 {
 		t.Fatal(r.code)
@@ -334,6 +345,7 @@ func TestFolderTrashRefuses(t *testing.T) {
 }
 
 func TestFolderRevealUsesRetakeReveal(t *testing.T) {
+	testmedia.NeedShell(t)
 	dir := t.TempDir()
 	out := filepath.Join(dir, "args")
 	bin := filepath.Join(dir, "reveal")

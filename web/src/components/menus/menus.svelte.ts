@@ -7,6 +7,8 @@ export class VideoMenus {
   share = $state<VideoTarget | null>(null);
   /** The video Move to Trash asks about. */
   trash = $state<VideoTarget | null>(null);
+  /** What this computer calls its trash, for the words: "Trash", or "Recycle Bin" on Windows (GET api/home). */
+  bin = $state('Trash');
   /** The last move, while Undo is offered. */
   undo = $state<{ id: string; title: string; home: string } | null>(null);
   /** A short message: the page's toast (set by the host). */

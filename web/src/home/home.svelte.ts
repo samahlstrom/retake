@@ -5,6 +5,7 @@ import { SvelteSet } from 'svelte/reactivity';
 import { normalizeHome, viewerId, type Card, type HomeResponse, type TreeNode } from '../lib/home';
 import { ancestors, findNode, hashOf, navKey, parseExtHash, parseHash, videosUnder } from '../lib/tree';
 import { Toast } from '../lib/toast.svelte';
+import { menus } from '../components/menus/menus.svelte';
 import { ExtLoader, type ExtInfo } from '../ext/loader';
 import type { Host } from '../ext/ctx';
 import type { Role as ExtRole } from '../ext/retake-ext';
@@ -213,6 +214,7 @@ export class Home {
         return;
       }
       this.res = normalizeHome(await r.json());
+      menus.bin = this.res.trash ?? 'Trash';
       this.error = '';
       if (this.selected && !findNode(this.res.tree, this.selected)) this.select('', !this.ext); // gone: the top
     } catch {

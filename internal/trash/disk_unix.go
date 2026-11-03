@@ -47,6 +47,9 @@ func mountOf(path string) string {
 	}
 }
 
+// recycleBin: there's no Recycle Bin here (Move only uses it when Options.GOOS says Windows).
+func recycleBin(string) (string, error) { return "", ErrOtherDisk }
+
 // isCrossDevice reports a rename across disks.
 func isCrossDevice(err error) bool {
 	var le *os.LinkError
