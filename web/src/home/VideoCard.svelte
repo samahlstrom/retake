@@ -6,7 +6,7 @@
   import { cardStatus, fmtLength, videoName, type Card } from '../lib/home';
   import { verName } from '../lib/versions';
   import { kindStatus } from '../ext/kinds';
-  import type { Home } from './home.svelte';
+  import type { Home } from './state.svelte';
   import ScriptThumb from './ScriptThumb.svelte';
   import VideoMenu from '../components/menus/VideoMenu.svelte';
   import { downloadVideo } from '../lib/video-menu-api';

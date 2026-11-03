@@ -3,7 +3,7 @@ import '../ui.css';
 import './home.css';
 import { mount } from 'svelte';
 import Home from './Home.svelte';
-import { Home as HomeState, type HomeHook } from './home.svelte';
+import { Home as HomeState, type HomeHook } from './state.svelte';
 
 declare global {
   interface Window {

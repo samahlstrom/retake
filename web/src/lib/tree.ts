@@ -1,5 +1,5 @@
 // The home's folder tree (spec/home.md): finding a place in it, the rows the left column shows (opened, filtered),
-// the status dots, and the URL hash. Pure functions; the state lives in home/home.svelte.ts.
+// the status dots, and the URL hash. Pure functions; the state lives in home/state.svelte.ts.
 import { videoName, type Card, type TreeNode } from './home';
 
 /** A status dot: has questions, to review, being edited; "" for none (reviewed). */

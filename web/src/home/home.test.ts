@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Home, NAV_MAX, NAV_MIN, NAV_WIDTH } from './home.svelte';
+import { Home, NAV_MAX, NAV_MIN, NAV_WIDTH } from './state.svelte';
 import type { ExtInfo } from '../ext/loader';
 
 const answer = (status: number, body: unknown): Response =>

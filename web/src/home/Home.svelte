@@ -5,7 +5,7 @@
   import { crumb, needsComputer, toReview, videoName, type Card } from '../lib/home';
   import { hashOf } from '../lib/tree';
   import { connectCommand } from '../lib/automation.svelte';
-  import type { Home } from './home.svelte';
+  import type { Home } from './state.svelte';
   import VideoCard from './VideoCard.svelte';
   import FolderNav from './FolderNav.svelte';
   import ConnectBlock from '../components/ConnectBlock.svelte';

@@ -10,7 +10,7 @@
   import { videoName, type Card } from '../lib/home';
   import { verName } from '../lib/versions';
   import { cardExt, extHash, iconUrl, kindStatus, navSections } from '../ext/kinds';
-  import { NAV_WIDTH, type Home } from './home.svelte';
+  import { NAV_WIDTH, type Home } from './state.svelte';
 
   let { home }: { home: Home } = $props();
   const sections = $derived(navSections(home.exts, home.res.projects));
