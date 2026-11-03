@@ -1,0 +1,63 @@
+name: ffmpeg
+
+# Retake's Linux ffmpeg and ffprobe: built from pinned sources by scripts/ffmpeg-build/build.sh on an x64 and an arm64
+# runner, then run there (static, x264 and zimg in, real encodes). release.yml calls this and bundles what it uploads:
+#
+#   ffmpeg-linux-amd64, ffmpeg-linux-arm64   linux_<arch>/ffmpeg, ffprobe, licenses/; ffmpeg-source-<v>.tar.xz
+#
+# A build is cached (the downloads and the result), keyed by the build script, which holds every pin: a release whose
+# script hasn't changed takes seconds here. It also runs by itself when the build changes, which tests the change and,
+# on main, fills the cache a tag's release run reads (a run can read its own ref's caches and main's).
+
+on:
+  workflow_call:
+  push:
+    branches-ignore: ["dry-run/**"] # release.yml runs there, and calls this
+    paths: [scripts/ffmpeg-build/**, .github/workflows/ffmpeg.yml]
+  pull_request:
+    paths: [scripts/ffmpeg-build/**, .github/workflows/ffmpeg.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ffmpeg linux/${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: ubuntu-24.04, arch: amd64 }
+          - { runner: ubuntu-24.04-arm, arch: arm64 }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      # An older script's cache still brings its downloads; build.sh rebuilds when the key it wrote isn't its own.
+      - name: The cached build and downloads
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/retake-bundle/ffmpeg
+          key: ffmpeg-linux_${{ matrix.arch }}-${{ hashFiles('scripts/ffmpeg-build/build.sh') }}
+          restore-keys: ffmpeg-linux_${{ matrix.arch }}-
+      - name: Build (scripts/ffmpeg-build/build.sh; nothing to do when the cache has this script's build)
+        run: scripts/ffmpeg-build/build.sh --out dist-ffmpeg
+      - name: Run it here (static, libx264 and zimg, encodes through zscale)
+        shell: bash # -o pipefail, for the tee
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          {
+            echo "### ffmpeg linux/$ARCH"
+            scripts/ffmpeg-build/build.sh --check "dist-ffmpeg/linux_$ARCH"
+            echo
+            echo '```'
+            sed -n '/^configuration:/p' "dist-ffmpeg/linux_$ARCH/licenses/ffmpeg-build.txt"
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          ls -l "dist-ffmpeg/linux_$ARCH" dist-ffmpeg/*.tar.xz
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ffmpeg-linux-${{ matrix.arch }}
+          path: dist-ffmpeg/
+          retention-days: 14

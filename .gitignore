@@ -2,6 +2,7 @@
 /dist/
 /dist-editor/
 /dist-bundle/
+/dist-ffmpeg/
 /coverage/
 web/node_modules/
 web/dist/

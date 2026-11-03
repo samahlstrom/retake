@@ -11,6 +11,14 @@
 # checksum that doesn't match stops the script. Nothing downloaded is run here; the release workflow runs each
 # platform's ffmpeg on that platform (scripts/npm-smoke.mjs checks it has libx264 and zscale).
 #
+# Linux's ffmpeg and ffprobe are our own build (scripts/ffmpeg-build/build.sh, static, from pinned sources), not a
+# download. They come from RETAKE_FFMPEG_DIR (DIR/linux_<arch>/, DIR/ffmpeg-source-<v>.tar.xz: what the build script's
+# --out writes; the release workflow sets it to its ffmpeg job's artifacts). Without it, this runs the build script,
+# which needs Docker and builds once per arch, cached in ~/.cache/retake-bundle/ffmpeg (the other arch runs under
+# emulation: slow). Their source, which the GPL says ships with them, goes to dist-bundle/ffmpeg-source-<v>.tar.xz,
+# which goreleaser lists in checksums.txt and the release carries next to the archives. RETAKE_RELEASE_TAG (the
+# release's tag) makes licenses/ffmpeg-SOURCE.txt link that exact file.
+#
 #   scripts/bundle-deps.sh                 # every platform below
 #   scripts/bundle-deps.sh linux_amd64     # just one
 #
@@ -42,18 +50,14 @@ herdr_asset() { # os_arch -> "file sha256"
 
 # ffmpeg and ffprobe: static GPL builds with libx264 and zimg (zscale), which retake-edit renders with
 # (docs/install-plan.md, "ffmpeg").
-#   Linux: BtbN's FFmpeg-Builds 9.0.2 (GPL, static), one .tar.xz with both, from GitHub Releases. (John Van
-#   Sickle's site refused GitHub's runners.)
+#   Linux: our own 9.0.2 (scripts/ffmpeg-build/build.sh; see the top of this file). The version is the build
+#   script's FFMPEG_VERSION.
 #   macOS: Martin Riedl's 9.0.2, signed, a .zip each (https://ffmpeg.martin-riedl.de).
 #   Windows: Gyan Doshi's 9.0.2 "essentials", one .zip (https://www.gyan.dev/ffmpeg/builds/, kept on GitHub).
-FFMPEG_VERSION="9.0.2"
-FFMPEG_URL="https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-11-02-12-51"
-ffmpeg_asset() { # os_arch -> "file sha256"
-  case "$1" in
-    linux_amd64) echo "ffmpeg-n9.0.2-45-g1e65c6cd5d-linux64-gpl-9.0.tar.xz d80a385fa6e5737256a286e615fe6cbab748d417d6c11a001aacd981358bda89" ;;
-    linux_arm64) echo "ffmpeg-n9.0.2-45-g1e65c6cd5d-linuxarm64-gpl-9.0.tar.xz 6a80df458afb59e07f1c648374ace9996efac17cfce680359b4a4c75ed322280" ;;
-  esac
-}
+FFMPEG_BUILD="scripts/ffmpeg-build/build.sh"
+FFMPEG_VERSION="$(sed -n 's/^FFMPEG_VERSION="\(.*\)"$/\1/p' "$FFMPEG_BUILD")"
+FFMPEG_SOURCE="ffmpeg-source-$FFMPEG_VERSION.tar.xz"
+RELEASES_URL="https://github.com/${GITHUB_REPOSITORY:-samahlstrom/retake}/releases"
 MAC_FFMPEG_VERSION="9.0.2"
 MAC_FFMPEG_URL="https://ffmpeg.martin-riedl.de/download/macos"
 mac_ffmpeg_asset() { # os_arch program -> "path sha256"
@@ -139,22 +143,37 @@ for p in $PLATFORMS; do
   cp "$(fetch "$HERDR_LICENSE_URL" "herdr-LICENSE-v$HERDR_VERSION" "$HERDR_LICENSE_SHA")" "$dir/licenses/herdr-LICENSE.txt"
   add_tool herdr "$HERDR_VERSION" "Apache-2.0" "https://github.com/herdrdev/herdr/tree/v$HERDR_VERSION"
 
-  # shellcheck disable=SC2046 # "file sha256": two words on purpose
-  if set -- $(ffmpeg_asset "$p") && [ $# -eq 2 ]; then
-    archive="$(fetch "$FFMPEG_URL/$1" "$1" "$2")"
-    tmp="$(mktemp -d "$OUT/.ffmpeg.XXXXXX")"
-    tar -xJf "$archive" -C "$tmp"
-    top="$(find "$tmp" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
+  case "$p" in linux_*) linux=1 ;; *) linux="" ;; esac
+  if [ -n "$linux" ]; then
+    if [ -n "${RETAKE_FFMPEG_DIR:-}" ]; then
+      ff="$RETAKE_FFMPEG_DIR/$p"
+      src="$RETAKE_FFMPEG_DIR/$FFMPEG_SOURCE"
+    else
+      ff="$("$FFMPEG_BUILD" --arch "${p#linux_}")" || die "couldn't build ffmpeg for $p (or set RETAKE_FFMPEG_DIR)"
+      src="$ff/$FFMPEG_SOURCE"
+    fi
+    for f in "$ff/ffmpeg" "$ff/ffprobe" "$ff/licenses/ffmpeg-build.txt" "$src"; do
+      [ -f "$f" ] || die "no $f ($FFMPEG_BUILD makes it)"
+    done
     for b in ffmpeg ffprobe; do
-      [ -f "$top/bin/$b" ] || die "$1 has no bin/$b"
-      cp "$top/bin/$b" "$dir/bin/$b"
+      cp "$ff/$b" "$dir/bin/$b"
       chmod 755 "$dir/bin/$b"
     done
-    cp "$top/LICENSE.txt" "$dir/licenses/ffmpeg-GPLv3.txt"
-    rm -rf "$tmp"
-    printf 'ffmpeg %s, a static GPL build by BtbN/FFmpeg-Builds (%s).\nIts source is FFmpeg %s: %s\n' \
-      "$FFMPEG_VERSION" "$FFMPEG_URL" "$FFMPEG_VERSION" "$(ffmpeg_source "$FFMPEG_VERSION")" >"$dir/licenses/ffmpeg-SOURCE.txt"
-    add_tool ffmpeg "$FFMPEG_VERSION" "GPL-3.0-or-later" "$(ffmpeg_source "$FFMPEG_VERSION")"
+    cp "$ff"/licenses/* "$dir/licenses/"
+    cp "$src" "$OUT/$FFMPEG_SOURCE"
+    if [ -n "${RETAKE_RELEASE_TAG:-}" ]; then
+      where="$RELEASES_URL/download/$RETAKE_RELEASE_TAG/$FFMPEG_SOURCE"
+    else
+      where="$RELEASES_URL, the asset $FFMPEG_SOURCE of the release this came from"
+    fi
+    printf '%s\n' \
+      "ffmpeg and ffprobe $FFMPEG_VERSION, built by Retake from source (scripts/ffmpeg-build/build.sh): static, GPL," \
+      "with libx264 and zimg. ffmpeg-build.txt, here, says exactly what went in and how it was configured." \
+      "" \
+      "Their complete source (FFmpeg, x264, zimg, zlib and musl as released, and the build script) is" \
+      "$FFMPEG_SOURCE, published next to this release's archives:" \
+      "$where" >"$dir/licenses/ffmpeg-SOURCE.txt"
+    add_tool ffmpeg "$FFMPEG_VERSION" "GPL-3.0-or-later" "$where"
   elif [ -n "$(mac_ffmpeg_asset "$p" ffmpeg)" ]; then
     for b in ffmpeg ffprobe; do
       # shellcheck disable=SC2046 # "path sha256": two words on purpose

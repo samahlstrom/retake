@@ -43,6 +43,8 @@ parity: server
 
 # Release archives for every platform in dist/, built by .goreleaser.yaml, with the tools that ship with retake
 # (scripts/bundle-deps.sh; downloads are pinned and cached). Publishes nothing. `make mac-app` then makes Retake.app.
+# Linux's ffmpeg is built from source in Docker the first time (scripts/ffmpeg-build/build.sh, cached), unless
+# RETAKE_FFMPEG_DIR points at a build (a release run's ffmpeg-linux-* artifacts, downloaded into one folder).
 snapshot:
 	scripts/bundle-deps.sh
 	nice -n 19 goreleaser release --snapshot --clean --parallelism 2
@@ -65,4 +67,4 @@ version:
 	@echo $(VERSION)
 
 clean:
-	rm -rf bin web/dist dist dist-bundle
+	rm -rf bin web/dist dist dist-bundle dist-ffmpeg

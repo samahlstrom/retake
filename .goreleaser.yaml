@@ -104,9 +104,11 @@ checksum:
   name_template: checksums.txt
   algorithm: sha256
   # The retake-edit archives, built on native runners, are put in dist-editor/ before goreleaser runs, so one
-  # checksums.txt covers both binaries (install.sh checks against it). Nothing there: nothing added.
+  # checksums.txt covers both binaries (install.sh checks against it). Nothing there: nothing added. So is the source
+  # of Linux's ffmpeg (scripts/bundle-deps.sh puts it in dist-bundle/), which the release carries next to the archives.
   extra_files:
     - glob: ./dist-editor/*
+    - glob: ./dist-bundle/ffmpeg-source-*.tar.xz
 
 snapshot:
   # Between releases: the next patch version as a pre-release, like scripts/version.sh. The commit is "none" when the
@@ -121,3 +123,4 @@ release:
   draft: true
   extra_files:
     - glob: ./dist-editor/*
+    - glob: ./dist-bundle/ffmpeg-source-*.tar.xz

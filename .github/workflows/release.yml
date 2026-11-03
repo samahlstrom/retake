@@ -149,9 +149,16 @@ jobs:
           path: dist-editor/*
           retention-days: 14
 
+  # Linux's ffmpeg and ffprobe, built from pinned sources on an x64 and an arm64 runner (scripts/ffmpeg-build/build.sh),
+  # cached by the build script, and run there. Uploads ffmpeg-linux-amd64 and ffmpeg-linux-arm64.
+  ffmpeg:
+    name: ffmpeg
+    needs: [plan]
+    uses: ./.github/workflows/ffmpeg.yml
+
   package:
     name: Archives, npm packages, Homebrew formula
-    needs: [plan, ci, editor]
+    needs: [plan, ci, editor, ffmpeg]
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -168,7 +175,16 @@ jobs:
           pattern: editor-*
           path: dist-editor
           merge-multiple: true
+      - name: Linux's ffmpeg and ffprobe, and their source (the ffmpeg job's)
+        uses: actions/download-artifact@v7
+        with:
+          pattern: ffmpeg-linux-*
+          path: dist-ffmpeg
+          merge-multiple: true
       - name: The tools that ship with Retake (herdr, ffmpeg, retake-edit), pinned by SHA-256
+        env:
+          RETAKE_FFMPEG_DIR: dist-ffmpeg
+          RETAKE_RELEASE_TAG: ${{ needs.plan.outputs.tag }}
         run: scripts/bundle-deps.sh
       - name: Archives and checksums.txt (goreleaser; it publishes nothing)
         env:
@@ -193,16 +209,19 @@ jobs:
           {
             echo '| File | Bytes |'
             echo '|---|---|'
-            for f in dist/retake_*.tar.gz dist/*.zip dist/npm/*.tgz; do echo "| $(basename "$f") | $(wc -c <"$f") |"; done
+            for f in dist/retake_*.tar.gz dist/*.zip dist/npm/*.tgz dist-bundle/ffmpeg-source-*.tar.xz; do
+              echo "| $(basename "$f") | $(wc -c <"$f") |"
+            done
           } >>"$GITHUB_STEP_SUMMARY"
-      - name: The retake-edit archives next to the rest (checksums.txt lists them too)
-        run: cp dist-editor/* dist/
+      - name: The retake-edit archives and ffmpeg's source next to the rest (checksums.txt lists them too)
+        run: cp dist-editor/* dist-bundle/ffmpeg-source-*.tar.xz dist/
       - uses: actions/upload-artifact@v7
         with:
           name: release
           path: |
             dist/*.tar.gz
             dist/*.zip
+            dist/ffmpeg-source-*.tar.xz
             dist/checksums.txt
             dist/metadata.json
             dist/retake.rb
@@ -306,7 +325,7 @@ jobs:
           EOF
           extra=()
           case "$VERSION" in *-*) extra+=(--prerelease) ;; esac
-          files=(dist/*.tar.gz dist/*.zip dist/checksums.txt dist/retake-edit_* install.sh)
+          files=(dist/*.tar.gz dist/*.zip dist/ffmpeg-source-*.tar.xz dist/checksums.txt dist/retake-edit_* install.sh)
           [ ! -f install.ps1 ] || files+=(install.ps1)
           gh release create "$TAG" --draft --verify-tag --title "Retake $VERSION" --notes-file notes.md "${extra[@]}" "${files[@]}"
           echo "Draft: $(gh release view "$TAG" --json url --jq .url)" >>"$GITHUB_STEP_SUMMARY"
