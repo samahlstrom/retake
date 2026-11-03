@@ -4,6 +4,7 @@
   import { cardStatus, fmtLength, videoName, type Card } from '../lib/home';
   import { kindStatus } from '../ext/kinds';
   import type { Home } from './home.svelte';
+  import VideoMenu from '../components/menus/VideoMenu.svelte';
   let { video, home, where = '' }: { video: Card; home: Home; where?: string } = $props();
   const status = $derived(cardStatus(video));
   const kindWord = $derived(kindStatus(home.exts, video));
@@ -32,6 +33,10 @@
       </span>
     </div>
   </a>
+  <VideoMenu
+    target={{ name: video.name, title: videoName(video), api: video.url, home: '' }}
+    context={{ owner: home.res.role === 'owner', local: !home.res.user && !!home.res.folder, page: 'card' }}
+  />
 </li>
 
 <style>
