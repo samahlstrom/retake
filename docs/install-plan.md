@@ -77,7 +77,7 @@ user's page.
 | `retakew` (Windows) | Starts `retake` with no console window: the Start menu entry and the login item run it. | This repo (`cmd/retakew`, `-H=windowsgui`). | Same as retake. |
 | `retake-edit` | Renders timeline projects. | This repo, built per platform on native runners (it links prebuilt Skia, so it can't be cross-compiled). | Same as retake. |
 | `herdr` | Where agents open by default: a workspace per video you can watch and type into. | Pinned upstream release binaries with their SHA-256 (`scripts/bundle-deps.sh`; on Windows `scripts/build-windows.ps1`): v0.8.2 on every platform, the version Retake's herdr support was built and tested against. Windows: `herdr-windows-x86_64.zip`, which is `herdr.exe` plus the `conpty\` folder (Microsoft's ConPTY: `conpty.dll`, `OpenConsole.exe`, `herdr-conpty.json`) that herdr loads from beside itself, so it ships whole, in that layout. | Apache-2.0: ship its LICENSE (there's no NOTICE file upstream). The ConPTY files are MIT: their LICENSE and NOTICE go in `licenses/`. |
-| `ffmpeg`, `ffprobe` | Probing, thumbnails, stills, renders. | Static builds, pinned with SHA-256 (below). | GPL (recommended) or LGPL. |
+| `ffmpeg`, `ffprobe` | Probing, thumbnails, stills, renders. | Linux: our own static build from pinned sources (below). macOS, Windows: static builds, pinned with SHA-256. | GPL-3.0-or-later as built (with x264). |
 | `retake-bundle.json`, `licenses/`, `THIRD_PARTY_NOTICES.md` | The bundle's manifest (what's inside, versions, sources) and every license text. | Written by `scripts/bundle-deps.sh`. | |
 
 **Bundle ffmpeg; don't fetch it on first run.** Fetching saves 40–70 MB of download but adds a network step, a
@@ -87,27 +87,64 @@ notarized app. A one-click app should work offline the moment it's opened.
 **GPL or LGPL ffmpeg.** `retake-edit` encodes with `libx264` for previews and proxies (and as the CPU encoder), and
 `libx264` is GPL. So:
 
-- **GPL build (recommended).** Same results as on our machines. Retake only runs ffmpeg as a separate program, so the
+- **GPL build (chosen).** Same results as on our machines. Retake only runs ffmpeg as a separate program, so the
   GPL doesn't reach Retake's own code ("mere aggregation"). What it costs us: ship ffmpeg's license text (done) and
-  offer its exact source: put the ffmpeg source tarball (and its build script) next to each release. That's one more
-  file per release.
+  its exact source: `ffmpeg-source-<version>.tar.xz` next to each release's archives (below). One more file per
+  release.
 - **LGPL build.** No source-offer duty beyond LGPL's, but no `libx264`: `retake-edit` would have to switch to
   VideoToolbox on Mac (fine) and OpenH264 on Linux (lower quality at the same size), and previews and proxies change.
   Not worth it.
 
-Where the static builds come from (all GPL, all pinned by SHA-256 in `scripts/bundle-deps.sh`, all with
-`--enable-libx264 --enable-libzimg` and the `zscale` filter):
+Where the static builds come from (all GPL 9.0.2, all pinned by SHA-256, all with `--enable-libx264
+--enable-libzimg` and the `zscale` filter):
 
 | Platform | Build | Checked |
 |---|---|---|
-| Linux x64, arm64 | BtbN's FFmpeg-Builds 9.0.2 (GPL, static, on GitHub Releases; John Van Sickle's site refused GitHub's runners) | checked on the release runners: build config, an encode through retake-edit's `zscale` chain with libx264 |
-| macOS arm64, x64 | Martin Riedl's 9.0.2 (signed by him) | configure line and filter list read from the binaries here (they can't run on Linux); run on both Mac runners by the release workflow |
-| Windows x64 | Gyan Doshi's 9.0.2 "essentials", from his GitHub releases | configure line read here; run on the Windows runner by the release workflow |
+| Linux x64, arm64 | **Our own**, built by the release workflow from pinned sources (`scripts/ffmpeg-build/build.sh`, below) | on the runner that built it, then by the npm smoke test on Ubuntu 22.04 x64 and arm64 |
+| macOS arm64, x64 | Martin Riedl's 9.0.2 (signed by him; `scripts/bundle-deps.sh`) | configure line and filter list read from the binaries here (they can't run on Linux); run on both Mac runners by the release workflow |
+| Windows x64 | Gyan Doshi's 9.0.2 "essentials", from his GitHub releases (`scripts/bundle-deps.sh`) | configure line read here; run on the Windows runner by the release workflow |
 
-`scripts/npm-smoke.mjs` runs each platform's ffmpeg on that platform: build config, filters, and a real encode. Later,
-**build ffmpeg ourselves in CI** from a pinned source tarball with only what Retake uses (x264, zimg, opus, the
-decoders and muxers): smaller (about 20 MB a binary, which would halve every download), reproducible, and the source
-offer is just our own tarball.
+`scripts/npm-smoke.mjs` runs each platform's ffmpeg on that platform: build config, filters, and a real encode.
+
+#### Linux: our own ffmpeg
+
+Linux had no build we could ship: John Van Sickle's site timed out from GitHub's runners, BtbN's GPL build is 173 MB a
+binary (it links dozens of libraries, which pushed the npm packages past npm's limit), and Martin Riedl's Linux builds
+are configured with `--enable-nonfree`, which can't be redistributed. So the release builds its own, small one.
+
+- **What's in it.** FFmpeg 9.0.2 with `--enable-gpl --enable-version3 --enable-libx264 --enable-libzimg`, and every
+  one of FFmpeg's own decoders, encoders, demuxers, muxers, parsers, filters, protocols and bitstream filters, plus
+  libavdevice's `lavfi` input. Outside libraries: x264 (stable branch, pinned commit), zimg 3.0.6, and zlib 1.3.2
+  (PNG and compressed MP4 headers need it). `--disable-autodetect` turns off everything else (no TLS, no hardware
+  encoders, no X11, no sound devices), so the build is the same whatever the image has. No ffplay.
+- **Static, against musl.** It's built in an Alpine container (`alpine:3.24.3`, pinned by digest) and linked
+  `-static`, so it needs no shared library at all, not even a libc: it runs on any x64 or arm64 Linux. A 2 MB thread
+  stack is linked in (musl's default, 128 KB, is too small for some codecs).
+- **About 23 MB a binary** (BtbN's was 173 MB): FFmpeg is compiled at `-O2` rather than its default `-O3` (8 MB less a
+  binary; its hot loops are assembly either way, and x264 and zimg keep their own flags), unused functions are
+  dropped (`--gc-sections`), C gets no unwind tables, and it's a plain static executable (`-no-pie`, no relocations).
+- **Everything Retake runs is in it**, checked against the code: `zscale`, `scale`, `format`, `colorspace`, `crop`,
+  `pad`, `overlay`, `fps`, `tile`, `select`, `setsar`, `ebur128`, `loudnorm`, `aresample`, `aformat`, `pan`,
+  `volume`, `asplit`, the `lavfi` sources (`testsrc2`, `color`, `sine`, `anullsrc`), libx264, AAC, PNG, MJPEG, PCM,
+  `h264_metadata` and `aac_adtstoasc`, the concat demuxer, MP4/MOV, Matroska/WebM, image2, HLS, f32le and ADTS, and
+  the decoders for what people drop in (H.264, HEVC, VP8, VP9, ProRes, Opus, Vorbis, MP3, FLAC, ...). Nothing Retake
+  runs reads https. Not in it: AV1 *decoding* (FFmpeg has no software AV1 decoder of its own; it needs dav1d) and
+  NVENC (needs a dynamically linked build): `retake-edit`'s `auto` encoder falls back to x264 without it.
+- **Pinned.** Every source by SHA-256, the image by digest, all in the one script. The build is cached by the
+  script's own SHA-256 (in CI with actions/cache, locally in `~/.cache/retake-bundle/ffmpeg`), so a release whose
+  script didn't change takes seconds; a change rebuilds both arches, about 10 minutes on GitHub's runners.
+- **Where it runs.** `.github/workflows/ffmpeg.yml`, on `ubuntu-24.04` and `ubuntu-24.04-arm`: `release.yml` calls it
+  and bundles its artifacts, and it runs by itself when the script changes. After building, it runs the binaries
+  there (`build.sh --check`): no interpreter or shared library, `-buildconf` has x264 and zimg, an encode through
+  retake-edit's `zscale` chain with libx264 and AAC read back by ffprobe, PNG and JPEG stills, `h264_metadata`,
+  concat into Matroska, `ebur128` and `loudnorm`, f32le, HLS; and the sizes. Locally, `make snapshot` runs the same
+  script in Docker (the other arch under emulation, slowly), or takes prebuilt binaries from `RETAKE_FFMPEG_DIR`.
+- **The source the GPL asks for** ships with each release as one asset, `ffmpeg-source-9.0.2.tar.xz`: the FFmpeg,
+  x264, zimg, zlib and musl tarballs as released, the build script, and a README saying how to rebuild. It's listed
+  in `checksums.txt`. Each archive's `licenses/` has `ffmpeg-SOURCE.txt` (where that file is),
+  `ffmpeg-build.txt` (the sources' SHA-256s, the configure line, the compiler and image) and the license texts of
+  FFmpeg, x264, zimg, zlib and musl. GCC's runtime (libgcc, libstdc++, for zimg) is linked under the GCC Runtime
+  Library Exception.
 
 ### npm: ffmpeg comes in the platform package (decided)
 
@@ -121,9 +158,10 @@ packages small. It bundles it instead, in each `retake-cli-<os>-<cpu>` package, 
 - **No new code that can fail at the worst moment.** First-run fetching needs a downloader, xz or zip unpacking in
   Go, a progress UI, retries, and a third-party host that's up (John Van Sickle's site is one person's server). One
   set of archives also stays the single source for npm, Homebrew, the install scripts and the app.
-- **It fits, just.** The packages are 71–111 MB (Windows is the biggest); npmjs.org has taken a 118 MB package (it
-  documents no limit; a 199 MB one was refused). `scripts/npm-pack.sh` stops above 117 MB, so a growing build fails
-  at packaging, not at `npm publish`. The fix when one nears it: our own smaller ffmpeg (above), not fetching.
+- **It fits.** npmjs.org has taken a 118 MB package (it documents no limit; a 199 MB one was refused).
+  `scripts/npm-pack.sh` stops above 117 MB, so a growing build fails at packaging, not at `npm publish`. The Linux
+  packages are small since they carry our own ffmpeg (above); Windows, about 111 MB, is the one near the limit. The
+  fix when one nears it: our own smaller ffmpeg for that platform too, not fetching.
 
 ### The npm package for Windows: `retake-cli-win32-x64`
 
@@ -202,8 +240,9 @@ Retake already survives restarts without losing agent work (docs/agents.md), so 
 
 1. **Apple Developer account ($99/yr)** for signing and notarizing. Without it, every editor goes through the "Open
    Anyway" steps once, and managed Macs may refuse the app.
-2. **GPL ffmpeg** (recommended; we put ffmpeg's source next to each release) or LGPL (needs `retake-edit` to stop
-   using `libx264`).
+2. **GPL ffmpeg** (built that way; on Linux it's our own build and its source ships next to each release) or LGPL
+   (needs `retake-edit` to stop using `libx264`). Linux's build leaves out AV1 decoding (dav1d, about 2 MB more) and
+   NVENC: say if footage in AV1 should work out of the box.
 3. **Where agents open by default.** The brief says herdr (bundled). For editors who never open a terminal, "in the
    background" may suit better: herdr is only useful if they open it (`herdr` in Terminal). The setup page asks
    either way; this is only the pre-selected choice.
@@ -226,9 +265,9 @@ Retake already survives restarts without losing agent work (docs/agents.md), so 
   (`e2e/tests/40-setup*.spec.ts`, Chromium and WebKit). Settings gained the videos folder and an agent Test.
 - Retake's own tools first: `retake-bundle.json` next to the binary puts its folder first on `PATH`; herdr is looked
   for next to the binary before `PATH`.
-- `scripts/bundle-deps.sh` (pinned herdr for 4 platforms, ffmpeg for Linux), goreleaser archives with them,
-  `install.sh` installing a bundle, `scripts/macos-app.sh` making the universal, unsigned `Retake.app` with
-  its menu bar (`scripts/macos/menubar.js`). Nothing downloaded was run here.
+- `scripts/bundle-deps.sh` (pinned herdr for 4 platforms; Linux's ffmpeg from `scripts/ffmpeg-build/build.sh`),
+  goreleaser archives with them, `install.sh` installing a bundle, `scripts/macos-app.sh` making the universal,
+  unsigned `Retake.app` with its menu bar (`scripts/macos/menubar.js`). Nothing downloaded was run here.
 - npm: `npm i -g retake-cli`, then `retake` (npm/, `scripts/npm-pack.sh`, `scripts/npm-smoke.mjs`); plain `retake` in
   a terminal is `retake start` (spec/setup.md). A Homebrew formula (`scripts/brew-formula.sh`), ffmpeg for macOS and
   Windows and herdr for Windows in the archives, and `.github/workflows/release.yml`, which builds every platform on

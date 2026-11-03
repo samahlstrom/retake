@@ -39,8 +39,8 @@ links it into the binary:
 | `retake` | goreleaser (`.goreleaser.yaml`), the page built first and embedded (`-tags webdist`), CGO off, cross-compiled on one Linux runner | the commit |
 | `retake-edit` | `cargo build --release` on each platform's own runner (it links prebuilt Skia, which can't be cross-linked): Ubuntu 22.04 x64 and arm64 (so glibc 2.35 is enough), macOS 15 arm64 and Intel, Windows | the commit |
 | `herdr` | herdr's GitHub release v0.8.2 (Apache-2.0). Windows: `herdr.exe` and its `conpty/` folder (Microsoft's ConPTY, MIT), side by side | SHA-256 per platform |
-| `ffmpeg`, `ffprobe` | Static GPL builds with libx264 and zimg (`zscale`), which `retake-edit` renders with: Linux, BtbN's FFmpeg-Builds 9.0.2 (from GitHub Releases); macOS, Martin Riedl's 9.0.2 (signed); Windows, Gyan Doshi's 9.0.2 "essentials" | SHA-256 |
-| `licenses/` | herdr's LICENSE (and ConPTY's), ffmpeg's GPLv3 text, its build notes and where its source is | herdr's and macOS ffmpeg's by SHA-256 |
+| `ffmpeg`, `ffprobe` | Static GPL builds with libx264 and zimg (`zscale`), which `retake-edit` renders with: Linux, our own 9.0.2, built by the release workflow from source (`scripts/ffmpeg-build/build.sh`, below); macOS, Martin Riedl's 9.0.2 (signed); Windows, Gyan Doshi's 9.0.2 "essentials" | Linux: every source and the build image; the others: SHA-256 |
+| `licenses/` | herdr's LICENSE (and ConPTY's), ffmpeg's GPLv3 text, its build notes and where its source is (Linux: also x264's, zimg's, zlib's and musl's texts, and `ffmpeg-build.txt`) | herdr's and macOS ffmpeg's by SHA-256 |
 | `retake-bundle.json` | What's inside, with versions, licenses and sources. It makes `retake` put its folder first on its own `PATH` (spec/setup.md) | |
 | `README.md`, `CHANGELOG.md`, `THIRD_PARTY_NOTICES.md`, `LICENSE` | this repo | |
 
@@ -48,7 +48,26 @@ links it into the binary:
 `~/.cache/retake-bundle`, so a second run downloads nothing, and a checksum that doesn't match stops it. Nothing
 downloaded runs while building; the release workflow runs each platform's ffmpeg on that platform (the smoke test
 below). `windows_arm64` gets a plain archive (`retake.exe` only). One `checksums.txt` (SHA-256) covers every archive,
-the `retake-edit` ones included.
+the `retake-edit` ones and `ffmpeg-source-<v>.tar.xz` included.
+
+### Linux's ffmpeg, and its source
+
+Linux's `ffmpeg` and `ffprobe` are built by `scripts/ffmpeg-build/build.sh` (docs/install-plan.md, "Linux: our own
+ffmpeg"): static against musl in a pinned Alpine container, from FFmpeg 9.0.2, x264, zimg, zlib and musl, each pinned
+by SHA-256, about 23 MB a binary. In the release workflow, the `ffmpeg` job (`.github/workflows/ffmpeg.yml`) builds
+them on an x64 and an arm64 runner, runs them there (`build.sh --check`) and uploads `ffmpeg-linux-amd64` and
+`ffmpeg-linux-arm64`; `package` hands those to `bundle-deps.sh` (`RETAKE_FFMPEG_DIR`). The build is cached by the
+script's SHA-256, so it only rebuilds when the script changes.
+
+Every release carries **`ffmpeg-source-9.0.2.tar.xz`** next to its archives: the source tarballs as released, the
+build script and a README on rebuilding them. That's the GPL's "corresponding source"; each archive's
+`licenses/ffmpeg-SOURCE.txt` links it. It's in the `release` artifact of a dry run, and the draft release uploads it.
+
+To bump a version, change its pin (file name, SHA-256, URL) in `build.sh`, and for FFmpeg `FFMPEG_VERSION`, which
+`bundle-deps.sh` reads. A local `make snapshot` builds Linux's ffmpeg in Docker the first time (`~/.cache/retake-bundle/
+ffmpeg`; the other arch runs under emulation, which is slow), or takes a build from `RETAKE_FFMPEG_DIR`: download a
+release run's `ffmpeg-linux-amd64` and `ffmpeg-linux-arm64` artifacts into one folder (`gh run download <id> -p
+'ffmpeg-linux-*' -D dist-ffmpeg`) and set `RETAKE_FFMPEG_DIR=dist-ffmpeg`.
 
 ## The npm packages
 
@@ -86,9 +105,9 @@ the `retake-edit` ones included.
 
 | When | What it does |
 |---|---|
-| A `vX.Y.Z` tag is pushed | Every CI test (it calls `ci.yml`); `retake-edit` on each platform's runner; the archives, `checksums.txt`, the Mac app, the npm packages and the Homebrew formula (`package`); the npm install tested on each platform (`smoke`); then a **draft** GitHub release with the archives, `checksums.txt`, `install.sh` and `install.ps1`. Nothing public yet. |
+| A `vX.Y.Z` tag is pushed | Every CI test (it calls `ci.yml`); `retake-edit` on each platform's runner; Linux's ffmpeg (`ffmpeg`, it calls `ffmpeg.yml`); the archives, `checksums.txt`, the Mac app, the npm packages and the Homebrew formula (`package`); the npm install tested on each platform (`smoke`); then a **draft** GitHub release with the archives, `ffmpeg-source-<v>.tar.xz`, `checksums.txt`, `install.sh` and `install.ps1`. Nothing public yet. |
 | You publish that draft on GitHub | `npm`: downloads the release's archives, checks them against its `checksums.txt`, makes the npm packages from them and publishes each with trusted publishing and provenance (a version with a `-` goes to the `next` tag, not `latest`). `homebrew`: writes the formula from the release's `checksums.txt` and pushes it to the tap (not for pre-releases). Both skip what's already there, so re-running is safe. |
-| Run workflow by hand, `dry_run` on (the default), or a push to a `dry-run/*` branch | Everything a tag push does except the draft, with snapshot versions. All of it is uploaded as the run's artifacts: `release` (archives, checksums, Mac app, `retake.rb`), `npm` (the tarballs), `editor-*`. Publishes nothing. |
+| Run workflow by hand, `dry_run` on (the default), or a push to a `dry-run/*` branch | Everything a tag push does except the draft, with snapshot versions. All of it is uploaded as the run's artifacts: `release` (archives, `ffmpeg-source-<v>.tar.xz`, checksums, Mac app, `retake.rb`), `npm` (the tarballs), `editor-*`, `ffmpeg-linux-*`. Publishes nothing. |
 
 **The smoke test** (`scripts/npm-smoke.mjs`, the `smoke` jobs: Linux x64 on Node 18 and current, Linux arm64, both
 Macs, Windows) serves the npm tarballs from a registry of its own on 127.0.0.1, in a scratch HOME with empty caches,
@@ -231,7 +250,7 @@ programs (herdr, ConPTY, ffmpeg) carry their own texts in each archive's `licens
       `NAME` in `install.sh`, `NAME` in `scripts/notices.mjs`, `name` in `npm/retake-cli/package.json`, the CLI's
       usage text, and the docs. The config folder (`~/.config/retake`), the project store (`.retake/`) and the
       `RETAKE_*` variables carry the name too; decide whether they change.
-- [ ] The decisions in docs/install-plan.md: signing (an Apple Developer account), GPL ffmpeg and its source next to
-      each release, and herdr's version.
+- [ ] The decisions in docs/install-plan.md: signing (an Apple Developer account), GPL ffmpeg (Linux's source ships
+      next to each release; AV1 decoding?), and herdr's version.
 - [ ] Decide what the git history publishes. Earlier commits contain the owner's private design notes (the original
       `docs/editor-design.md`), names in test data and the legacy goldens.

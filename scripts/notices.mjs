@@ -504,9 +504,17 @@ function render() {
   L.push('## Fonts', '');
   L.push(table(['Font', 'In', 'Use', 'License'], fonts), '');
 
+  const list = (items) => {
+    for (const p of items) L.push(para(`- ${sub(p)}`).replace(/\n(?=.)/g, '\n  ').trimEnd());
+    L.push('');
+  };
+  L.push('## Shipped as separate programs', '');
+  L.push(para('The release archives and npm packages carry these programs next to the binaries above. Each is its own '
+    + 'program, run as a separate process, never linked; their license texts and notices are in the archive\'s '
+    + '`licenses/` folder.'));
+  list(extra.shipped);
   L.push('## Run as separate programs (not shipped)', '');
-  for (const p of extra.programs) L.push(para(`- ${sub(p)}`).replace(/\n(?=.)/g, '\n  ').trimEnd());
-  L.push('');
+  list(extra.programs);
 
   L.push('## Development and test only (not distributed)', '');
   L.push(para('These npm packages build and test the page and run the end-to-end tests. None of them is in a release. '

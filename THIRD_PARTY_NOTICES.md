@@ -221,10 +221,20 @@ This software is based in part on the work of the Independent JPEG Group.
 | Baloo 2 | `retake-edit` | embedded as the built-in `display` font | OFL-1.1 |
 | Go Bold (the Go fonts) | `retake` | embedded from golang.org/x/image/font/gofont; draws the numbered badges in note snapshots | BSD-3-Clause |
 
+## Shipped as separate programs
+
+The release archives and npm packages carry these programs next to the binaries above. Each is its own program, run as
+a separate process, never linked; their license texts and notices are in the archive's `licenses/` folder.
+
+- ffmpeg and ffprobe 9.0.2: GPL-3.0-or-later as built (with x264, GPL-2.0-or-later, and zimg, WTFPL). Linux: built by
+  scripts/ffmpeg-build/build.sh from FFmpeg, x264, zimg, zlib (Zlib) and musl (MIT), statically; the release carries
+  their complete source as ffmpeg-source-9.0.2.tar.xz. macOS: Martin Riedl's static build. Windows: Gyan Doshi's
+  "essentials" build.
+- herdr 0.8.2: Apache-2.0. Its Windows build carries Microsoft's ConPTY (conpty.dll, OpenConsole.exe): MIT.
+
 ## Run as separate programs (not shipped)
 
-- ffmpeg and ffprobe: LGPL-2.1-or-later, or GPL-2.0-or-later in builds with x264 and other GPL parts. Installed by the
-  user and run as separate programs; never linked or shipped.
+- A system ffmpeg, when the user runs Retake without the bundled one (go install, a source build): its own license.
 - whisper.cpp (whisper-cli): MIT. Optional, for transcription. scripts/install-whisper.sh builds it on the user's
   machine; it is not shipped. Its models are downloaded separately, under their own licenses.
 - Chromium (through Playwright): used only by the end-to-end tests; never shipped.
