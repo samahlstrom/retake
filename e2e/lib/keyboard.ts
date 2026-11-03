@@ -155,7 +155,10 @@ const listScroll = (page: Page) => page.locator('#side .vp').evaluate((el) => el
 export async function videoKeyboard(page: Page, url: string, where: string, shot: (what: string) => Promise<void>): Promise<void> {
   await page.goto(`${url}p/busy/`);
   await page.waitForFunction(() => !!window.__review?.view?.shown && !!window.__review.notes?.available, null, { timeout: 20_000 });
-  await expect(page.locator('#side .item')).toHaveCount(COMMENTS.length, { timeout: 10_000 });
+  // The eight comments, and one per device run before on this server (each saves one with Return, below).
+  const items = page.locator('#side .item');
+  await expect.poll(() => items.count(), { timeout: 10_000 }).toBeGreaterThanOrEqual(COMMENTS.length);
+  const count = await items.count();
   const inner = await page.evaluate(() => innerHeight);
   // The list scrolled part way, as someone reading it would have it.
   await page.locator('#side .vp').evaluate((el) => (el.scrollTop = 60));
@@ -222,7 +225,7 @@ export async function videoKeyboard(page: Page, url: string, where: string, shot
   await page.locator(COMMENT_BOX).press('Enter');
   await expect.poll(() => viewport(page).then((v) => v.compose)).toBe(false);
   await keyboardDown(page);
-  await expect(page.locator('#side .item')).toHaveCount(COMMENTS.length + 1, { timeout: 10_000 });
+  await expect(items).toHaveCount(count + 1, { timeout: 10_000 });
   for (const sel of FADES) await expect.poll(() => hidden(page, sel)).toBe(false);
 }
 
