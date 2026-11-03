@@ -22,6 +22,7 @@ import {
   versionOf,
   versionStrip,
   visible,
+  withLive,
   type Row,
 } from './view';
 
@@ -380,6 +381,29 @@ describe('comments belong to the version they were made on', () => {
     expect(rowVersions(plain).size).toBe(0);
   });
 
+  it('the live version also lists the comments being worked into it, in time order', () => {
+    const fam = [{ label: 'v4' }, { label: 'v5-draft2' }];
+    const all = sidebarRows(
+      {
+        version: 'v5-draft2',
+        newest: false,
+        scope: 'video',
+        items: [
+          item({ id: 1, version: 'v4', t0: 3 }),
+          item({ id: 2, version: 'v4', t0: 9 }),
+          item({ id: 3, version: 'v4', t0: 1 }),
+          item({ id: 4, version: 'v5-draft1', t0: 5 }),
+        ],
+      },
+      { versions: fam, shown: 'v5-draft2' },
+    );
+    const own = forVersion(all, 'v5-draft2');
+    expect(keys(own)).toEqual(['note:4']);
+    // #1 and #2 are the running batch's; #3 isn't in it (another task's, or never sent).
+    expect(keys(withLive(all, own, [1, 2]))).toEqual(['note:1', 'note:4', 'note:2']);
+    expect(keys(withLive(all, own, []))).toEqual(['note:4']);
+  });
+
   it("a draft's comments belong to the version it heads for", () => {
     expect(versionOf('v8-draft2')).toBe('v8');
     expect(versionOf('v8')).toBe('v8');
@@ -418,7 +442,7 @@ describe('comments belong to the version they were made on', () => {
     expect(versionStrip([{ label: 'v1' }], 'v1', counts)).toEqual([]);
   });
 
-  it("the agent's drafts are one quiet entry that shows the newest draft", () => {
+  it("the agent's drafts are one entry, the live version, that shows the newest revision", () => {
     const withDrafts = [...family, { label: 'v8-draft2' }, { label: 'v8-draft3' }];
     const strip = versionStrip(withDrafts, 'v8-draft2', new Map([['v8', 1]]));
     expect(strip).toHaveLength(8);
@@ -431,6 +455,9 @@ describe('comments belong to the version they were made on', () => {
       on: true,
       into: 'v9',
     });
+    // Updating v8 in place: its newest revision is the live one, not the v8 it had.
+    const updating = versionStrip([...family, { label: 'v8' }, { label: 'v8-draft4' }], 'v8', new Map());
+    expect(updating.at(-1)).toMatchObject({ version: 'v8', label: 'v8-draft4', drafting: true, on: true });
     // A single version and its draft: that's two, so there is a strip.
     expect(versionStrip([{ label: 'v1' }, { label: 'v2-draft1' }], 'v1', new Map()).map((e) => e.version)).toEqual([
       'v1',

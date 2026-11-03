@@ -75,6 +75,7 @@ type runner struct {
 	connected             time.Time
 	selected              bool
 	render                project.LiveRender
+	renderStarted         map[string]time.Time // when this worker started each render, by id: a mark waits for one after it
 	renderErr             string
 	finalTask             string
 	versions              int             // the family's versions, from the last poll: outside a task, render only while 0
@@ -266,6 +267,7 @@ type outcome struct {
 	state, message, result string
 	version                string           // a plain task's new version file
 	changes                map[int64]string // what changed for each note, from the report
+	said                   []int64          // the notes the agent wrote its own entry for (the rest may have a mark)
 	usage                  *project.AgentUsage
 }
 
@@ -446,7 +448,7 @@ func (r *runner) controlLoop(ctx context.Context) error {
 				told, join := r.unsentTold(), r.unsentJoin()
 				report := project.WorkReport{Worker: r.identity.ID, Task: current.ID, Lease: current.Lease, State: result.state,
 					Message: result.message, Result: result.result, Version: result.version, Usage: result.usage, Told: told,
-					Join: join, Notes: result.changes}
+					Join: join, Notes: result.changes, Said: result.said}
 				if r.call(ctx, "/api/worker/report", report, nil) == nil {
 					r.acked(told)
 					r.joined(join)

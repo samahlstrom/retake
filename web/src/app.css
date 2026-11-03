@@ -588,6 +588,33 @@
   #timeline .comment-marker.done {
     background: var(--status-done);
   }
+  /* The comment the agent is on: its marker pulses softly (a ring, transform and opacity only). */
+  #timeline .comment-marker.now::after {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: 50%;
+    border: 1.5px solid var(--status-working);
+    animation: marker-now 1.6s ease-out infinite;
+    pointer-events: none;
+  }
+  @keyframes marker-now {
+    from {
+      opacity: 0.8;
+      transform: scale(0.7);
+    }
+    to {
+      opacity: 0;
+      transform: scale(1.5);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #timeline .comment-marker.now::after {
+      animation: none;
+      opacity: 0.6;
+      transform: none;
+    }
+  }
   /* The agent's question (retake ask), at its own moment: a violet tag with a "?", dashed like its visuals. */
   #timeline .ask-marker {
     position: absolute;
@@ -696,16 +723,28 @@
     }
   }
 
-  /* The agent's drafts (contract C4): the version they head for, with a quiet tag. */
-  #verBtn .draft,
-  #verList .draft {
-    margin-left: 6px;
-    color: var(--dim);
-    font-size: 11px;
-    font-weight: 500;
-    letter-spacing: 0.02em;
+  /* The live version (spec/automation.md, "The live version"): a small red dot, in the list after its name and on the
+     button over its border (nothing moves), while the agent works on it. */
+  #verList .live {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    margin-left: 8px;
+    border-radius: 50%;
+    background: var(--agent-edge);
+    vertical-align: 2px;
   }
-  #verList .is-draft {
-    color: var(--text-5);
+  #verBtn.live {
+    position: relative;
+  }
+  #verBtn.live::after {
+    content: '';
+    position: absolute;
+    top: -3px;
+    right: -3px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--agent-edge);
   }
 }

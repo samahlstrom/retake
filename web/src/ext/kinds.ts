@@ -3,6 +3,7 @@
 // is unit-tested.
 import type { Card } from '../lib/home';
 import type { ExtInfo, ExtKind } from './loader';
+import { verName } from '../lib/versions';
 
 /** The extension and kind of a full kind id (`scripts.doc`), or null when no extension on here has it. */
 export function kindOf(
@@ -21,9 +22,10 @@ export function kindOf(
 export const owns = (ext: ExtInfo, kind: string | null | undefined): boolean =>
   !!kind && (ext.kinds.some((k) => k.id === kind) || kind.startsWith(`${ext.id}.`));
 
-/** How a version reads: `v0 · Script` for a kind's version (`v0` alone when its extension isn't on), else its label. */
+/** How a version reads: `v0 · Script` for a kind's version (`v0` alone when its extension isn't on), else its label (a
+ * revision of the live v5, `v5-draft2`, reads `v5`). */
 export function versionName(exts: readonly ExtInfo[], v: { label: string; kind?: string }): string {
-  if (!v.kind) return v.label;
+  if (!v.kind) return verName(v.label);
   const label = kindOf(exts, v.kind)?.kind.label;
   return label ? `${v.label} · ${label}` : v.label;
 }

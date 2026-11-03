@@ -326,6 +326,21 @@ func (s *Server) workerRoute(w http.ResponseWriter, r *http.Request, p []string,
 		}
 		s.json(w, r, 200, q)
 		return
+	case is(p, "api", "worker", "progress") && r.Method == http.MethodPost:
+		// retake working and retake done from the task's running attempt (spec/automation.md, "Marking progress").
+		var b project.WorkProgress
+		if json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&b) != nil {
+			s.fail(w, r, 400, "invalid progress")
+			return
+		}
+		b.Worker = id
+		m, e := st.MarkProgress(b)
+		if e != nil {
+			s.fail(w, r, 409, e.Error())
+			return
+		}
+		s.json(w, r, 200, m)
+		return
 	case is(p, "api", "worker", "report") && r.Method == http.MethodPost:
 		var b project.WorkReport
 		// A batch's report may say what changed for each of its notes: up to 1000 of 4000 characters.
@@ -363,7 +378,8 @@ func (s *Server) workerRoute(w http.ResponseWriter, r *http.Request, p []string,
 			project.LiveRender
 			Lease string `json:"lease"`
 		}
-		if json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<20)).Decode(&b) != nil || !project.ValidWorkID(b.ID) || b.Worker != id || len(b.Source) != 64 || b.Duration <= 0 || b.FPS <= 0 || b.Width <= 0 || b.Height <= 0 {
+		if json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<20)).Decode(&b) != nil || !project.ValidWorkID(b.ID) || b.Worker != id || len(b.Source) != 64 || b.Duration <= 0 || b.FPS <= 0 || b.Width <= 0 || b.Height <= 0 ||
+			b.Media != "" && (!relay.ValidFile(b.Media) || !family.IsVideo(b.Media) || family.IsPlaylist(b.Media)) {
 			s.fail(w, r, 400, "invalid render")
 			return
 		}
@@ -383,7 +399,7 @@ func (s *Server) workerRoute(w http.ResponseWriter, r *http.Request, p []string,
 			}
 			old := a.Render(b.ID)
 			if old != nil {
-				if old.ID != b.ID || old.Worker != id || old.Source != b.Source || old.Task != b.Task {
+				if old.ID != b.ID || old.Worker != id || old.Source != b.Source || old.Task != b.Task || old.Media != b.Media {
 					return false, errors.New("immutable render identity changed")
 				}
 				b.Label, b.N, b.Draft, b.Alias = old.Label, old.N, old.Draft, old.Alias
@@ -630,7 +646,7 @@ func (s *Server) remoteVersion(v project.LiveRender) family.Version {
 	stream := remoteStream(v)
 	duration := jsonx.Float(v.Duration)
 	w, h := v.Width, v.Height
-	return family.Version{Label: v.Label, N: v.N, Name: "index.m3u8", Path: s.remotePath(v.Label), FPS: jsonx.Float(v.FPS),
+	return family.Version{Label: v.Label, N: v.N, Name: v.MediaName(), Path: s.remoteMediaPath(v.Label, v.MediaName()), FPS: jsonx.Float(v.FPS),
 		Duration: &duration, Width: &w, Height: &h, Stream: &stream, Relay: true}
 }
 
@@ -666,7 +682,12 @@ func (s *Server) familyVersion(label string) (family.Version, bool) {
 
 // remotePath is where a relayed version's takes and manifest live on the host.
 func (s *Server) remotePath(label string) string {
-	return filepath.Join(s.root, ".retake", "remote", label, "index.m3u8")
+	return s.remoteMediaPath(label, "index.m3u8")
+}
+
+// remoteMediaPath is remotePath for a render whose media is name (a plain project's revision is video.mp4).
+func (s *Server) remoteMediaPath(label, name string) string {
+	return filepath.Join(s.root, ".retake", "remote", label, name)
 }
 
 // unlistedRender finds a relayed render the family doesn't list (an older draft, or a promoted draft's old label).

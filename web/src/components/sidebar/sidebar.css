@@ -244,6 +244,7 @@
     background: var(--scrollbar-thumb-hover);
   }
   #side ol {
+    position: relative; /* a card leaving to Done stays where it was while the others slide up */
     list-style: none;
     margin: 0;
     padding: 0 0 64px; /* room for the floating strip at the bottom */
@@ -323,12 +324,27 @@
   #side .compose.pending textarea {
     border-color: color-mix(in srgb, var(--overlay) 22%, transparent);
   }
-  /* Where a comment's edit goes: "→ v8", next to its status, quiet. */
+  /* Where a comment's edit goes: "→ v8", next to its status, quiet; once done, "in v8", which shows it there. */
   #side .into {
     color: var(--faint);
     font-size: 12px;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
+  }
+  #side button.into {
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: 12px;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  #side button.into:hover,
+  #side button.into:focus-visible {
+    color: var(--text-strong);
+    text-decoration: underline;
+    text-underline-offset: 3px;
   }
   /* 17 px on a phone: Safari zooms into a field whose text is smaller than 16 px. */
   html[data-phone] #side .compose {
@@ -401,6 +417,42 @@
   }
   #side .item.active {
     background: color-mix(in srgb, var(--overlay) 4.5%, transparent);
+  }
+  /* The comment the agent is working on: a soft light sweeps across it (transform only), under its content. */
+  #side .item[data-doing] {
+    overflow: hidden;
+    isolation: isolate;
+  }
+  #side .item[data-doing]::before {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, var(--working-sweep) 50%, transparent);
+    transform: translateX(-100%);
+    animation: working-sweep 2.4s linear infinite;
+    pointer-events: none;
+  }
+  @keyframes working-sweep {
+    to {
+      transform: translateX(100%);
+    }
+  }
+  /* The agent's line under it: its words, quiet and italic. */
+  #side .doing {
+    margin: 4px 0 0;
+    color: var(--muted);
+    font-size: 12.5px;
+    font-style: italic;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #side .item[data-doing]::before {
+      animation: none;
+      transform: none;
+      background: var(--working-sweep);
+    }
   }
   #side .line1 {
     display: flex;
@@ -700,9 +752,6 @@
   }
   #side .recording-comment .pulse {
     background: var(--record);
-  }
-  #side .batch-line .pulse {
-    background: var(--status-working);
   }
   #side .deleted-comment {
     justify-content: space-between;

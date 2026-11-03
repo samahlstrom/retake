@@ -157,6 +157,7 @@ Every command has `--json`. `retake mcp <video>` serves the same tools over stdi
 | `notes_list` | `retake notes list <video> [--status open] [--version vN]` | Notes with text, times, author, strokes (shape, color, box), images, the snapshot path and the answers. |
 | `note_ask` | `retake ask <video> <note> "text" [--option v8a ...]` | Asks a question about a note. |
 | | `retake ask [--note ID] [--at T] [--from T --to T] [--box …] [--arrow …] [--draw F] [--image F] [--option TEXT[@F]] "text"` | From inside a running editing task, without the video: asks about a moment of the video through the worker, with visuals (spec/automation.md, "Questions from inside a task"). |
+| | `retake working <note> ["what I'm doing"]`, `retake done <note> "what changed"` | From inside a running editing task: the note the agent is on, and a note whose edit is in the live version (spec/automation.md, "Marking progress"). |
 | `note_set` | `retake note <video> <id> --status S [--in vN] [--change "..."]` | Changes one note. |
 | `version_push` | `retake push <video> <file> --parent vN --change ID="summary"... --ask ID="question"...` | Copies or moves the file into the family as the next `v<N>`, or takes `--label vN` (labels are `v<N>`: the page finds versions by the `_v<N>` in their names). Records sha256, parent and changelog, enforces the push rule, and emits a `version` event. |
 | `versions_list` | `retake versions <video>` | Versions, parents, changelogs. |
@@ -187,13 +188,20 @@ The review page opens the newest playable cut. A version picker exposes review c
 
 ### Comments belong to their version
 
-A comment belongs to the version it was recorded on. A draft's comments (`v5-draft2`) belong to the version the draft
+A comment belongs to the version it was recorded on. A draft's comments (`v5-draft2`, a revision of the live `v5`:
+spec/automation.md, "Versions versus drafts") belong to the version the draft
 heads for (`v5`), so they are still there once the draft becomes that version.
 
 - **What a version shows.** The sidebar and the timeline show the shown version's comments only, plus the agent's
   questions about them (an item's `note`, else its own `version`), never another version's. The two tabs count that
-  version: To do (Open, Working, Question) and Done (resolved, with the change and "See vN" when another version holds
-  it). Timeline markers follow the tab, one per comment, in its status color, at the comment's own time on its own
+  version: To do (Open, Working, Question) and Done (resolved, with the change and where it went, "in vN", which shows
+  that version at that comment's moment). A comment the agent marks done while it works (spec/automation.md,
+  "Marking progress") is in Done as soon as its edit is in the live vN, with the agent's words for its change; it
+  moves there from To do by itself, fading out and letting the cards under it slide up (transform and opacity only,
+  nothing jumps; nothing moves with `prefers-reduced-motion`). Switching tab, version or search never animates.
+  While a version is live (spec/automation.md, "The live version"), its list also has the comments whose edits go
+  into it, the running batch's, so following the latest to the live vN keeps them in view as they land. A Send never
+  moves the list by itself; switching to the live version happens with following the latest (the video), as before. Timeline markers follow the tab, one per comment, in its status color, at the comment's own time on its own
   version; a comment's pen strokes and voice fold into its marker once it is transcribed. Transcription completion is
   independent of resolution. Switching the version, however it is switched (the picker, the strip below, C),
   switches the comments, the markers and the drawings on the video with it; flipped with C, the open take's own
@@ -206,8 +214,9 @@ heads for (`v5`), so they are still there once the draft becomes that version.
   shown version as a menu (`v8 ⌄`), then search and hide at the right. The second: a To do · Done toggle (each with
   its count), then an extension's tabs (on a phone they share the first row). With two or more entries in the family
   (a second version, or a draft), the version menu lists every version, newest first, each with where its comments go
-  and its To do count (`v7 → v8 · 63 to do`; nothing when none), the shown one checked; the agent's drafts of the next
-  version are one entry, `v8 · drafting`, which shows the newest listed draft; an extension's version comes first
+  and its To do count (`v7 → v8 · 63 to do`; nothing when none), the shown one checked; a version and its revisions
+  (drafts) are one entry, `v8`, which shows its newest listed revision, with a small red live mark while the agent
+  works on it (spec/automation.md, "The live version"); an extension's version comes first
   (`v0 · Script`). A pick shows that version, as the bar's picker does (pinned unless it is the newest). While an
   earlier version still has something to do, the menu's button has a small dot, and its title says what (`Open on
   earlier versions: v6 · 2, v3 · 91`). A single version shows its label without a menu. This replaced the version
@@ -235,7 +244,8 @@ heads for (`v5`), so they are still there once the draft becomes that version.
   version its edit goes in, made or updated in place (a comment on v7 goes into v8 even once v8 exists; one on v8
   makes v9), and `later` names a version after the target that exists already. The page says it in the same few
   words everywhere: the comment box `Comment at 0:18 · goes into v8…`, the version menu `v7 → v8 · 3 to do`, a
-  card's `→ v8` next to its status until it's done (its title adds "v9 is newer" with `later`), and after Send
+  card's `→ v8` next to its status until it's done (its title adds "v9 is newer" with `later`), `in v8` once it is,
+  and after Send
   `Sent to v8.` Without `target` (an older server) the page takes the next number (a draft's comments, `v8-draft2`,
   go into v9). A typed comment on an extension's document has none.
 - **Send** counts and sends the shown version's open comments (spec/automation.md, "HTTP and UI"), never a task per

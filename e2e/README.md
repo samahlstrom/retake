@@ -295,3 +295,17 @@ stubbed and its `resize` or `scroll` sent.
   is above the keyboard; Done brings the bar back.
 - Screenshots: `.retake-work/keyboard-shots/` (`chromium-<what>` and `webkit-<what>-<device>`, `<what>` one of
   `video`, `video-keyboard`, `video-after`, `script`, `script-chat-keyboard`, `script-doc-keyboard`).
+
+**`23-progress`** and **`23-progress-webkit`** (new only; spec/automation.md, "Marking progress" and "The live
+version"): a plain video with three typed comments, sent with Send to a fake agent that works them one at a time
+(`retake working`, a different take of the video as its edit, `retake done`) and waits for the test's gate between
+steps (`lib/progress.ts`). Chromium on a desktop and an iPhone 15; WebKit (`RETAKE_E2E_WEBKIT`) on the iPhone 15.
+- v2 is live at once (`v2-draft1`, the page follows it, the picker says `v2`, never "draft"), and the red edge light is
+  on while the agent works.
+- The working comment alone has the sweep (`data-doing`) and its line ("trimming the intro…"); there is no "Agent
+  working on" pill.
+- Each gate moves the counts by exactly one (To do 3 → 2 → 1 → 0, Done 0 → 1 → 2 → 3), the finished card leaves To do,
+  the sweep moves to the next one, and the page follows each new revision of v2 without reloading.
+- Done shows each change with "in v2", which plays v2 at that comment's moment. The report makes v2 final, the edge
+  light goes, and the notes are answered in v2 with the agent's words.
+- Screenshots: `.retake-work/progress-shots/` (`working-<device>`, `mid-batch-<device>`).

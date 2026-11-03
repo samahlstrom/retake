@@ -62,6 +62,7 @@ type runRecord struct {
 	Given    []int64             `json:"given,omitempty"`
 	Round    []int64             `json:"round,omitempty"`
 	Changes  map[int64]string    `json:"changes,omitempty"`
+	Said     []int64             `json:"said,omitempty"` // the notes with the agent's own report entry
 	Messages []string            `json:"messages,omitempty"`
 	Usage    *project.AgentUsage `json:"usage,omitempty"`
 	Secret   string              `json:"secret,omitempty"` // its retake ask secret
@@ -72,7 +73,11 @@ type runRecord struct {
 	Restore  string              `json:"restore,omitempty"` // the timeline to put back at the end (an older target's)
 	Snaps    []ext.SnapState     `json:"snaps,omitempty"`
 	Outcome  *savedOutcome       `json:"outcome,omitempty"` // its end, until the server has it
-	Done     bool                `json:"done,omitempty"`    // the server has its end
+	// Waiting is the done marks whose edit isn't in a complete render yet (timeline), and Revisions a plain task's
+	// revisions of its target, oldest first (spec/automation.md, "The live version").
+	Waiting   []waitingMark `json:"waiting,omitempty"`
+	Revisions []string      `json:"revisions,omitempty"`
+	Done      bool          `json:"done,omitempty"` // the server has its end
 }
 
 // plainRun is a plain task's video: where it goes and where the agent started.
@@ -91,15 +96,16 @@ type savedOutcome struct {
 	Result  string              `json:"result,omitempty"`
 	Version string              `json:"version,omitempty"`
 	Changes map[int64]string    `json:"changes,omitempty"`
+	Said    []int64             `json:"said,omitempty"`
 	Usage   *project.AgentUsage `json:"usage,omitempty"`
 }
 
 func (o outcome) saved() *savedOutcome {
-	return &savedOutcome{State: o.state, Message: o.message, Result: o.result, Version: o.version, Changes: o.changes, Usage: o.usage}
+	return &savedOutcome{State: o.state, Message: o.message, Result: o.result, Version: o.version, Changes: o.changes, Said: o.said, Usage: o.usage}
 }
 
 func (s *savedOutcome) back() outcome {
-	return outcome{state: s.State, message: s.Message, result: s.Result, version: s.Version, changes: s.Changes, usage: s.Usage}
+	return outcome{state: s.State, message: s.Message, result: s.Result, version: s.Version, changes: s.Changes, said: s.Said, usage: s.Usage}
 }
 
 func (r *runner) recordPath(task string) string {

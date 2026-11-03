@@ -518,6 +518,7 @@ func (s *Store) AskInTask(r WorkAsk) (TaskQuestion, error) {
 			}
 		}
 		j.Asked = append(j.Asked, TaskAsk{ID: id, Note: note})
+		j.unmark(note) // a question takes back its done mark: the note is the reviewer's to answer now
 		where := "at " + Clock(at)
 		if r.Anchor != nil {
 			where = "in " + r.Anchor.File

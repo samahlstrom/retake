@@ -133,8 +133,13 @@ func (r *runner) renderLoop(ctx context.Context) {
 			task, lease := "", ""
 			if t != nil {
 				task, lease = t.ID, t.Lease
+				r.resolveMarks(ctx)
+				// A task renders its source as soon as it has no render of its own, unchanged or not: its target is
+				// live at once (spec/automation.md, "The live version"). A document task renders only what changed.
+				doc := r.docTask(task)
 				r.mu.Lock()
-				unchanged := r.render.Complete && r.render.Source == source && r.finalTask != task
+				unchanged := r.render.Complete && r.render.Source == source && r.finalTask != task &&
+					(r.render.Task == task || doc)
 				r.mu.Unlock()
 				if unchanged {
 					continue
@@ -172,6 +177,12 @@ func (r *runner) renderLoop(ctx context.Context) {
 
 func (r *runner) renderSource(ctx context.Context, source string, doc []byte, task, lease string) {
 	v := project.LiveRender{ID: project.NewWorkID(), Worker: r.identity.ID, Task: task, Source: source}
+	r.mu.Lock()
+	if r.renderStarted == nil {
+		r.renderStarted = map[string]time.Time{}
+	}
+	r.renderStarted[v.ID] = time.Now()
+	r.mu.Unlock()
 	dir := filepath.Join(r.dir, "renders", v.ID)
 	set := func(err string) {
 		r.mu.Lock()

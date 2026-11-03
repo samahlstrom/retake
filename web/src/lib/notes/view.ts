@@ -234,6 +234,24 @@ export function rowVersions(rows: readonly Row[]): Map<string, string> {
   return out;
 }
 
+/** A live version's rows (spec/notes.md, "What a version shows"): its own, and while the agent works the comments
+ * whose edits go into it (`notes`, the running batch's) with the agent's questions about them, so the person watches
+ * them land in the version they're watching. In time order. */
+export function withLive(rows: readonly Row[], own: readonly Row[], notes: readonly number[]): Row[] {
+  if (!notes.length) return [...own];
+  const have = new Set(own.map((r) => r.key)),
+    ids = new Set(notes);
+  const extra = rows.filter(
+    (r) =>
+      !have.has(r.key) &&
+      ((r.kind === 'note' && ids.has(r.id)) || (r.kind === 'question' && r.note != null && ids.has(r.note))),
+  );
+  if (!extra.length) return [...own];
+  return [...own, ...extra].sort(
+    (a, b) => a.t0 - b.t0 || (a.kind === b.kind ? a.id - b.id : a.kind === 'note' ? -1 : 1),
+  );
+}
+
 /** The rows of the version on screen (spec/notes.md, "Comments belong to their version"): its comments and the
  * agent's questions about them, and nothing of another version. */
 export function forVersion(rows: readonly Row[], shown: string | null): Row[] {
@@ -275,9 +293,10 @@ export interface VersionEntry {
   name: string;
   /** An extension's kind of version (`scripts.doc`): it isn't a video. */
   kind?: string;
-  /** What a click shows: the version itself, or the newest listed draft heading for it. */
+  /** What a click shows: its newest listed revision (the version itself, or while it's live the newest draft of it:
+   * spec/automation.md, "The live version"). */
   label: string;
-  /** Only drafts of it so far: it reads `v5 · drafting`. */
+  /** That newest revision is a draft: the version is being made or updated (it reads `v5`, live while its task runs). */
   drafting: boolean;
   /** Its comments still to do. */
   todo: number;
@@ -327,8 +346,7 @@ export function versionStrip(
         on: version === on,
         into: intoVersion(version),
       });
-    else if (!draft) Object.assign(e, { label, drafting: false });
-    else if (e.drafting) e.label = label; // the family lists drafts oldest first: the newest wins
+    else Object.assign(e, { label, drafting: draft }); // the family lists a version's revisions oldest first: the newest wins
   }
   return out.length < 2 ? [] : out;
 }

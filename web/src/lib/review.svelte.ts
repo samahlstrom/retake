@@ -54,6 +54,7 @@ import {
   activeKey,
   earlierOpen,
   forVersion,
+  withLive,
   historyLabels,
   intoVersion,
   PHONE_QUERY,
@@ -82,8 +83,10 @@ import {
 import { covers, drawTimeline, pendingStrokes, pendingVoiceBins, tlT, type VoiceTrack } from './timeline';
 import {
   activeTask,
+  agentEdge,
   agentStatus,
   commentStatus,
+  liveTarget,
   managesAgent,
   pendingNotes,
   sendButton,
@@ -126,6 +129,8 @@ import {
   neighbor,
   newlyStreamed,
   renderedEnd,
+  revisionOf,
+  verName,
   withStream,
 } from './versions';
 import { Watcher } from './watch';
@@ -330,7 +335,18 @@ export class Review {
   );
   /** The rows of the version on screen: the list, the markers, the counts and Send are about these only. During a
    * switch it's the version the notes answer is for, until the new one's is in (its times are on that clock). */
-  readonly versionRows = $derived(forVersion(this.rows, this.notes.res?.version ?? this.shown));
+  readonly versionRows = $derived.by(() => {
+    const label = this.notes.res?.version ?? this.shown;
+    const own = forVersion(this.rows, label);
+    // The live version also lists the comments being worked into it (spec/notes.md, "What a version shows").
+    const t = (this.automation.state?.tasks ?? []).find((x) => x.state === 'running' || x.state === 'stopping');
+    if (!t?.target || !label || verName(label) !== t.target) return own;
+    return withLive(
+      this.rows,
+      own,
+      t.notes.filter((id) => !t.dropped?.includes(id)),
+    );
+  });
   /** The sidebar row under the playhead. */
   historyVoice = $state.raw<VoiceTrack[]>([]);
   transcribedTakes = $state.raw<string[]>([]);
@@ -403,6 +419,19 @@ export class Review {
     return notes.some((row) => row.by !== notes[0]!.by);
   });
   readonly agent: AgentStatus = $derived(agentStatus(this.automation.state, this.clock));
+  /** The version a running task of this video makes or updates, live (spec/automation.md, "The live version"). */
+  readonly liveTarget = $derived(liveTarget(this.automation.state?.tasks));
+  /** The red light around the video's edge while the agent works (spec/automation.md, "While the agent works"). */
+  readonly edgeLit = $derived(
+    agentEdge(
+      this.automation.state?.tasks,
+      (id) => {
+        const row = this.rows.find((r) => r.kind === 'note' && r.id === id);
+        return row ? this.statusOf(row).state : null;
+      },
+      { recording: !!this.seg || this.starting, kind: !!this.kindShown },
+    ),
+  );
   /** Runs the agent: chooses it and connects computers. Everyone who can record sends. */
   readonly owner = $derived(this.canRecord && managesAgent(this.role));
   historyTakeIds = $state.raw<string[]>([]);
@@ -2479,9 +2508,13 @@ export class Review {
   #announceStreams(): void {
     const fresh = newlyStreamed(this.versions, this.#seenStreams);
     for (const v of fresh) this.#seenStreams.add(v.label);
-    const v = fresh[fresh.length - 1];
+    // A live version's next revision is no news: the edge light says it's updating (spec/automation.md).
+    const v = fresh.filter((f) => !this.#announced.has(verName(f.label))).at(-1);
+    for (const f of fresh) this.#announced.add(verName(f.label));
     if (v) this.toast.say('Updating video…', 2500);
   }
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- bookkeeping, not state
+  #announced = new Set<string>();
 
   /** A line or image of the open take shows on the version it was drawn on only: flipped with C to the other version,
    * the take's lines on the base wait for C back (another version's drawings never show on this one). */
@@ -2741,6 +2774,7 @@ export class Review {
     if (this.switching || (label === this.base && !this.flipped)) return;
     const v = byLabel(this.versions, label);
     if (!v) return;
+    const was = verName(this.shown);
     // A quick check before a recording is stopped for nothing, with the map if it's here already (it's fetched ahead,
     // see #prefetchMaps): showVersion, which starts the switch at once, has the last word.
     const land =
@@ -2764,13 +2798,29 @@ export class Review {
     if (v.kind) return; // an extension's version: no drawings to load, nothing to say
     void this.loadHistory(label);
     const note = this.#landNote;
-    this.toast.say(note ?? 'Video updated', note ? 3200 : 1400);
+    // The live version's next revision (the agent's next edit) comes in quietly: the edge light is its news.
+    if (note || verName(label) !== was) this.toast.say(note ?? 'Video updated', note ? 3200 : 1400);
   }
 
   pickVersion = (label: string): void => {
     this.verOpen = false;
-    this.followLatest = label === this.versions.at(-1)?.label;
+    // A live version plays its newest revision that has the moment (spec/automation.md, "The live version").
+    const v = byLabel(this.versions, label);
+    if (v && !v.kind) label = revisionOf(this.cuts, verName(label), this.video?.currentTime ?? 0)?.label ?? label;
+    this.followLatest = label === this.versions.at(-1)?.label || verName(label) === verName(this.cuts.at(-1)?.label);
     void this.setBase(label);
+  };
+
+  /** A Done comment's "in v5": v5 (its newest revision while it's live) at that comment's moment, mapped from the
+   * comment's version (spec/notes.md, "What a version shows"). */
+  showIn = async (row: Row, version: string): Promise<void> => {
+    const v = revisionOf(this.cuts, version, row.t0);
+    if (!v) return;
+    this.jumpToComment(row);
+    if (v.label === this.shown) return;
+    this.verOpen = false;
+    this.followLatest = verName(v.label) === verName(this.cuts.at(-1)?.label);
+    await this.setBase(v.label);
   };
 
   jumpToComment = (row: Row): void => {

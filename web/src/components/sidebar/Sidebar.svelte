@@ -3,20 +3,35 @@
   // header"): a speech bubble, the version as a menu (every version with where its comments go and what's still to
   // do), search and hide; then To do · Done. Each version shows its own comments only. At the bottom, the comment box
   // ("Comment at 0:18 · goes into v8…"). Progress (recording, transcribing, an undo after a delete) floats over the
-  // bottom of the list, so nothing in it moves. N or the › hides the column (remembered); the speech bubble over the
+  // bottom of the list, so nothing in it moves. While the agent works there is no line or pill: the comment it's on
+  // sweeps, and each one it finishes fades out of To do while the cards under it slide up (lib/notes/motion.ts:
+  // transform and opacity only, and only for a change in place, never a switch of tab, version or search). N or the › hides the column (remembered); the speech bubble over the
   // video, with the to-do count, brings it back. Extensions add tabs after To do · Done (spec/extensions.md, "UI
   // slots"): a sidebar tab shows its slot in place of the list; a review panel widens the column to half the page. On
   // a computer the column's left edge is a handle that drags it wider or narrower (spec/notes.md, "The column's
   // width"), remembered per viewer.
   import { Collapsible, ScrollArea, Tooltip } from 'bits-ui';
   import { onMount, tick } from 'svelte';
+  import { flip } from 'svelte/animate';
+  import { cubicOut } from 'svelte/easing';
   import type { Review } from '../../lib/review.svelte';
+  import type { Row } from '../../lib/notes/view';
+  import {
+    ARRIVE_MS,
+    LEAVE_MS,
+    SLIDE_MS,
+    arriveCss,
+    arriving,
+    leaveCss,
+    leaving,
+    scopeKey,
+    slides,
+  } from '../../lib/notes/motion';
   import SidebarItem from './SidebarItem.svelte';
   import VersionMenu from './VersionMenu.svelte';
   import CommentBox from './CommentBox.svelte';
   import ExtSlot from '../../ext/ExtSlot.svelte';
   import Chat from '../chat/Chat.svelte';
-  import { batchLine } from '../../lib/status';
   import {
     browserStorage,
     clampSide,
@@ -69,8 +84,35 @@
   /** A phone: the header and To do · Done share one row (the list needs the height), unless an extension adds
    * tabs. */
   const oneRow = $derived(review.layoutMode !== 'desktop' && !review.extTabs.length && !review.kindDrawer);
-  /** "Agent working on 3 comments": the batch the agent works on, as one group. */
-  const batch = $derived(batchLine(review.agent));
+  // The list's moves (lib/notes/motion.ts). `then` is the scope the list was last drawn with: a card that leaves or
+  // arrives while it's the same scope moved in place.
+  const scope = $derived(
+    scopeKey({
+      filter: review.commentFilter,
+      version: review.notes.res?.version ?? review.shown,
+      search: review.commentSearch,
+    }),
+  );
+  let then: string | null = null;
+  $effect(() => {
+    void view.rows;
+    then = scope;
+  });
+  const still = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function leave(_: Element, row: Row) {
+    if (still() || leaving(then, scope, review.commentFilter, review.statusOf(row).state) !== 'done')
+      return { duration: 0 };
+    return { duration: LEAVE_MS, easing: cubicOut, css: leaveCss };
+  }
+  function arrive(_: Element, row: Row) {
+    if (still() || arriving(then, scope, review.commentFilter, review.statusOf(row).state) !== 'done')
+      return { duration: 0 };
+    return { duration: ARRIVE_MS, delay: 80, easing: cubicOut, css: arriveCss };
+  }
+  function slide(node: Element, rect: { from: DOMRect; to: DOMRect }) {
+    if (still() || !slides(then, scope)) return { duration: 0 };
+    return flip(node, rect, { duration: SLIDE_MS, easing: cubicOut });
+  }
   const setOpen = (v: boolean) => {
     if (v !== view.panel) review.toggleSidebar();
   };
@@ -375,7 +417,22 @@
                     {#if view.rows.length}
                       <ol>
                         {#each view.rows as row (row.key)}
-                          <SidebarItem {review} {row} active={row.key === view.active} />
+                          {@const st = review.statusOf(row)}
+                          <li
+                            class="item"
+                            data-part="comment"
+                            class:active={row.key === view.active}
+                            class:asking={row.kind === 'question'}
+                            data-key={row.key}
+                            data-mark={row.mark}
+                            data-state={st.state}
+                            data-doing={st.doing != null ? '' : undefined}
+                            animate:slide
+                            in:arrive={row}
+                            out:leave={row}
+                          >
+                            <SidebarItem {review} {row} />
+                          </li>
                         {/each}
                       </ol>
                     {:else if review.commentSearch.trim()}
@@ -432,9 +489,6 @@
                       ? 'Recording.'
                       : 'Recording. Comments appear here as you talk.'}
                   </div>
-                {:else if batch}
-                  <!-- The agent's batch, as one group: one line while it works (spec/automation.md, "Batches"). -->
-                  <div class="batch-line" role="status"><span class="pulse"></span>{batch}</div>
                 {/if}
               </div>
             </div>

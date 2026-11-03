@@ -112,6 +112,16 @@
     color: var(--muted);
     font-weight: 400;
   }
+  /* The live version: a small red dot while the agent works on it (spec/automation.md, "The live version"). */
+  .vmenu-list .live {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    margin-left: 7px;
+    border-radius: 50%;
+    background: var(--agent-edge);
+    vertical-align: 2px;
+  }
   .vmenu-list .n {
     display: inline-flex;
     align-items: center;
