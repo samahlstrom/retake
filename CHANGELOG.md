@@ -4,6 +4,23 @@ All notable changes are listed here. Versions follow semver once the first relea
 
 ## Unreleased
 
+### Install with npm, Homebrew or one line, on every OS
+- `npm i -g retake-cli`, then `retake`: setup opens in the browser. Needs Node 18+. npm downloads only your
+  platform's package (macOS arm64 and Intel, Linux x64 and arm64, Windows x64), with ffmpeg, herdr and `retake-edit`
+  inside; there are no install scripts. `npx retake-cli` tries it without installing. Update with
+  `npm i -g retake-cli@latest`.
+- Plain `retake` typed in a terminal is `retake start`, and `retake --no-open --port N` passes the options to it. Piped
+  or from an agent, plain `retake` still prints the usage. `retake -v` prints the version.
+- Agents are told to run the `retake` binary they can actually reach: with npm, its full path inside the platform
+  package (the `retake` on PATH is a node launcher, and a herdr or tmux pane may not have node or that folder).
+- No Node: `curl -fsSL https://raw.githubusercontent.com/samahlstrom/retake/main/install.sh | sh` (macOS, Linux; it
+  moved from `scripts/` to the repo root), `install.ps1` on Windows, or `brew install samahlstrom/retake/retake`.
+- The macOS and Windows archives now carry ffmpeg (Martin Riedl's and Gyan Doshi's 9.0.2 GPL builds, with libx264
+  and zimg), and the Windows one herdr.
+- `.github/workflows/release.yml`: a `v*` tag builds every platform on its own runner, tests the npm install on each,
+  and drafts the GitHub release; publishing the draft publishes npm (trusted publishing, provenance) and the Homebrew
+  formula. Run by hand with `dry_run`, it builds and tests everything and publishes nothing (docs/releasing.md).
+
 ### Edit a comment's words while it's still to do
 - ⋯ → **Edit**, or a double-click on a comment's words: they become a field in their own place (same font and size,
   nothing moves), with Cancel and Save where the ⋯ was. Enter saves, Shift+Enter is a new line, Esc cancels. On a

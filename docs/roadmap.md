@@ -40,8 +40,9 @@
    - Done: local multi-project home screen with thumbnails, status, Next video and folder share links; on-demand HLS rendering with cached resume and progress.
    - Left: a web admin page, per-person sidebars, redacting server paths, presigned media or a CDN.
 4. **Release.** Installers, docs, a CC0 sample project, then the hosted service.
-   - Done, short of publishing: versions from tags, release archives, `scripts/install.sh`, the docs, the sample
-     project and third-party notices ([releasing.md](releasing.md)).
+   - Done, short of publishing: versions from tags, release archives, npm packages (`npm i -g retake-cli`), a
+     Homebrew formula, `install.sh`, a release workflow that builds and tests every platform on its own runner, the
+     docs, the sample project and third-party notices ([releasing.md](releasing.md)).
    - Left: publishing (below) and the hosted service.
 
 ## Editor track (after milestone 2)

@@ -38,7 +38,7 @@ changed, and each note turns Done as its change lands in the next version.
 
 ## Quickstart
 
-1. **Install Retake** ([below](#install)) and open it. On a Mac it's an app; on Linux, **Retake** in your app menu.
+1. **Install Retake** and start it: `npm i -g retake-cli`, then `retake` ([other ways](#install)).
 2. **Answer three questions** in the page that opens in your browser: the folder with your videos, your AI agent
    (Claude Code or Codex; it shows how to install and sign in to one, and **Test** checks it works), and where the
    agent works. Then **Open my videos**. You can change all of it later in Settings.
@@ -213,41 +213,43 @@ credits. Agents get the same tools over MCP, and plug-ins add domain data. See [
 
 ## Install
 
-![Setup: download Retake, open it, pick your videos folder, it finds your agents (or helps you sign in), and you review in the browser. Optional: a share link for a phone or a teammate.](docs/media/setup.svg)
-
-> There are no releases yet, so these are the steps once there are. Until then, build from source (Quickstart).
-
-**Mac** (Apple silicon or Intel)
-
-1. Download **Retake** from the releases page and drag it into Applications.
-2. Open it. A Retake icon appears in the menu bar (Open, Start at login, Quit) and your browser opens the setup page.
-3. While Retake isn't signed by Apple yet, the first open is blocked: open **System Settings → Privacy & Security**,
-   click **Open Anyway**, and confirm. Once is enough.
-
-**Linux**
-
 ```bash
-curl -fsSL <release URL>/install.sh | sh
+npm i -g retake-cli
+retake
 ```
 
-Then open **Retake** from your app menu (or run `retake start`). Nothing needs sudo.
+Needs Node 18+. `retake` opens Retake in your browser and walks you through setup. Update: `npm i -g
+retake-cli@latest`. To try it without installing: `npx retake-cli`.
 
-**Windows:** not yet.
+![Setup: install Retake, run retake, pick your videos folder, it finds your agents (or helps you sign in), and you review in the browser. Optional: a share link for a phone or a teammate.](docs/media/setup.svg)
 
-Everything Retake uses comes with it: [herdr](https://herdr.dev) to watch your agents work, ffmpeg, and `retake-edit`,
-the renderer. The one thing you bring is the AI agent, Claude Code or Codex, installed and signed in with your own
-account; the setup page shows how.
+**No Node?**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/samahlstrom/retake/main/install.sh | sh       # macOS, Linux
+```
+
+```powershell
+irm https://raw.githubusercontent.com/samahlstrom/retake/main/install.ps1 | iex           # Windows
+```
+
+**Homebrew:** `brew install samahlstrom/retake/retake`
+
+Everything Retake uses comes with it: ffmpeg, `retake-edit` (the renderer) and [herdr](https://herdr.dev), to watch
+your agents work. The one thing you bring is the AI agent, Claude Code or Codex, installed and signed in with your
+own account; the setup page shows how. Runs on macOS (Apple silicon, Intel), Linux (x64, arm64) and Windows (x64).
 
 **For developers**
 
-- The install script checks each download against the release's SHA-256 list. It unpacks the release into
-  `~/.local/share/retake/<version>/` and links `retake` and `retake-edit` into `~/.local/bin`. Options: `--version`,
-  `--dir`, `--no-menu`; to try it on a local build, `make snapshot`, then
-  `INSTALL_BASE_URL="file://$PWD/dist" sh scripts/install.sh --version <snapshot version>`.
-- `retake start --app` is what the app runs. `retake autostart on` starts it at login. `retake version` prints the
-  version.
-- How releases are built, and the Mac app: [docs/releasing.md](docs/releasing.md). What ships per OS, signing,
-  updates and the decisions still open: [docs/install-plan.md](docs/install-plan.md).
+- npm installs one package for your platform (`retake-cli-<os>-<cpu>`) holding the same programs as the release
+  archive; `retake` is a small node launcher that runs the Go binary in it. Agents get that binary's own path, so they
+  never wait on node. The install script checks each download against the release's SHA-256 list, unpacks it into
+  `~/.local/share/retake/<version>/` and links `retake` and `retake-edit` into `~/.local/bin`; options `--version`,
+  `--dir`, `--no-menu`.
+- `retake start` is what plain `retake` runs; `retake open <folder or video>` skips setup. `retake autostart on`
+  starts it at login. `retake version` prints the version.
+- How releases are built, tested and published (npm, Homebrew, the install scripts, the Mac app):
+  [docs/releasing.md](docs/releasing.md). What ships per OS and why: [docs/install-plan.md](docs/install-plan.md).
 
 ## Docs
 
