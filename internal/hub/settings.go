@@ -62,6 +62,8 @@ type SettingsView struct {
 	FolderEditable bool   `json:"folder_editable"`
 	// Test says the agents can be tested here (POST api/settings/test).
 	Test bool `json:"test"`
+	// Sharing is how a link made in the page reaches people (local only; spec/home.md, "Settings").
+	Sharing *SettingsSharing `json:"sharing,omitempty"`
 }
 
 // SettingsExt is one extension on the settings page.
@@ -87,6 +89,8 @@ type settingsChange struct {
 	OpenIn     *string         `json:"open_in"`
 	Extensions map[string]bool `json:"extensions"`
 	Folder     *string         `json:"folder"`
+	// ShareTunnel is "cloudflare" (a link may start a tunnel) or "off" ([share] tunnel).
+	ShareTunnel *string `json:"share_tunnel"`
 }
 
 // readChange decodes a POST body: JSON, no unknown keys, at most 16 KiB.
@@ -272,6 +276,7 @@ func (f *Folder) settingsView(ls *LocalSettings) (SettingsView, error) {
 	if v.OpenIn == "" {
 		v.OpenIn = config.OpenBackground
 	}
+	v.Sharing = sharingView(c, f.opts.Share.Cloudflared)
 	if ls.Extensions != nil {
 		seen := map[string]bool{}
 		for _, e := range ls.Extensions() {
@@ -313,6 +318,9 @@ func (f *Folder) changeSettings(w http.ResponseWriter, r *http.Request, ls *Loca
 	}
 	if c.OpenIn != nil && !config.ValidOpenIn(*c.OpenIn) {
 		return fmt.Errorf("open_in %q isn't background, herdr or tmux", *c.OpenIn)
+	}
+	if c.ShareTunnel != nil && *c.ShareTunnel != ShareTunnelOn && *c.ShareTunnel != ShareTunnelOff {
+		return fmt.Errorf("share_tunnel %q isn't cloudflare or off", *c.ShareTunnel)
 	}
 	installed := map[string]*ext.Ext{}
 	if ls.Extensions != nil {
@@ -372,6 +380,13 @@ func (f *Folder) changeSettings(w http.ResponseWriter, r *http.Request, ls *Loca
 		if err := config.SetTop(ls.ConfigPath, "folder", tilde(folder, ls.Home)); err != nil {
 			return err
 		}
+	}
+	if c.ShareTunnel != nil {
+		off := *c.ShareTunnel == ShareTunnelOff
+		if err := config.SetShareTunnel(ls.ConfigPath, off); err != nil {
+			return err
+		}
+		f.menus.sharing.SetOff(off) // the next link goes by it at once
 	}
 	if c.Agent != nil || c.Fallback != nil {
 		for _, fd := range f.rescan(false) {
@@ -460,6 +475,9 @@ func (h *Hub) settingsRoute(w http.ResponseWriter, r *http.Request, s *session) 
 		}
 		if err == nil && len(c.Extensions) > 0 {
 			err = errors.New("the server's extensions are set where it runs (--extensions, RETAKE_EXTENSIONS)")
+		}
+		if err == nil && c.ShareTunnel != nil {
+			err = errors.New("the team server's links use its own address")
 		}
 		var agent, fallback string
 		if err == nil {

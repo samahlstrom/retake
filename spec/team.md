@@ -263,7 +263,8 @@ started), `note` ("" for hosted and tunnel).
 **On the local network.** The first `lan` link makes the server also listen on `<that address>:<port>` until it stops.
 That `Host` is a shared host, like a tunnel's: every request there needs a token, its writes must come from
 `http://<that address>:<port>`, and its share cookie is set without `Secure` (plain HTTP; a phone's browser drops a
-`Secure` cookie from an `http://` address). Nothing else changes: `127.0.0.1` stays the owner's.
+`Secure` cookie from an `http://` address). Nothing else changes: `127.0.0.1` stays the owner's. Only a folder's server (`retake open <folder>`, `retake start`) does this; `retake open <video>`
+has no local-network fallback (503, with the note).
 
 Comment deletion and restoration (`POST /api/notes/<id>/delete|restore`) require approve permission, like reopening
 feedback. Viewers, reviewer-only links and editing agents cannot delete other people's review history.

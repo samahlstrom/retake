@@ -141,6 +141,17 @@ Forwarding headers (`X-Forwarded-For`, `-Proto`, `-Host`) are believed only from
 only by you. `retake push --remote` remembers unfinished uploads in `$XDG_STATE_HOME/retake/uploads.json`
 (`~/.local/state/retake/uploads.json`), so the next push of the same file resumes them.
 
+## [share]
+
+How sharing reaches people ([sharing.md](sharing.md)).
+
+```toml
+[share]
+cloudflared = ""   # the cloudflared binary; "" = the one on PATH
+tailscale = ""     # the tailscale binary (retake share --tunnel tailscale); "" = the one on PATH
+tunnel = ""        # "off": a link made in the page never starts a tunnel, it uses your local network instead
+```
+
 ## Your theme
 
 The page's look is a folder next to `config.toml`: `$XDG_CONFIG_HOME/retake/theme/` (`~/.config/retake/theme/`),
@@ -158,6 +169,7 @@ See [theming.md](theming.md).
 | `RETAKE_WHISPER_THREADS` | retake | whisper.cpp's CPU threads. |
 | `RETAKE_DATA`, `RETAKE_LISTEN`, `RETAKE_PUBLIC_URL`, `RETAKE_TRUSTED_PROXIES`, `RETAKE_DATABASE_URL`, `RETAKE_S3_*`, `RETAKE_SMTP_URL`, `RETAKE_SMTP_FROM`, `RETAKE_RELAY_CACHE` | retake serve, user, project | The team server's settings ([server] above). |
 | `RETAKE_THEME` | retake open, share, serve, theme | The theme folder ([theming.md](theming.md)), or `none` for the built-in look. |
+| `RETAKE_REVEAL` | retake open, start | The program Show in folder runs with the video's folder, instead of the file manager (tests). |
 | `RETAKE_TOKEN` | retake remote add | The agent token, when `--token` isn't given. |
 | `XDG_STATE_HOME` | retake push --remote, retake start | Where unfinished uploads are remembered (`retake/uploads.json`), and the running `retake start` (`retake/start.json`). |
 | `RETAKE_PROMPT`, `RETAKE_LANGUAGE` | your command engine | Set by retake for the program it runs. |

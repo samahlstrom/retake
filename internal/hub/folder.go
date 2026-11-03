@@ -27,6 +27,7 @@ import (
 	"github.com/samahlstrom/retake/internal/theme"
 	"github.com/samahlstrom/retake/internal/thumb"
 	"github.com/samahlstrom/retake/internal/transcribe"
+	"github.com/samahlstrom/retake/internal/trash"
 	"github.com/samahlstrom/retake/internal/ui"
 )
 
@@ -72,6 +73,11 @@ type FolderOptions struct {
 	FileTranscriber func() (transcribe.Transcriber, error)
 	// Settings is what the settings page reads and writes (settings.go); nil: it has none.
 	Settings *LocalSettings
+	// A video's ⋯ (videomenu.go): how share links made in the page reach people, where Move to Trash moves a video
+	// (the zero value: this computer's trash), and Show in folder (nil: RevealDefault).
+	Share  FolderShare
+	Trash  trash.Options
+	Reveal func(dir string) error
 }
 
 // Folder serves a folder of projects.
@@ -97,6 +103,8 @@ type Folder struct {
 
 	tryMu  sync.Mutex      // the agent tests running (Settings' Test)
 	trying map[string]bool // by agent id
+
+	menus menuState // a video's ⋯: share links' address, Move to Trash (videomenu.go)
 }
 
 // folderProject is one project's server, made on first use, and a handle on its store for the cards.
@@ -135,6 +143,7 @@ func NewFolder(opts FolderOptions) *Folder {
 	for _, h := range opts.AllowHosts {
 		f.allow[strings.ToLower(h)] = true
 	}
+	f.initMenus()
 	f.rescan(true)
 	return f
 }
@@ -191,14 +200,14 @@ func (f *Folder) projectOf(fd home.Found) *folderProject {
 	if fp, ok := f.open[fd.Root]; ok && fp.found.Name == fd.Name {
 		return fp
 	}
-	if f.closed {
+	if f.closed || f.leavingRoot(fd) {
 		return nil
 	}
 	o := server.Options{Video: fd.Anchor, Root: fd.Root, Port: f.opts.Port, UI: f.opts.UI, Author: f.opts.Author,
 		Prober: f.opts.Prober, Jobs: f.opts.Jobs, Version: f.opts.Version, Log: f.opts.Log, Verbose: f.opts.Verbose,
 		EventPoll: f.opts.EventPoll, External: true, BasePath: "/p/" + fd.Name, FollowNewest: true,
 		Thumbs: f.opts.Thumbs, LocalWorker: f.opts.LocalWorker, Exts: f.opts.Exts, FindAnchor: home.Anchor,
-		FileTranscriber: f.opts.FileTranscriber}
+		FileTranscriber: f.opts.FileTranscriber, Sharing: f.menus.sharing}
 	if f.opts.Project != nil {
 		f.opts.Project(fd.Name, &o)
 	}
@@ -255,7 +264,7 @@ func (f *Folder) Close() error {
 	open := f.open
 	f.open = map[string]*folderProject{}
 	f.mu.Unlock()
-	var errs []error
+	errs := []error{f.closeMenus()}
 	for _, fp := range open {
 		errs = append(errs, fp.close())
 	}
@@ -384,6 +393,9 @@ func (f *Folder) cards(allowed func(string) bool) []home.Card {
 // classify says whether a request is local or shared (spec/team.md, "Hosts"); ok is false for a Host we don't
 // answer to.
 func (f *Folder) classify(r *http.Request) (shared, ok bool) {
+	if viaLAN(r) {
+		return true, true // the local network listener checked the Host; nothing there is the owner's
+	}
 	host := strings.ToLower(r.Host)
 	if f.local[host] {
 		return server.Forwarded(r), true
@@ -403,6 +415,9 @@ func (f *Folder) originOK(r *http.Request) bool {
 	case 1:
 		if f.origins[vals[0]] {
 			return true
+		}
+		if viaLAN(r) {
+			return f.lanOrigin(vals[0])
 		}
 		h, ok := strings.CutPrefix(vals[0], "https://")
 		if !ok || h == "" {
@@ -454,6 +469,9 @@ func (f *Folder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if isHomeExt(parts) && !get {
 		perm = team.PermRecord // the extension's own role is checked inside
 	}
+	if isVideoMenu(parts) {
+		perm = team.PermManage // Move to Trash and Show in folder are the owner's
+	}
 	role, _, scope, ok := f.identify(w, r, shared, nil, perm, page)
 	if !ok {
 		return
@@ -468,6 +486,8 @@ func (f *Folder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, r, http.StatusOK, map[string]bool{"ok": true})
 	case isHomeExt(parts):
 		f.homeExt(w, r, role, parts)
+	case isVideoMenu(parts):
+		f.videoMenu(w, r, parts)
 	case len(parts) == 2 && parts[0] == "api" && parts[1] == "settings":
 		f.settingsRoute(w, r, role, "")
 	case len(parts) == 3 && parts[0] == "api" && parts[1] == "settings":
@@ -618,9 +638,14 @@ func (f *Folder) shareLink(w http.ResponseWriter, r *http.Request, tok string) {
 	if exp, ok := t.ExpiresAt(); ok {
 		age = min(age, exp.Sub(f.opts.Now()))
 	}
+	// On the local network the page is plain HTTP, where a browser drops a Secure cookie (spec/team.md).
 	http.SetCookie(w, &http.Cookie{Name: ShareCookie, Value: tok, Path: "/", MaxAge: max(1, int(age.Seconds())),
-		HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode})
-	body := bouncePage("/")
+		HttpOnly: true, Secure: !viaLAN(r), SameSite: http.SameSiteStrictMode})
+	to := "/"
+	if video, ok := strings.CutPrefix(t.Scope, "video:"); ok && video != "" {
+		to = "/p/" + video + "/" // a video's link opens its page (spec/home.md, "Sharing the home")
+	}
+	body := bouncePage(to)
 	hd := w.Header()
 	hd.Set("Referrer-Policy", "no-referrer")
 	hd.Set("Content-Type", "text/html; charset=utf-8")

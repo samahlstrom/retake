@@ -96,6 +96,12 @@ func newFolder(env Env, cfg config.Config, st config.Settings, o hub.FolderOptio
 	o.LocalWorker = localWorker(env, cfg, o.Exts) // each project's editing worker runs in this process
 	o.Working = worker.InFlight                   // and the ones with agents at work start at once
 	o.FileTranscriber = fileTranscriber(cfg)
+	// A video's ⋯ (spec/home.md): how a link made in the page reaches people. Move to Trash uses this computer's
+	// trash, and Show in folder its file manager (RETAKE_REVEAL in tests).
+	o.Share = hub.FolderShare{Off: cfg.Share.TunnelOff()}
+	if p := cfg.Share.Cloudflared; p != nil && *p != "" {
+		o.Share.Cloudflared = absPath(*p, env.Getenv)
+	}
 	if env.Clock != nil {
 		o.Now = env.Clock.Now
 	}

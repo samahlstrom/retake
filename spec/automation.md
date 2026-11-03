@@ -694,9 +694,10 @@ because a comment on the one before asked for changes.
   origin-checked) sets or clears it: an agent the selected worker (before one is selected, any worker) doesn't offer
   is 400 and changes nothing. Settings' default agent never touches it.
   - **Which agent a task gets**, first to last: the agent picked by holding Send (that one send only) > the video's
-    agent > the default agent (Settings, which is `config.agent`). A task queued without an agent takes the video's
-    agent when its computer offers it, else `config.agent`, when a worker claims it; so changing the video's agent
-    also moves a task still waiting. A running task keeps its agent (Switch agent in a comment's ⋯ changes that).
+    agent > the default agent (Settings, which is `config.agent`). A send without a held pick queues its task with the
+    video's agent while the computer offers it, else `config.agent` (a task an older store queued without an agent
+    takes it when a worker claims it). A task keeps the agent it was queued with (Switch agent in a comment's ⋯
+    changes that). The chat on a video's script (spec/chat.md) uses the video's agent the same way.
   - Nothing about the agent shows on or near Send, and Settings explains the choice in one line.
 - **No agent menu in the bar.** The agent, its fallback, where agents run and connecting a computer are in Settings
   (the home's left nav, spec/home.md). Only where Send can't reach an agent does one quiet line say so, over the bar's
@@ -731,7 +732,7 @@ because a comment on the one before asked for changes.
 ## Required verification
 
 Use disposable native timelines and generated media. For "An agent for one video": the order (a held Send's agent, then the video's,
-then `config.agent`), a queued task taking the video's agent at its claim, an agent the worker doesn't offer refused,
+then `config.agent`), a queued task keeping its agent, an agentless one taking the video's at its claim, an agent the worker doesn't offer refused,
 only the owner setting it, and Settings' default leaving it alone. Test persistence, single claim, lease fencing, cancellation
 before switching, rate-limit handoff, final submission versus incremental transcription, questions and replies,
 role restrictions, revoked tokens, bounded relay, path safety, server/worker reconnect, cached incremental
