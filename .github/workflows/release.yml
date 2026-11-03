@@ -247,8 +247,7 @@ jobs:
           - { name: Linux arm64, runner: ubuntu-22.04-arm, node: "lts/*" }
           - { name: macOS arm64, runner: macos-15, node: "lts/*", brew: true }
           - { name: macOS x64, runner: macos-15-intel, node: "lts/*", brew: true }
-          # Windows doesn't block a release until it has passed here once: then drop `experimental`.
-          - { name: Windows x64, runner: windows-latest, node: "lts/*", experimental: true }
+          - { name: Windows x64, runner: windows-latest, node: "lts/*" } # passed in dry run 41657644297, so it blocks
     runs-on: ${{ matrix.runner }}
     continue-on-error: ${{ matrix.experimental == true }}
     timeout-minutes: 30
