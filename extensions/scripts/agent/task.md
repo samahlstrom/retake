@@ -17,7 +17,8 @@ both edit it.
   other page shows as a card with its title); a link inside a sentence stays a link.
 - Edit in place. Keep headings stable, because they're anchors. Move text rather than delete it, and list anything
   cut under `## Cut` at the end.
-- Each comment's change says what you did (the report).
+- Work the comments one at a time: `retake working <id> "what you're doing"`, edit, then `retake done <id> "what you
+  did"`. Each comment's change says what you did.
 - When unsure, ask about a place in the document and carry on:
   `retake ask --note 12 --file v0/<video>_v0.md --heading "Cold open" --option "Start with the result" --option "Start with the problem" "Which opening?"`
 

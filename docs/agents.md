@@ -38,12 +38,16 @@ to the others). The comment turns Done once that video plays.
 - One agent per video. Everything you send goes to it, one target version at a time (a Send with comments on `v7` and
   `v8` updates `v8`, then makes `v9`). Comments for the version it's working on join its work: in herdr or tmux as a
   new message in its session, in the background as a follow-up round of the same agent once its run ends.
-- The comments show Working together, and each one still turns Done (or Question, when the agent asks about it) on
-  its own.
+- The agent works the comments one at a time and says so as it goes (`retake working`, `retake done`, below): the one
+  it's on has a soft light sweeping across it and a line in its own words, and each moves to Done as soon as its edit
+  is in. A slow red light runs around the video's edge while it works.
 - Each video (project) has its own agent. Different videos edit at the same time, so ten videos with work means ten
   agents working at once. The agent works in the project folder with its own sign-in and settings.
-- While it works, the page follows its drafts (`v4-draft1`, `v4-draft2`, ...). Only a finished task makes a version
-  (`v4`), and restarting `retake open` makes none.
+- The version it's making is live from the start: `v4` shows up at once (at first it's the version your comments were
+  on) and updates in place as each comment's edit goes in, so you can watch every change as it lands. Tap a Done
+  comment's "in v4" to see it at that moment. Comments you make on the live `v4` go into `v5`. When the task finishes,
+  `v4` is final; restarting `retake open` makes nothing new. (Under the hood each update is a revision, `v4-draft2`
+  and so on, playable by its URL.)
 - Anyone you share the review with (`retake share`) has the same Send button, and their comments go to this agent.
 - Each task's prompt, context, log and report are in `.retake/worker/tasks/<task>/` (no log in herdr or tmux: the
   session is the log).
@@ -57,7 +61,7 @@ herdr and tmux sessions stay open, and background agents and chat replies keep r
 When Retake starts again it picks each one back up: the same task, no new prompt. A comment that was Working stays
 Working, and if the agent finished while Retake was down, its report is read then (the new version is made, the
 comments turn Done). If its agent is gone with no report, the comment shows Paused, with Retry. On a hosted review the
-progress line says "Reconnecting to the agent" while your computer is away; after 10 minutes it shows Paused, and the
+comment being worked on says "Reconnecting to the agent" while your computer is away; after 10 minutes it shows Paused, and the
 agent is still picked back up when your computer reconnects.
 
 Only you stop an agent: Pause or switching agents on a comment, Stop in the chat, or taking all of its comments back.
@@ -124,6 +128,23 @@ the same with a hosted server.
 | `--option TEXT[@FILE]` | A choice to answer with one tap, with an optional image. Up to 6. |
 
 A background agent that writes `{"state": "question", ...}` as its report still works too.
+
+## One comment at a time
+
+The task prompt asks the agent to work its comments one at a time and to say so, through the same local address as
+`retake ask`:
+
+```bash
+retake working 12 "slowing the mask fade"     # the comment it's on now, in a few words
+# ... the edit (a project without a timeline: write the whole video so far to $RETAKE_OUTPUT) ...
+retake done 12 "Slowed the mask fade to 1.2 s"  # what changed
+```
+
+`done` puts the edit in the version being made before the comment shows Done: in a timeline project once a render has
+it (only the changed parts render, so that's quick), in a project without one once the video so far is copied in as
+the version's newest revision. A comment shows Done with these words unless the final report says something else
+for it. The report still decides: a comment the agent asked about stays Question, and if the task pauses, the
+comments go back to To do.
 
 Reviewing on a hosted server instead? Run `retake connect` and the same worker connects out to it: [hosting.md](hosting.md).
 
