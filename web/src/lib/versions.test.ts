@@ -19,7 +19,9 @@ import {
   neighbor,
   newlyStreamed,
   partner,
+  pickerEntries,
   renderedEnd,
+  revisionOf,
   streamChip,
   versionTitle,
   withStream,
@@ -119,9 +121,9 @@ describe('labels', () => {
       { label: 'v4', n: 4, duration: 40 },
       { label: 'v5-draft2', n: 5, duration: 40 },
     ];
-    expect(flipToast(drafts, 'v4', drafts[1]!, true)).toBe('v5 draft (newer)');
+    expect(flipToast(drafts, 'v4', drafts[1]!, true)).toBe('v5 (newer)');
     expect(flipToast(drafts, 'v5-draft2', drafts[0]!, true)).toBe('v4 (previous)');
-    expect(flipToast(drafts, 'v5-draft2', drafts[1]!, false)).toBe('v5 draft');
+    expect(flipToast(drafts, 'v5-draft2', drafts[1]!, false)).toBe('v5');
   });
   it('titles the version button', () => {
     expect(versionTitle(fam, 'v6', 'v6', false)).toBe('Version v6. C flips to v7');
@@ -267,11 +269,38 @@ describe('drafts (C4) read as the version they head for', () => {
     expect(draftOf('v5')).toBeNull();
     expect(draftOf('v5_draft')).toBeNull();
     expect(draftOf(null)).toBeNull();
-    expect(verName('v5-draft2')).toBe('v5 draft');
+    expect(verName('v5-draft2')).toBe('v5'); // never "draft": it's the live v5
     expect(verName('v12')).toBe('v12');
   });
   it('Latest is the newest real version', () => {
     expect(latestVersion([{ label: 'v3' }, { label: 'v4' }, { label: 'v5-draft1' }])?.label).toBe('v4');
     expect(latestVersion([{ label: 'v1-draft1' }])).toBeUndefined();
+  });
+});
+
+describe('the live version (spec/automation.md, "The live version")', () => {
+  const fam = [
+    { label: 'v3', n: 3, duration: 40 },
+    { label: 'v4', n: 4, duration: 40 },
+    { label: 'v5-draft1', n: 5, duration: 40, stream: { state: 'complete' as const, done: 3, total: 3, seconds: 40 } },
+    { label: 'v5-draft2', n: 5, duration: 40, stream: { state: 'rendering' as const, done: 1, total: 3, seconds: 12 } },
+  ];
+  it('the picker has one entry per version: its newest revision', () => {
+    expect(pickerEntries(fam).map((v) => v.label)).toEqual(['v3', 'v4', 'v5-draft2']);
+    // Updating v4 in place: the live revision stands for v4.
+    expect(pickerEntries([...fam.slice(0, 2), { label: 'v4-draft3', n: 4, duration: 40 }]).map((v) => v.label)).toEqual(
+      ['v3', 'v4-draft3'],
+    );
+    // An extension's version is never folded.
+    expect(pickerEntries([{ label: 'v0', kind: 'scripts.doc' }, { label: 'v1' }]).map((v) => v.label)).toEqual([
+      'v0',
+      'v1',
+    ]);
+  });
+  it('showing v5 plays its newest revision that has the moment', () => {
+    expect(revisionOf(fam, 'v5', 5)?.label).toBe('v5-draft2');
+    expect(revisionOf(fam, 'v5', 30)?.label).toBe('v5-draft1'); // draft2 hasn't rendered 0:30 yet
+    expect(revisionOf(fam, 'v4', 30)?.label).toBe('v4');
+    expect(revisionOf(fam, 'v9', 0)).toBeUndefined();
   });
 });

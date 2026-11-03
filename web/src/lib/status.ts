@@ -18,6 +18,11 @@ export interface CommentStatus {
   paused: string | null;
   /** A Working comment that hasn't started: why, in one short line ("Waiting for the editing computer"). */
   waiting: string | null;
+  /** The comment the agent is on now (spec/automation.md, "Marking progress"): its line in the agent's words ("" with
+   * none). Null for every other comment: one at a time. */
+  doing?: string | null;
+  /** Done by the agent's mark, its edit in the live version before the report: what changed, in its words. */
+  change?: string | null;
 }
 
 /** A task's notes still to do: not finished in an earlier attempt, nor dropped from the batch. */
@@ -56,7 +61,7 @@ export interface StatusContext {
  * sent and is still being transcribed is Working already: it has no task yet, but it is on its way.
  */
 export function commentStatus(
-  row: { mark: 'answered' | 'question' | 'open'; kind: 'note' | 'question' },
+  row: { mark: 'answered' | 'question' | 'open'; kind: 'note' | 'question'; id?: number },
   task?: EditingTask | null,
   ctx: StatusContext = {},
 ): CommentStatus {
@@ -72,7 +77,7 @@ export function commentStatus(
     case 'running':
     case 'stopping':
       // The agent asked about it from inside the task and works on: the question is the reviewer's to answer.
-      return row.mark === 'question' ? is('question') : is('working');
+      return row.mark === 'question' ? is('question') : progress(row, task, ctx);
     case 'paused':
       return is('open', pausedReason(task));
   }
@@ -81,6 +86,39 @@ export function commentStatus(
     return { state: 'working', paused: null, waiting: waitingLine(ctx.agent) };
   return is('open');
 }
+
+/** A comment of a running task, as the agent marks it (spec/automation.md, "Marking progress"): Done once its edit is in
+ * the live version, Working while it's being put in ("Putting it in v5…") or worked on (the agent's words), else plain
+ * Working. While the editing computer is offline the one being worked on says it's reconnecting. */
+function progress(row: { kind: string; id?: number }, task: EditingTask, ctx: StatusContext): CommentStatus {
+  const working: CommentStatus = { state: 'working', paused: null, waiting: null };
+  if (row.kind !== 'note' || row.id == null) return working;
+  const line = (text: string) => (ctx.agent?.available && !ctx.agent.online ? 'Reconnecting to the agent' : text);
+  const mark = task.marked?.find((m) => m.note === row.id);
+  if (mark?.ready) return { state: 'done', paused: null, waiting: null, change: mark.change.trim() || null };
+  if (mark) return { ...working, doing: line(task.target ? `Putting it in ${task.target}…` : 'Putting it in…') };
+  if (task.working?.note === row.id) return { ...working, doing: line((task.working.text ?? '').trim()) };
+  return working;
+}
+
+/** The red light around the video's edge (spec/automation.md, "While the agent works"): a task of this video runs, and
+ * not every comment it still has to do waits on a question. Never while recording, nor on an extension's version.
+ * `stateOf` is a comment's state, null for one the page doesn't have. */
+export function agentEdge(
+  tasks: readonly EditingTask[] | null | undefined,
+  stateOf: (note: number) => CommentState | null,
+  o: { recording: boolean; kind: boolean },
+): boolean {
+  if (o.recording || o.kind) return false;
+  const t = (tasks ?? []).find((x) => x.state === 'running' || x.state === 'stopping');
+  if (!t) return false;
+  const todo = pendingNotes(t).filter((id) => !t.marked?.some((m) => m.note === id && m.ready));
+  return !todo.length || todo.some((id) => stateOf(id) !== 'question');
+}
+
+/** The version a running task of this video makes or updates: the live one (spec/automation.md, "The live version"). */
+export const liveTarget = (tasks: readonly EditingTask[] | null | undefined): string | null =>
+  (tasks ?? []).find((t) => t.state === 'running' || t.state === 'stopping')?.target ?? null;
 
 /** Why sent work hasn't started, when it's the computer's fault: none is online (hosted), or the built-in one can't
  * edit (local mode, `blocked`). A queue behind another task needs no words. */
@@ -182,17 +220,6 @@ export function sendNotice(s: AgentStatus, owner: boolean): SendNotice | null {
   if (s.online || s.local) return null;
   if (!owner) return { text: 'The editing computer is offline. Send still queues.', settings: false };
   return { text: s.worker ? 'The editing computer is offline' : 'No editing computer connected', settings: true };
-}
-
-const comments = (n: number) => (n === 1 ? '1 comment' : `${n} comments`);
-
-/** The comments column's line while a batch runs: "Agent working on 3 comments · 2 more coming" (sent meanwhile, on
- * their way into the same version). While the editing computer is offline the agent works on regardless (agents
- * outlive Retake, spec/automation.md): "Reconnecting to the agent". Null when none runs. */
-export function batchLine(s: AgentStatus): string | null {
-  if (!s.batch) return null;
-  if (!s.online) return 'Reconnecting to the agent';
-  return `Agent working on ${comments(s.batch)}${s.next ? ` · ${s.next} more coming` : ''}`;
 }
 
 // ---------------------------------------------------------------- the primary button

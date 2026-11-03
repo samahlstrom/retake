@@ -7,6 +7,7 @@
   import HomeNav from './HomeNav.svelte';
   import ImageLayer from './ImageLayer.svelte';
   import AgentLayer from './AgentLayer.svelte';
+  import AgentEdge from './AgentEdge.svelte';
   import ExtSlot from '../ext/ExtSlot.svelte';
 
   let { review }: { review: Review } = $props();
@@ -39,6 +40,7 @@
   <canvas id="freeze" bind:this={review.el.freeze} style:display={review.freezeShown ? 'block' : null}></canvas>
   <ImageLayer {review} />
   <AgentLayer {review} />
+  <AgentEdge {review} />
   <canvas
     id="ink"
     class:pen={review.canRecord && !review.kindShown}

@@ -1,7 +1,8 @@
 <script lang="ts">
   // The comments' version, in their header: "v8 ⌄" (spec/notes.md, "The comments header"). Its menu lists every
   // version, newest first (an extension's version first), each with where its comments go and what's still to do
-  // ("v7 → v8 · 3 to do"); the agent's drafts of the next version are one "v9 · drafting". A pick shows that version,
+  // ("v7 → v8 · 3 to do"); a version and its revisions are one entry that plays the newest, with a small red live dot
+  // while the agent works on it (spec/automation.md, "The live version"). A pick shows that version,
   // like the bar's picker. While an earlier version still has something to do, the button has a small dot and its
   // title says what. A single version is its label alone, without a menu.
   import { DropdownMenu } from 'bits-ui';
@@ -61,9 +62,8 @@
             aria-current={e.on ? 'true' : undefined}
             onSelect={() => review.pickVersion(e.label)}
             ><span class="name"
-              >{e.name}{#if e.drafting}<span class="dim">· drafting</span>{:else if e.into && e.todo}<span class="into"
-                  >→ {e.into}</span
-                >{/if}</span
+              >{e.name}{#if e.version === review.liveTarget}<span class="live" aria-label="live"
+                ></span>{/if}{#if e.into && e.todo}<span class="into">→ {e.into}</span>{/if}</span
             ><span class="n"
               >{e.todo ? `${e.todo} to do` : ''}{#if e.on}<span class="check" aria-hidden="true">✓</span>{/if}</span
             ></DropdownMenu.Item

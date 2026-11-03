@@ -11,9 +11,11 @@
 <div id="timeline" data-part="timeline" {@attach review.attachTimeline}>
   <canvas id="tl" bind:this={review.el.tl}></canvas>
   {#each review.timelineComments as row (row.key)}
-    {@const state = review.statusOf(row).state}
+    {@const status = review.statusOf(row)}
+    {@const state = status.state}
     <button
       class="comment-marker {state}"
+      class:now={status.doing != null}
       data-part="marker"
       data-state={state}
       data-comment={row.key}

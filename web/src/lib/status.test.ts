@@ -2,9 +2,10 @@ import { describe, expect, it } from 'vitest';
 import type { AutomationState, EditingTask, EditingWorker } from './automation.svelte';
 import {
   activeTask,
+  agentEdge,
   agentStatus,
-  batchLine,
   commentStatus,
+  liveTarget,
   managesAgent,
   pausedReason,
   pendingNotes,
@@ -149,14 +150,8 @@ describe('the agent and its computer', () => {
       1001,
     );
     expect(s).toMatchObject({ working: true, batch: 2, next: 2 });
-    expect(batchLine(s)).toBe('Agent working on 2 comments · 2 more coming');
-    expect(batchLine({ ...s, batch: 1, next: 0 })).toBe('Agent working on 1 comment');
-    // The computer went away (Retake restarting, a laptop asleep): the agent works on, and Retake comes back to it.
-    expect(batchLine({ ...s, online: false })).toBe('Reconnecting to the agent');
-    // Nothing runs: no line, however much waits (the comments say Working on their own).
     const waiting = agentStatus(automation({ tasks: [task('queued', { notes: [5, 6] })] }), 1001);
     expect(waiting).toMatchObject({ working: false, batch: 0, next: 0 });
-    expect(batchLine(waiting)).toBeNull();
   });
   it('reads local (C1) and the local blocked reason', () => {
     const s = agentStatus(automation({ local: true, blocked: 'Install Claude Code or Codex to edit' }), 1001);
@@ -298,5 +293,82 @@ describe('the bar button', () => {
     for (const status of [online, hostedNone, hostedOff, blocked, unknown])
       for (const owner of [true, false])
         for (const st of states) expect(b({ owner, status, ...st }).label).not.toMatch(/finish/i);
+  });
+});
+
+// The agent marks its comments as it goes (spec/automation.md, "Marking progress"): one is being worked on, the ones
+// whose edit is in the live version are Done, one by one, before the report.
+describe('progress, one comment at a time', () => {
+  const note = (id: number) => ({ mark: 'open' as const, kind: 'note' as const, id });
+  const online: AgentStatus = {
+    available: true,
+    local: true,
+    worker: null,
+    online: true,
+    agent: 'Claude Code',
+    working: true,
+    batch: 3,
+    next: 0,
+    blocked: '',
+  };
+  const run = task('running', {
+    notes: [1, 2, 3, 4],
+    target: 'v5',
+    working: { note: 3, text: '  slowing the mask fade ', at: 1 },
+    marked: [
+      { note: 1, change: 'Slowed the fade', at: 1, ready: true, render: 'r2' },
+      { note: 2, change: 'Moved the bell', at: 2 },
+    ],
+  });
+  it('the working comment has its line; done ones are Done with their words; the rest work', () => {
+    expect(commentStatus(note(1), run, { agent: online })).toMatchObject({ state: 'done', change: 'Slowed the fade' });
+    // Marked, but its edit isn't in v5 yet: still Working, being put in.
+    expect(commentStatus(note(2), run, { agent: online })).toMatchObject({
+      state: 'working',
+      doing: 'Putting it in v5…',
+    });
+    expect(commentStatus(note(3), run, { agent: online })).toMatchObject({
+      state: 'working',
+      doing: 'slowing the mask fade',
+    });
+    const rest = commentStatus(note(4), run, { agent: online });
+    expect(rest.state).toBe('working');
+    expect(rest.doing ?? null).toBeNull();
+  });
+  it('only one comment is being worked on', () => {
+    const doing = [1, 2, 3, 4].filter((id) => commentStatus(note(id), run, { agent: online }).doing != null);
+    expect(doing).toEqual([2, 3]); // the one put in now, and the one worked on
+    const moved = task('running', { ...run, working: { note: 4, at: 2 } });
+    expect(commentStatus(note(3), moved, { agent: online }).doing ?? null).toBeNull();
+    expect(commentStatus(note(4), moved, { agent: online }).doing).toBe(''); // no words: the sweep alone
+  });
+  it('a question wins over a mark, and the report wins over everything', () => {
+    expect(commentStatus({ ...note(1), mark: 'question' }, run).state).toBe('question');
+    expect(commentStatus({ ...note(4), mark: 'answered' }, run).state).toBe('done');
+    // A paused attempt finished nothing: the marks don't count once it isn't running.
+    const paused = task('paused', { ...run, state: 'paused', error: 'Usage limit reached' });
+    expect(commentStatus(note(1), paused)).toMatchObject({ state: 'open', paused: 'Paused: usage limit' });
+  });
+  it('the working comment says when the computer is away', () => {
+    expect(commentStatus(note(3), run, { agent: { ...online, online: false } }).doing).toBe(
+      'Reconnecting to the agent',
+    );
+  });
+  it('the edge light: on while a task of this video runs and not everything waits on a question', () => {
+    const state = (q: number[]) => (id: number) => (q.includes(id) ? 'question' : 'working') as 'question' | 'working';
+    const o = { recording: false, kind: false };
+    expect(agentEdge([run], state([]), o)).toBe(true);
+    expect(agentEdge([run], state([2, 3, 4]), o)).toBe(false); // #1 is done, the rest wait on questions
+    expect(agentEdge([run], state([2, 3]), o)).toBe(true);
+    expect(agentEdge([run], state([]), { recording: true, kind: false })).toBe(false);
+    expect(agentEdge([run], state([]), { recording: false, kind: true })).toBe(false);
+    expect(agentEdge([task('question', { notes: [1] })], state([]), o)).toBe(false);
+    expect(agentEdge([task('completed')], state([]), o)).toBe(false);
+    expect(agentEdge(null, state([]), o)).toBe(false);
+    // Everything marked done: it still works (the version is being finished).
+    const all = task('running', { notes: [1], marked: [{ note: 1, change: 'x', at: 1, ready: true }] });
+    expect(agentEdge([all], state([]), o)).toBe(true);
+    expect(liveTarget([task('queued', { target: 'v4' }), run])).toBe('v5');
+    expect(liveTarget([task('queued', { target: 'v4' })])).toBeNull();
   });
 });

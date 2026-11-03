@@ -275,9 +275,10 @@ export interface VersionEntry {
   name: string;
   /** An extension's kind of version (`scripts.doc`): it isn't a video. */
   kind?: string;
-  /** What a click shows: the version itself, or the newest listed draft heading for it. */
+  /** What a click shows: its newest listed revision (the version itself, or while it's live the newest draft of it:
+   * spec/automation.md, "The live version"). */
   label: string;
-  /** Only drafts of it so far: it reads `v5 · drafting`. */
+  /** That newest revision is a draft: the version is being made or updated (it reads `v5`, live while its task runs). */
   drafting: boolean;
   /** Its comments still to do. */
   todo: number;
@@ -327,8 +328,7 @@ export function versionStrip(
         on: version === on,
         into: intoVersion(version),
       });
-    else if (!draft) Object.assign(e, { label, drafting: false });
-    else if (e.drafting) e.label = label; // the family lists drafts oldest first: the newest wins
+    else Object.assign(e, { label, drafting: draft }); // the family lists a version's revisions oldest first: the newest wins
   }
   return out.length < 2 ? [] : out;
 }

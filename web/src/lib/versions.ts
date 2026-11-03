@@ -154,16 +154,32 @@ export function versionTitle(vs: readonly V[], base: string | null, shown: strin
     : `Version ${base}${pt ? `. C flips to ${pt.label}` : ''}`;
 }
 
-/** A draft render (contract C4): `v5-draft2` is the agent's second draft heading for v5. Drafts aren't versions of
- * their own, so the page shows them quietly as "v5" with a draft tag. Returns the version it heads for, or null. */
+/** A draft render (contract C4): `v5-draft2` is the second revision of the live v5 (spec/automation.md, "The live
+ * version"). People never see the word: the page shows it as "v5". Returns the version it heads for, or null. */
 export const draftOf = (label: string | null | undefined): string | null =>
   /^(v\d+)-draft\d+$/.exec(label ?? '')?.[1] ?? null;
 
-/** How a label reads on screen: "v5" for a version, "v5 draft" for a draft of it. */
-export const verName = (label: string | null | undefined): string => {
-  const d = draftOf(label);
-  return d ? `${d} draft` : (label ?? '');
-};
+/** How a label reads on screen: "v5" for a version and for each revision of the live v5 (a draft). */
+export const verName = (label: string | null | undefined): string => draftOf(label) ?? label ?? '';
+
+/** The version picker's entries (spec/automation.md, "The live version"): one per version, its newest listed
+ * revision (the family lists a version's revisions oldest first), so the live v5 is one "v5". */
+export function pickerEntries<T extends { label: string; kind?: string }>(vs: readonly T[]): T[] {
+  const out: T[] = [];
+  for (const v of vs) {
+    const i = v.kind ? -1 : out.findIndex((x) => !x.kind && verName(x.label) === verName(v.label));
+    if (i >= 0) out[i] = v;
+    else out.push(v);
+  }
+  return out;
+}
+
+/** What showing version `version` plays: its newest revision that can play `t` (a live version's newest draft once
+ * it reaches the playhead), else its newest listed one. */
+export function revisionOf<T extends V>(vs: readonly T[], version: string, t: number): T | undefined {
+  const mine = vs.filter((v) => verName(v.label) === version);
+  return latestPlayable(mine, t) ?? mine.at(-1);
+}
 
 /** The newest real version (not a draft), for the list's "Latest". */
 export const latestVersion = <T extends { label: string }>(vs: readonly T[]): T | undefined =>

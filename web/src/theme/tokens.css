@@ -51,6 +51,8 @@
     --record: #ff453a;
     --record-text: #ff7a70;
     --record-wait: #d9a441;
+    /* the light that travels around the video's edge while the agent works (a still hairline with reduced motion) */
+    --agent-edge: var(--record);
     --voice: #5ac8fa;
     --voice-text: #d6eefa;
     --flip: #ffcf6e;
@@ -72,6 +74,8 @@
     --danger: #ff8f86;
     --warn: #e2bd73;
     --change: #9ccfb3;
+    /* the light that sweeps across the comment the agent is working on */
+    --working-sweep: color-mix(in srgb, var(--overlay) 5%, transparent);
 
     /* scrollbars (ui.css): thin, no arrows, a quiet thumb on no track */
     --scrollbar-thumb: color-mix(in srgb, var(--overlay) 14%, transparent);

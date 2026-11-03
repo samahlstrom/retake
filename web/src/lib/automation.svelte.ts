@@ -30,8 +30,24 @@ export interface EditingTask {
   /** Notes an earlier attempt finished while others waited on an answer, and notes withdrawn from the batch. */
   done?: number[];
   dropped?: number[];
+  /** The comment the agent works on now, in its words, and the ones it says are done (spec/automation.md, "Marking
+   * progress"); a mark is `ready` once its edit is in the live version. Only while an attempt runs. */
+  working?: NoteDoing | null;
+  marked?: NoteMark[] | null;
   events: { at: number; agent?: string; text: string }[];
   usage?: { input_tokens?: number; output_tokens?: number; estimated_cost_usd?: number };
+}
+export interface NoteDoing {
+  note: number;
+  text?: string;
+  at: number;
+}
+export interface NoteMark {
+  note: number;
+  change: string;
+  at: number;
+  ready?: boolean;
+  render?: string;
 }
 export interface AutomationConfig {
   /** Older pages' "send finished reviews automatically". This page never sets it; it keeps whatever is there. */
@@ -44,7 +60,7 @@ export interface AutomationState {
   config: AutomationConfig;
   workers: EditingWorker[];
   tasks: EditingTask[];
-  renders: { label: string; complete: boolean; error?: string }[];
+  renders: { label: string; complete: boolean; error?: string; task?: string; draft?: boolean }[];
   /** C1: the worker runs inside this server (`retake open`), or connects from elsewhere (hosted). Absent on older
    * servers. */
   local?: boolean;

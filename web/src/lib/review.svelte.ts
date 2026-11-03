@@ -79,8 +79,10 @@ import {
 import { covers, drawTimeline, pendingStrokes, pendingVoiceBins, tlT, type VoiceTrack } from './timeline';
 import {
   activeTask,
+  agentEdge,
   agentStatus,
   commentStatus,
+  liveTarget,
   managesAgent,
   pendingNotes,
   sendButton,
@@ -123,6 +125,8 @@ import {
   neighbor,
   newlyStreamed,
   renderedEnd,
+  revisionOf,
+  verName,
   withStream,
 } from './versions';
 import { Watcher } from './watch';
@@ -390,6 +394,19 @@ export class Review {
     return notes.some((row) => row.by !== notes[0]!.by);
   });
   readonly agent: AgentStatus = $derived(agentStatus(this.automation.state, this.clock));
+  /** The version a running task of this video makes or updates, live (spec/automation.md, "The live version"). */
+  readonly liveTarget = $derived(liveTarget(this.automation.state?.tasks));
+  /** The red light around the video's edge while the agent works (spec/automation.md, "While the agent works"). */
+  readonly edgeLit = $derived(
+    agentEdge(
+      this.automation.state?.tasks,
+      (id) => {
+        const row = this.rows.find((r) => r.kind === 'note' && r.id === id);
+        return row ? this.statusOf(row).state : null;
+      },
+      { recording: !!this.seg || this.starting, kind: !!this.kindShown },
+    ),
+  );
   /** Runs the agent: chooses it and connects computers. Everyone who can record sends. */
   readonly owner = $derived(this.canRecord && managesAgent(this.role));
   historyTakeIds = $state.raw<string[]>([]);
@@ -2737,8 +2754,23 @@ export class Review {
 
   pickVersion = (label: string): void => {
     this.verOpen = false;
-    this.followLatest = label === this.versions.at(-1)?.label;
+    // A live version plays its newest revision that has the moment (spec/automation.md, "The live version").
+    const v = byLabel(this.versions, label);
+    if (v && !v.kind) label = revisionOf(this.cuts, verName(label), this.video?.currentTime ?? 0)?.label ?? label;
+    this.followLatest = label === this.versions.at(-1)?.label || verName(label) === verName(this.cuts.at(-1)?.label);
     void this.setBase(label);
+  };
+
+  /** A Done comment's "in v5": v5 (its newest revision while it's live) at that comment's moment, mapped from the
+   * comment's version (spec/notes.md, "What a version shows"). */
+  showIn = async (row: Row, version: string): Promise<void> => {
+    const v = revisionOf(this.cuts, version, row.t0);
+    if (!v) return;
+    this.jumpToComment(row);
+    if (v.label === this.shown) return;
+    this.verOpen = false;
+    this.followLatest = verName(v.label) === verName(this.cuts.at(-1)?.label);
+    await this.setBase(v.label);
   };
 
   jumpToComment = (row: Row): void => {

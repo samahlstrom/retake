@@ -418,7 +418,7 @@ describe('comments belong to the version they were made on', () => {
     expect(versionStrip([{ label: 'v1' }], 'v1', counts)).toEqual([]);
   });
 
-  it("the agent's drafts are one quiet entry that shows the newest draft", () => {
+  it("the agent's drafts are one entry, the live version, that shows the newest revision", () => {
     const withDrafts = [...family, { label: 'v8-draft2' }, { label: 'v8-draft3' }];
     const strip = versionStrip(withDrafts, 'v8-draft2', new Map([['v8', 1]]));
     expect(strip).toHaveLength(8);
@@ -431,6 +431,9 @@ describe('comments belong to the version they were made on', () => {
       on: true,
       into: 'v9',
     });
+    // Updating v8 in place: its newest revision is the live one, not the v8 it had.
+    const updating = versionStrip([...family, { label: 'v8' }, { label: 'v8-draft4' }], 'v8', new Map());
+    expect(updating.at(-1)).toMatchObject({ version: 'v8', label: 'v8-draft4', drafting: true, on: true });
     // A single version and its draft: that's two, so there is a strip.
     expect(versionStrip([{ label: 'v1' }, { label: 'v2-draft1' }], 'v1', new Map()).map((e) => e.version)).toEqual([
       'v1',
