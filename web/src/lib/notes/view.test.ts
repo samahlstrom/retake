@@ -9,6 +9,7 @@ import {
   heading,
   historyLabels,
   intoVersion,
+  listItems,
   markOf,
   MARKS,
   presence,
@@ -402,6 +403,58 @@ describe('comments belong to the version they were made on', () => {
     // #1 and #2 are the running batch's; #3 isn't in it (another task's, or never sent).
     expect(keys(withLive(all, own, [1, 2]))).toEqual(['note:1', 'note:4', 'note:2']);
     expect(keys(withLive(all, own, []))).toEqual(['note:4']);
+  });
+
+  it("the list's items: the one the agent is on first; on a live version, the batch under From v4, its own apart", () => {
+    const fam = [{ label: 'v4' }, { label: 'v5-draft2' }];
+    const all = sidebarRows(
+      {
+        version: 'v5-draft2',
+        newest: false,
+        scope: 'video',
+        items: [
+          item({ id: 1, version: 'v4', t0: 3 }),
+          item({ id: 2, version: 'v4', t0: 9 }),
+          item({ id: 3, version: 'v4', t0: 12 }),
+          item({ id: 4, version: 'v5-draft1', t0: 5 }),
+          item({ id: 5, version: 'v5-draft2', t0: 1 }),
+        ],
+      },
+      { versions: fam, shown: 'v5-draft2' },
+    );
+    const live = withLive(all, forVersion(all, 'v5-draft2'), [1, 2, 3]);
+    const show = (items: ReturnType<typeof listItems>) => items.map((i) => (i.kind === 'row' ? i.key : i.text));
+    expect(show(listItems(live, { shown: 'v5-draft2' }))).toEqual([
+      'From v4',
+      'note:1',
+      'note:2',
+      'note:3',
+      'On v5',
+      'note:5',
+      'note:4',
+    ]);
+    // The agent is on #3: first, the rest in their order; the line before everything.
+    expect(
+      show(listItems(live, { shown: 'v5-draft2', now: 'note:3', line: 'The agent is on it · 3 comments' })),
+    ).toEqual([
+      'The agent is on it · 3 comments',
+      'From v4',
+      'note:3',
+      'note:1',
+      'note:2',
+      'On v5',
+      'note:5',
+      'note:4',
+    ]);
+    // No comments on v5 yet: the label still says where these came from.
+    const batch = withLive(all, [], [1, 2]);
+    expect(show(listItems(batch, { shown: 'v5', now: 'note:2' }))).toEqual(['From v4', 'note:2', 'note:1']);
+    // A version that isn't live: its own rows only, no labels; the one it's on still first.
+    const v4 = forVersion(all, 'v4');
+    expect(show(listItems(v4, { shown: 'v4', now: 'note:2' }))).toEqual(['note:2', 'note:1', 'note:3']);
+    expect(show(listItems(v4, { shown: 'v4', now: 'note:9' }))).toEqual(['note:1', 'note:2', 'note:3']);
+    expect(listItems(v4, { shown: 'v4' }).map((i) => i.key)).toEqual(['note:1', 'note:2', 'note:3']);
+    expect(show(listItems(all, { shown: null }))).toEqual(all.map((r) => r.key));
   });
 
   it("a draft's comments belong to the version it heads for", () => {

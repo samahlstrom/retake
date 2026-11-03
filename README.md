@@ -13,10 +13,11 @@ patches.
 
 ## How it works
 
-![You watch v4, press R, talk and draw three notes, and press Send. One agent on your computer edits the files, only the changed parts render, and each note turns done as it lands in v5.](docs/media/how-it-works.svg)
+![You watch v4, press R, talk and draw three notes, and press Send. One agent on your computer edits the project files, the renderer redraws only the parts those edits changed, and each note turns done as it lands in v5.](docs/media/how-it-works.svg)
 
-Watch a version, press **R**, talk and draw over it, and press **Send**. One agent edits the project on your computer,
-only the parts that changed render again, and each note turns Done as its change lands in the next version.
+Watch a version, press **R**, talk and draw over it, and press **Send**. One agent edits the project's files on your
+computer (the timeline, code, whatever format the project uses), the renderer redraws only the parts those edits
+changed, and each note turns Done as its change lands in the next version.
 
 - `retake open clip_v6.mp4` finds the other versions of the clip by name (`clip_v5.mp4`, `../v7/clip_v7.mp4`, …).
   Versions can be single files or `.m3u8` playlists.
@@ -30,6 +31,10 @@ only the parts that changed render again, and each note turns Done as its change
 - Each version keeps its own comments, and a comment on v7 becomes an edit in v8. The comments panel shows the version
   on screen; its version menu lists every version with where its comments go and what's still to do ("v7 → v8 · 3 to
   do").
+- The version menu (`v5 ⌄`) ends with **Download v5 (MP4)**: one MP4 you can drag straight into YouTube Studio (H.264
+  High, BT.709, AAC 48 kHz stereo at -14 LUFS, faststart, named `clip_v5.mp4`). A file that already is that downloads
+  as it is; anything else is made once and kept in `.retake/downloads/`. It works the same through a share link or a
+  hosted server. Uploading stays yours: Retake holds no YouTube login ([spec/api.md](spec/api.md), "Download").
 
 ## Quickstart
 
@@ -93,10 +98,10 @@ with a valid link get in (see [Sharing](#sharing)).
 
 ## Connect an agent
 
-![Three videos, each connected through its own socket in Retake to its own agent: Claude Code, Codex, or any command-line agent.](docs/media/any-agent.svg)
+![Retake has one socket, and Claude Code, Codex or any command-line agent plugs into it in turn: the default from Settings, another picked for one video in its ⋯ menu, or one picked for a single Send by holding Send.](docs/media/any-agent.svg)
 
-Bring the agent you already use: Claude Code, Codex or any command-line agent. Each video gets one agent, which takes
-all of that video's notes.
+Bring the agent you already use: Claude Code, Codex or any command-line agent. They all fit the same socket. One
+agent works on a video's notes at a time.
 
 There's nothing to connect. In a timeline project, with Claude Code or Codex installed and signed in:
 
@@ -113,7 +118,7 @@ and driving your own agent over MCP (`retake mcp <video>`) or the CLI.
 ![Settings lists what powers your agent: a Claude subscription, a ChatGPT subscription, an API key, or OpenRouter. Holding Send opens a short list to pick another agent for one send.](docs/media/pick-model.svg)
 
 What powers the agent is your own account: a Claude or ChatGPT subscription, an API key, or OpenRouter for any model.
-Set it once in Settings, and hold Send to pick another agent for one send.
+Settings sets the default; a video's ⋯ menu picks another for that video, and holding Send picks one for one send.
 
 ![Agents run in herdr, in tmux, or in the background, one per video. You can type into an agent's session, and its questions land on the video at the shot.](docs/media/where-agents-work.svg)
 
@@ -180,11 +185,12 @@ needs no token. See [`docs/sharing.md`](docs/sharing.md).
 
 ## Hosting
 
-![Local: Retake runs on your computer with the footage and the agent. Hosted: the Retake server is online, your computer connects out to it, and only the video someone watches is relayed.](docs/media/two-halves.svg)
+![The browser, the Retake server (page and comments) and the editing machine (footage, agent, renderer). Local: the server and the editing machine are one program on your computer. Hosted: the server is online and the editing machine connects out to it; the rendered video streams to the browser through the server.](docs/media/two-halves.svg)
 
-Retake has two halves: the page and the comments, and your computer, where the footage and the agent live. Working
-alone, they're one program on your computer. Hosted, the page is online and your computer connects out to it, so the
-footage never uploads.
+Retake has two halves: the page and the comments, and the editing machine, where the footage, the agent and the
+renderer are. The footage stays on that machine and renders there; the browser gets the rendered stream. Working
+alone, both halves are one program on your computer. Hosted, the page is online and the editing machine (your
+computer, or a box you host) connects out to it.
 
 Want people to review without being at your computer? Host it, in two commands:
 

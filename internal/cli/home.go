@@ -18,6 +18,7 @@ import (
 	"github.com/samahlstrom/retake/internal/home"
 	"github.com/samahlstrom/retake/internal/hub"
 	"github.com/samahlstrom/retake/internal/probe"
+	"github.com/samahlstrom/retake/internal/server"
 	"github.com/samahlstrom/retake/internal/worker"
 )
 
@@ -104,6 +105,14 @@ func newFolder(env Env, cfg config.Config, st config.Settings, o hub.FolderOptio
 	}
 	if env.Clock != nil {
 		o.Now = env.Clock.Now
+	}
+	// Each project downloads as a single video does (spec/api.md, "Download"): who may, and this computer's encoder.
+	who, editor, adjust := whoDownloads(env, cfg), editorOf(env), o.Project
+	o.Project = func(name string, so *server.Options) {
+		so.WhoDownloads, so.Editor = who, editor
+		if adjust != nil {
+			adjust(name, so)
+		}
 	}
 	return hub.NewFolder(o)
 }

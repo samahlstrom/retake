@@ -98,8 +98,9 @@ deadlock/                         a project
   it writes `v0/<folder>_v0.md` with `idea.md`, then `outline.md`, then `script.md` (each file's text as it is, the
   outline and the script under `## Outline` and `## Script` when they don't start with a `#` heading of their own),
   and leaves the old files where they are. From then on it reads only the one file.
-- A folder with only `v0/` is a video with one version: an **idea**. Its home card shows the chip "Idea" on an empty
-  thumbnail box, and it has no status dot.
+- A folder with only `v0/` is a video with one version: an **idea**. Its home card shows the chip "Idea" and, in
+  place of a frame, the document: its first image, else its title and first lines (spec/home.md, "Every card has a
+  picture"); it has no status dot.
 
 ## New script
 
@@ -156,7 +157,9 @@ tokens. No tabs and no toolbar.
   agent…", with its mic) and Send. Tapping the pill opens the chat sheet with the keyboard up; the sheet covers the
   bar and stays above the keyboard, and its header has the version. Reading never raises the keyboard: the document
   is read-only to the keyboard until ⋯ → **Type in the script** (⋯ → **Done typing** goes back; the menu item focuses
-  a stand-in field in the tap, so iOS raises the keyboard). While the text has the focus the page is as tall as the
+  a stand-in field in the tap, so iOS raises the keyboard). Neither moves the text: it stays where it was being read,
+  and the caret starts on the first line in view, so the keyboard coming up doesn't scroll to it (a tap puts it
+  anywhere else). While the text has the focus the page is as tall as the
   visible area above the keyboard, the bar fades out, and the caret's line stays in view above the keyboard; the text
   never moves as a whole (spec/notes.md, "Typing on a phone"). The top row is back on
   the left, and on the right the chat's bubble and ⋯. Text is at least 17 px and wraps inside the screen; nothing
@@ -289,13 +292,13 @@ otherwise, and with each new version write `v0/cuts/<label>.json`:
 isn't in the cut is left out. **On a video** (the Script sidebar tab, on videos that have v0): the script read-only,
 with the section under the playhead highlighted; clicking a section seeks to its start.
 
-## In the nav and the version strip
+## In the nav and the version menu
 
 - **The Scripts section**, under the folder tree: its header row opens the scripts page (`#ext/scripts/`) and its +
   makes a new one. Its rows are the ideas (videos with only v0), most recently edited first.
 - **The scripts page** (headed with the manifest's `name`): New script, then each idea's title (the document's `# `
   line, else the folder's name), its project, when it was last edited and its first two lines. Clicking one opens it.
-- **The version strip and picker** list `v0 · Script` first. A video with a cut opens on its newest cut, as today.
+- **The version menu** lists `Script` last, set apart. A video with a cut opens on its newest cut, as today.
   Following latest and comparing (C) never land on v0.
 
 ## Local and hosted

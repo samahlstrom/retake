@@ -131,7 +131,7 @@ func (p *proj) makeServerLocked(allowEmpty bool) *server.Server {
 	so := server.Options{Video: anchor, Root: p.root, Store: p.store, External: true, BasePath: p.base,
 		FollowNewest: true, UI: o.UI, Prober: o.Prober, Jobs: o.Jobs, Version: o.Version, Log: o.Log,
 		Verbose: o.Verbose, EventPoll: o.EventPoll, MCPFiles: p.uploadFile, MediaCache: p.h.cache, CacheScope: p.row.Name,
-		Exts: o.Exts, RemoteFiles: true, Sharing: hostedSharing{h: p.h, base: p.base}}
+		Exts: o.Exts, RemoteFiles: true, WhoDownloads: o.Downloads, Sharing: hostedSharing{h: p.h, base: p.base}}
 	if p.pub != nil {
 		so.Media = p.pub.serve
 	}

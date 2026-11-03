@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   draftOf,
+  pageName,
   latestVersion,
   verName,
   byLabel,
@@ -302,5 +303,22 @@ describe('the live version (spec/automation.md, "The live version")', () => {
     expect(revisionOf(fam, 'v5', 30)?.label).toBe('v5-draft1'); // draft2 hasn't rendered 0:30 yet
     expect(revisionOf(fam, 'v4', 30)?.label).toBe('v4');
     expect(revisionOf(fam, 'v9', 0)).toBeUndefined();
+  });
+});
+
+describe("the page's title", () => {
+  const family = [
+    { label: 'v0', name: 'v0', kind: 'scripts.doc' },
+    { label: 'v1', name: 'promo_v1.mp4' },
+    { label: 'v2', name: 'index.m3u8' },
+    { label: 'v3-draft11', name: 'video.mp4' },
+  ];
+  it('names a version by its file, and a revision of the live version by the family and its version, never "draft"', () => {
+    expect(pageName({ label: 'v1', name: 'promo_v1.mp4' }, family)).toBe('promo_v1.mp4');
+    expect(pageName({ label: 'v3-draft11', name: 'video.mp4' }, family)).toBe('promo_v3');
+    expect(pageName({ label: 'v2', name: 'index.m3u8' }, family)).toBe('promo_v2');
+    expect(pageName({ label: 'v5-draft2', name: 'clip_v5_draft2.mp4' }, [])).toBe('v5');
+    expect(pageName({ label: 'v2', name: 'index.m3u8' }, [])).toBe('v2');
+    expect(pageName({ label: 'current', name: 'notes.mp4' }, [])).toBe('notes.mp4'); // an unversioned file
   });
 });

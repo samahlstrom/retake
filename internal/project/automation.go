@@ -262,6 +262,11 @@ func (s *Store) Automation() (AutomationState, error) { return readAutomation(s.
 
 // UpdateAutomation serializes assignments across processes and persists their events atomically.
 func (s *Store) UpdateAutomation(fn func(*AutomationState) (bool, error)) error {
+	return s.updateAutomation(func(_ *tx, a *AutomationState) (bool, error) { return fn(a) })
+}
+
+// updateAutomation is UpdateAutomation with the transaction, for an update that adds events of its own.
+func (s *Store) updateAutomation(fn func(*tx, *AutomationState) (bool, error)) error {
 	return s.write(func(t *tx) error {
 		a, err := readAutomation(t)
 		if err != nil {
@@ -271,7 +276,7 @@ func (s *Store) UpdateAutomation(fn func(*AutomationState) (bool, error)) error 
 		if err != nil {
 			return err
 		}
-		changed, err := fn(&a)
+		changed, err := fn(t, &a)
 		if err != nil {
 			return err
 		}
@@ -1075,7 +1080,7 @@ func (s *Store) PollWorkerChat(p WorkPoll) (task, next *EditingTask, chat *ChatT
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	err = s.UpdateAutomation(func(a *AutomationState) (bool, error) {
+	err = s.updateAutomation(func(t *tx, a *AutomationState) (bool, error) {
 		now := s.Now().Unix()
 		changed := false
 		old := a.Worker(w.ID)
@@ -1146,6 +1151,8 @@ func (s *Store) PollWorkerChat(p WorkPoll) (task, next *EditingTask, chat *ChatT
 				return changed, nil // the video's agent is replying in the chat
 			}
 			if c.claim(w, a.agentFor(&w), now) {
+				// The page's activity line goes from "Waiting for the agent…" to what the agent does (spec/chat.md).
+				t.emit(EventChat, ChatEventData{Why: "turn", Turn: c.view()})
 				clone := *c
 				chat = &clone
 				return true, nil

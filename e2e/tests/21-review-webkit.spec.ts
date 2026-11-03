@@ -136,7 +136,7 @@ async function draw(page: Page, points: [number, number][]): Promise<void> {
   await page.mouse.up();
 }
 
-const BAR = ['#play', '#verBtn', '#pen', '#undo', '#rec', '#done', '#sideToggle'];
+const BAR = ['#play', '#verBtn', '#pen', '#undo', '#rec', '#done'];
 
 /** The comments fill the row between the controls (#pbar) and Record and Send (#precord): no gap above or below them,
  * and the page itself doesn't scroll. */
@@ -204,7 +204,8 @@ test.describe('the review page on phones in WebKit', () => {
         await page.goto(`${server.url}p/quiet/`);
         await page.waitForFunction(() => !!window.__review?.view?.shown && !!window.__review.notes?.available, null, { timeout: 20_000 });
         await expect(page.locator('#side')).toBeVisible();
-        expect(await page.evaluate(() => window.__review.sidebar)).toMatchObject({ phone: true, panel: true, toggle: true });
+        expect(await page.evaluate(() => window.__review.sidebar)).toMatchObject({ phone: true, panel: true, toggle: false });
+        await expect(page.locator('#sideToggle')).toHaveCount(0); // the comments are in view: no bubble over the video
         await expect(page.locator('#side .empty')).toContainText('No comments yet');
         await expect(page.locator('#side .tabs .seg button')).toHaveText(['To do 0', 'Done 0']);
         await fillsSpace(page, `${device}: 0 comments`);
@@ -217,8 +218,7 @@ test.describe('the review page on phones in WebKit', () => {
         await page.waitForFunction(() => !!window.__review?.view?.shown && !!window.__review.notes?.available, null, { timeout: 20_000 });
         await expect(page.locator('#side .item')).toHaveCount(8, { timeout: 10_000 });
         await expect(page.locator('#side .tabs .seg button')).toHaveText(['To do 8', 'Done 0']);
-        await expect(page.locator('#sideToggle')).toHaveText('8');
-        await expect(page.locator('#sideToggle')).toHaveAttribute('aria-label', 'Comments: 8 to do');
+        await expect(page.locator('#sideToggle')).toHaveCount(0); // To do 8 says it once
         await fillsSpace(page, `${device}: 8 comments`);
         await fitsWidth(page, `${device}: 8 comments`);
         await targets(page, `${device}: 8 comments`, [...BAR, COMMENT_BOX, ...TABS, '#side .item .more', '#side .item .time.jump']);
@@ -245,15 +245,15 @@ test.describe('the review page on phones in WebKit', () => {
         await fillsSpace(page, `${device}: 8 comments, scrolled`);
         await shot(page, 'comments-8-scrolled', device);
 
-        // The bubble goes to the comments (To do, from the top); it never hides them here.
+        // To do goes back to the comments to do, from the top.
         await page.locator('#side .tabs .seg button', { hasText: 'Done' }).tap();
         await expect(page.locator('#side .empty')).toContainText('Nothing done yet');
         await fillsSpace(page, `${device}: Done`);
-        await page.locator('#sideToggle').tap();
+        await page.locator('#side .tabs .seg button', { hasText: 'To do' }).tap();
         await expect(page.locator('#side')).toBeVisible();
         await expect(page.locator('#side .item')).toHaveCount(8);
         await expect.poll(() => page.locator('#side .vp').evaluate((el) => el.scrollTop)).toBe(0);
-        await fillsSpace(page, `${device}: after the bubble`);
+        await fillsSpace(page, `${device}: back on To do`);
       } finally {
         await context.close();
       }
@@ -298,11 +298,12 @@ test.describe('the review page on phones in WebKit', () => {
         await expect(card.locator('[data-part~="into"]')).toHaveText('→ v7');
         await expect.poll(() => page.evaluate(() => window.__review.draft)).toBeNull();
 
-        // The comments' version menu.
-        await page.locator('#side [data-part~="version-menu"]').tap();
-        const list = page.locator('[data-part~="version-menu-list"]');
+        // The one version menu, in the controls row (the comments header has none).
+        await expect(page.locator('#side [data-part~="version-picker"]')).toHaveCount(0);
+        await page.locator('#pbar [data-part~="version-picker"]').tap();
+        const list = page.locator('[data-part~="version-list"]');
         await expect(list).toBeVisible();
-        await targets(page, `${device}: the version menu`, ['[data-part~="version-menu-list"] [data-version="v5"]']);
+        await targets(page, `${device}: the version menu`, ['[data-part~="version-list"] [data-version="v5"]']);
         await fitsWidth(page, `${device}: the version menu`);
         await shot(page, 'version-menu', device);
         await page.keyboard.press('Escape');

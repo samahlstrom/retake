@@ -8,6 +8,7 @@
   import { tick } from 'svelte';
   import { DOT_TEXT, rows, topDot, videosUnder, type Row } from '../lib/tree';
   import { videoName, type Card } from '../lib/home';
+  import { verName } from '../lib/versions';
   import { cardExt, extHash, iconUrl, kindStatus, navSections } from '../ext/kinds';
   import { NAV_WIDTH, type Home } from './home.svelte';
 
@@ -220,7 +221,7 @@
           onkeydown={(e) => onKey(e, row)}
           onfocus={() => (focusKey = row.key)}
           ><span class="chev" aria-hidden="true"></span><span class="label">{row.title}</span><span class="ver"
-            >{row.card.version}</span
+            >{verName(row.card.version)}</span
           >{#if iconOf(row.card)}{@const ic = iconOf(row.card)!}{@render icon(ic.src, ic.label)}{:else}{@render dot(
               row.dot,
             )}{/if}</a

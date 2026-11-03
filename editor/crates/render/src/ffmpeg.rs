@@ -899,7 +899,13 @@ pub fn concat(segments: &[std::path::PathBuf], list: &Path, out: &Path) -> Resul
     Ok(())
 }
 
-/// Puts the video and the AAC audio in one MP4, both copied, faststart.
+/// The BT.709 colour description written into the H.264 itself (its SPS) and the MP4's `colr` box. Encoders take
+/// the colour tags from the frames, which the converter doesn't set, so the units carry only the matrix: an MP4 that
+/// leaves (a download, spec/bridge.md "Download") gets all of it, without touching a pixel.
+const BT709_SPS: &str =
+    "h264_metadata=colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1:video_full_range_flag=0";
+
+/// Puts the video and the AAC audio in one MP4, both copied, faststart, tagged BT.709.
 pub fn mux(video: &Path, audio: &Path, out: &Path) -> Result<()> {
     run(
         Command::new(ffmpeg_bin())
@@ -907,7 +913,8 @@ pub fn mux(video: &Path, audio: &Path, out: &Path) -> Result<()> {
             .arg(video)
             .arg("-i")
             .arg(audio)
-            .args(["-map", "0:v", "-map", "1:a", "-c", "copy", "-movflags", "+faststart"])
+            .args(["-map", "0:v", "-map", "1:a", "-c", "copy", "-bsf:v", BT709_SPS, "-movflags", "+faststart"])
+            .args(["-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709", "-color_range", "tv"])
             .args(["-fflags", "+bitexact", "-map_metadata", "-1"])
             .arg(out),
         "muxing",

@@ -33,6 +33,9 @@ export interface Card {
   /** Notes the agent asked about and waits on. */
   questions: number;
   stream: Stream | null;
+  /** The agent works on it now: its newest version is the live one (`version` then often a revision, `v6-draft11`,
+   * which reads `v6`). */
+  live?: boolean;
   thumb: string;
   /** With `status: "no_cut"`: the extension kind of its only version (`scripts.doc`). */
   kind?: string;
@@ -154,6 +157,7 @@ export function normalizeHome(body: unknown): HomeResponse {
       questions: num(c.questions),
       stream: s && str(s.state) ? { state: str(s.state), done: num(s.done), total: num(s.total) } : null,
       thumb: str(c.thumb),
+      ...(c.live === true ? { live: true } : {}),
       ...(str(c.kind) ? { kind: str(c.kind) } : {}),
       ...(Array.isArray(c.kinds)
         ? { kinds: (c.kinds as unknown[]).filter((k): k is string => typeof k === 'string') }
@@ -250,3 +254,68 @@ export function viewerId(rand: () => number = Math.random): string {
 /** The unwatch call for a version (spec/home.md, "Close means close"), relative to the review page. */
 export const unwatchUrl = (label: string, viewer: string): string =>
   `api/versions/${encodeURIComponent(label)}/unwatch?viewer=${encodeURIComponent(viewer)}`;
+
+/** What an idea's card shows in place of a frame (spec/home.md, "Every card has a picture"): its document's title,
+ * its first lines as plain text, and its first image. */
+export interface ScriptPreview {
+  title: string;
+  lines: string[];
+  /** The first image's path inside the video's folder (`v0/images/x.png`), or null. */
+  image: string | null;
+}
+
+/** A Markdown line as plain text: list, quote and heading marks, emphasis, code and links taken out. */
+export function plainLine(s: string): string {
+  return s
+    .replace(/^\s{0,3}(?:#{1,6}\s+|>\s?|[-*+]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+)/, '')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/(\*\*|__|~~|`)(.+?)\1/g, '$2')
+    .replace(/(^|[^\w*])[*_]([^*_]+)[*_](?=$|[^\w*])/g, '$1$2')
+    .replace(/<[^>]+>/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** A relative path inside `folder` (no scheme, no leading /, no ..), joined to it; else null. */
+function inside(folder: string, p: string): string | null {
+  const path = p.trim().replace(/^<|>$/g, '');
+  if (!path || /^[a-z][a-z0-9+.-]*:/i.test(path) || path.startsWith('/') || path.startsWith('#')) return null;
+  const parts = path.replace(/^\.\//, '').split('/');
+  if (parts.some((x) => x === '..' || x === '')) return null;
+  return `${folder}/${parts.join('/')}`;
+}
+
+/** An idea's preview from its Markdown document, whose images are relative to `folder` (the kind's, `v0`): the first
+ * `# ` line as the title, up to three first lines of text after it (Markdown marks taken out, at most 160 characters
+ * each), and the first image whose path is inside the folder. */
+export function scriptPreview(md: string, folder: string): ScriptPreview {
+  let title = '';
+  const lines: string[] = [];
+  let image: string | null = null;
+  let fenced = false;
+  for (const raw of md.split(/\r?\n/)) {
+    if (/^\s*(```|~~~)/.test(raw)) {
+      fenced = !fenced;
+      continue;
+    }
+    if (fenced) continue;
+    for (const m of raw.matchAll(/!\[[^\]]*\]\(\s*([^)\s]+)(?:\s+"[^"]*")?\s*\)/g)) image ??= inside(folder, m[1]!);
+    if (!title && !lines.length && /^\s{0,3}#\s+\S/.test(raw)) {
+      title = plainLine(raw.replace(/\s+#+\s*$/, ''));
+      continue;
+    }
+    if (/^\s*(?:[-*_]\s*){3,}$/.test(raw) || /^\s*<!--/.test(raw)) continue;
+    const text = plainLine(raw);
+    if (text && lines.length < 3) lines.push(text.length > 160 ? `${text.slice(0, 159)}…` : text);
+  }
+  return { title, lines, image };
+}
+
+/** Of an idea's documents (the paths the extension's file list gave, matching its kind's marker), the one its
+ * extension reads: `<folder name>_v0.md` (the video's folder's own) first, else the first by path. */
+export function pickDocument(paths: readonly string[], videoFolder: string): string | null {
+  const sorted = [...paths].sort();
+  const own = sorted.find((p) => p.split('/').pop()?.toLowerCase() === `${videoFolder.toLowerCase()}_v0.md`);
+  return own ?? sorted[0] ?? null;
+}

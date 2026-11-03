@@ -214,6 +214,22 @@ func TestMakeCards(t *testing.T) {
 	if c := Make(Source{Name: "clip", Info: infoOf(t, "v3", video, nil), Store: st}); c.Open != 0 {
 		t.Errorf("notes of v2 counted on v3: %+v", c)
 	}
+	// Live while a task runs (the agent works on its newest version), not once it has stopped or finished.
+	if c.Live {
+		t.Errorf("live without a task: %+v", c)
+	}
+	for state, live := range map[string]bool{"running": true, "stopping": true, "queued": false, "failed": false,
+		"completed": false} {
+		if err := st.UpdateAutomation(func(a *project.AutomationState) (bool, error) {
+			a.Tasks = []project.EditingTask{{ID: "t1", State: state, Target: "v3"}}
+			return true, nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if c := Make(Source{Name: "clip", Info: infoOf(t, "v2", video, nil), Store: st}); c.Live != live {
+			t.Errorf("a %s task: live = %v", state, c.Live)
+		}
+	}
 
 	// The streaming side's state and poster pass through.
 	c = Make(Source{Name: "clip", Info: infoOf(t, "v2", video, map[string]any{

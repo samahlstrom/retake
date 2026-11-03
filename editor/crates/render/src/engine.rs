@@ -37,6 +37,10 @@ pub struct Options {
     /// The H.264 encoder (the CLI's default is `auto`; the library's x264, which needs no device and gives the same
     /// bytes on every run).
     pub encoder: EncoderChoice,
+    /// The MP4 export's loudness target in LUFS when the timeline's master sets none (spec/bridge.md, "Download"):
+    /// `render -o` levels the export's mix to it, with a ceiling of [`crate::audio::EXPORT_TRUE_PEAK`] unless the
+    /// master sets one. With `--hls` only the packaged MP4 gets it; the playlist keeps the timeline's own mix.
+    pub export_loudness: Option<f64>,
 }
 
 impl Default for Options {
@@ -48,6 +52,7 @@ impl Default for Options {
             jobs: 3,
             cache: None,
             encoder: EncoderChoice::Fixed(EncoderKind::X264),
+            export_loudness: None,
         }
     }
 }
@@ -1015,7 +1020,10 @@ impl Engine {
             ap.clone()
         } else {
             let all: Vec<UnitPlan> = self.res.units.iter().map(|u| self.plan_unit(u)).collect::<Result<_>>()?;
-            self.audio_plan(&all)
+            let mut full = self.audio_plan(&all);
+            // The master is the whole timeline's: keep this plan's (an export's level, spec/bridge.md "Download").
+            full.master = ap.master.clone().map(|m| MasterPlan { gain_db: None, ..m });
+            full
         };
         let key = hex_of(canonical_json(&json!({"v": "levels/1", "plan": full})).as_bytes());
         let levels = match self.store.get_index("levels", &key) {

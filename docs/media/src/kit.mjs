@@ -457,6 +457,10 @@ export const icon = {
     const h = w * 0.36;
     return path(`M${cx - w / 2} ${cy}Q${cx} ${cy - h * 1.6} ${cx + w / 2} ${cy}Q${cx} ${cy + h * 1.6} ${cx - w / 2} ${cy}Z`, { fill: PAPER }) + circle(cx, cy, h * 0.5, { fill: INK, stroke: 'none' });
   },
+  // The ⋯ menu: three dots centred on (cx, cy).
+  more(cx, cy, fill = INK, r = 2.6) {
+    return [-8, 0, 8].map((dx) => circle(cx + dx, cy, r, { fill, stroke: 'none' })).join('');
+  },
   // A ring as a path (so it can spin or draw on).
   ring(r) {
     return circleD(0, 0, r);

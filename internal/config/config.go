@@ -64,6 +64,9 @@ type Server struct {
 	SMTPURL        *string  `toml:"smtp_url"`
 	SMTPFrom       *string  `toml:"smtp_from"`
 	RelayCache     *string  `toml:"relay_cache"`
+	// Downloads is who may download a version's MP4 (spec/api.md, "Download"): "everyone" who can watch (default),
+	// "reviewers" or "off". retake open and retake share read it too.
+	Downloads *string `toml:"downloads"`
 	// Extensions are the extensions the server allows, for everyone (spec/extensions.md, "Turning them on").
 	Extensions []string `toml:"extensions"`
 }
@@ -118,6 +121,9 @@ type Render struct {
 	// videotoolbox, qsv or vaapi.
 	Encoder *string `toml:"encoder"`
 }
+
+// DownloadsValues are the values [server] downloads takes.
+var DownloadsValues = []string{"everyone", "reviewers", "off"}
 
 // Encoders are the values [render] encoder takes.
 var Encoders = []string{"auto", "x264", "nvenc", "videotoolbox", "qsv", "vaapi"}
@@ -199,6 +205,9 @@ func Parse(s string) (Config, []string, error) {
 	}
 	if e := c.Render.Encoder; e != nil && !slices.Contains(Encoders, *e) {
 		return Config{}, warnings, fmt.Errorf("render.encoder %q isn't auto, x264, nvenc, videotoolbox, qsv or vaapi", *e)
+	}
+	if d := c.Server.Downloads; d != nil && !slices.Contains(DownloadsValues, *d) {
+		return Config{}, warnings, fmt.Errorf("server.downloads %q isn't everyone, reviewers or off", *d)
 	}
 	if o := c.OpenAgentsIn; o != nil && !ValidOpenIn(*o) {
 		return Config{}, warnings, fmt.Errorf("open_agents_in %q isn't background, herdr or tmux", *o)

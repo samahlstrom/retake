@@ -7,7 +7,10 @@ import {
   homeContext,
   nextToReview,
   normalizeHome,
+  pickDocument,
+  plainLine,
   projectUrl,
+  scriptPreview,
   STATUS_TEXT,
   streamText,
   toReview,
@@ -244,5 +247,68 @@ describe('hosted: connect your computer', () => {
     expect(needsComputer({ role: 'owner', machines: [] })).toBe(false);
     expect(needsComputer({ user: { email: '', name: '' }, role: 'reviewer', machines: [] })).toBe(false);
     expect(needsComputer({ user: { email: '', name: '' }, role: 'owner' })).toBe(false);
+  });
+});
+
+describe("an idea's card", () => {
+  it('shows its document: the title, the first lines as plain text, and its first image inside its folder', () => {
+    const md = [
+      '# Non-meta promo',
+      '',
+      'A promo that never shows the app reviewing itself. **Real footage** only, cut to [the beat](https://x.y).',
+      '',
+      '## Cold open',
+      '- A creator scrubs a `timeline` at 2 a.m.',
+      '- She sighs, then talks _over_ the video.',
+      '![The first shot](images/frame.png)',
+    ].join('\n');
+    expect(scriptPreview(md, 'v0')).toEqual({
+      title: 'Non-meta promo',
+      lines: [
+        'A promo that never shows the app reviewing itself. Real footage only, cut to the beat.',
+        'Cold open',
+        'A creator scrubs a timeline at 2 a.m.',
+      ],
+      image: 'v0/images/frame.png',
+    });
+  });
+
+  it('takes only an image inside its folder, and skips code, rules and comments', () => {
+    expect(scriptPreview('![a](https://x.y/a.png)\n![b](../secret.png)\n![c](/abs.png)', 'v0').image).toBeNull();
+    expect(scriptPreview('![a](./images/a b.png)\n![c](images/c.png "C")', 'v0').image).toBe('v0/images/c.png');
+    expect(scriptPreview('```\n# not a title\n```\n---\n<!-- note -->\nHello', 'v0')).toEqual({
+      title: '',
+      lines: ['Hello'],
+      image: null,
+    });
+    expect(scriptPreview('Before\n# Late title', 'v0').title).toBe(''); // the title is the first line's only
+    expect(scriptPreview('# Title #', 'v0').title).toBe('Title');
+    expect(scriptPreview(`# T\n${'word '.repeat(60)}`, 'v0').lines[0]).toHaveLength(160);
+  });
+
+  it('plain text of a Markdown line', () => {
+    expect(plainLine('> **Bold** and *it* and ~~gone~~ <b>x</b>')).toBe('Bold and it and gone x');
+    expect(plainLine('1. [ ] a task')).toBe('[ ] a task');
+    expect(plainLine('- [x] done')).toBe('done');
+    expect(plainLine('snake_case_name stays')).toBe('snake_case_name stays');
+  });
+
+  it("picks the document its extension reads: the folder's own first", () => {
+    expect(pickDocument(['v0/b_v0.md', 'v0/idea_v0.md', 'v0/a_v0.md'], 'idea')).toBe('v0/idea_v0.md');
+    expect(pickDocument(['v0/b_v0.md', 'v0/a_v0.md'], 'idea')).toBe('v0/a_v0.md');
+    expect(pickDocument([], 'idea')).toBeNull();
+  });
+
+  it('keeps a card live only when the server says so', () => {
+    const h = normalizeHome({
+      projects: [
+        { name: 'a', version: 'v6-draft11', live: true },
+        { name: 'b', live: 'yes' },
+      ],
+    });
+    expect(h.projects.map((c) => [c.version, c.live])).toEqual([
+      ['v6-draft11', true],
+      ['', undefined],
+    ]);
   });
 });

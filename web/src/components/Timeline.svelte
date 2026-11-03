@@ -15,7 +15,7 @@
     {@const state = status.state}
     <button
       class="comment-marker {state}"
-      class:now={status.doing != null}
+      class:now={!!status.now}
       data-part="marker"
       data-state={state}
       data-comment={row.key}

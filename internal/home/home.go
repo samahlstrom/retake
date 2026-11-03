@@ -68,7 +68,10 @@ type Card struct {
 	// Questions are its notes the agent asked about and waits on.
 	Questions int     `json:"questions"`
 	Stream    *Stream `json:"stream"`
-	Thumb     string  `json:"thumb"` // relative to the home
+	// Live says the agent is working on it now (a task runs): its newest version is the live one, updated in place
+	// (spec/automation.md, "The live version").
+	Live  bool   `json:"live,omitempty"`
+	Thumb string `json:"thumb"` // relative to the home
 	// Kind is the extension kind of a video whose only version is of that kind (status no_cut); Kinds the kinds of
 	// the versions it has. Changed is its newest change in Unix ms: its documents' edits or its newest push.
 	Kind    string   `json:"kind,omitempty"`
@@ -173,6 +176,7 @@ func Make(src Source) Card {
 	}
 	c.Takes = ClosedTakes(cur.Path)
 	if src.Store != nil {
+		c.Live = working(src.Store)
 		c.Open, c.Questions = openNotes(src.Store, cur.Label, cur.Path)
 		if row, err := src.Store.Version(cur.Label); err == nil {
 			if t, err := project.ParseTime(row.Created); err == nil {
@@ -287,6 +291,20 @@ func closedTake(dir string) bool {
 
 // openNotes counts the notes on a version (recorded on it, or carried over inside their ranges) that are open or
 // asked about, and of those the asked-about ones.
+// working reports whether a task of the video runs now (the agent works on its live version).
+func working(st *project.Store) bool {
+	a, err := st.Automation()
+	if err != nil {
+		return false
+	}
+	for _, t := range a.Tasks {
+		if t.State == "running" || t.State == "stopping" {
+			return true
+		}
+	}
+	return false
+}
+
 func openNotes(st *project.Store, label, video string) (open, questions int) {
 	sc := project.Scope{Version: label}
 	for _, x := range inherited(video) {

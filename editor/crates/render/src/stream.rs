@@ -415,7 +415,11 @@ pub fn render_stream(e: &Engine, o: &StreamOptions) -> Result<RenderReport> {
     let mut manifest = pipeline::build_manifest(e, &plans, &indexes, &au.out.digests)?;
     let mut output = None;
     if let Some(mp4) = &o.mp4 {
-        pipeline::package_mp4(e, &indexes, &au.out.aac, &mut manifest, mp4)?;
+        // The export may be levelled where the playlist isn't (spec/bridge.md, "Download"): then it has its own mix
+        // and encode, and its manifest their hashes. Without that, it is the same mix (the same cached encode).
+        let ex = pipeline::export_audio(e, &plans)?;
+        let mut em = pipeline::build_manifest(e, &plans, &indexes, &ex.digests)?;
+        pipeline::package_mp4(e, &indexes, &ex.aac, &mut em, mp4)?;
         output = Some(mp4.clone());
     }
     manifest.video = Some(o.playlist.file_name().unwrap_or_default().to_string_lossy().into_owned());

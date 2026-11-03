@@ -1,12 +1,17 @@
 <script lang="ts">
   // The comments, beside the video (desktop) or under the controls (phone). The header (spec/notes.md, "The comments
-  // header"): a speech bubble, the version as a menu (every version with where its comments go and what's still to
-  // do), search and hide; then To do · Done. Each version shows its own comments only. At the bottom, the comment box
+  // header"): one row, To do · Done (and an extension's tabs), then search and hide. No speech bubble and no version
+  // in it: the version menu is the bar's (one place per layout), except on a phone's extension version in portrait,
+  // whose drawer header has it (no controls row there). Each version shows its own comments only. At the bottom, the comment box
   // ("Comment at 0:18 · goes into v8…"). Progress (recording, transcribing, an undo after a delete) floats over the
-  // bottom of the list, so nothing in it moves. While the agent works there is no line or pill: the comment it's on
-  // sweeps, and each one it finishes fades out of To do while the cards under it slide up (lib/notes/motion.ts:
-  // transform and opacity only, and only for a change in place, never a switch of tab, version or search). N or the › hides the column (remembered); the speech bubble over the
-  // video, with the to-do count, brings it back. Extensions add tabs after To do · Done (spec/extensions.md, "UI
+  // bottom of the list, so nothing in it moves. While the agent works nothing floats over the list: the comment it's on
+  // comes first and sweeps, the rest of its batch read quietly, and each one it finishes fades out of To do while the
+  // cards under it slide up (lib/notes/motion.ts: transform and opacity only, and only for a change in place, never a
+  // switch of tab, version or search). Until the agent marks one, one quiet line at the top says it's on them. A live
+  // version lists its batch's comments under "From v4", its own under "On v5" (lib/notes/view.ts, listItems). N or
+  // the › hides the column (remembered); the speech bubble over the
+  // video, with the to-do count, brings it back (none on a phone in portrait: the comments are always there).
+  // Extensions add tabs after To do · Done (spec/extensions.md, "UI
   // slots"): a sidebar tab shows its slot in place of the list; a review panel widens the column to half the page. On
   // a computer the column's left edge is a handle that drags it wider or narrower (spec/notes.md, "The column's
   // width"), remembered per viewer.
@@ -15,7 +20,7 @@
   import { flip } from 'svelte/animate';
   import { cubicOut } from 'svelte/easing';
   import type { Review } from '../../lib/review.svelte';
-  import type { Row } from '../../lib/notes/view';
+  import { listItems, versionOf, type ListItem } from '../../lib/notes/view';
   import {
     ARRIVE_MS,
     LEAVE_MS,
@@ -28,7 +33,7 @@
     slides,
   } from '../../lib/notes/motion';
   import SidebarItem from './SidebarItem.svelte';
-  import VersionMenu from './VersionMenu.svelte';
+  import VersionMenu from '../VersionMenu.svelte';
   import CommentBox from './CommentBox.svelte';
   import ExtSlot from '../../ext/ExtSlot.svelte';
   import Chat from '../chat/Chat.svelte';
@@ -81,31 +86,47 @@
               ? 'w'
               : '',
   );
-  /** A phone: the header and To do · Done share one row (the list needs the height), unless an extension adds
-   * tabs. */
-  const oneRow = $derived(review.layoutMode !== 'desktop' && !review.extTabs.length && !review.kindDrawer);
+  /** The header and To do · Done share one row, but in a phone's drawer on an extension's version (its version menu,
+   * search and hide on the first). */
+  const oneRow = $derived(!review.kindDrawer);
+  /** The version the list is about (during a switch, the one the notes answer is for). */
+  const listed = $derived(review.notes.res?.version ?? review.shown);
   // The list's moves (lib/notes/motion.ts). `then` is the scope the list was last drawn with: a card that leaves or
   // arrives while it's the same scope moved in place.
   const scope = $derived(
     scopeKey({
       filter: review.commentFilter,
-      version: review.notes.res?.version ?? review.shown,
+      // A live version's revisions are one version: the page following the next one moves nothing by itself.
+      version: listed ? versionOf(listed) : null,
       search: review.commentSearch,
+    }),
+  );
+  /** What the list draws: the agent's line (To do only), then the comments, the one it's on first, grouped on a live
+   * version. */
+  const items = $derived(
+    listItems(view.rows, {
+      shown: listed,
+      now: view.rows.find((row) => review.statusOf(row).now)?.key ?? null,
+      line: review.commentFilter === 'todo' ? review.onIt : null,
     }),
   );
   let then: string | null = null;
   $effect(() => {
-    void view.rows;
+    void items;
     then = scope;
   });
   const still = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-  function leave(_: Element, row: Row) {
-    if (still() || leaving(then, scope, review.commentFilter, review.statusOf(row).state) !== 'done')
+  /** A label or the agent's line comes and goes with a short fade, within one scope only. */
+  const fades = () => !still() && slides(then, scope);
+  function leave(_: Element, it: ListItem) {
+    if (it.kind !== 'row') return fades() ? { duration: LEAVE_MS, easing: cubicOut, css: leaveCss } : { duration: 0 };
+    if (still() || leaving(then, scope, review.commentFilter, review.statusOf(it.row).state) !== 'done')
       return { duration: 0 };
     return { duration: LEAVE_MS, easing: cubicOut, css: leaveCss };
   }
-  function arrive(_: Element, row: Row) {
-    if (still() || arriving(then, scope, review.commentFilter, review.statusOf(row).state) !== 'done')
+  function arrive(_: Element, it: ListItem) {
+    if (it.kind !== 'row') return fades() ? { duration: ARRIVE_MS, easing: cubicOut, css: arriveCss } : { duration: 0 };
+    if (still() || arriving(then, scope, review.commentFilter, review.statusOf(it.row).state) !== 'done')
       return { duration: 0 };
     return { duration: ARRIVE_MS, delay: 80, easing: cubicOut, css: arriveCss };
   }
@@ -247,9 +268,8 @@
                       stroke-width="1.7"
                       stroke-linejoin="round"
                     /></svg
-                  >{#if review.todoCount && !chatting}<span class="n">{review.todoCount}</span>{/if}{#if dot}<span
-                      class="dot {dot}"
-                    ></span>{/if}</Collapsible.Trigger
+                  >{#if review.todoCount && !chatting && !view.panel}<span class="n">{review.todoCount}</span
+                    >{/if}{#if dot}<span class="dot {dot}"></span>{/if}</Collapsible.Trigger
                 >
               {/snippet}
             </Tooltip.Trigger>
@@ -299,7 +319,7 @@
               ondblclick={resetWidth}
             ></div>
           {/if}
-          <header>
+          <header class:one={oneRow && !chatting}>
             {#if searching}
               <input
                 bind:this={input}
@@ -319,18 +339,9 @@
                 }}
               />
             {:else}
-              <span class="cicon" aria-hidden="true" title="Comments"
-                ><svg viewBox="0 0 24 24"
-                  ><path
-                    d="M6 5h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-7l-4.5 3.5V17H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="1.7"
-                    stroke-linejoin="round"
-                  /></svg
-                ></span
-              >
-              <VersionMenu {review} />
+              {#if review.kindDrawer}<VersionMenu {review} side="bottom" />{:else if chatting}<span class="title"
+                  >Chat</span
+                >{/if}
               {#if oneRow && !chatting}{@render tabs()}{/if}
               <span class="h"></span>
             {/if}
@@ -416,22 +427,23 @@
                   <ScrollArea.Viewport class="vp">
                     {#if view.rows.length}
                       <ol>
-                        {#each view.rows as row (row.key)}
-                          {@const st = review.statusOf(row)}
+                        {#each items as it (it.key)}
+                          {@const row = it.kind === 'row' ? it.row : null}
+                          {@const st = row ? review.statusOf(row) : null}
                           <li
-                            class="item"
-                            data-part="comment"
-                            class:active={row.key === view.active}
-                            class:asking={row.kind === 'question'}
-                            data-key={row.key}
-                            data-mark={row.mark}
-                            data-state={st.state}
-                            data-doing={st.doing != null ? '' : undefined}
+                            class={row ? 'item' : it.kind === 'label' ? 'group' : 'on-it'}
+                            data-part={row ? 'comment' : it.kind === 'label' ? 'comment-group' : 'agent-on-it'}
+                            class:active={!!row && row.key === view.active}
+                            class:asking={row?.kind === 'question'}
+                            data-key={row?.key}
+                            data-mark={row?.mark}
+                            data-state={st?.state}
+                            data-doing={st?.now ? '' : undefined}
                             animate:slide
-                            in:arrive={row}
-                            out:leave={row}
+                            in:arrive={it}
+                            out:leave={it}
                           >
-                            <SidebarItem {review} {row} />
+                            {#if row}<SidebarItem {review} {row} />{:else if it.kind !== 'row'}{it.text}{/if}
                           </li>
                         {/each}
                       </ol>

@@ -39,15 +39,17 @@ to the others). The comment turns Done once that video plays.
   `v8` updates `v8`, then makes `v9`). Comments for the version it's working on join its work: in herdr or tmux as a
   new message in its session, in the background as a follow-up round of the same agent once its run ends.
 - The agent works the comments one at a time and says so as it goes (`retake working`, `retake done`, below): the one
-  it's on has a soft light sweeping across it and a line in its own words, and each moves to Done as soon as its edit
-  is in. A slow red light runs around the video's edge while it works.
+  it's on moves to the top of To do, with a soft light sweeping across it and a line in its own words, the rest of the
+  batch wait quietly ("→ v5"), and each moves to Done as soon as its edit is in. An agent that doesn't mark its
+  comments gets one quiet line at the top instead: "The agent is on it · 15 comments".
 - Each video (project) has its own agent. Different videos edit at the same time, so ten videos with work means ten
   agents working at once. The agent works in the project folder with its own sign-in and settings.
 - The version it's making is live from the start: `v4` shows up at once (at first it's the version your comments were
   on) and updates in place as each comment's edit goes in, so you can watch every change as it lands. Tap a Done
-  comment's "in v4" to see it at that moment. Comments you make on the live `v4` go into `v5`. When the task finishes,
-  `v4` is final; restarting `retake open` makes nothing new. (Under the hood each update is a revision, `v4-draft2`
-  and so on, playable by its URL.)
+  comment's "in v4" to see it at that moment. Its comment list keeps the comments being worked in under a quiet
+  "From v3", so you watch them land. Comments you make on the live `v4` (under "On v4") go into `v5`. When the task
+  finishes, `v4` is final; restarting `retake open` makes nothing new. (Under the hood each update is a revision,
+  `v4-draft2` and so on, playable by its URL.)
 - **Which agent.** The default agent is in Settings. To use another one for one video, open the video's ⋯ (its card,
   or the top left of its page) and pick it under **Agent for this video**; **Use my default** goes back. To use
   another one for a single send, hold Send and pick it. A held Send wins over the video's agent, which wins over the

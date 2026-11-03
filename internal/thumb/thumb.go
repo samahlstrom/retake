@@ -83,6 +83,24 @@ func (m *Maker) First(ctx context.Context, root, video string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	return m.cached(ctx, out, filepath.Base(video), func(context.Context, string) (string, error) { return video, nil })
+}
+
+// Keyed returns the first frame of media that src fetches, cached under key (what names that media for good: a
+// relayed render's id, a version file's size and time), and made once. src writes the start of the media into dir, a
+// scratch folder deleted afterwards, and returns the file to read. An error from src (the media can't be reached
+// now) gives ErrNone and is tried again next time; a frame ffmpeg can't make from what it fetched isn't.
+func (m *Maker) Keyed(ctx context.Context, root, key string,
+	src func(ctx context.Context, dir string) (string, error),
+) (string, error) {
+	h := sha256.Sum256([]byte("key\x00" + key))
+	return m.cached(ctx, filepath.Join(Dir(root), hex.EncodeToString(h[:])+".jpg"), key, src)
+}
+
+// cached returns out when it is made, else makes it from the media src gives (once at a time per out).
+func (m *Maker) cached(ctx context.Context, out, name string,
+	src func(ctx context.Context, dir string) (string, error),
+) (string, error) {
 	if st, err := os.Stat(out); err == nil && st.Size() > 0 {
 		return out, nil
 	}
@@ -101,13 +119,25 @@ func (m *Maker) First(ctx context.Context, root, video string) (string, error) {
 	if err := os.MkdirAll(filepath.Dir(out), 0o755); err != nil { //nolint:gosec // a user folder others may read
 		return "", err
 	}
+	scratch, err := os.MkdirTemp(filepath.Dir(out), ".src-")
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = os.RemoveAll(scratch) }()
+	rctx, cancel := context.WithTimeout(ctx, Timeout)
+	defer cancel()
+	video, err := src(rctx, scratch)
+	if err != nil {
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
+		return "", fmt.Errorf("%w: %s: %w", ErrNone, name, err) // not remembered: it may be there next time
+	}
 	tmp := filepath.Join(filepath.Dir(out), "."+filepath.Base(out)+".tmp.jpg")
 	run := m.Run
 	if run == nil {
 		run = ffmpeg
 	}
-	rctx, cancel := context.WithTimeout(ctx, Timeout)
-	defer cancel()
 	err = run(rctx, video, tmp)
 	if err == nil {
 		if st, serr := os.Stat(tmp); serr != nil || st.Size() == 0 {
@@ -119,7 +149,7 @@ func (m *Maker) First(ctx context.Context, root, video string) (string, error) {
 		if ctx.Err() != nil {
 			return "", ctx.Err() // the request went away: try again next time
 		}
-		ferr := fmt.Errorf("%w: %s: %w", ErrNone, filepath.Base(video), err)
+		ferr := fmt.Errorf("%w: %s: %w", ErrNone, name, err)
 		m.mu.Lock()
 		if m.failed == nil {
 			m.failed = map[string]error{}

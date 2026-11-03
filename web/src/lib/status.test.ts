@@ -2,11 +2,12 @@ import { describe, expect, it } from 'vitest';
 import type { AutomationState, EditingTask, EditingWorker } from './automation.svelte';
 import {
   activeTask,
-  agentEdge,
   agentStatus,
   commentStatus,
   liveTarget,
   managesAgent,
+  nowNote,
+  onItLine,
   pausedReason,
   pendingNotes,
   sendButton,
@@ -320,27 +321,53 @@ describe('progress, one comment at a time', () => {
       { note: 2, change: 'Moved the bell', at: 2 },
     ],
   });
-  it('the working comment has its line; done ones are Done with their words; the rest work', () => {
+  it('the comment it is on has the dot, the sweep and its line; done ones are Done; the rest of the batch is quiet', () => {
     expect(commentStatus(note(1), run, { agent: online })).toMatchObject({ state: 'done', change: 'Slowed the fade' });
-    // Marked, but its edit isn't in v5 yet: still Working, being put in.
-    expect(commentStatus(note(2), run, { agent: online })).toMatchObject({
-      state: 'working',
-      doing: 'Putting it in v5…',
-    });
     expect(commentStatus(note(3), run, { agent: online })).toMatchObject({
       state: 'working',
+      now: true,
       doing: 'slowing the mask fade',
     });
-    const rest = commentStatus(note(4), run, { agent: online });
-    expect(rest.state).toBe('working');
-    expect(rest.doing ?? null).toBeNull();
+    // Marked, but its edit isn't in v5 yet, while the agent is on #3: still Working, and quiet.
+    for (const id of [2, 4]) {
+      const rest = commentStatus(note(id), run, { agent: online });
+      expect(rest.state).toBe('working');
+      expect(rest.now ?? false).toBe(false);
+      expect(rest.doing ?? null).toBeNull();
+    }
   });
-  it('only one comment is being worked on', () => {
-    const doing = [1, 2, 3, 4].filter((id) => commentStatus(note(id), run, { agent: online }).doing != null);
-    expect(doing).toEqual([2, 3]); // the one put in now, and the one worked on
+  it('only one comment is the one it is on', () => {
+    const now = (t: EditingTask) =>
+      [1, 2, 3, 4].filter((id) => commentStatus(note(id), t, { agent: online }).now).map((id) => id);
+    expect(now(run)).toEqual([3]);
+    expect([1, 2, 3, 4].filter((id) => commentStatus(note(id), run, { agent: online }).doing != null)).toEqual([3]);
     const moved = task('running', { ...run, working: { note: 4, at: 2 } });
-    expect(commentStatus(note(3), moved, { agent: online }).doing ?? null).toBeNull();
+    expect(now(moved)).toEqual([4]);
     expect(commentStatus(note(4), moved, { agent: online }).doing).toBe(''); // no words: the sweep alone
+    // Between marks (#3 done, its edit still going in, nothing new yet): the one being put in.
+    const between = task('running', {
+      ...run,
+      working: null,
+      marked: [...run.marked!, { note: 3, change: 'Faded slower', at: 3 }],
+    });
+    expect(now(between)).toEqual([3]);
+    expect(commentStatus(note(3), between, { agent: online }).doing).toBe('Putting it in v5…');
+    // Nothing marked yet: nobody is first, nothing sweeps.
+    expect(now(task('running', { notes: [1, 2, 3, 4], target: 'v5' }))).toEqual([]);
+  });
+  it('nowNote: the working note, else the last one still being put in', () => {
+    expect(nowNote(run)).toBe(3);
+    expect(
+      nowNote({
+        working: null,
+        marked: [
+          { note: 1, change: '', at: 1 },
+          { note: 2, change: '', at: 2 },
+        ],
+      }),
+    ).toBe(2);
+    expect(nowNote({ working: null, marked: [{ note: 1, change: '', at: 1, ready: true }] })).toBeNull();
+    expect(nowNote({})).toBeNull();
   });
   it('a question wins over a mark, and the report wins over everything', () => {
     expect(commentStatus({ ...note(1), mark: 'question' }, run).state).toBe('question');
@@ -348,26 +375,28 @@ describe('progress, one comment at a time', () => {
     // A paused attempt finished nothing: the marks don't count once it isn't running.
     const paused = task('paused', { ...run, state: 'paused', error: 'Usage limit reached' });
     expect(commentStatus(note(1), paused)).toMatchObject({ state: 'open', paused: 'Paused: usage limit' });
+    expect(commentStatus(note(3), paused).now ?? false).toBe(false);
   });
   it('the working comment says when the computer is away', () => {
     expect(commentStatus(note(3), run, { agent: { ...online, online: false } }).doing).toBe(
       'Reconnecting to the agent',
     );
   });
-  it('the edge light: on while a task of this video runs and not everything waits on a question', () => {
-    const state = (q: number[]) => (id: number) => (q.includes(id) ? 'question' : 'working') as 'question' | 'working';
-    const o = { recording: false, kind: false };
-    expect(agentEdge([run], state([]), o)).toBe(true);
-    expect(agentEdge([run], state([2, 3, 4]), o)).toBe(false); // #1 is done, the rest wait on questions
-    expect(agentEdge([run], state([2, 3]), o)).toBe(true);
-    expect(agentEdge([run], state([]), { recording: true, kind: false })).toBe(false);
-    expect(agentEdge([run], state([]), { recording: false, kind: true })).toBe(false);
-    expect(agentEdge([task('question', { notes: [1] })], state([]), o)).toBe(false);
-    expect(agentEdge([task('completed')], state([]), o)).toBe(false);
-    expect(agentEdge(null, state([]), o)).toBe(false);
-    // Everything marked done: it still works (the version is being finished).
-    const all = task('running', { notes: [1], marked: [{ note: 1, change: 'x', at: 1, ready: true }] });
-    expect(agentEdge([all], state([]), o)).toBe(true);
+  it('"The agent is on it": while its task runs and has no mark yet', () => {
+    const fresh = task('running', { notes: [1, 2, 3], target: 'v5' });
+    expect(onItLine([fresh, fresh, fresh])).toBe('The agent is on it · 3 comments');
+    expect(onItLine([fresh])).toBe('The agent is on it · 1 comment');
+    expect(onItLine([fresh, fresh, task('stopping', { notes: [1, 2, 3] })])).toBe('The agent is on it · 3 comments');
+    // Marked one (working or done): the comment it's on says it instead.
+    expect(onItLine([task('running', { ...fresh, working: { note: 1, at: 1 } })])).toBeNull();
+    expect(onItLine([task('running', { ...fresh, marked: [{ note: 1, change: 'x', at: 1 }] })])).toBeNull();
+    // Waiting (queued) or nothing running: no line.
+    expect(onItLine([task('queued', { notes: [1] }), undefined, null])).toBeNull();
+    expect(onItLine([])).toBeNull();
+    // Only the list's comments of the running task count.
+    expect(onItLine([fresh, fresh, task('queued', { notes: [9] })])).toBe('The agent is on it · 2 comments');
+  });
+  it('the live target', () => {
     expect(liveTarget([task('queued', { target: 'v4' }), run])).toBe('v5');
     expect(liveTarget([task('queued', { target: 'v4' })])).toBeNull();
   });

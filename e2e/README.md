@@ -290,25 +290,49 @@ stubbed and its `resize` or `scroll` sent.
   Return (which saves the comment) each end it, and every box is back where it was, the list's scroll too.
 - A script: the bar's pill opens the chat sheet with its composer focused; with the keyboard up the sheet's bottom is
   the keyboard's top and its top 64 px down, the composer at its bottom, and nothing behind it moved (the bar hidden
-  under it); Done and the keyboard going down bring the sheet back to the bottom. ⋯ → Type in the script, then a tap
-  low in the text: with the keyboard up the page ends at the keyboard, Record and Send are hidden, and the caret's line
-  is above the keyboard; Done brings the bar back.
+  under it); Done and the keyboard going down bring the sheet back to the bottom. With the text read part way down,
+  ⋯ → Type in the script and the keyboard coming up leave it where it is; the page ends at the keyboard and Record and
+  Send are hidden. After Done, a tap in the text under where the keyboard comes: with the keyboard up the page ends
+  at it again and the caret is above it; Done brings the bar back.
 - Screenshots: `.retake-work/keyboard-shots/` (`chromium-<what>` and `webkit-<what>-<device>`, `<what>` one of
   `video`, `video-keyboard`, `video-after`, `script`, `script-chat-keyboard`, `script-doc-keyboard`).
 
-**`23-progress`** and **`23-progress-webkit`** (new only; spec/automation.md, "Marking progress" and "The live
-version"): a plain video with three typed comments, sent with Send to a fake agent that works them one at a time
-(`retake working`, a different take of the video as its edit, `retake done`) and waits for the test's gate between
-steps (`lib/progress.ts`). Chromium on a desktop and an iPhone 15; WebKit (`RETAKE_E2E_WEBKIT`) on the iPhone 15.
-- v2 is live at once (`v2-draft1`, the page follows it, the picker says `v2`, never "draft"), and the red edge light is
-  on while the agent works.
-- The working comment alone has the sweep (`data-doing`) and its line ("trimming the intro…"); there is no "Agent
-  working on" pill.
-- Each gate moves the counts by exactly one (To do 3 → 2 → 1 → 0, Done 0 → 1 → 2 → 3), the finished card leaves To do,
-  the sweep moves to the next one, and the page follows each new revision of v2 without reloading.
-- Done shows each change with "in v2", which plays v2 at that comment's moment. The report makes v2 final, the edge
-  light goes, and the notes are answered in v2 with the agent's words.
-- Screenshots: `.retake-work/progress-shots/` (`working-<device>`, `mid-batch-<device>`).
+**`23-progress`** and **`23-progress-webkit`** (new only; spec/automation.md, "Marking progress", "While the agent
+works" and "The live version"): a plain video with fifteen typed comments, sent with Send to a fake agent that waits
+for the test's gate before its first mark, then works three of them out of time order (the fifth first: `retake
+working`, a different take of the video as its edit, `retake done`), a gate between steps, and leaves the other twelve
+to its report (`lib/progress.ts`). Chromium on a desktop and an iPhone 15; WebKit (`RETAKE_E2E_WEBKIT`) on the iPhone
+15.
+- v2 is live at once (`v2-draft1`, the page follows it, the picker says `v2`, never "draft"), and its list has the
+  batch under "From v1"; a comment typed on the live v2 sits apart under "On v2" (Open, `→ v3`).
+- Before the first mark the only sign is one quiet line at the top of To do, "The agent is on it · 15 comments": no
+  sweep, and every card of the batch quiet (`→ v2`, no dot, no word).
+- Then the line goes, and the comment the agent is on is first in To do with the Working dot, the sweep
+  (`data-doing`) and its line ("drawing the okay hand in ink…"); the other fourteen stay quiet and in time order.
+  There is no "Agent working on" pill and nothing lights up around the video.
+- Each gate moves the counts by exactly one (To do 16 → 15 → 14 → 13, Done 0 → 1 → 2 → 3), the finished card leaves
+  To do, the next one the agent is on moves to the top, and the page follows each new revision of v2 without
+  reloading. Between marks nothing sweeps.
+- Done shows each change with "in v2", which plays v2 at that comment's moment. The report makes v2 final and
+  finishes the twelve never marked; v2's list is its own comment again, without labels, and every v1 note is
+  answered in v2 (the marked ones with the agent's words).
+- Screenshots: `.retake-work/progress-shots/` (`on-it-<device>`, `working-<device>`, `mid-batch-<device>`).
+
+**`24-version-menu`** and **`24-version-menu-webkit`** (new only; spec/notes.md, "The version menu", and spec/home.md,
+"A version's name, never draft" and "Every card has a picture"): `retake open` on a folder with a video `promo` (v1, v2
+and its script v0), two ideas (a script with words, a script with an image) and another video, Scripts on, and a fake
+agent that waits at its gates, so Send on v2 makes v3 live (`lib/version-menu.ts`). It reuses the progress port.
+Chromium on a desktop and an iPhone 15; WebKit (`RETAKE_E2E_WEBKIT`) on the iPhone 15.
+- One version menu on screen in each layout: the bar's on a computer, the controls row's on a phone in portrait, the
+  bottom bar's in landscape; none in the comments header, no speech bubble while the comments are in view.
+- Its rows while v3 is live: `v3 v2 v1 Script`, the red dot on v3's line, v3 the one on screen, one detail each
+  (`0:40`, `3 to do`, `2 to do`), Script after a separator, never "draft", "Latest", "→" or a check; on the phone 44 px
+  rows in a menu at least 240 px wide inside the screen; a pick switches the comments.
+- In landscape (Safari's 734×343) the bubble opens the comments over the video, as tall as it.
+- The page's title (`Review · promo_v3`), the home's card (`v3` and its live dot) and tree say v3; the live revision's
+  poster is a JPEG; the cards' images load (the video's frame, the other video's, an idea's own image) and the other
+  idea shows its title and first lines.
+- Screenshots: `.retake-work/version-menu-shots/` (`menu-<device>`, `landscape-<device>`, `home-<device>`).
 
 **`24-menus`** and **`24-menus-webkit`** (new only; spec/home.md, "A video's ⋯", spec/team.md, "Sharing a video from
 the page", spec/automation.md, "An agent for one video"): a folder of two videos with its own config (two fake agents

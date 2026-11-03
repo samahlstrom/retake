@@ -73,9 +73,14 @@ func TestChatTurns(t *testing.T) {
 	if m2.Turn != m1.Turn {
 		t.Fatalf("joined %+v", m2)
 	}
+	seq, _ := s.LastSeq()
 	_, turn := pollChat(t, s, w, nil)
 	if turn == nil || turn.State != ChatRunning || turn.Agent != "codex" || turn.Lease == "" {
 		t.Fatalf("claim %+v", turn)
+	}
+	// The page hears that it runs: its activity line stops saying "Waiting for the agent…".
+	if v := lastTurnEvent(t, s, seq); v == nil || v.ID != turn.ID || v.State != ChatRunning || v.Agent != "codex" {
+		t.Fatalf("the claim's turn event %+v", v)
 	}
 	work, err := s.ChatWorkOf(*turn)
 	if err != nil || len(work.Messages) != 2 || work.Session != "" {
@@ -298,6 +303,23 @@ func TestChatQuestion(t *testing.T) {
 	if kinds["message"] == 0 || kinds["turn"] == 0 {
 		t.Fatalf("events %v", kinds)
 	}
+}
+
+// lastTurnEvent is the turn of the newest chat "turn" event after seq, nil when there is none.
+func lastTurnEvent(t *testing.T, s *Store, seq int64) *ChatTurnView {
+	t.Helper()
+	evs, err := s.Events(seq, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var v *ChatTurnView
+	for _, e := range evs {
+		var d ChatEventData
+		if e.Kind == EventChat && json.Unmarshal(e.Data, &d) == nil && d.Why == "turn" {
+			v = d.Turn
+		}
+	}
+	return v
 }
 
 // A text event says where its words go, as the page counts (UTF-16).

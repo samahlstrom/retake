@@ -133,8 +133,7 @@ test("the agent's question: under its comment, on the timeline, on the video in 
 
   // Phone: the same card in the list under the controls.
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.locator('#sideToggle')).toBeVisible(); // phones: the list opens under the controls
-  await page.locator('#sideToggle').click();
+  await expect(page.locator('#sideToggle')).toHaveCount(0); // phones in portrait: the list is always under the controls
   await expect(page.locator('#side .agent-ask')).toBeVisible();
   const box = await page.locator('#side .agent-ask').boundingBox();
   expect(box!.x).toBeGreaterThanOrEqual(0);

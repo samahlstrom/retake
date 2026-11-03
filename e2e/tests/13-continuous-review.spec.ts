@@ -25,8 +25,8 @@ test.beforeEach(async ({ page }) => {
 
 test('opens the latest version with done feedback separate and lets an older cut stay selected', async ({ page }) => {
   await expect.poll(() => page.evaluate(() => window.__review.view.shown)).toBe('v6');
-  await expect(page.locator('#verBtn')).toHaveText('v6⌄');
-  await expect(page.locator('#side header [data-part~="version-menu"]')).toHaveText('v6'); // a bubble, then the version
+  await expect(page.locator('#verBtn')).toHaveText('v6');
+  await expect(page.locator('#side [data-part~="version-picker"]')).toHaveCount(0); // one version menu: the bar's
   await expect(page.locator('#side .item')).toHaveCount(1);
   await page.getByRole('tab', {name:'Done 1', exact:true}).click();
   await expect(page.locator('#side .item .status')).toHaveText('Done');
@@ -97,9 +97,8 @@ test('a stopped voice clip starts before Done and retries a temporary failure', 
 
 test('phone comments and timeline stay inside the viewport', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.locator('#sideToggle')).toBeVisible();
-  await page.locator('#sideToggle').click();
-  await expect(page.locator('#side')).toBeVisible();
+  await expect(page.locator('#side')).toBeVisible(); // always there in portrait, no bubble over the video
+  await expect(page.locator('#sideToggle')).toHaveCount(0);
   await expect(page.locator('#side .item')).toHaveCount(1);
   const bounds = await page.locator('#side').boundingBox();
   expect(bounds!.x).toBeGreaterThanOrEqual(0);
@@ -208,12 +207,12 @@ test('an earlier version\'s open comment stays on it: the line goes there, its d
   // Not on v6: the newest version has none of its own; the version menu's dot and title say v5 still has one.
   await expect(page.locator('#side .item')).toHaveCount(0);
   await expect(page.locator('.comment-marker')).toHaveCount(0);
-  const menu = page.locator('#side [data-part~="version-menu"]');
+  const menu = page.locator('#verBtn');
   await expect(menu).toHaveAttribute('title', /Open on earlier versions: v5 · 1/);
-  await expect(menu.locator('.dot')).toBeVisible();
+  await expect(menu).toHaveClass(/\bearlier\b/);
   await menu.click();
-  await expect(page.locator('[data-part~="version-menu-list"] [data-version="v5"]')).toContainText('1 to do');
-  await page.locator('[data-part~="version-menu-list"] [data-version="v5"]').click();
+  await expect(page.locator('[data-part~="version-list"] [data-version="v5"]')).toContainText('1 to do');
+  await page.locator('[data-part~="version-list"] [data-version="v5"]').click();
   await expect.poll(() => page.evaluate(() => window.__review.view.shown)).toBe('v5');
   await expect(page.locator('#side .item')).toHaveCount(1);
   await page.locator('#side .time').click();

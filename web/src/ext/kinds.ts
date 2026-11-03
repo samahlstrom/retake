@@ -22,12 +22,11 @@ export function kindOf(
 export const owns = (ext: ExtInfo, kind: string | null | undefined): boolean =>
   !!kind && (ext.kinds.some((k) => k.id === kind) || kind.startsWith(`${ext.id}.`));
 
-/** How a version reads: `v0 · Script` for a kind's version (`v0` alone when its extension isn't on), else its label (a
- * revision of the live v5, `v5-draft2`, reads `v5`). */
+/** How a version reads (spec/notes.md, "The version menu"): a kind's version by its kind's label alone, `Script`
+ * (`v0` when its extension isn't on), else its name (a revision of the live v5, `v5-draft2`, reads `v5`: `verName`). */
 export function versionName(exts: readonly ExtInfo[], v: { label: string; kind?: string }): string {
   if (!v.kind) return verName(v.label);
-  const label = kindOf(exts, v.kind)?.kind.label;
-  return label ? `${v.label} · ${label}` : v.label;
+  return kindOf(exts, v.kind)?.kind.label || v.label;
 }
 
 /** The extension whose `version` slot shows a version of `kind`. */

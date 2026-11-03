@@ -52,7 +52,8 @@ echo '{"ok": true, "units": 2, "reused": 1, "rendered": 1, "stream": {"playlist"
 		t.Fatal(err)
 	}
 	if b, _ := os.ReadFile(args); strings.TrimSpace(string(b)) !=
-		"render t.json --hls v2/x_v2.m3u8 --progress --json --doc v2/x_v2.timeline.json --draft -o v2/x_v2.export.mp4" {
+		"render t.json --hls v2/x_v2.m3u8 --progress --json --doc v2/x_v2.timeline.json --draft -o v2/x_v2.export.mp4 "+
+			"--export-loudness=-14" {
 		t.Fatalf("args: %s", b)
 	}
 	if len(got) != 3 || got[0].Progress != "plan" || got[0].Units != 2 || got[0].Duration != 8 || got[1].Done != 1 ||

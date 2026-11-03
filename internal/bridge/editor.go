@@ -153,7 +153,8 @@ func (e Editor) RenderStream(ctx context.Context, bin string, a StreamArgs, prog
 	error) {
 	args := a.common([]string{"render", a.Timeline, "--hls", a.Playlist, "--progress", "--json"})
 	if a.Export != "" {
-		args = append(args, "-o", a.Export)
+		// The export is the download (spec/bridge.md, "Download"): levelled for YouTube unless the master sets a level.
+		args = append(args, "-o", a.Export, ExportLoudnessFlag)
 	}
 	var rep RenderReport
 	err := e.runWith(ctx, bin, args, &rep, func(line []byte) bool {
@@ -219,6 +220,33 @@ func (e *EditError) Error() string { return "retake-edit: " + e.Message }
 func (e Editor) Render(ctx context.Context, bin, timeline, out string, draft bool) (RenderReport, error) {
 	args := []string{"render", timeline, "-o", out, "--json"}
 	if draft {
+		args = append(args, "--draft")
+	}
+	var rep RenderReport
+	err := e.run(ctx, bin, args, &rep)
+	return rep, err
+}
+
+// ExportLoudnessFlag levels an export at YouTube's -14 LUFS when the timeline's master sets no loudness.
+const ExportLoudnessFlag = "--export-loudness=-14"
+
+// ExportArgs are a rendered version's export (spec/bridge.md, "Download"): its timeline rendered from its snapshot
+// into one MP4, levelled at Loudness LUFS unless the master sets a level.
+type ExportArgs struct {
+	Timeline, Doc, Out string
+	Draft              bool
+	Loudness           float64
+}
+
+// Export runs `retake-edit render <timeline> [--doc <snapshot>] -o <out> --export-loudness=<L> --json [--draft]`:
+// the cached units concatenated with the export's mix.
+func (e Editor) Export(ctx context.Context, bin string, a ExportArgs) (RenderReport, error) {
+	args := []string{"render", a.Timeline, "-o", a.Out, "--export-loudness=" + strconv.FormatFloat(a.Loudness, 'f', -1, 64),
+		"--json"}
+	if a.Doc != "" {
+		args = append(args, "--doc", a.Doc)
+	}
+	if a.Draft {
 		args = append(args, "--draft")
 	}
 	var rep RenderReport

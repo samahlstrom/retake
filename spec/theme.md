@@ -177,7 +177,6 @@ the toast, the comments toggle, "← Projects") use `--scrim` and `--on-scrim`, 
 | `--record` | `#ff453a` | The record dot, the red edge while recording |
 | `--record-text` | `#ff7a70` | "REC 0:12" and other words in the record red |
 | `--record-wait` | `#d9a441` | The record dot while the mic starts |
-| `--agent-edge` | `var(--record)` | The light that travels around the video's edge while the agent works on its comments (a faint still hairline with reduced motion) |
 | `--voice` | `#5ac8fa` | Your voice on the timeline and the waveform, progress dots |
 | `--voice-text` | `#d6eefa` | "To review" on the home |
 | `--flip` | `#ffcf6e` | The version button while comparing (C) |
@@ -193,7 +192,7 @@ the toast, the comments toggle, "← Projects") use `--scrim` and `--on-scrim`, 
 | `--danger` | `#ff8f86` | Delete, errors |
 | `--warn` | `#e2bd73` | A paused comment, offline warnings |
 | `--change` | `#9ccfb3` | What a done comment changed |
-| `--working-sweep` | `--overlay` at 5% | The light that sweeps across the comment the agent is working on |
+| `--working-sweep` | `--overlay` at 5% | The light that sweeps across the comment the agent is working on (the only one that stands out) |
 | `--scrollbar-thumb` | `--overlay` at 14% | Every scrollbar's thumb: the document, the chat, the comments, the folder tree, the home, Settings |
 | `--scrollbar-thumb-hover` | `--overlay` at 28% | The thumb under the pointer, where a page can style that (Safari on a computer, the comments' list); Chrome and Firefox shade `--scrollbar-thumb` themselves |
 | `--scrollbar-track` | `transparent` | Behind the thumb |
@@ -267,8 +266,10 @@ Versioning). Classes and ids are not part of the API and can change in any relea
 | `marker` | A comment's marker on the timeline; `data-state` is its status | review |
 | `ask-marker` | An agent's question ("?") on the timeline | review |
 | `tip` | The tip over the timeline | review |
-| `version-picker` | The version button | review |
-| `version-list` | The list of versions it opens | review |
+| `version-picker` | The version menu's button, the one place to switch versions (spec/notes.md, "The version menu") | review |
+| `version-list` | The versions it lists | review |
+| `download` | The version menu's last entry: Download the version on screen as an MP4 (spec/api.md, "Download") | review |
+| `download-note` | The one quiet line under Download: why it failed, or the license note | review |
 | `pen-button` | The pen: one button, its pen in the colour you draw with (the eraser while that's on); it opens the pens | review |
 | `pens` | The pen's colours and the eraser, in what the pen button opens | review |
 | `pen` | One pen colour; `data-color` is its colour | review |
@@ -284,20 +285,21 @@ Versioning). Classes and ids are not part of the API and can change in any relea
 | `home-nav` | The back link and "Next video" over the video | review |
 | `review-back` | The back link over the video: "Project › video", back to the same place on the home | review |
 | `agent-visuals` | The agent's boxes, arrows and lines over the video | review |
-| `agent-edge` | The light that travels around the video's edge while the agent works on this video's comments | review |
 | `offline` | "The editing computer is offline" over the video | review |
 | `undo` | Undo (phone) | review |
 | `flip` | Compare two versions (phone) | review |
 | `sidebar` | The comments column | review |
 | `sidebar-toggle` | The pill over the video that shows and hides it | review |
 | `sidebar-grip` | The handle on the column's left edge that resizes it (desktop; spec/notes.md, "The column's width") | review |
-| `version-menu` | The version in the comments' header (`v8 ⌄`), a menu when there are more | review |
-| `version-menu-list` | The versions it lists, each with where its comments go and what's still to do (`v7 → v8 · 3 to do`) | review |
+| `version-menu` | The same element as `version-picker` (the comments' header has no version of its own any more) | review |
+| `version-menu-list` | The same element as `version-list` | review |
 | `tabs` | To do · Done (and an extension's tabs) | review |
 | `comment` | One comment; `data-state` is `open`, `working`, `question` or `done` | review |
 | `status` | A status: a dot and a word (in a comment, on a video card) | both |
 | `into` | Where a comment's edit goes (`→ v8`; `→ v8 · rendering`, then `in v8` once done), next to its status | review |
 | `doing` | The agent's line under the comment it's working on ("slowing the mask fade…"); that comment has `data-doing` | review |
+| `agent-on-it` | The one quiet line at the top of To do before the agent marks a comment ("The agent is on it · 15 comments") | review |
+| `comment-group` | On a live version, the quiet label over its batch's comments ("From v4") and over its own ("On v5") | review |
 | `reply-box` | The field to answer the agent | review |
 | `question-card` | The agent's question under its comment (thumbnail, choices) | review |
 | `progress` | The strip at the bottom of the comments (recording, transcribing, undo) | review |
@@ -346,6 +348,7 @@ Versioning). Classes and ids are not part of the API and can change in any relea
 | `connect-card` | The "Connect your computer" card | home |
 | `home-grid` | A grid of videos | home |
 | `video-card` | One video; `data-status` is its status | home |
+| `idea-preview` | An idea's picture on its card: its document's first image, or its title and first lines | home |
 | `nav-settings` | Settings, at the bottom of the folder tree (the owner's) | home |
 | `settings` | The settings page | home |
 | `settings-section` | A group of settings (Agent, Computers, Extensions, Theme) | home |
@@ -361,7 +364,7 @@ activity line's `data-state` is `live` or `done`.
 Renamed before the first release, the old name still on the new element (listed as deprecated in `api.json`, so
 `retake theme check` says what to use): `agent-status` is now `send-notice`, `agent-menu` is `agent-picker`,
 `version-strip` is `version-menu` and `earlier-versions` is `version-menu-list` (the agent's name left the bar, and the
-version strip became the comments' version menu).
+version strip became the comments' version menu, which is now the one version menu, `version-picker`).
 
 `web/src/theme/api.json` is the machine-readable list of parts and of deprecated names
 (`"deprecated": {"tokens": {"--old": {"use": "--new", "since": "2.0.0"}}, "parts": {…}}`); `retake theme init` and

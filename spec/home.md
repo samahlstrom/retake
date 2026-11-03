@@ -160,6 +160,9 @@ origins, the 401/403/429 answers, rate limits and `Cache-Control: private` are t
   `question` (the agent asked and waits for an answer).
 - `stream` is the newest version's streaming state when the streaming side reports one, else null:
   `{"state": "pending" | "rendering" | "complete", "done": n, "total": m}` (below).
+- `live` is true while the agent works on the video (one of its tasks is running or stopping), so its newest version
+  is the live one (spec/automation.md, "The live version"); absent otherwise. `version` is then often one of its
+  revisions (`v6-draft11`): the page shows it as `v6`.
 - `thumb` is the newest version's poster (below).
 
 `tree` is the same videos as folders → projects → videos. A node is `{title, path, project, videos, children}`:
@@ -206,14 +209,24 @@ is one: **Rendering n/total** (`rendering`) or **Not rendered yet** (`pending`).
 ## Thumbnails and the poster: `GET api/poster[?v=<label>]`
 
 Every project page (and `retake open <video>`'s `/`) answers `GET api/poster`: a JPEG of the version's first frame.
-No `v` means the current version; an unknown label is 404 `{"error":"no such version"}`; a version that has no frame
-yet is 404 `{"error":"no poster"}`. It needs watch.
+No `v` means the current version; an unknown label is 404 `{"error":"no such version"}`. It needs watch.
 
 1. The streaming side's poster, when it exists: `<stem>.poster.jpg` beside the version's file
    (`v4/clip_v4.poster.jpg` for `v4/clip_v4.m3u8`).
 2. Else a frame at t = 0, made once with ffmpeg (`-ss 0 -frames:v 1`, at most 640 px wide) and cached under the
    project root's `.retake/thumbs/` as `<sha256 of path, size and modification time>.jpg`. A changed file gets a new
    one. A file ffmpeg can't read isn't tried again by the same process.
+3. A **relayed version** (its video is on the editing computer: a worker's render, the live version's revisions
+   `v6-draft11` among them, or a connected computer's version file; spec/automation.md, "The media relay") gets its
+   frame the same way, from the start of its media asked through the relay: a playlist's first segment, with the
+   init segment before it (`EXT-X-MAP`) for fMP4; a file's first chunk and, when it is longer, its last one, in place
+   in a sparse copy (an MP4's index is at one end or the other). It is cached as `<sha256 of what names that media for
+   good>.jpg`: a render's id and file, or a version file's worker, label, size and time. A render with no segment yet,
+   or a computer that is offline, has none for now and is asked again next time.
+4. **Else the newest version before it that has one**: a version with no frame of its own (yet) answers with the
+   frame of the newest video version whose number is not higher (a live version's other revisions first, then the
+   versions before it), so a card always has a picture. Only when no version has a frame is it 404
+   `{"error":"no poster"}` (an extension's version alone, an idea, never has one).
 
 The answer has `Content-Type: image/jpeg`, `Last-Modified` and `Cache-Control: no-cache`, and answers
 `If-Modified-Since` with 304. The home's `thumb` and the review page's `<video poster>` are the same URL, so the image
@@ -245,9 +258,20 @@ nothing more than the videos.
   760 px wide): the column is a drawer that ☰ opens over the page; choosing something, the backdrop or Escape
   closes it.
 - A grid of cards, one per video (one column on a phone). A card is a link to `p/<name>/` with the thumbnail (16:9,
-  a fixed box, so nothing moves when it loads), the video's name, the newest version's label and length, and the
+  a fixed box, so nothing moves when it loads), the video's name, the newest version's name and length, and the
   status chip (plus the streaming chip; "Has questions" when the agent waits for an answer). In a folder's view a
   card also names its project when that says more than the video's name.
+- **A version's name, never "draft".** Cards, the folder tree and the page's title name a version by the one label
+  helper the review page uses (`verName`): a live version's revision `v6-draft11` is `v6`. A card adds a small red
+  dot after it while `live`; the tree's row, which already has its status dot, doesn't.
+- **Every card has a picture.** A video's card shows its `thumb`, which is always a real frame when any version of it
+  has one (the poster falls back, below). A card whose image fails to load shows the quiet box. A video whose only
+  version is an extension's kind (an idea: a script) shows its document instead of a frame: its first image when it
+  has one (the first `![…](path)` with a path inside the kind's folder), else its title (the first `# ` line, else
+  the video's name) and its first lines (up to three, as plain text, Markdown marks taken out), small, on the card's
+  dark box. The page reads the document through the extension's file routes (`api/ext/<id>/files?glob=<folder>/<marker>`,
+  then the file; spec/extensions.md), so it works hosted too, and only a kind whose marker names a `.md` or `.txt`
+  file is read this way. The chip stays the kind's word ("Idea").
 - **A card's ⋯** (part `video-menu`) at the right of its name: there on hover or focus on a computer, always there but
   quiet on a phone ("A video's ⋯" below). Opening it doesn't open the video.
 - With no videos: "No videos here yet", and what a video's file name looks like.
@@ -449,17 +473,21 @@ One link for the whole home, as `retake share <video>` makes one for a review (s
 - Go: discovery in a folder (version folders, flat families, the folder itself, hidden, `.review` and unnumbered
   files left out, date-and-time recordings and long ID numbers left out, names and collisions), the scan of a tree (nested folders, `vN/` folders, a project's `shorts/`,
   junk folders, the depth limits, links, a big generated tree in well under a second), the tree built from paths,
-  the status rules, thumbnail caching (made once, remade for a changed file, the poster beside the file first),
+  the status rules, `live` while a task runs, thumbnail caching (made once, remade for a changed file, the poster
+  beside the file first, a relayed version's frame made once from its fetched start and not remembered while it
+  can't be fetched), a relayed version's poster (a file's two ends, a playlist's init and first segment, a live
+  revision falling back to the newest version before it until its first segment is out),
   `/api/home` (status, thumbnail URL, newest version, order, the tree, local and hosted alike), `retake connect`
   sending each video's path, `api/poster` and unwatch, share tokens scoped to the folder or to one video, and retired
   `project:`/`group:` links refused with 410 and a page (the migration that drops the organization keeps their rows).
 - Go: Move to Trash on a scratch folder with a scratch `XDG_DATA_HOME` (the folder and its info file in the trash,
   Undo putting it back, a taken name, a video that can't go, an agent at work), a video's link bouncing to its page,
   and Show in folder through `RETAKE_REVEAL`.
-- Web unit tests: the tree's rows (opened, filtered, dots), the hash, and the remembered state. A video's ⋯: which items show for whom, the size and
-  versions line, the agent list and its check.
+- Web unit tests: the tree's rows (opened, filtered, dots), the hash, the remembered state, a version's name (never
+  "draft") and a script's preview (title, first lines, first image). A video's ⋯: which items
+  show for whom, the size and versions line, the agent list and its check.
 - e2e `e2e/tests/12-home.spec.ts`: a folder with three generated projects. The home lists them with thumbnails and
-  statuses; a card opens its review page with the poster; a take and Done make it Reviewed; "Next video" and `>` go
+  statuses, every card's image a loaded frame (an idea's card its document); a card opens its review page with the poster; a take and Done make it Reviewed; "Next video" and `>` go
   to the next one to review; the home and the controls work on a phone.
 - e2e `e2e/tests/24-menus.spec.ts` (Chromium on a computer and an iPhone 15) and `24-menus-webkit.spec.ts` (WebKit
   on an iPhone 15): a card's ⋯ (on hover on a computer, always on a phone), Share… making a link that a fresh browser

@@ -125,6 +125,9 @@ func permFor(method string, parts []string) team.Perm {
 		if len(parts) == 4 && parts[0] == "api" && parts[1] == "versions" && (parts[3] == "watch" || parts[3] == "unwatch") {
 			return team.PermWatch // a viewer's page watches a streamed version (spec/bridge.md, "Streaming")
 		}
+		if is(parts, "api", "download") {
+			return team.PermWatch // getting a download ready; [server] downloads narrows it (spec/api.md, "Download")
+		}
 		if len(parts) == 4 && parts[0] == "api" &&
 			(parts[1] == "notes" && (parts[3] == "reopen" || parts[3] == "delete" || parts[3] == "restore") || parts[1] == "versions" && parts[3] == "approve") {
 			return team.PermApprove

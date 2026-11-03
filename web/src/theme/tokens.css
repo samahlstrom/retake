@@ -51,8 +51,6 @@
     --record: #ff453a;
     --record-text: #ff7a70;
     --record-wait: #d9a441;
-    /* the light that travels around the video's edge while the agent works (a still hairline with reduced motion) */
-    --agent-edge: var(--record);
     --voice: #5ac8fa;
     --voice-text: #d6eefa;
     --flip: #ffcf6e;

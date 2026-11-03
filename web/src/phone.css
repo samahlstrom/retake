@@ -83,30 +83,23 @@
   html[data-phone] #verBtn:hover {
     background: transparent;
   }
-  html[data-phone] #verList {
-    left: auto;
-    right: 0;
-    transform: none;
-    min-width: 150px;
-    overflow-y: auto;
-  }
-  /* Portrait: the list opens downward, over the free space (the video stays in view). Landscape: upward, from the bar. */
-  html[data-layout='portrait'] #verList {
-    top: calc(100% + 8px);
-    bottom: auto;
-    max-height: 50vh;
-  }
-  html[data-layout='landscape'] #verList {
-    bottom: calc(100% + 8px);
-    max-height: calc(100vh - 80px);
-  }
-  html[data-phone] #verList button {
+  html[data-phone] #verList .download {
     align-items: center;
     min-height: 44px;
     padding: 0 14px;
   }
-  html[data-phone] #verList button:hover {
+  html[data-phone] #verList .download:hover {
     background: transparent;
+  }
+  html[data-phone] #verList .download-note {
+    padding: 0 14px 6px;
+  }
+  /* A phone's list is narrow and anchored to the picker: the progress goes under the entry, not beside it. */
+  html[data-phone] #verList .download .d {
+    display: none;
+  }
+  html[data-phone] #verList .download-progress {
+    display: block;
   }
   #flip {
     flex: none;
@@ -588,6 +581,7 @@
     justify-self: end;
     align-self: stretch;
     width: min(320px, 70%);
+    max-height: none; /* the overlay is the stage's height (a phone in landscape is often under 760 px wide) */
     z-index: 5;
   }
 
