@@ -59,6 +59,7 @@
     "chat-stop": "The chat's stop square while the agent replies",
     "chat-pill": "On a phone, the bar's Ask the agent… pill that opens the chat",
     "comment-line": "The comment box at the bottom of the comments (Comment at 0:18 · goes into v8…, or Comment for the agent… on an extension's version)",
+    "comment-edit": "A comment's words being edited, in its card (a field in their place)",
     "question-card": "The agent's question under its comment (thumbnail, choices)",
     "progress": "The strip at the bottom of the comments (recording, transcribing, undo)",
     "sketch": "A comment's drawing, small, on the still of its moment",

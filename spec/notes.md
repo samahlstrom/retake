@@ -309,8 +309,8 @@ goes stay as they are.
 - **Who.** The comment's author (the request's name is the note's `author`: a signed-in member's or a guest's, a share
   link's label, or locally the server's own), approvers and the owner. Anyone else gets 403.
 - **On a computer.** ⋯ → **Edit**, or a double-click on its words. The words become a field in their own place, with
-  the same text, font and size, so nothing around them moves; one quiet line under it says `Enter saves · Esc cancels`
-  with Cancel and Save. Shift+Enter is a new line. A drawing-only comment's field starts empty (`Add words…`). Keys
+  the same text, font and size, as tall as the words, so nothing around them moves; Cancel and Save take the ⋯'s place
+  in the card's first line (their tooltips say Esc and Enter). Enter saves, Shift+Enter is a new line. A drawing-only comment's field starts empty (`Add words…`). Keys
   typed in it never reach the player (Space, R and the rest type). Saving the same words, or Esc, ends it with nothing
   changed. Undo is Cancel before saving; after saving, editing again is enough.
 - **On a phone** (a touch screen), ⋯ → **Edit** or a tap on its words opens compose mode ("Typing on a phone") with

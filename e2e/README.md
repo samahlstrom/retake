@@ -316,3 +316,17 @@ to its report (`lib/progress.ts`). Chromium on a desktop and an iPhone 15; WebKi
   finishes the twelve never marked; v2's list is its own comment again, without labels, and every v1 note is
   answered in v2 (the marked ones with the agent's words).
 - Screenshots: `.retake-work/progress-shots/` (`on-it-<device>`, `working-<device>`, `mid-batch-<device>`).
+
+**`24-edit`** and **`24-edit-webkit`** (new only; spec/notes.md, "Editing a comment"): a plain video with a fake
+transcriber and no agent (`lib/edit.ts`). Chromium on a desktop and an iPhone 15; WebKit (`RETAKE_E2E_WEBKIT`) on the
+iPhone 15.
+- A computer: a voice comment (R, talk, R) and a typed one. ⋯ → Edit turns the voice comment's words into a field in
+  their place, as tall, focused, with every card's box unchanged and Cancel and Save where the ⋯ was; R and Space typed
+  in it are words; Shift+Enter is a new line and Enter saves; the card shows the new words with only an `Edited`
+  tooltip, and the notes API has them (`edited: true`). A double-click on the typed one's words, Esc: unchanged; again,
+  Save: saved. Send (a save here) runs the take's final pass, and after it and a reload both keep their new words.
+- A phone: a tap on a comment's words is compose mode with its words in the comment box (`Editing 0:12`), which sits
+  on the simulated keyboard with the rest hidden; Return saves and ends it, and the box is empty again. ⋯ → Edit on
+  another, Cancel: unchanged. A reload keeps the words.
+- Screenshots: `.retake-work/edit-shots/` (`chromium-desktop-before`, `-editing`, `-saved`, and
+  `<browser>-phone-edit-keyboard`, `<browser>-phone-edit-saved`).

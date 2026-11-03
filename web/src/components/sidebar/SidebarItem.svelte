@@ -6,9 +6,12 @@
   // says so. The one the agent is on has the Working dot and a quiet line in the agent's words under its own; the rest
   // of its batch read quietly, only their "→ v8" (the word stays for screen readers); a done one says what changed and
   // "in v5", which plays v5 at that moment (spec/automation.md, "While the agent works"). Everything else is in its ⋯.
+  // While it's still to do its words can be edited (spec/notes.md, "Editing a comment"): ⋯ → Edit, or a double-click on
+  // them (a tap on a phone, where the comment box is the field), and here they become a field in their own place.
   import type { Review } from '../../lib/review.svelte';
   import { anchorText, sketchFrame, type Row } from '../../lib/notes/view';
   import { STATE_TEXT } from '../../lib/status';
+  import { canEdit, editKey } from '../../lib/notes/edit.svelte';
   import { verName } from '../../lib/versions';
   import CommentMenu from './CommentMenu.svelte';
   import ReplyBox from '../ReplyBox.svelte';
@@ -50,6 +53,46 @@
   const quiet = $derived(status.state === 'working' && !status.now);
   /** The agent's line: its words, trailed off ("slowing the mask fade…"). */
   const doing = $derived(status.doing ? (/[.…!?]$/.test(status.doing) ? status.doing : `${status.doing}…`) : '');
+
+  /** Its words may change now: still to do, the agent not on it, and this page may. */
+  const editable = $derived(review.canRecord && canEdit(row, status, task));
+  const edit = $derived(review.edit);
+  /** Its words are a field here (on a phone the comment box is the field instead). */
+  const editing = $derived(edit.editing(row.id));
+  let field = $state<HTMLTextAreaElement | null>(null);
+  $effect(() => {
+    // The field takes the focus once, with the caret after the words.
+    if (!field) return;
+    const el = field;
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+  });
+  $effect(() => {
+    // The field is as tall as its words, like the words it replaced: nothing around it moves.
+    void edit.text;
+    if (!field) return;
+    field.style.height = 'auto';
+    field.style.height = `${field.scrollHeight}px`;
+  });
+  $effect(() => {
+    // The agent started on it (or it's done) while it was being edited: its words stay as they are.
+    if (edit.editing(row.id, true) && !editable && !edit.busy) {
+      edit.cancel();
+      review.toast.say('The agent started on this comment, so its words stay as they were.', 5000);
+    }
+  });
+  function editKeys(e: KeyboardEvent) {
+    const k = editKey(e);
+    if (!k) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (k === 'cancel') edit.cancel();
+    else void edit.save();
+  }
+  function startEdit() {
+    getSelection()?.removeAllRanges();
+    review.editComment(row);
+  }
 
   async function answer(message: string): Promise<boolean> {
     if (!workerAsks) return false;
@@ -97,12 +140,41 @@
       >→ {row.into}</span
     >{/if}
   <span class="grow"></span>
-  <CommentMenu {review} {row} />
+  {#if editing}
+    <!-- Cancel and Save take the ⋯'s place while its words are a field: no new row, nothing moves. -->
+    <span class="edit-actions">
+      <button type="button" title="Cancel (Esc)" onclick={edit.cancel} disabled={edit.busy}>Cancel</button>
+      <button type="button" class="strong" title="Save (Enter)" onclick={edit.save} disabled={edit.busy}>Save</button>
+    </span>
+  {:else}
+    <CommentMenu {review} {row} />
+  {/if}
 </div>
 {#if row.kind === 'question'}
   <p class="text asked">{row.text}</p>
+{:else if editing}
+  <textarea
+    bind:this={field}
+    bind:value={edit.text}
+    class="text editing"
+    data-part="comment-edit"
+    rows="1"
+    placeholder="Add words…"
+    aria-label="Edit the comment at {row.time}"
+    readonly={edit.busy}
+    onkeydown={editKeys}></textarea>
 {:else}
-  <p class="text" class:quiet={!row.text.trim()}>{text}</p>
+  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+  <p
+    class="text"
+    class:quiet={!row.text.trim()}
+    class:editable
+    title={row.edited ? 'Edited' : undefined}
+    ondblclick={editable && !review.touch ? startEdit : undefined}
+    onclick={editable && review.touch ? startEdit : undefined}
+  >
+    {text}
+  </p>
 {/if}
 {#if doing}<p class="doing" data-part="doing">{doing}</p>{/if}
 {#if strokes.length || row.images.length}
