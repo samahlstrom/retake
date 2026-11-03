@@ -232,7 +232,14 @@ curl -fsSL <release URL>/install.sh | sh
 
 Then open **Retake** from your app menu (or run `retake start`). Nothing needs sudo.
 
-**Windows:** not yet.
+**Windows** (x64; ARM runs it emulated), in PowerShell:
+
+```powershell
+irm https://github.com/samahlstrom/retake/releases/latest/download/install.ps1 | iex
+```
+
+Then open **Retake** from the Start menu (or run `retake`). No administrator rights needed. Or `npm i -g retake-cli`,
+as on any system. What's different on Windows: [docs/windows.md](docs/windows.md).
 
 Everything Retake uses comes with it: [herdr](https://herdr.dev) to watch your agents work, ffmpeg, and `retake-edit`,
 the renderer. The one thing you bring is the AI agent, Claude Code or Codex, installed and signed in with your own
@@ -258,6 +265,7 @@ account; the setup page shows how.
 - [deploy/README.md](deploy/README.md): the self-hosting reference (HTTPS, transcription, mail, backups).
 - [docs/timeline.md](docs/timeline.md): the editor's timeline format, as a guide.
 - [docs/install-plan.md](docs/install-plan.md): one-click install per OS, what ships inside, signing and updates.
+- [docs/windows.md](docs/windows.md): Retake on Windows: install, where things live, what's different.
 - [docs/releasing.md](docs/releasing.md): versions, release archives, the installer and the license notices.
 - [spec/](spec/): the contracts. [setup.md](spec/setup.md) (`retake start` and the setup page), [api.md](spec/api.md) (HTTP), [take-format.md](spec/take-format.md),
   [notes.md](spec/notes.md) (notes, questions, agent API), [team.md](spec/team.md) (sharing),
