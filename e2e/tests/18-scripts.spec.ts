@@ -287,8 +287,8 @@ async function chatLink(page: Page, folder: string): Promise<void> {
   await expect(line).toHaveAttribute('data-state', 'done');
 }
 
-/** A slow turn: while it runs ONE live line says what the agent does now, the words stream in under it, and the
- * composer's arrow is Stop; once it's done the line sums the turn up. */
+/** A slow turn: while it runs ONE live line says what the agent does now, after its words, and the composer's arrow
+ * is Stop; once it's done the line sums the turn up. */
 async function slowTurn(page: Page): Promise<void> {
   await composer(page).click();
   await page.keyboard.type('Check the server slowly');
@@ -298,7 +298,7 @@ async function slowTurn(page: Page): Promise<void> {
   await expect(line).toHaveAttribute('data-state', 'live');
   const words = chat(page).locator('[data-part="chat-agent"]').last();
   await expect(words).toContainText('Checking the server first.');
-  expect((await words.boundingBox())!.y).toBeGreaterThan((await line.boundingBox())!.y);
+  expect((await words.boundingBox())!.y).toBeLessThan((await line.boundingBox())!.y);
   await expect(page.locator('#side [data-part="chat-stop"]')).toBeVisible();
   await expect(page.locator('[data-part="chat-status"]')).toHaveText('');
   await shot(page, 'chat-midturn');

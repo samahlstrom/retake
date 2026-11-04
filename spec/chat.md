@@ -140,19 +140,19 @@ no box.
 
 ### The activity line
 
-A turn's tool lines are never listed one by one. Each turn has ONE muted line at the top of its reply (part
-`chat-tool`), and the words stream in under it.
+A turn's tool lines are never listed one by one. Each turn has ONE muted activity line (part `chat-tool`). While
+the turn is live, it sits after that reply's latest words and before any queued next message from the person.
 
 - **While the turn is live** (it is the chat's `turn`), the line says what is happening now and replaces itself as
   that changes, with a soft shimmer and no dot: "Waiting for the agent…" while queued (or why it waits: "The agent is
   busy with v3's edits", "The editing computer is offline", the local worker's `blocked` reason, without the shimmer),
   "Working…" until the first tool and while the agent writes, the newest tool line with an ellipsis while it runs
   ("Running a command…", "Editing the script…", "Reading example.org/…"), and "Stopping…". The line keeps its room
-  the whole turn, so nothing below it moves as it changes, and while the reply is longer than the thread it stays
-  pinned at the top of the thread (`position: sticky`). A queued turn with nothing said yet shows its line after the
-  person's message.
-- **When the turn ends**, the line becomes one quiet summary that never wraps (it ends in an ellipsis where it doesn't
-  fit), or goes away for a turn that used no tools. The summary counts the turn's tool lines in at most three parts,
+  the whole turn, so nothing below it moves as its text changes. It stays in the reply's normal flow and scrolls with
+  it, never floating over earlier messages. A queued turn with nothing said yet shows its line after the person's
+  message.
+- **When the turn ends**, the line becomes one quiet summary above the reply that never wraps (it ends in an ellipsis
+  where it doesn't fit), or goes away for a turn that used no tools. The summary counts the turn's tool lines in at most three parts,
   joined with " · " and starting with a capital: "Edited the script · ran 3 commands".
 
   | Tool lines | Part (one) | Part (several) |

@@ -2,8 +2,8 @@
   // The chat with the agent (spec/chat.md), in the comments column of a kind's version that has one (a script): the
   // thread, then one quiet status line (what a Send started), then the composer. The person's messages are quiet
   // bubbles on the right; the agent answers in plain text across the column, like a person talking back (no name, no
-  // rule, no box). Each turn of the agent is one block with ONE activity line at its top: while the turn runs it says
-  // what the agent does now and replaces itself ("Running a command…"), and when the turn ends it sums up ("Edited the
+  // rule, no box). Each turn of the agent is one block with ONE activity line: while the turn runs it follows the
+  // latest words ("Running a command…"), and when the turn ends it sums up above the reply ("Edited the
   // script · ran 3 commands"). Questions have choices to tap (pictures side by side, stacked on a phone). The
   // composer: one line "Ask the agent…", a quiet attach icon, the mic (a voice message: its words are sent) and the
   // send arrow, which is a stop square while the agent replies and nothing is typed. Enter sends, Shift+Enter is a new
@@ -185,19 +185,20 @@
         </div>
       {:else}
         {@const act = activity(view, b, review.agent.online)}
+        {#snippet activityLine()}
+          <p
+            class="activity"
+            class:live={act.state === 'live'}
+            data-part="chat-tool"
+            data-state={act.state}
+            aria-live={act.state === 'live' ? 'polite' : undefined}
+            title={act.text}
+          >
+            <span class="t" class:moving={act.moving}>{act.text}</span>
+          </p>
+        {/snippet}
         <div class="reply" data-turn={b.turn || undefined}>
-          {#if act.state === 'live' || act.text}
-            <p
-              class="activity"
-              class:live={act.state === 'live'}
-              data-part="chat-tool"
-              data-state={act.state}
-              aria-live={act.state === 'live' ? 'polite' : undefined}
-              title={act.text}
-            >
-              <span class="t" class:moving={act.moving}>{act.text}</span>
-            </p>
-          {/if}
+          {#if act.state !== 'live' && act.text}{@render activityLine()}{/if}
           {#each b.messages as m (m.id)}
             {#if m.role === 'agent'}
               {#if m.text}
@@ -240,6 +241,7 @@
               <p class="msg info" data-part="chat-info">{m.text}</p>
             {/if}
           {/each}
+          {#if act.state === 'live'}{@render activityLine()}{/if}
         </div>
       {/if}
     {/each}
@@ -407,7 +409,7 @@
       color: var(--text);
       overflow-wrap: anywhere;
     }
-    /* One turn of the agent: its activity line, then its words (and questions) as one reply. */
+    /* One turn: a completed summary above its words, or a live activity line after them. */
     .reply {
       display: flex;
       flex-direction: column;
@@ -524,8 +526,7 @@
       border: 0;
       border-top: 1px solid var(--line);
     }
-    /* The turn's one activity line: what the agent does now (live, a soft shimmer, pinned to the top of the thread
-       while the reply is longer than it), then what it did. One line, never wrapping; it keeps its room while live. */
+    /* The turn's one activity line scrolls with the reply. One line, never wrapping; it keeps its room while live. */
     .activity {
       flex: none;
       height: 20px;
@@ -535,15 +536,6 @@
       line-height: 20px;
       white-space: nowrap;
       overflow: hidden;
-    }
-    .activity.live {
-      position: sticky;
-      top: 0; /* the scrollport's top edge: the thread's padding doesn't count */
-      z-index: 1;
-      height: 26px;
-      margin: -3px 0;
-      padding: 3px 0;
-      background: var(--surface-raised);
     }
     .activity .t {
       display: inline-block;
