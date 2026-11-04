@@ -19,6 +19,11 @@ retake open <folder> [--port N] [--no-open] [--idle-exit MIN] [--ui-dir DIR] [--
 When the argument is a folder instead of a video, the server serves every project in it. `--versions` takes a video,
 so it can't be used with a folder (exit 2).
 
+The local owner can change this selection in **Linked folders**, reached from the navigation or Settings.
+The owner can select several folders, choose whether to include their subfolders, and remove a link without
+deleting files. The original folder remains selected until the owner changes it. See [library.md](library.md)
+for the selection API, persistence, offline folders, and share boundaries.
+
 ### Folders, projects and videos
 
 The home is the folder as a tree: **folders** that organize, **projects** in them, and each project's **videos**.
@@ -68,6 +73,10 @@ among them), `*.review` folders, `node_modules` or `__pycache__`, and it reads a
 folders and stats only the files named like versioned videos: no video is opened or probed to build the tree. A
 folder reached through a symbolic link is followed when it lies outside the opened folder (once); a link to a folder
 inside it is left out, since the scan finds that folder anyway.
+
+Once the owner chooses linked folders, each link is a strict scan boundary: symbolic links cannot bring in
+outside folders. With **Include subfolders** off, discovery checks only that folder's own video family and
+version folders. It does not scan child projects. An empty selection scans nothing.
 
 A video's **anchor** is the file its family is detected from: of its versioned files, the highest version number, a
 plain name (`clip_v3`) before one with more after the number (`clip_v3_draft`), then the newest. Its server follows
@@ -377,9 +386,9 @@ routes refuse anyone else (403). They replace the agent menu the review page had
   address).
 - **Theme**: the theme folder in effect, its name when a theme is there, else that `retake theme init` makes one
   (read-only).
-- **Your videos** (spec/setup.md): the folder served. Under `retake start` it can be changed, and the home switches to
-  the new folder at once; under `retake open <folder>` it's the argument, read-only. **Test** next to the default
-  agent runs the agent once, as the setup page does.
+- **Linked folders** ([library.md](library.md)): opens the same local folder manager as the navigation entry.
+  It replaces the single-folder editor under both `retake start` and `retake open <folder>`. It is absent on the
+  team server. **Test** next to the default agent runs the agent once, as the setup page does.
 
 ### `GET api/settings` and `POST api/settings`
 

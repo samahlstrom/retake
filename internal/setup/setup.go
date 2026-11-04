@@ -245,9 +245,6 @@ func (h *Handler) StateOf() (State, error) {
 		return State{}, fmt.Errorf("%s: %w", Tilde(h.o.ConfigPath, h.o.Home), err)
 	}
 	folder := config.FolderPath(c, h.o.Home)
-	if folder == "" {
-		folder = Suggest(h.o.Home, h.o.GOOS)
-	}
 	s := State{Folder: Tilde(folder, h.o.Home), FolderPath: folder, FolderExists: isDir(folder), Agents: h.agents(),
 		OS: h.o.GOOS, Config: Tilde(h.o.ConfigPath, h.o.Home)}
 	if s.FolderExists {
@@ -299,7 +296,7 @@ func (h *Handler) save(w http.ResponseWriter, r *http.Request, done bool) {
 		return
 	}
 	folder := ""
-	if a.Folder != nil || done {
+	if a.Folder != nil || (done && cur.FolderPath != "") {
 		f := cur.FolderPath
 		if a.Folder != nil {
 			f = *a.Folder
@@ -308,6 +305,9 @@ func (h *Handler) save(w http.ResponseWriter, r *http.Request, done bool) {
 			WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
+	} else if done {
+		WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "choose a folder"})
+		return
 	}
 	if a.Agent != nil && *a.Agent != "" && !slices.ContainsFunc(cur.Agents, func(p project.AgentProfile) bool { return p.ID == *a.Agent }) {
 		WriteJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("no agent %q here", *a.Agent)})

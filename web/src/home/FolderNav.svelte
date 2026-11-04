@@ -293,6 +293,26 @@
   {/each}
   {#if home.res.role === 'owner'}
     <div class="foot">
+      {#if !home.res.user}
+        <a
+          class="row settings-link"
+          class:selected={home.library}
+          data-part="nav-linked-folders"
+          href="#folders"
+          aria-current={home.library ? 'page' : undefined}
+          ><span class="chev" aria-hidden="true"
+            ><svg viewBox="0 0 16 16"
+              ><path
+                d="M2 4.5h4l1.5 1.5H14v6.5H2z"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.4"
+                stroke-linejoin="round"
+              /></svg
+            ></span
+          ><span class="label">Linked folders</span></a
+        >
+      {/if}
       <a
         class="row settings-link"
         class:selected={home.settings}

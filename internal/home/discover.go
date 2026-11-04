@@ -100,6 +100,7 @@ type scanner struct {
 	dirs   int
 	capped bool
 	linked map[string]bool // the real folders reached through links, so each is entered once
+	strict bool            // links may not leave top
 	videos []Found
 	empty  []Found
 	kindAt KindAt // nil: no kinds
@@ -159,6 +160,9 @@ func (s *scanner) subdirs(dir string) []subdir {
 		switch {
 		case e.IsDir():
 		case e.Type()&os.ModeSymlink != 0:
+			if s.strict {
+				continue
+			}
 			target, err := filepath.EvalSymlinks(p)
 			if err != nil {
 				continue
@@ -347,15 +351,33 @@ func parentOf(rel string) string {
 // ScanDir scans a folder's tree for its folders, projects and videos (spec/home.md). dir must be absolute with
 // symlinks resolved. It reads folders and stats the files named like versioned videos; it never opens a video.
 func ScanDir(dir string, kinds ...KindAt) Scan {
+	return scanDir(dir, false, true, kinds...)
+}
+
+// ScanLinkedDir scans one selected library folder. Symlinks may only point
+// within that folder; with subfolders false, only the folder and its direct
+// project folders are considered (version folders remain part of a project).
+func ScanLinkedDir(dir string, subfolders bool, kinds ...KindAt) Scan {
+	return scanDir(dir, true, subfolders, kinds...)
+}
+
+func scanDir(dir string, strict, subfolders bool, kinds ...KindAt) Scan {
 	start := time.Now()
 	s := newScanner(dir)
+	s.strict = strict
 	for _, k := range kinds {
 		if k != nil {
 			s.kindAt = k
 		}
 	}
 	if st, err := os.Stat(s.top); err == nil && st.IsDir() { //nolint:gosec // the folder being opened
-		s.walk(s.top, "", 0)
+		if subfolders {
+			s.walk(s.top, "", 0)
+		} else if anchor, kind := s.anchor(s.top), s.kind(s.top); anchor != "" || kind != "" || s.timeline(s.top) {
+			// anchor reads the selected folder and its version folders only. It
+			// deliberately does not walk into child projects.
+			s.add(s.top, "", anchor, kind)
+		}
 	}
 	all := slices.Concat(s.videos, s.empty)
 	place(s.videos, s.fams, all)

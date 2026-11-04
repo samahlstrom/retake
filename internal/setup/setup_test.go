@@ -136,7 +136,7 @@ func TestStateFirstTime(t *testing.T) {
 		t.Fatal(err)
 	}
 	code, s := w.do("GET", "/api/setup", "", nil)
-	if code != 200 || s["folder"] != "~/Movies" || s["folder_exists"] != true || s["videos"] != 1.0 ||
+	if code != 200 || s["folder"] != "" || s["folder_path"] != "" || s["folder_exists"] != false || s["videos"] != nil ||
 		s["agent"] != "claude" || s["open_in"] != "background" || s["os"] != "darwin" || s["ffmpeg"] != true ||
 		s["config"] != "~/.config/retake/config.toml" {
 		t.Fatalf("state: %d %v", code, s)
@@ -222,8 +222,12 @@ func TestSaveChecksEverythingFirst(t *testing.T) {
 func TestDone(t *testing.T) {
 	w := newWorld(t, "linux")
 	w.tools["herdr"] = true
-	// ~/Videos doesn't exist yet: Done makes it.
-	code, s := w.do("POST", "/api/setup/done", `{}`, nil)
+	// A fresh install must not select the whole Videos folder without a choice.
+	if code, s := w.do("POST", "/api/setup/done", `{}`, nil); code != 400 {
+		t.Fatalf("implicit folder accepted: %d %v", code, s)
+	}
+	// An explicit choice can still create a new folder.
+	code, s := w.do("POST", "/api/setup/done", `{"folder":"~/Videos"}`, nil)
 	if code != 200 || s["ok"] != true {
 		t.Fatalf("done: %d %v", code, s)
 	}

@@ -223,7 +223,8 @@ func startCmd(ctx context.Context, args []string, env Env) int {
 	for {
 		cfg = reloadConfig(env, loadConfig(env))
 		folder := config.FolderPath(cfg, userdir.Home(env.Getenv))
-		if folder == "" || !isDir(folder) {
+		configPath, _ := config.Path(env.Getenv)
+		if folder == "" || (!isDir(folder) && !hub.HasLibrary(configPath, absPath(folder, env.Getenv))) {
 			if code, again := serveSetup(ctx, env, cfg, st, a, page, port, ho.phase()); !again {
 				return code
 			}
@@ -335,8 +336,12 @@ func serveStartFolder(ctx context.Context, env Env, cfg config.Config, st config
 		})
 		return nil
 	}
-	f := newFolder(env, cfg, st, hub.FolderOptions{Dir: dir, Port: port, UI: page, IdleExit: idleDuration(st.IdleExit),
-		Verbose: a.verbose, Exts: exts, Settings: ls})
+	o := hub.FolderOptions{Dir: dir, Port: port, UI: page, IdleExit: idleDuration(st.IdleExit),
+		Verbose: a.verbose, Exts: exts, Settings: ls}
+	if a.app && env.goos() == "darwin" {
+		o.NativePicker = desktop.ChooseFolders
+	}
+	f := newFolder(env, cfg, st, o)
 	printFolderStartup(env.Stdout, f, fmt.Sprintf("http://127.0.0.1:%d/", port), st.IdleExit)
 	idle, err := f.Serve(fctx, ln)
 	if cerr := f.Close(); cerr != nil {

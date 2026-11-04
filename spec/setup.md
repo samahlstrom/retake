@@ -79,12 +79,13 @@ found by its name without `.exe`.
 
 ## The setup page
 
-One page, three questions, each with a choice made already, and one button. Everything on it can be changed later in
+One page, three questions, and one button. The video folder requires an explicit choice. Everything can be changed later in
 Settings (spec/home.md). Plain words; no paths the person didn't choose, no config keys.
 
-1. **Your videos.** The folder (`~/Movies` on a Mac, else `~/Videos`, which Done makes when it's missing), shown as
-   `~/Movies`, and how many videos are in it ("3 videos", "No videos yet, that's fine"). **Change** opens a list of the folder's
-   folders, with **Up** and **Use this folder**; it never shows hidden folders.
+1. **Your videos.** A fresh install starts with **Choose folder**, no selected path and no scan. It says Retake scans
+   only the chosen folder and its subfolders. **Choose folder** opens a list of folders, with **Up** and **Use this
+   folder**; it never shows hidden folders. **Open my videos** stays disabled until a folder is chosen. Existing
+   configured installs retain their folder.
 2. **Your agent.** The agents found (Claude Code, Codex, and the `[[agents]]` of config.toml), the default one
    selected, each with **Test**. Test runs it once with a one-line prompt and says "Works" with how long it took, or
    what's wrong in one line ("Not signed in: run claude once in Terminal"). With no agent: what an agent is in one
@@ -132,8 +133,10 @@ the home after Done can tell.
 }
 ```
 
-- `folder` is shown with `~`; `folder_path` is the absolute path. Before anything is saved it is the suggestion.
-  `videos` counts the videos in it (the home's discovery, stopping at 99; `null` when it isn't a folder).
+- `folder` is shown with `~`; `folder_path` is the absolute path. Before a fresh install has a choice, both are empty,
+  `folder_exists` is false, and `videos` is `null`; Retake does not inspect a suggested Movies or Videos directory.
+  Existing configured installs report their configured folder. `videos` counts the selected folder's videos (stopping at
+  99; `null` when it isn't a folder).
 - `agents` are the agents the worker would offer now; `agent` the saved default when offered, else the first, else "".
 - `open_in` is the saved place when it's available, else the default (herdr when available, else background).
 - `places`: herdr's `bundled` is true when it's the copy next to `retake`.
@@ -143,7 +146,8 @@ the home after Done can tell.
 written): `folder` must be absolute or start with `~`, and be a folder, or (Done only) one whose parent exists, which
 Done then makes; `agent` must be offered ("" means none chosen); `open_in` must be `background`, `herdr` or `tmux`,
 and available. They write `folder`, `default_agent` and `open_agents_in` with config.SetTop (the rest of the file
-stays as it is). A `folder` under the home folder is written as `~/…`.
+stays as it is). A fresh `Done` without an explicit folder returns 400. A `folder` under the home folder is written as
+`~/…`.
 
 `GET /api/setup/folders?path=~/Movies`: `{"path": "~/Movies", "parent": "~", "folders": ["Clips", "Old"]}`, the
 folder's non-hidden folders by name (case ignored, at most 500). `parent` is "" at the top of the disk. A path that

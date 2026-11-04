@@ -11,6 +11,7 @@
   import ConnectBlock from '../components/ConnectBlock.svelte';
   import ExtSlot from '../ext/ExtSlot.svelte';
   import Settings from './Settings.svelte';
+  import Library from './Library.svelte';
   import VideoMenuHost from '../components/menus/VideoMenuHost.svelte';
   import { brandOf, homeTitle } from '../lib/brand';
   import Feedback from '../components/Feedback.svelte';
@@ -23,13 +24,15 @@
   const todo = $derived(toReview(videos));
   const extPage = $derived(home.extOpen);
   const title = $derived(
-    home.settings
-      ? 'Settings'
-      : extPage
-        ? (extPage.nav?.title ?? extPage.name)
-        : node.path
-          ? node.title
-          : home.res.title || 'Videos',
+    home.library
+      ? 'Linked folders'
+      : home.settings
+        ? 'Settings'
+        : extPage
+          ? (extPage.nav?.title ?? extPage.name)
+          : node.path
+            ? node.title
+            : home.res.title || 'Videos',
   );
   const connect = $derived(needsComputer(home.res));
   const user = $derived(home.res.user);
@@ -93,7 +96,9 @@
               >{/if}</span
           ></a
         >
-        {#if home.settings}
+        {#if home.library}
+          <span aria-hidden="true">/</span><span class="here" aria-current="page">Linked folders</span>
+        {:else if home.settings}
           <span aria-hidden="true">/</span><span class="here" aria-current="page">Settings</span>
         {:else if home.ext}
           {#if extPage}<span aria-hidden="true">/</span><span class="here" aria-current="page">{title}</span>{/if}
@@ -114,7 +119,9 @@
         </div>
       {/if}
     </div>
-    {#if home.settings}
+    {#if home.library && home.res.role === 'owner' && !user}
+      <Library changed={() => void home.refresh()} openAdd={home.libraryAdding} />
+    {:else if home.settings}
       <Settings />
     {:else if home.ext}
       {#if extPage}
@@ -138,6 +145,9 @@
               {videos.length === 1 ? 'video' : 'videos'} · {todo ? `${todo} to review` : 'all reviewed'}{/if}
           </p>
         </div>
+        {#if home.res.role === 'owner' && !user}
+          <a class="add-folders" href="#folders/add">Add folders</a>
+        {/if}
       </header>
 
       {#if home.error}<p class="err" role="alert">{home.error}</p>{/if}
@@ -221,6 +231,19 @@
     .here {
       color: var(--text);
     }
+    .add-folders {
+      min-height: 32px;
+      padding: 7px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text-3);
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .add-folders:hover {
+      border-color: var(--border-hover);
+      color: var(--text);
+    }
     /* An extension's page, where the cards go. */
     .home :global(.page-slot) {
       min-height: 60vh;
@@ -254,6 +277,11 @@
         width: 44px;
         height: 44px;
         margin: -8px 0 -8px -12px;
+      }
+      .add-folders {
+        min-height: 44px;
+        display: inline-flex;
+        align-items: center;
       }
     }
   }

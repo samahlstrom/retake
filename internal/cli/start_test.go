@@ -80,7 +80,7 @@ func TestStartFirstRunSetsUpThenServesTheFolder(t *testing.T) {
 
 	// The setup page, at /, on a fresh config.
 	var s map[string]any
-	if code := getJSON(t, url+"api/setup", &s); code != 200 || s["folder"] != "~/Videos" || s["agent"] != "claude" ||
+	if code := getJSON(t, url+"api/setup", &s); code != 200 || s["folder"] != "" || s["agent"] != "claude" ||
 		s["open_in"] != "herdr" {
 		t.Fatalf("setup state: %d %v", code, s)
 	}

@@ -93,6 +93,8 @@
     "video-card": "One video; data-status is its status",
     "idea-preview": "An idea's picture on its card: its document's first image, or its title and first lines",
     "nav-settings": "Settings, at the bottom of the folder tree (the owner's)",
+    "nav-linked-folders": "Linked folders, above Settings in the local owner's folder tree",
+    "linked-folders": "The local owner's linked-folder list, selector and confirmations",
     "settings": "The settings page",
     "settings-section": "A group of settings (Agent, Computers, Extensions, Theme)",
     "settings-row": "One setting: its name, a line about it, and its control",

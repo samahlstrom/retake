@@ -138,10 +138,14 @@
       <h2 id="q-folder">Your videos</h2>
       <div class="row">
         <div class="what">
-          <code class="folder" data-testid="setup-folder">{s.folder}</code>
-          <span class="note">{videosLine(s)}</span>
+          <code class="folder" data-testid="setup-folder">{s.folder || 'Choose a folder'}</code>
+          <span class="note"
+            >{s.folder ? videosLine(s) : 'Only the folder you choose, and its subfolders, will be scanned.'}</span
+          >
         </div>
-        {#if !picking}<button class="quiet" onclick={() => (picking = true)}>Change</button>{/if}
+        {#if !picking}<button class="quiet" onclick={() => (picking = true)}
+            >{s.folder ? 'Change' : 'Choose folder'}</button
+          >{/if}
       </div>
       {#if picking}
         <FolderPicker
@@ -212,7 +216,7 @@
     </section>
 
     <div class="go">
-      <button class="primary" disabled={finishing} onclick={finish}
+      <button class="primary" disabled={finishing || !s.folder_path} onclick={finish}
         >{finishing ? 'Opening your videos…' : 'Open my videos'}</button
       >
     </div>

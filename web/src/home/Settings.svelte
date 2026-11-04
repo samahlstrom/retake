@@ -6,8 +6,7 @@
   import { onMount } from 'svelte';
   import StyledSelect from '../components/ui/Select.svelte';
   import ConnectBlock from '../components/ConnectBlock.svelte';
-  import FolderPicker from '../components/FolderPicker.svelte';
-  import { post, tryLine, waitForHome, type TryResult } from '../setup/setup';
+  import { post, tryLine, type TryResult } from '../setup/setup';
   import { connectCommand } from '../lib/automation.svelte';
   import { copyText } from '../lib/video-menu-api';
   import {
@@ -18,7 +17,6 @@
     effectiveAgent,
     fallbackOptions,
     loadSettings,
-    normalizeSettings,
     openInOptions,
     pendingRestart,
     saveSettings,
@@ -31,8 +29,6 @@
   let saved = $state('');
   let busy = $state(false);
   let command = $state('');
-  let picking = $state(false);
-  let moving = $state(false);
   let tried = $state<TryResult | 'busy' | null>(null);
   let copiedInstall = $state(false);
   let savedTimer: ReturnType<typeof setTimeout> | null = null;
@@ -56,28 +52,6 @@
   $effect(() => {
     if (s?.hosted && !online.length && !command) void connectCommand('api/connect').then((c) => (command = c));
   });
-
-  // A new videos folder: retake start serves it at once, so the home reloads once the server answers for it.
-  async function moveTo(folder: string) {
-    picking = false;
-    const before = s?.folder ?? '';
-    if (folder === before) return; // the same folder: nothing moves
-    await save({ folder });
-    if (error) return;
-    moving = true;
-    if (
-      await waitForHome(
-        fetch,
-        30_000,
-        300,
-        async (r) => normalizeSettings(await r.json()).folder !== before,
-        'api/settings',
-      )
-    )
-      location.replace('./');
-    else error = 'Your videos folder didn’t open. Reload the page.';
-    moving = false;
-  }
 
   async function test(agent: string) {
     tried = 'busy';
@@ -119,29 +93,16 @@
   {#if error}<p class="err" role="alert">{error}</p>{/if}
 
   {#if s}
-    {#if s.folder && !s.hosted}
+    {#if !s.hosted}
       <div class="group" data-part="settings-section" aria-labelledby="set-videos">
-        <h2 id="set-videos">Your videos</h2>
+        <h2 id="set-videos">Linked folders</h2>
         <div class="row" data-part="settings-row">
           <div class="what">
-            <code class="name path" data-testid="settings-folder">{s.folder}</code>
-            <span class="note"
-              >{#if moving}Opening it…{:else if s.folder_editable}Retake opens this folder when it starts.{:else}Opened
-                with <code>retake open</code>. The app and <code>retake start</code> open the one you chose in setup.{/if}</span
-            >
+            <span class="name">Choose folders to link</span>
+            <span class="note">Manage the folders Retake scans. Your files stay where they are.</span>
           </div>
-          {#if s.folder_editable && !picking}
-            <button class="quiet" disabled={busy || moving} onclick={() => (picking = true)}>Change</button>
-          {/if}
+          <a class="quiet" href="#folders">Manage folders</a>
         </div>
-        {#if picking}
-          <FolderPicker
-            start={s.folder}
-            endpoint="api/settings/folders"
-            onpick={moveTo}
-            oncancel={() => (picking = false)}
-          />
-        {/if}
       </div>
     {/if}
 
@@ -418,10 +379,6 @@
     }
     .note .bad {
       color: var(--danger);
-    }
-    code.name {
-      font: 13px var(--font-mono);
-      overflow-wrap: anywhere;
     }
     .quiet {
       flex: none;

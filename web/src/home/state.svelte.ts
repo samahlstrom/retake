@@ -94,6 +94,10 @@ export class Home {
   settings = $state(false);
   /** A short message (an extension's ctx.toast). */
   readonly toast = new Toast();
+  /** The local owner's linked-folder manager (`#folders`). */
+  library = $state(false);
+  /** `#folders/add` opens the selector immediately. */
+  libraryAdding = $state(false);
   readonly loader: ExtLoader;
   /** The page slot's host (one, so the slot remounts only for another extension). */
   readonly extHost: Host;
@@ -234,6 +238,8 @@ export class Home {
     if (writeHash) {
       this.ext = null; // a folder in the tree: the cards again
       this.settings = false;
+      this.library = false;
+      this.libraryAdding = false;
     }
     this.selected = path;
     if (path) this.topOpen = true;
@@ -246,16 +252,28 @@ export class Home {
     this.#save();
   }
 
-  /** Follows the URL hash: the settings (`#settings`), an extension's page (`#ext/<id>/<route>`), else a folder's
+  /** Follows the URL hash: settings, linked folders, an extension's page, else a folder's
    * selection. */
   route(hash: string): void {
     if (/^#?settings$/.test(hash)) {
       this.ext = null;
       this.settings = true;
+      this.library = false;
+      this.libraryAdding = false;
+      if (this.phone) this.drawer = false;
+      return;
+    }
+    if (/^#?folders(?:\/add)?$/.test(hash)) {
+      this.ext = null;
+      this.settings = false;
+      this.library = true;
+      this.libraryAdding = /\/add$/.test(hash);
       if (this.phone) this.drawer = false;
       return;
     }
     this.settings = false;
+    this.library = false;
+    this.libraryAdding = false;
     const e = parseExtHash(hash);
     if (!e) {
       this.ext = null;

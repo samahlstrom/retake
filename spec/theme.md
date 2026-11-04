@@ -354,6 +354,8 @@ Versioning). Classes and ids are not part of the API and can change in any relea
 | `video-card` | One video; `data-status` is its status | home |
 | `idea-preview` | An idea's picture on its card: its document's first image, or its title and first lines | home |
 | `nav-settings` | Settings, at the bottom of the folder tree (the owner's) | home |
+| `nav-linked-folders` | The local owner's Linked folders navigation entry | home |
+| `linked-folders` | The local folder manager, picker, and selected folders | home |
 | `settings` | The settings page | home |
 | `settings-section` | A group of settings (Agent, Computers, Extensions, Theme) | home |
 | `settings-row` | One setting: its name, a line about it, and its control | home |

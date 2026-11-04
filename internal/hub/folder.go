@@ -79,6 +79,9 @@ type FolderOptions struct {
 	Share  FolderShare
 	Trash  trash.Options
 	Reveal func(dir string) error
+	// NativePicker opens the local desktop's folder chooser. It is set only by
+	// retake start --app on macOS, never by a shared request.
+	NativePicker func(context.Context) ([]string, error)
 }
 
 // Folder serves a folder of projects.
@@ -107,6 +110,13 @@ type Folder struct {
 	trying map[string]bool // by agent id
 
 	menus menuState // a video's ⋯: share links' address, Move to Trash (videomenu.go)
+
+	libraryMu sync.Mutex
+	// libraryChangeMu serializes validation, durable replacement and name writes.
+	libraryChangeMu sync.Mutex
+	library         libraryState
+	pickerMu        sync.Mutex
+	picking         bool
 }
 
 // folderProject is one project's server, made on first use, and a handle on its store for the cards.
@@ -138,6 +148,7 @@ func NewFolder(opts FolderOptions) *Folder {
 	f := &Folder{opts: opts, local: map[string]bool{}, origins: map[string]bool{}, allow: map[string]bool{},
 		feedback: feedback.New(opts.Version),
 		trying:   map[string]bool{}, limiter: team.NewLimiter(), open: map[string]*folderProject{}}
+	f.library = f.loadLibrary()
 	for _, h := range []string{"127.0.0.1", "localhost"} {
 		hp := net.JoinHostPort(h, strconv.Itoa(opts.Port))
 		f.local[hp] = true
@@ -169,7 +180,9 @@ func (f *Folder) rescan(force bool) []home.Found {
 	}
 	first := f.scanned.IsZero()
 	f.mu.Unlock()
-	scan := home.ScanDir(f.opts.Dir, f.opts.Exts.KindAt) // outside the lock: a big folder takes a moment
+	f.libraryChangeMu.Lock()
+	defer f.libraryChangeMu.Unlock()
+	scan := f.scanLibraryLocked() // serialized with replacement through publication
 	if f.opts.Verbose || scan.Capped && first {
 		capped := ""
 		if scan.Capped {
@@ -374,7 +387,10 @@ func (f *Folder) Serve(ctx context.Context, ln net.Listener) (idle bool, err err
 func (f *Folder) Cards() []home.Card { return f.cards(nil) }
 
 func (f *Folder) cards(allowed func(string) bool) []home.Card {
-	found := f.rescan(false)
+	return f.cardsFrom(f.rescan(false), allowed)
+}
+
+func (f *Folder) cardsFrom(found []home.Found, allowed func(string) bool) []home.Card {
 	cards := make([]home.Card, 0, len(found))
 	for _, fd := range found {
 		if allowed != nil && !allowed(fd.Name) {
@@ -485,6 +501,10 @@ func (f *Folder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.homePage(w, r)
 	case len(parts) == 2 && parts[0] == "api" && parts[1] == "home" && get:
 		f.apiHome(w, r, role, scope)
+	case len(parts) == 2 && parts[0] == "api" && parts[1] == "library":
+		f.libraryRoute(w, r, shared, role, false)
+	case len(parts) == 3 && parts[0] == "api" && parts[1] == "library" && parts[2] == "pick":
+		f.libraryRoute(w, r, shared, role, true)
 	case len(parts) == 2 && parts[0] == "api" && parts[1] == "ping" && get:
 		writeJSON(w, r, http.StatusOK, map[string]bool{"ok": true})
 	case len(parts) == 2 && parts[0] == "api" && parts[1] == "feedback":
@@ -681,8 +701,12 @@ func (f *Folder) projectRoute(w http.ResponseWriter, r *http.Request, shared boo
 	parts := splitPath(rest)
 	page := (r.Method == http.MethodGet || r.Method == http.MethodHead) &&
 		(len(parts) == 0 || len(parts) == 1 && parts[0] == "index.html")
-	role, author, _, ok := f.identify(w, r, shared, fp, server.PermFor(r.Method, rest), page)
+	role, author, scope, ok := f.identify(w, r, shared, fp, server.PermFor(r.Method, rest), page)
 	if !ok {
+		return
+	}
+	if shared && scope == "" && !f.legacyProject(fp.found) {
+		f.refuse(w, r, http.StatusForbidden, "not allowed", page)
 		return
 	}
 	f.touch()
@@ -694,9 +718,29 @@ func (f *Folder) projectRoute(w http.ResponseWriter, r *http.Request, shared boo
 
 // apiHome is GET /api/home.
 func (f *Folder) apiHome(w http.ResponseWriter, r *http.Request, role team.Role, scope string) {
-	cards := f.cards(func(video string) bool { return scopeAllows(scope, video) })
+	if f.libraryError() != nil {
+		f.libraryUnavailable(w, r)
+		return
+	}
+	found := f.rescan(false)
+	legacy := map[string]bool(nil)
+	if role != team.Owner && scope == "" {
+		legacy = make(map[string]bool, len(found))
+		for _, fd := range found {
+			if f.legacyProject(fd) {
+				legacy[fd.Name] = true
+			}
+		}
+	}
+	cards := f.cardsFrom(found, func(video string) bool {
+		return scopeAllows(scope, video) && (role == team.Owner || scope != "" || legacy[video])
+	})
 	title := filepath.Base(f.opts.Dir)
-	res := home.Response{Title: title, Role: string(role), Projects: cards, Tree: home.BuildTree(title, cards, nil)}
+	projects := []string(nil)
+	if role == team.Owner {
+		projects = f.libraryTreeProjects()
+	}
+	res := home.Response{Title: title, Role: string(role), Projects: cards, Tree: home.BuildTree(title, cards, projects)}
 	res.Machines = []home.Machine{}
 	if role == team.Owner {
 		res.Folder = f.opts.Dir

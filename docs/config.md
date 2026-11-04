@@ -33,12 +33,19 @@ encoder = "auto"
 | `open_agents_in` | `"background"` | Where agents run. `background`: headless, you see the result. `herdr`: each video's agent is an interactive session in its own herdr workspace. `tmux`: a window per video in a tmux session `retake`. You can watch and type into those. [agents.md](agents.md#watch-and-talk-to-your-agents-herdr-tmux). |
 | `default_agent` | none (the first agent found) | The agent that edits when you press Send, by id (`claude`, `codex`, or an `[[agents]]` id). The worker offers it first, so a new project starts with it. The home's **Settings** writes it and sets it on every project. |
 | `fallback_agent` | none: pause and ask | The agent to switch to when the default agent's usage runs out. Settings writes it. |
-| `folder` | none: the setup page | Your videos folder (`~/Movies`): what `retake start` and the app open ([spec/setup.md](../spec/setup.md)). The setup page writes it the first time, and Settings when you change it. |
+| `folder` | none: the setup page | The initial folder chosen in setup: what `retake start` and the app open ([spec/setup.md](../spec/setup.md)). **Linked folders** can then select several folders without changing this library's identity. |
 
 The home's **Settings** (the gear at the bottom of the folder column, `retake open <folder>`) changes
-`default_agent`, `fallback_agent`, `open_agents_in`, `folder` (under `retake start`) and `[extensions] enabled` in this
+`default_agent`, `fallback_agent`, `open_agents_in` and `[extensions] enabled` in this
 file for you, keeping the rest of it, comments included, as it is. The first-run setup page of `retake start` writes
 `folder`, `default_agent` and `open_agents_in` the same way.
+
+Use **Linked folders** to select specific folders on the computer running Retake. You can select several folders,
+choose **Include subfolders** for each, and use **Locate folder** when a drive is offline or a folder moves.
+Removing a link leaves the files in place. Linking does not share the folder. The selection is stored beside the
+application config in `.retake/library-<identity>.json`, so other selected drives stay available if the first one
+is offline. A browser can browse the server's folders; the Mac desktop app also offers a native folder chooser.
+Browser drops from Finder cannot supply a full folder path, so use the chooser for those folders.
 
 The port matters more than it seems: the browser remembers the microphone permission per origin, port included.
 
