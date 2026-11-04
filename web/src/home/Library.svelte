@@ -16,6 +16,8 @@
   let adding = $state(false);
   let removing = $state('');
   let dropNote = $state('');
+  let browseRequest = 0;
+  let pathVersion = 0;
 
   const computer = $derived(library?.computer.name || 'this computer');
   const newCandidates = $derived(
@@ -36,11 +38,16 @@
   }
 
   async function go(next = path) {
+    const request = ++browseRequest;
+    const inputVersion = pathVersion;
     error = '';
     try {
-      browse = await listFolders('api/settings/folders', next);
-      path = browse.path;
+      const folders = await listFolders('api/settings/folders', next);
+      if (request !== browseRequest) return;
+      browse = folders;
+      if (inputVersion === pathVersion) path = folders.path;
     } catch (e) {
+      if (request !== browseRequest) return;
       error = e instanceof Error ? e.message : 'Can’t read that folder.';
     }
   }
@@ -181,7 +188,12 @@
           aria-label="Up one folder"
           ><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 12.5v-9M4 7.5l4-4 4 4" /></svg></button
         >
-        <input aria-label="Folder path" bind:value={path} onkeydown={(e) => e.key === 'Enter' && go()} />
+        <input
+          aria-label="Folder path"
+          bind:value={path}
+          oninput={() => pathVersion++}
+          onkeydown={(e) => e.key === 'Enter' && go()}
+        />
         <button class="quiet" onclick={() => go()}>Go</button>
       </div>
       {#if locating}
@@ -195,7 +207,9 @@
       {:else}
         {#if library?.native_picker}<button class="quiet" onclick={nativePick}>Choose folders on {computer}</button
           >{/if}
-        <button class="quiet" disabled={!browse} onclick={() => addCandidate(path)}>Select this folder</button>
+        <button class="quiet" disabled={!browse} onclick={() => browse && addCandidate(browse.path)}
+          >Select this folder</button
+        >
       {/if}
       <ul class="browser-list" aria-label="Folders to browse">
         {#each browse?.folders ?? [] as name (name)}

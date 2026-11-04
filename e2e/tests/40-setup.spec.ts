@@ -141,8 +141,23 @@ test.describe('with agents', () => {
       const library = page.locator('[data-part="linked-folders"]');
       await expect(library.locator('.folder-row')).toHaveCount(1);
       await expect(library.locator('.folder-row code')).toHaveText(join(w.home, 'Movies'));
+      let releaseInitial!: () => void;
+      let fetchedInitial!: () => void;
+      const holdInitial = new Promise<void>((resolve) => { releaseInitial = resolve; });
+      const initialFetched = new Promise<void>((resolve) => { fetchedInitial = resolve; });
+      await page.route('**/api/settings/folders?*', async (route) => {
+        const response = await route.fetch();
+        fetchedInitial();
+        await holdInitial;
+        await route.fulfill({ response });
+      }, { times: 1 });
       await library.getByRole('button', { name: 'Add folders', exact: true }).click();
+      await initialFetched;
       await library.getByRole('textbox', { name: 'Folder path' }).fill(join(w.home, 'Videos'));
+      releaseInitial();
+      // A slow initial browse must not erase a path already typed by the person.
+      await expect(library.getByRole('button', { name: 'Open Movies' })).toBeVisible();
+      await expect(library.getByRole('textbox', { name: 'Folder path' })).toHaveValue(join(w.home, 'Videos'));
       await library.getByRole('button', { name: 'Go', exact: true }).click();
       await expect(library.getByRole('button', { name: 'Open alpha' })).toBeVisible();
       await library.getByRole('button', { name: 'Select this folder' }).click();
