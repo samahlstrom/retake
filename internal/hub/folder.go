@@ -93,12 +93,14 @@ type Folder struct {
 	limiter  *team.Limiter
 	feedback http.Handler
 
-	mu      sync.Mutex
-	found   []home.Found // the videos
-	scanned time.Time
-	took    time.Duration             // how long the last scan took
-	open    map[string]*folderProject // by root
-	closed  bool
+	mu       sync.Mutex
+	found    []home.Found // the videos
+	scanned  time.Time
+	took     time.Duration             // how long the last scan took
+	open     map[string]*folderProject // by root
+	closed   bool
+	close    sync.Once
+	closeErr error
 
 	storeMu sync.Mutex
 	store   *project.Store // the home store; nil until it exists
@@ -275,6 +277,11 @@ func (f *Folder) homeStore() *project.Store {
 
 // Close stops every project's server (their jobs are queued again) and closes the stores.
 func (f *Folder) Close() error {
+	f.close.Do(func() { f.closeErr = f.closeAll() })
+	return f.closeErr
+}
+
+func (f *Folder) closeAll() error {
 	f.mu.Lock()
 	f.closed = true
 	open := f.open

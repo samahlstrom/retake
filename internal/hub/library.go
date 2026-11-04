@@ -78,8 +78,21 @@ func HasLibrary(configPath, original string) bool {
 
 func stablePath(p string) string {
 	p = filepath.Clean(p)
-	if resolved, err := filepath.EvalSymlinks(p); err == nil {
-		p = resolved
+	ancestor := p
+	missing := []string{}
+	for {
+		if resolved, err := filepath.EvalSymlinks(ancestor); err == nil {
+			p = resolved
+			for i := len(missing) - 1; i >= 0; i-- {
+				p = filepath.Join(p, missing[i])
+			}
+			break
+		}
+		parent := filepath.Dir(ancestor)
+		if parent == ancestor {
+			break
+		}
+		missing, ancestor = append(missing, filepath.Base(ancestor)), parent
 	}
 	if runtime.GOOS == "darwin" {
 		for _, alias := range []string{"/private/tmp", "/private/var", "/private/etc"} {
