@@ -1,11 +1,11 @@
 // New (spec/setup.md): the first run. `retake start` with a scratch home, config and state, and a PATH with fake
 // agents only (a `claude` that answers the test, a `codex` that isn't signed in; no real agent is ever run). The setup
-// page shows the suggested folder and its videos, tests the agents, changes the folder with the folder list, and Open
-// my videos lands on the folder's home at the same address; Settings shows the folder, tests the agent and switches to
-// another folder. With no agent the page shows the makers' install lines, and Check again finds one that the login
+// page requires a folder choice, tests the agents, chooses the folder with the folder list, and Open
+// my videos lands on the folder's home at the same address; Settings tests the agent and opens the linked-folder
+// manager. With no agent the page shows the makers' install lines, and Check again finds one that the login
 // shell's PATH (a fake $SHELL) names. On a phone it fits the screen.
 import { expect, test, type Browser, type Page } from '@playwright/test';
-import { chmodSync, copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { mediaLayout } from '../lib/fixtures.ts';
 import { LEGACY, PORTS, WORK } from '../lib/env.ts';
@@ -81,8 +81,9 @@ test.describe('with agents', () => {
     try {
       const setup = page.locator('[data-part~="setup"]');
       await expect(setup.locator('h1')).toHaveText('Set up Retake');
-      await expect(page.getByTestId('setup-folder')).toHaveText('~/Videos');
-      await expect(setup).toContainText('1 video');
+      await expect(page.getByTestId('setup-folder')).toHaveText('Choose a folder');
+      await expect(page.getByRole('button', { name: 'Open my videos' })).toBeDisabled();
+      await expect(setup).not.toContainText('1 video');
 
       // Both agents are offered; Test says which works.
       const agents = page.getByRole('radiogroup', { name: 'Your agent' });
@@ -95,12 +96,9 @@ test.describe('with agents', () => {
       await expect(codex).toContainText('Not signed in: run codex once in Terminal and sign in.');
       await claude.getByRole('radio').check();
 
-      // Another folder, from the folder list: up to the home, into Movies.
-      await setup.getByRole('button', { name: 'Change' }).click();
+      // The picker starts at home, without linking or scanning Videos by default.
+      await setup.getByRole('button', { name: 'Choose folder', exact: true }).click();
       const picker = page.locator('[data-part~="folder-picker"]');
-      await expect(picker.locator('.path')).toHaveText('~/Videos');
-      await expect(picker.getByRole('button', { name: 'alpha' })).toBeVisible();
-      await picker.getByRole('button', { name: 'Up one folder' }).click();
       await expect(picker.locator('.path')).toHaveText('~');
       await picker.getByRole('button', { name: 'Movies' }).click();
       await expect(picker.locator('.path')).toHaveText('~/Movies');
@@ -127,29 +125,41 @@ test.describe('with agents', () => {
     }
   });
 
-  test('Settings: the videos folder, Test, and switching to another folder', async ({ browser }) => {
+  test('Settings: Test, link a selected folder, and unlink without deleting footage', async ({ browser }) => {
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     const page = await context.newPage();
     page.on('pageerror', (e) => pageErrors.push(`${e.name}: ${e.message}`));
     try {
       await page.goto(`${server.url}#settings`);
-      await expect(page.getByTestId('settings-folder')).toHaveText('~/Movies');
+      await expect(page.getByRole('link', { name: 'Manage folders' })).toBeVisible();
       const agentRow = page.locator('[data-part~="settings-row"]', { hasText: 'Default agent' });
       await agentRow.getByRole('button', { name: 'Test' }).click();
       await expect(agentRow).toContainText(/Works · (<1|\d+) s/);
       if (SHOTS) await page.screenshot({ path: join(SHOTS, 'setup-settings.png') });
 
-      const videos = page.locator('[data-part~="settings-section"]', { hasText: 'Your videos' });
-      await videos.getByRole('button', { name: 'Change' }).click();
-      const picker = page.locator('[data-part~="folder-picker"]');
-      await picker.getByRole('button', { name: 'Up one folder' }).click();
-      await picker.getByRole('button', { name: 'Videos' }).click();
-      await expect(picker.locator('.path')).toHaveText('~/Videos');
-      await picker.getByRole('button', { name: 'Use this folder' }).click();
-      // The home switches to it, at the same address.
+      await page.getByRole('link', { name: 'Manage folders' }).click();
+      const library = page.locator('[data-part="linked-folders"]');
+      await expect(library.locator('.folder-row')).toHaveCount(1);
+      await expect(library.locator('.folder-row code')).toHaveText(join(w.home, 'Movies'));
+      await library.getByRole('button', { name: 'Add folders', exact: true }).click();
+      await library.getByRole('textbox', { name: 'Folder path' }).fill(join(w.home, 'Videos'));
+      await library.getByRole('button', { name: 'Go', exact: true }).click();
+      await expect(library.getByRole('button', { name: 'Open alpha' })).toBeVisible();
+      await library.getByRole('button', { name: 'Select this folder' }).click();
+      await library.getByRole('button', { name: 'Add 1 folder', exact: true }).click();
+      await expect(library.locator('.folder-row')).toHaveCount(2);
+      const movies = library.locator('.folder-row', { hasText: join(w.home, 'Movies') });
+      await movies.getByRole('button', { name: 'Remove from Retake' }).click();
+      await expect(movies).toContainText('Files stay on your computer.');
+      await movies.getByRole('button', { name: 'Remove from Retake' }).click();
+      await expect(library.locator('.folder-row')).toHaveCount(1);
+      await expect(library.locator('.folder-row code')).toHaveText(join(w.home, 'Videos'));
+      expect(existsSync(join(w.home, 'Movies/bravo/bravo_v1.mp4'))).toBe(true);
+      await library.getByRole('link', { name: 'Back to videos' }).click();
+      // Only the linked folder appears, at the same server address.
       await page.waitForFunction(() => window.__home?.loaded && window.__home.projects.some((p) => p.name === 'alpha'),
         null, { timeout: 30_000, polling: 100 });
-      expect(readFileSync(join(w.config, 'retake', 'config.toml'), 'utf8')).toContain('folder = "~/Videos"');
+      expect(await page.evaluate(() => window.__home.projects.map((p) => p.name))).toEqual(['alpha']);
       expect(pageErrors).toEqual([]);
     } finally {
       await context.close();

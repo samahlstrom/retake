@@ -273,7 +273,8 @@ test('on a phone the folders are a drawer', async ({ browser }) => {
     await page.keyboard.press('Escape');
     await expect(nav(page)).toBeHidden();
     await toggle.tap();
-    await page.mouse.click(380, 400);
+    // The Feedback tab occupies the middle of the right edge; choose the backdrop above it.
+    await page.locator('.scrim').click({ position: { x: 380, y: 100 } });
     await expect(nav(page)).toBeHidden();
     expect(await page.evaluate(overflowing)).toEqual([]);
   } finally {
