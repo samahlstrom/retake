@@ -201,6 +201,8 @@ jobs:
           CHROMIUM_PATH="$(cd e2e && node -e "console.log(require('@playwright/test').chromium.executablePath())")"
           export CHROMIUM_PATH
           examples/sample/run-quickstart.sh
+          # This job already builds the real editor; exercise revision following instead of skipping it.
+          RETAKE_EDIT="$PWD/editor/target/release/retake-edit" npm --prefix e2e test -- tests/11-stream.spec.ts
 
   # Retake on Windows: the Go tests, the page's unit tests, retake-edit, the release folder (scripts/build-windows.ps1)
   # and a smoke test of it (scripts/windows-smoke.ps1). After the toolchain is in, every step runs even when an earlier
