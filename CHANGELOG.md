@@ -2,6 +2,12 @@
 
 All notable changes are listed here. Versions follow semver.
 
+## 0.2.1 — 2026-11-04
+
+- Build bundled Whisper for Retake's macOS 12 minimum. Keep its portable CPU backend free of the optional
+  BLAS calls that require macOS 13.3, and check both Mac artifacts before packaging.
+- Includes the in-app project and review changes below; 0.2.0 was an unpublished draft build.
+
 ## 0.2.0 — 2026-11-04
 
 ### Start and review a project in the app
