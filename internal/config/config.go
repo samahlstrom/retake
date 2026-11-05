@@ -329,10 +329,11 @@ func Resolve(c Config, f Flags) Settings {
 // connect turn on, the content hashes of the project extensions among them, and a settings table per extension
 // ([extensions.<id>]), which goes to its server and tools, never to the page.
 type Extensions struct {
-	Enabled  []string
-	Pins     map[string]string         // id -> "b3:<hex>"
-	Settings map[string]map[string]any // id -> its table
-	unknown  []string                  // keys that are neither enabled, pins nor a table
+	Enabled    []string
+	EnabledSet bool                      // enabled appeared in config.toml; [] is an explicit choice to turn every extension off.
+	Pins       map[string]string         // id -> "b3:<hex>"
+	Settings   map[string]map[string]any // id -> its table
+	unknown    []string                  // keys that are neither enabled, pins nor a table
 }
 
 // UnmarshalTOML reads [extensions]: enabled, pins and the per-extension tables.
@@ -344,6 +345,7 @@ func (e *Extensions) UnmarshalTOML(data any) error {
 	for k, v := range m {
 		switch k {
 		case "enabled":
+			e.EnabledSet = true
 			list, ok := v.([]any)
 			if !ok {
 				return errors.New("extensions.enabled must be a list of extension ids")
@@ -398,6 +400,16 @@ var (
 // removed when off). The rest of the file, comments included, stays as it is; the file and its folder are made when
 // missing.
 func SetExtension(path, id string, on bool, pin string) error {
+	return setExtension(path, id, on, pin, false)
+}
+
+// SetExtensionDefault is SetExtension for a context with an enabled-by-default
+// extension. Turning that default off must write enabled = [] so it stays off.
+func SetExtensionDefault(path, id string, on bool, pin string, defaultOn bool) error {
+	return setExtension(path, id, on, pin, defaultOn)
+}
+
+func setExtension(path, id string, on bool, pin string, defaultOn bool) error {
 	if !extIDRE.MatchString(id) {
 		return fmt.Errorf("%q isn't an extension id", id)
 	}
@@ -429,7 +441,7 @@ func SetExtension(path, id string, on bool, pin string) error {
 	case pin != "":
 		pins[id] = pin
 	}
-	if slices.Equal(enabled, c.Extensions.Enabled) && pins[id] == c.Extensions.Pins[id] {
+	if slices.Equal(enabled, c.Extensions.Enabled) && pins[id] == c.Extensions.Pins[id] && (!defaultOn || on || c.Extensions.EnabledSet) {
 		return nil // already so
 	}
 	lines := strings.Split(text, "\n")

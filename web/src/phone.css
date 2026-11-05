@@ -393,6 +393,12 @@
   html[data-layout='portrait'] #pbar #verBtn {
     min-height: 40px;
   }
+  html[data-layout='portrait'] #pbar .speed {
+    width: 48px;
+    min-width: 48px;
+    height: 40px;
+    padding: 0 2px;
+  }
   .prow {
     display: flex;
     align-items: center;

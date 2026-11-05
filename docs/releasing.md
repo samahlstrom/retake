@@ -1,7 +1,7 @@
 # Releasing
 
-Nothing is published yet. This page says how a release is built, tested and published, the one-time setup it needs,
-and how to try all of it without publishing anything.
+This page says how a release is built, tested and published, the one-time setup it needs, and how to try all of it
+without publishing anything.
 
 ## Four ways to install, one set of archives
 
@@ -40,6 +40,7 @@ links it into the binary:
 | `retake-edit` | `cargo build --release` on each platform's own runner (it links prebuilt Skia, which can't be cross-linked): Ubuntu 22.04 x64 and arm64 (so glibc 2.35 is enough), macOS 15 arm64 and Intel, Windows | the commit |
 | `herdr` | herdr's GitHub release v0.8.2 (Apache-2.0). Windows: `herdr.exe` and its `conpty/` folder (Microsoft's ConPTY, MIT), side by side | SHA-256 per platform |
 | `ffmpeg`, `ffprobe` | Static GPL builds with libx264 and zimg (`zscale`), which `retake-edit` renders with: Linux, our own 9.0.2, built by the release workflow from source (`scripts/ffmpeg-build/build.sh`, below); macOS, Martin Riedl's 9.0.2 (signed); Windows, Gyan Doshi's 9.0.2 "essentials" | Linux: every source and the build image; the others: SHA-256 |
+| `whisper-cli` | whisper.cpp 1.9.5, built on each supported native release runner with `GGML_NATIVE=OFF`; it is portable CPU transcription support | source tarball SHA-256 in `scripts/install-whisper.sh`; MIT license in each archive |
 | `licenses/` | herdr's LICENSE (and ConPTY's), ffmpeg's GPLv3 text, its build notes and where its source is (Linux: also x264's, zimg's, zlib's and musl's texts, and `ffmpeg-build.txt`) | herdr's and macOS ffmpeg's by SHA-256 |
 | `retake-bundle.json` | What's inside, with versions, licenses and sources. It makes `retake` put its folder first on its own `PATH` (spec/setup.md) | |
 | `README.md`, `CHANGELOG.md`, `THIRD_PARTY_NOTICES.md`, `LICENSE` | this repo | |

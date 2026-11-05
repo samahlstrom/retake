@@ -292,6 +292,15 @@ func (f *Folder) replaceLibrary(w http.ResponseWriter, r *http.Request) {
 	}
 	next := cloneLibrary(old)
 	next.Configured, next.Folders, next.Revision = true, links, old.Revision+1
+	kept := map[string]bool{}
+	for _, link := range links {
+		kept[link.ID] = true
+	}
+	for _, link := range foldersOf(old, f.opts.Dir) {
+		if !kept[link.ID] {
+			f.removedRoots[link.ID] = true
+		}
+	}
 	candidate := f.scanState(&next)
 	if f.removesBusyProject(candidate.Videos) {
 		writeJSON(w, r, http.StatusConflict, map[string]string{"error": "a linked folder has an edit in progress"})

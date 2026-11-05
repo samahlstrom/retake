@@ -208,11 +208,14 @@ heads for (`v5`), so they are still there once the draft becomes that version.
   rest in their usual order; the other Working comments of its batch read quietly (no dot or word, only `→ v5`), and
   before its first mark one quiet line at the top of To do says "The agent is on it · 15 comments".
   While a version is live (spec/automation.md, "The live version"), its list also has the comments whose edits go
-  into it, the running batch's, so following the latest to the live vN keeps them in view as they land. They come
+  into it, the running batch's, so explicitly opening the live vN keeps them in view as they land. They come
   first, under one quiet label, muted and small, that says where they came from: "From v4" (one line, no box; there
   even when v5 has no comments of its own yet). The live version's own comments (they go into v6) sit apart after
   them, under "On v5". A version that isn't live has no labels. A Send never
-  moves the list by itself; switching to the live version happens with following the latest (the video), as before. Timeline markers follow the tab, one per comment, in its status color, at the comment's own time on its own
+  moves the list by itself. New versions never move the reviewer away from the shown version: progress and questions
+  remain on the comments they sent. Once the target render and its batch are complete, with no unanswered questions,
+  a quiet **View vN** action opens it. The version menu still lets the reviewer inspect work early; updates within
+  that explicitly chosen version may load in place. Timeline markers follow the tab, one per comment, in its status color, at the comment's own time on its own
   version; a comment's pen strokes and voice fold into its marker once it is transcribed. Transcription completion is
   independent of resolution. Switching the version, however it is switched (the version menu, C, a Done
   comment's "in vN"), switches the comments, the markers and the drawings on the video with it; flipped with C, the open take's own
@@ -292,11 +295,29 @@ The bar's one action, Send (spec/automation.md), stops and saves the current rec
 
 The keyboard hint under the video shows until the first recording, once per browser (localStorage `retake.hint`); after that the keys are behind `?` (a key and a button in the bar).
 
+### Playback speed and personal shortcuts
+
+The video controls offer speeds from **0.5× to 3×**, in 0.25 increments, with **1×** as the initial speed.
+The selected speed applies to the media element and stays selected across version changes. **A** decreases speed,
+**D** increases speed, and **S** stops playback at the current frame. Repeated speed changes clamp at the endpoints.
+Recording, timestamps and frame stepping continue to use the video's clock.
+
+The **Keyboard shortcuts** sheet lets the viewer change player keys and reset the defaults. Changes are remembered
+in this browser and the sheet shows the current bindings. Conflicting keys and reserved entry/navigation keys are
+rejected with an inline explanation. Ctrl/Cmd shortcuts and typing in inputs, textareas, selects, and editable
+documents keep their existing behavior. **R** still records by default. Failed or blocked browser storage must not
+break playback or prevent a change for the current page.
+
 Long recordings rotate into independently decodable clips at a pause after 10 seconds, or after 20 seconds of continuous speech, deferring rotation during a pen stroke. The microphone stays open; stopping or finishing during rotation stops both recorders safely. Completed clips begin processing while recording continues. Live notes builds skip snapshots and artifact writes so text can arrive promptly; final processing generates the full artifacts. This is incremental clip transcription, not word-by-word streaming.
 
 `GET /api/notes?v=<label>&scope=video` includes the family’s discussion, including resolved comments. Items are deduplicated by kind/id and mapped onto the displayed cut when render manifests exist. Without a map, timestamps retain their original clock. The response includes `scope: "video"`. The original version-scoped API remains available to integrations.
 
 Comments support text search and all/open/resolved filters. Timeline markers expose comments on hover or keyboard focus and seek on activation. Search fields do not consume player shortcuts.
+
+Clicking or tapping the non-interactive area of a comment card, including its words, pauses and seeks to its timestamp.
+Text selection, editing fields, reply fields, links, menu buttons, and other nested controls keep their own behavior
+and do not trigger a card seek. The timestamp remains an accessible keyboard action. Document comments reveal their
+anchor instead of seeking a nonexistent video clock.
 
 After a voice clip stops and its final bytes are uploaded, the page sends `POST /api/session/<take>/transcribe?v=<label>`. This queues transcription and notes without closing the take. The server fingerprints completed segments and their byte sizes for idempotence; a later clip queues new work. In-progress segments are excluded. A stopped segment remains marked `recording` in saved metadata until its recorder has finalized and all buffered bytes are uploaded; this prevents autosave from exposing a truncated clip. Clip jobs carry a `revision` argument (the fingerprint), distinct from the final pass. Failed requests retry on autosave. Done still closes the take and runs the final pass, reusing cached completed audio. No coding agent is started automatically.
 
@@ -350,7 +371,7 @@ goes stay as they are.
   in the card's first line (their tooltips say Esc and Enter). Enter saves, Shift+Enter is a new line. A drawing-only comment's field starts empty (`Add words…`). Keys
   typed in it never reach the player (Space, R and the rest type). Saving the same words, or Esc, ends it with nothing
   changed. Undo is Cancel before saving; after saving, editing again is enough.
-- **On a phone** (a touch screen), ⋯ → **Edit** or a tap on its words opens compose mode ("Typing on a phone") with
+- **On a phone** (a touch screen), ⋯ → **Edit** opens compose mode ("Typing on a phone") with
   the comment box as the field: the comment's words in the box, which sits on the keyboard, and its line saying
   `Editing 0:18` with Cancel and Save; the video shows the comment's moment, paused. Return saves; Cancel ends it with
   nothing changed. The keyboard's Done or a tap on the video only puts the keyboard away: the words stay in the box,

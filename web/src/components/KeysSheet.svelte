@@ -3,13 +3,17 @@
   // here, behind the ? in the bar (or the ? key).
   import { Popover } from 'bits-ui';
   import type { Review } from '../lib/review.svelte';
-  import { KEY_SHEET } from '../lib/keys';
+  import { SHORTCUT_ACTIONS, type ShortcutAction } from '../lib/keys';
 
   let { review }: { review: Review } = $props();
 </script>
 
 <Popover.Root bind:open={() => review.keysOpen, (v) => (review.keysOpen = v)}>
-  <Popover.Trigger id="keys" data-part="keys" aria-label="Keyboard shortcuts" title="Keys (?)"
+  <Popover.Trigger
+    id="keys"
+    data-part="keys"
+    aria-label="Keyboard shortcuts"
+    title="Keys ({review.shortcutLabel('help')})"
     ><svg viewBox="0 0 24 24" aria-hidden="true"
       ><circle cx="12" cy="12" r="8.6" fill="none" stroke="currentColor" stroke-width="1.6" /><path
         d="M9.7 9.6a2.4 2.4 0 0 1 4.7.6c0 1.7-2.4 2-2.4 3.6M12 16.6v.01"
@@ -33,13 +37,22 @@
     >
       <strong>Keys</strong>
       <dl>
-        {#each KEY_SHEET as k (k.what)}
+        {#each SHORTCUT_ACTIONS as binding (binding.action)}
+          {@const action = binding.action as ShortcutAction}
           <dt>
-            {#each k.keys as key (key)}<kbd>{key}</kbd>{/each}
+            <input
+              aria-label={binding.label}
+              value={review.shortcutLabel(action)}
+              maxlength="1"
+              autocapitalize="characters"
+              oninput={(event) => review.setShortcut(action, event.currentTarget.value)}
+            />
           </dt>
-          <dd>{k.what}</dd>
+          <dd>{binding.label}</dd>
         {/each}
       </dl>
+      {#if review.shortcutError}<p class="key-error" role="alert">{review.shortcutError}</p>{/if}
+      <button class="reset-keys" onclick={review.resetShortcuts}>Reset defaults</button>
       <p class="note">Draw, type or record a comment at any moment.</p>
     </Popover.Content>
   </Popover.Portal>

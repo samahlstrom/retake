@@ -33,6 +33,10 @@ name = "${AUTHOR}"
 open_browser = false
 find_agents = false
 
+# This test starts with an explicitly disabled extension, then turns it on.
+[extensions]
+enabled = []
+
 [[agents]]
 id = "one"
 name = "Agent One"

@@ -60,7 +60,7 @@
     </p>
   {/if}
   {#if review.layoutMode !== 'portrait' && !kind}
-    <Hint gone={review.hintGone} touch={review.touch} viewOnly={!review.canRecord} />
+    <Hint {review} gone={review.hintGone} touch={review.touch} viewOnly={!review.canRecord} />
   {/if}
   <div id="toast" data-part="toast" class="float" class:show={review.toast.show}>{review.toast.msg}</div>
   <div id="fatal" style:display={review.fatal ? 'flex' : null}>{review.fatal}</div>

@@ -141,7 +141,7 @@ describe('the review keys with an extension on the page', () => {
 });
 
 describe("an extension's version is never landed on by following or comparing", () => {
-  it('following the latest skips v0, and a v0-only video stays on v0', async () => {
+  it('an extension may land on its first video cut, but a selected video never follows later cuts', async () => {
     const calls: string[] = [];
     const view = {
       followLatest: true,
@@ -150,10 +150,12 @@ describe("an extension's version is never landed on by following or comparing", 
       starting: false,
       switching: false,
       shown: 'v0',
+      base: 'v0',
       video: { currentTime: 0 },
       versions: [V0] as Version[],
       async setBase(label: string) {
         calls.push(label);
+        this.base = label;
         this.shown = label;
       },
     };
@@ -162,7 +164,7 @@ describe("an extension's version is never landed on by following or comparing", 
     view.versions = [V0, v('v1')]; // Start v1's cut arrived
     await Review.prototype.followCurrent.call(view as unknown as Review);
     expect(calls).toEqual(['v1']);
-    view.versions = [v('v1'), V0]; // whatever the order
+    view.versions = [V0, v('v1'), v('v2')]; // reviewer deliberately selected the first cut
     view.shown = 'v1';
     await Review.prototype.followCurrent.call(view as unknown as Review);
     expect(calls).toEqual(['v1']);

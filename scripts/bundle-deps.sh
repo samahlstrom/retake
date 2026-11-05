@@ -2,7 +2,7 @@
 # Puts the tools a release ships with retake into dist-bundle/<os>_<arch>/ (docs/install-plan.md), where goreleaser's
 # archives pick them up:
 #
-#   bin/herdr, bin/ffmpeg, bin/ffprobe, bin/retake-edit   (each when there is one for that platform; .exe on Windows)
+#   bin/herdr, bin/ffmpeg, bin/ffprobe, bin/retake-edit, bin/whisper-cli   (each when there is one for that platform; .exe on Windows)
 #   conpty/                                              (Windows: what herdr.exe loads from next to itself)
 #   licenses/                                            (each tool's license text)
 #   retake-bundle.json                                   (what's inside: versions, licenses, sources)
@@ -38,6 +38,8 @@ HERDR_VERSION="0.8.2"
 HERDR_URL="https://github.com/herdrdev/herdr/releases/download/v${HERDR_VERSION}"
 HERDR_LICENSE_URL="https://raw.githubusercontent.com/herdrdev/herdr/v${HERDR_VERSION}/LICENSE"
 HERDR_LICENSE_SHA="c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+WHISPER_VERSION="1.9.5"
+WHISPER_LICENSE_SHA="94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d"
 herdr_asset() { # os_arch -> "file sha256"
   case "$1" in
     linux_amd64) echo "herdr-linux-x86_64 976150a14d490c94b243ea2e1a7eb2dfb67f12e36b182db90936f6728e6aecf4" ;;
@@ -222,7 +224,9 @@ for p in $PLATFORMS; do
         *.zip) unzip -q -o "$a" -d "$tmp" ;;
         *) tar -xzf "$a" -C "$tmp" ;;
       esac
+
       [ ! -f "$tmp/retake-edit$exe" ] || { cp "$tmp/retake-edit$exe" "$dir/bin/.retake-edit" && editor="$dir/bin/.retake-edit"; }
+      [ ! -f "$tmp/whisper-cli$exe" ] || cp "$tmp/whisper-cli$exe" "$dir/bin/whisper-cli$exe"
       rm -rf "$tmp"
     done
   fi
@@ -230,6 +234,12 @@ for p in $PLATFORMS; do
     cp "$editor" "$dir/bin/retake-edit$exe"
     chmod 755 "$dir/bin/retake-edit$exe"
     rm -f "$dir/bin/.retake-edit"
+  fi
+
+  if [ -f "$dir/bin/whisper-cli$exe" ]; then
+    chmod 755 "$dir/bin/whisper-cli$exe"
+    cp "$(fetch "https://raw.githubusercontent.com/ggml-org/whisper.cpp/v${WHISPER_VERSION}/LICENSE" "whisper-cpp-LICENSE-v${WHISPER_VERSION}" "$WHISPER_LICENSE_SHA")" "$dir/licenses/whisper-cpp-LICENSE.txt"
+    add_tool whisper-cli "$WHISPER_VERSION" "MIT" "https://github.com/ggml-org/whisper.cpp/tree/v${WHISPER_VERSION}"
   fi
 
   printf '{\n  "bundle": 1,\n  "tools": {%s\n  }\n}\n' "$tools" >"$dir/retake-bundle.json"

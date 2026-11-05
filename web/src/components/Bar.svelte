@@ -27,6 +27,16 @@
     <div id="time" data-part="time">
       <span id="cur">{review.curText}</span> <span class="dim">/ <span id="dur">{review.durText}</span></span>
     </div>
+    <select
+      class="speed"
+      aria-label="Playback speed"
+      value={review.playbackRate}
+      onchange={(event) => review.setPlaybackRate(Number(event.currentTarget.value))}
+    >
+      {#each [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 2.75, 3] as rate (rate)}
+        <option value={rate}>{rate}×</option>
+      {/each}
+    </select>
     <Timeline {review} />
   {/if}
   <VersionMenu {review} />

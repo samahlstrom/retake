@@ -94,6 +94,11 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
+      - name: Initialize MSVC
+        if: matrix.os == 'windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
       - name: Install Rust from mise.toml
         uses: jdx/mise-action@v5
         with:
@@ -126,7 +131,14 @@ jobs:
           if (-not (Test-Path stage/retake-edit.exe)) { throw "no stage/retake-edit.exe" }
       - name: It runs here
         shell: bash
-        run: stage/retake-edit --version
+        env:
+          OS: ${{ matrix.os }}
+        run: |
+          stage/retake-edit --version
+          scripts/install-whisper.sh --cpu --prefix "$PWD/stage/whisper" --jobs 2
+          cp stage/whisper/bin/whisper-cli* stage/
+          if [ "$OS" = windows ]; then stage/whisper-cli.exe --help; else stage/whisper-cli --help; fi
+          rm -rf stage/whisper
       - name: Package (named like goreleaser's archives; scripts/bundle-deps.sh puts it in the release archive)
         shell: bash
         env:
@@ -181,7 +193,7 @@ jobs:
           pattern: ffmpeg-linux-*
           path: dist-ffmpeg
           merge-multiple: true
-      - name: The tools that ship with Retake (herdr, ffmpeg, retake-edit), pinned by SHA-256
+      - name: The tools that ship with Retake (herdr, ffmpeg, retake-edit, whisper-cli), pinned by SHA-256
         env:
           RETAKE_FFMPEG_DIR: dist-ffmpeg
           RETAKE_RELEASE_TAG: ${{ needs.plan.outputs.tag }}

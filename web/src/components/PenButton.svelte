@@ -20,7 +20,9 @@
     class={review.eraser ? 'erasing' : ''}
     data-color={review.eraser ? 'eraser' : review.penColor}
     aria-label="{label}: colours and eraser"
-    title="{label} (1–4, E)"
+    title="{label} ({review.shortcutLabel('color1')}–{review.shortcutLabel('color4')}, {review.shortcutLabel(
+      'eraser',
+    )})"
   >
     {#if review.eraser}
       <svg viewBox="0 0 24 24" aria-hidden="true"
@@ -62,6 +64,7 @@
     >
       <PenColors
         color={review.penColor}
+        keyOf={review.shortcutLabel}
         onpick={(c) => {
           review.setColor(c);
           review.penOpen = false;

@@ -164,14 +164,12 @@
     readonly={edit.busy}
     onkeydown={editKeys}></textarea>
 {:else}
-  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
   <p
     class="text"
     class:quiet={!row.text.trim()}
     class:editable
     title={row.edited ? 'Edited' : undefined}
     ondblclick={editable && !review.touch ? startEdit : undefined}
-    onclick={editable && review.touch ? startEdit : undefined}
   >
     {text}
   </p>

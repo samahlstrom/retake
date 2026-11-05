@@ -8,11 +8,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/samahlstrom/retake/internal/desktop"
@@ -34,6 +36,10 @@ var (
 	viewCheck = 2 * time.Second
 	herdrTake = 15 * time.Second
 )
+
+// Herdr owns one local server per user configuration. Serializing its first
+// start prevents two Retake projects from racing to make the same server.
+var herdrServerMu sync.Mutex
 
 const herdrStartTimeout = 60 * time.Second
 
@@ -191,6 +197,9 @@ func (v *view) stop() {
 // herdr: one workspace per project, its agent started with herdr agent start and given work with herdr agent prompt.
 
 func (v *view) startHerdr(ctx context.Context, p Profile, line string) error {
+	if err := v.ensureHerdr(ctx); err != nil {
+		return err
+	}
 	s := &v.state
 	if s.Pane != "" && v.herdrExists(ctx, "pane", s.Pane) {
 		if s.Profile == p.ID {
@@ -236,6 +245,94 @@ func (v *view) startHerdr(ctx context.Context, p Profile, line string) error {
 		return e
 	}
 	return v.herdrPrompt(ctx, line)
+}
+
+type herdrServerStatus uint8
+
+const (
+	herdrStatusUnknown herdrServerStatus = iota
+	herdrStatusNotRunning
+	herdrStatusReady
+	herdrStatusIncompatible
+)
+
+// ensureHerdr starts the documented headless command only after status says no
+// server is running. It intentionally never owns, stops, or waits for the server:
+// an existing user's server and its jobs outlive Retake.
+func (v *view) ensureHerdr(ctx context.Context) error {
+	herdrServerMu.Lock()
+	defer herdrServerMu.Unlock()
+	switch v.herdrStatus(ctx, 5*time.Second) {
+	case herdrStatusReady:
+		return nil
+	case herdrStatusIncompatible:
+		return errors.New("Herdr is already running but is incompatible with this Retake version. Update Retake or Herdr, then retry.") //nolint:revive,staticcheck // a sentence shown directly to the person.
+	case herdrStatusUnknown:
+		return errors.New("Couldn't inspect Herdr status. Retry.") //nolint:revive,staticcheck // a sentence shown directly to the person.
+	}
+	cmd := exec.Command(v.bin, "server") //nolint:gosec // bundled herdr, fixed headless command
+	cmd.Env = slices.DeleteFunc(os.Environ(), func(kv string) bool {
+		k, _, _ := strings.Cut(kv, "=")
+		return reservedEnv(k) || k == "HERDR_PANE_ID" || k == "HERDR_TAB_ID" || k == "HERDR_WORKSPACE_ID"
+	})
+	cmd.Stdout, cmd.Stderr = io.Discard, io.Discard
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("Couldn't start Herdr. Retry. %w", err) //nolint:staticcheck // a sentence shown directly to the person.
+	}
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	deadline := time.NewTimer(10 * time.Second)
+	defer deadline.Stop()
+	tick := time.NewTicker(100 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		switch v.herdrStatus(ctx, 2*time.Second) {
+		case herdrStatusReady:
+			return nil
+		case herdrStatusIncompatible:
+			return errors.New("Herdr started but is incompatible with this Retake version. Update Retake or Herdr, then retry.") //nolint:revive,staticcheck // a sentence shown directly to the person.
+		}
+		select {
+		case err := <-done:
+			if err == nil {
+				return fmt.Errorf("Couldn't start Herdr. Retry. server stopped") //nolint:staticcheck // a sentence shown directly to the person.
+			}
+			return fmt.Errorf("Couldn't start Herdr. Retry. %w", err) //nolint:staticcheck // a sentence shown directly to the person.
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-deadline.C:
+			return errors.New("Couldn't start Herdr. Retry. server did not become ready") //nolint:staticcheck // a sentence shown directly to the person.
+		case <-tick.C:
+		}
+	}
+}
+
+// herdrStatus distinguishes a successful status command from its result. `status
+// server` exits zero when no server is running, so only the documented JSON
+// states decide whether Retake may start one or create a workspace.
+func (v *view) herdrStatus(ctx context.Context, timeout time.Duration) herdrServerStatus {
+	out, err := v.cli(ctx, timeout, "status", "server", "--json")
+	if err != nil {
+		return herdrStatusUnknown
+	}
+	var reply struct {
+		Status     string `json:"status"`
+		Running    bool   `json:"running"`
+		Compatible *bool  `json:"compatible"`
+	}
+	if json.Unmarshal(out, &reply) != nil {
+		return herdrStatusUnknown
+	}
+	if reply.Status == "not_running" && !reply.Running {
+		return herdrStatusNotRunning
+	}
+	if reply.Running && reply.Compatible != nil {
+		if *reply.Compatible {
+			return herdrStatusReady
+		}
+		return herdrStatusIncompatible
+	}
+	return herdrStatusUnknown
 }
 
 func (v *view) herdrExists(ctx context.Context, kind, id string) bool {

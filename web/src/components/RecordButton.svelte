@@ -9,7 +9,11 @@
 
   const seg = $derived(review.seg);
   const recClass = $derived(seg ? 'on' : review.starting ? 'wait' : '');
-  const name = $derived(seg ? 'Stop recording (R)' : 'Record voice (R)');
+  const name = $derived(
+    seg
+      ? `Stop recording (${review.shortcutLabel('toggleRec')})`
+      : `Record voice (${review.shortcutLabel('toggleRec')})`,
+  );
 </script>
 
 <button

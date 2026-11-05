@@ -117,6 +117,7 @@ type Folder struct {
 	// libraryChangeMu serializes validation, durable replacement and name writes.
 	libraryChangeMu sync.Mutex
 	library         libraryState
+	removedRoots    map[string]bool // ids removed this run; stale create forms get conflict, never a path fallback
 	pickerMu        sync.Mutex
 	picking         bool
 }
@@ -148,8 +149,8 @@ func NewFolder(opts FolderOptions) *Folder {
 		opts.Thumbs = thumb.Default
 	}
 	f := &Folder{opts: opts, local: map[string]bool{}, origins: map[string]bool{}, allow: map[string]bool{},
-		feedback: feedback.New(opts.Version),
-		trying:   map[string]bool{}, limiter: team.NewLimiter(), open: map[string]*folderProject{}}
+		feedback: feedback.New(opts.Version), removedRoots: map[string]bool{},
+		trying: map[string]bool{}, limiter: team.NewLimiter(), open: map[string]*folderProject{}}
 	f.library = f.loadLibrary()
 	for _, h := range []string{"127.0.0.1", "localhost"} {
 		hp := net.JoinHostPort(h, strconv.Itoa(opts.Port))
@@ -195,8 +196,8 @@ func (f *Folder) rescan(force bool) []home.Found {
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.found, f.scanned, f.took = scan.Videos, f.opts.Now(), scan.Took
-	return scan.Videos
+	f.found, f.scanned, f.took = append(scan.Videos, scan.Empty...), f.opts.Now(), scan.Took
+	return f.found
 }
 
 // projectNamed returns a project by name, scanning the folder again when it doesn't know the name.
@@ -508,6 +509,8 @@ func (f *Folder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.homePage(w, r)
 	case len(parts) == 2 && parts[0] == "api" && parts[1] == "home" && get:
 		f.apiHome(w, r, role, scope)
+	case len(parts) == 2 && parts[0] == "api" && parts[1] == "projects" && r.Method == http.MethodPost:
+		f.createProject(w, r, shared, role)
 	case len(parts) == 2 && parts[0] == "api" && parts[1] == "library":
 		f.libraryRoute(w, r, shared, role, false)
 	case len(parts) == 3 && parts[0] == "api" && parts[1] == "library" && parts[2] == "pick":

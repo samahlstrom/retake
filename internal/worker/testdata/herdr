@@ -2,7 +2,8 @@
 # A stand-in for herdr in tests. It logs its argv (fields end with \037, one call per line) to $FAKE_HERDR_DIR/argv.log
 # and keeps workspaces, panes and agents as files there. "agent prompt" runs $FAKE_AGENT with the line, in the pane's
 # folder and environment, the way an interactive agent gets a message. It never talks to a herdr server and never
-# starts claude or codex. $FAKE_HERDR_DIR/not-ready makes the next "agent start" stop at a startup question, and
+# starts claude or codex. In managed-server mode, `status server` reports whether this fake server is ready, and
+# `server` starts it. $FAKE_HERDR_DIR/not-ready makes the next "agent start" stop at a startup question, and
 # $FAKE_HERDR_DIR/drop-prompt makes the next "agent prompt" lose its line (the agent stays idle, so waiting for it to
 # work times out).
 set -u
@@ -24,6 +25,24 @@ next() {
 	echo "$n"
 }
 case "$1 ${2:-}" in
+"server ")
+	if [ "${FAKE_HERDR_MANAGE_SERVER:-}" ] && [ "${FAKE_HERDR_START_FAIL:-}" ]; then
+		fail server_start_failed "fake herdr could not start"
+	fi
+	: >"$D/server-ready"
+	echo '{"id":"cli","result":{"type":"server_started"}}'
+	;;
+"status server")
+	if [ "${FAKE_HERDR_INCOMPATIBLE:-}" ]; then
+		echo '{"status":"running","running":true,"compatible":false}'
+		exit 0
+	fi
+	if [ "${FAKE_HERDR_MANAGE_SERVER:-}" ] && [ ! -f "$D/server-ready" ]; then
+		echo '{"status":"not_running","running":false,"compatible":null}'
+	else
+		echo '{"status":"running","running":true,"compatible":true}'
+	fi
+	;;
 "workspace get")
 	[ -f "$D/ws-$3" ] || fail workspace_not_found "workspace $3 not found"
 	echo '{"id":"cli","result":{"type":"workspace_info"}}'
@@ -33,6 +52,9 @@ case "$1 ${2:-}" in
 	echo '{"id":"cli","result":{"type":"pane_info"}}'
 	;;
 "workspace create" | "tab create")
+	if [ "${FAKE_HERDR_MANAGE_SERVER:-}" ] && [ ! -f "$D/server-ready" ]; then
+		fail server_unavailable "fake herdr is unavailable"
+	fi
 	shift 2
 	ws="" cwd=""
 	: >"$D/env.new"

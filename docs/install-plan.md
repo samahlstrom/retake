@@ -26,7 +26,7 @@ How the Mac app is put together (scripts/macos-app.sh):
   no arguments from an app bundle, it runs `retake start --app`: it reads the person's login-shell `PATH` (apps
   started from Finder don't get it, so it would miss `claude` in `~/.local/bin` or `/opt/homebrew/bin`), serves the
   setup page or the videos folder, opens the browser, and never idle-exits.
-- `Contents/MacOS/` also holds `retake-edit`, `herdr`, `ffmpeg` and `ffprobe`. Retake puts that folder first on its
+- `Contents/MacOS/` also holds `retake-edit`, `herdr`, `ffmpeg`, `ffprobe` and `whisper-cli`. Retake puts that folder first on its
   own `PATH`, so it, its renders and its agents use these copies. The person's shell is never changed.
 - `Contents/Resources/menubar.js` is the menu-bar item, a short JavaScript-for-Automation script that `osascript`
   runs (ships with every Mac, nothing to compile). The core (server, browser, setup) is Go and tested on Linux; only
@@ -54,11 +54,11 @@ user's page.
   console program for the terminal. No tray icon: Retake lives in the browser, and opening it again from the Start
   menu finds the one that runs.
 - The release's Windows zip is made like the others: goreleaser cross-builds `retake.exe` and `retakew.exe` on Linux,
-  and `scripts/bundle-deps.sh` adds herdr, ffmpeg and `retake-edit.exe`, which the release workflow builds on
-  `windows-latest` with `scripts/build-windows.ps1 -OutDir <dir>` (it links prebuilt Skia with MSVC, so it can't be
-  cross-compiled).
+  and `scripts/bundle-deps.sh` adds herdr, ffmpeg, `retake-edit.exe` and `whisper-cli.exe`. The release workflow
+  builds `retake-edit.exe` with `scripts/build-windows.ps1 -OutDir <dir>` and builds Whisper from its pinned source on
+  `windows-latest`, after it initializes MSVC; neither can be cross-compiled.
 - `scripts/build-windows.ps1` without `-OutDir` builds that same package natively in one go, for CI and by hand: the
-  page, `retake.exe`, `retakew.exe`, `retake-edit.exe` and the pinned downloads (ffmpeg, herdr, the same pins as
+  page, `retake.exe`, `retakew.exe`, `retake-edit.exe`, `whisper-cli.exe` and the pinned downloads (ffmpeg, herdr, the same pins as
   `bundle-deps.sh`) in `dist/windows/`, plus `dist/retake_<version>_windows_amd64.zip` and its line in
   `dist/checksums-windows.txt`. That zip is for testing; the release uses goreleaser's.
 - CI's `windows` job (`.github/workflows/ci.yml`) runs the Go tests and the page's unit tests on `windows-latest`,
@@ -78,6 +78,7 @@ user's page.
 | `retake-edit` | Renders timeline projects. | This repo, built per platform on native runners (it links prebuilt Skia, so it can't be cross-compiled). | Same as retake. |
 | `herdr` | Where agents open by default: a workspace per video you can watch and type into. | Pinned upstream release binaries with their SHA-256 (`scripts/bundle-deps.sh`; on Windows `scripts/build-windows.ps1`): v0.8.2 on every platform, the version Retake's herdr support was built and tested against. Windows: `herdr-windows-x86_64.zip`, which is `herdr.exe` plus the `conpty\` folder (Microsoft's ConPTY: `conpty.dll`, `OpenConsole.exe`, `herdr-conpty.json`) that herdr loads from beside itself, so it ships whole, in that layout. | Apache-2.0: ship its LICENSE (there's no NOTICE file upstream). The ConPTY files are MIT: their LICENSE and NOTICE go in `licenses/`. |
 | `ffmpeg`, `ffprobe` | Probing, thumbnails, stills, renders. | Linux: our own static build from pinned sources (below). macOS, Windows: static builds, pinned with SHA-256. | GPL-3.0-or-later as built (with x264). |
+| `whisper-cli` | Optional local transcription runtime; models still download on first use. | whisper.cpp 1.9.5 built natively with portable CPU flags and no bundled model. | MIT. |
 | `retake-bundle.json`, `licenses/`, `THIRD_PARTY_NOTICES.md` | The bundle's manifest (what's inside, versions, sources) and every license text. | Written by `scripts/bundle-deps.sh`. | |
 
 **Bundle ffmpeg; don't fetch it on first run.** Fetching saves 40–70 MB of download but adds a network step, a

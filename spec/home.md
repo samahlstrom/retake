@@ -105,6 +105,7 @@ and API (spec/api.md, spec/notes.md, spec/bridge.md) under `/p/<name>/`, for its
 | GET/HEAD | `/`, `/index.html` | watch | The home screen (the page's `home.html`). |
 | GET | `/api/home` | watch | The projects (below). |
 | GET | `/api/ping` | any role | `{"ok": true}` |
+| POST | `/api/projects` | local owner | Makes a new local project, optionally importing one selected video. |
 | GET/HEAD | `/assets/*` and other page files | watch | The page's static files, as at `/p/<name>/`. |
 | GET | `/s/<token>` | nothing | A share link: the whole home, or one video's page for a video's link (below). |
 | GET | `/api/videos/<name>/trash` | owner | What Move to Trash would move ("A video's ⋯"). |
@@ -116,6 +117,35 @@ and API (spec/api.md, spec/notes.md, spec/bridge.md) under `/p/<name>/`, for its
 | GET | `/favicon.ico` | nothing | 204 |
 
 Anything else is 404 `{"error":"not found"}`; an unknown project is 404 `{"error":"no such project"}`.
+
+### New local project
+
+The local Home always offers **New project** and **Open existing project** to its local owner, before or after videos
+exist. Open existing project opens the existing linked-folders flow; it never grants a shared viewer, a tunnel request,
+or a project token access to local files.
+
+`POST /api/projects` is local-owner-only: a shared host, bearer token, cookie, or non-owner gets 403. Its request is a
+streaming `multipart/form-data` body with `root` (the opaque `id` from `GET /api/library`), `name` (the new folder's
+display name, 1–200 characters), and an optional `video` file selected by the person. `root` is required, including
+for the implicit initial link (`original`). The server resolves it against the current library transaction and creates
+only at that linked root. It never accepts a filesystem path, follows an unlinked folder, or revives a removed link.
+An offline or removed id gets 409; an unknown id gets 400. The response contains only the project name and relative
+review URL, never the root path or id.
+
+- Without `video`, Retake creates `<root>/<slug>/edit/timeline.json` as an empty native project and returns 201
+  `{name, url}`. It needs no agent and does not render until a person or agent adds a valid timeline.
+- With `video`, Retake first writes only under a new temporary folder inside the selected root. It probes the streamed
+  upload with its bundled ffprobe. A browser-safe H.264 `yuv420p` video with AAC audio is moved to
+  `<root>/<slug>/v1/<slug>_v1.mp4`; all other readable videos are converted there with bundled ffmpeg to H.264
+  `yuv420p`, AAC when audio exists, fast-start MP4. A video without audio stays playable without an invented audio
+  stream. The original selected file is never changed.
+- The copy/convert streams from disk: it does not buffer the video in memory. Cancellation, an unreadable video,
+  invalid multipart input, a name collision, or ffmpeg failure removes the temporary folder and leaves no project.
+  The response is 400 with one plain error (409 for an existing folder); successful response is 201 `{name, url}`.
+
+The page shows upload/copy/convert progress and an inline failure with Retry. It only navigates to the returned project
+after success. A blank project has its native timeline and a built-in Scripts-compatible v0 brief, so its first in-app
+action is to write the brief or open its chat; no agent or render starts until the person chooses one.
 
 **Who a request is.** As spec/team.md, with the folder in place of the project: local requests (`127.0.0.1:<port>`
 or `localhost:<port>`, no proxy header) without a token are the `owner`, with no accounts. A request through a shared

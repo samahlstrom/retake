@@ -296,8 +296,12 @@ func (f *Folder) settingsView(ls *LocalSettings) (SettingsView, error) {
 				continue
 			}
 			seen[e.ID] = true
+			on := slices.Contains(c.Extensions.Enabled, e.ID)
+			if e.ID == "scripts" && !c.Extensions.EnabledSet && f.opts.Exts.Get(e.ID) != nil {
+				on = true
+			}
 			v.Extensions = append(v.Extensions, SettingsExt{ID: e.ID, Name: extName(e), Description: e.Description,
-				On: slices.Contains(c.Extensions.Enabled, e.ID), Loaded: f.opts.Exts.Get(e.ID) != nil})
+				On: on, Loaded: f.opts.Exts.Get(e.ID) != nil})
 		}
 	}
 	return v, nil
@@ -384,7 +388,8 @@ func (f *Folder) changeSettings(w http.ResponseWriter, r *http.Request, ls *Loca
 		if e.Where == ext.WhereProject {
 			pin = e.Hash
 		}
-		if err := config.SetExtension(ls.ConfigPath, id, c.Extensions[id], pin); err != nil {
+		defaultOn := id == "scripts" && !cur.Extensions.EnabledSet && f.opts.Exts.Get(id) != nil
+		if err := config.SetExtensionDefault(ls.ConfigPath, id, c.Extensions[id], pin, defaultOn); err != nil {
 			return err
 		}
 	}

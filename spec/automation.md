@@ -654,7 +654,10 @@ because a comment on the one before asked for changes.
   promotes the task's final draft to its target `v<N>`: same media, new label, and the old draft label keeps resolving
   to it; when `v<N>` existed, its earlier render becomes the draft `v<N>-draft<K>`. The family lists each version,
   plus, per version number, the newest draft and the newest complete draft while they're ahead of the newest version
-  or their task is unfinished, so following latest keeps showing the agent's work live. Older drafts aren't listed but stay playable by URL, and
+  or their task is unfinished, so a reviewer who explicitly opens that version can watch its updates live.
+  A new version number never replaces the version being reviewed automatically, including after Send and after
+  a reconnect. The original version keeps its comments, progress and unanswered questions visible. When the target
+  render and batch are complete, with no unanswered questions, **View vN** offers an explicit switch. Older drafts aren't listed but stay playable by URL, and
   takes recorded on them still save.
 - **The live version.** During a batch its target `v<N>` is live: people see it as `v<N>`, updated in place as the
   agent finishes each note, and never the word "draft". The drafts are its revisions, internal (their labels stay in

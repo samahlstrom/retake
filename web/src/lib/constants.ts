@@ -25,7 +25,7 @@ export const TL_PAD = 8;
 /** Keepalive requests on page exit are limited in size; legacy keeps each one under this many bytes. */
 export const KEEPALIVE_MAX = 60000;
 
-export const MSG_SAVED = 'Saved. Press R to start a new take.';
+export const MSG_SAVED = 'Saved. Start a new take when you are ready.';
 export const MSG_SAVED_TOUCH = 'Saved. Tap ● to start a new take.';
 export const MSG_SAVE_FAILED = 'Could not save. Is the review server still running?';
 /** A viewer's share link (spec/team.md): watching only. */

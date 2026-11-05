@@ -90,7 +90,7 @@ for entry in $PLATFORMS; do
   done
 
   need="$PROJECT$exe retake-edit$exe ffmpeg$exe ffprobe$exe retake-bundle.json"
-  need="$need herdr$exe"
+  need="$need herdr$exe whisper-cli$exe"
   missing=""
   for f in $need; do [ -f "$stage/bin/$f" ] || missing="$missing $f"; done
   if [ -n "$missing" ]; then
@@ -120,7 +120,7 @@ for entry in $PLATFORMS; do
     fs.writeFileSync(process.argv[1] + "/package.json", JSON.stringify(p, null, 2) + "\n");
     fs.writeFileSync(process.argv[1] + "/README.md",
       `# ${PKG}\n\nThe ${label} programs of [${NAME}](https://www.npmjs.com/package/${NAME}): retake, retake-edit, ` +
-      `ffmpeg, ffprobe and herdr. npm installs it for you on this platform; install ` +
+      `ffmpeg, ffprobe, herdr and whisper-cli. npm installs it for you on this platform; install ` +
       `${NAME} instead:\n\n    npm i -g ${NAME}\n\nRetake is Apache-2.0. ffmpeg is GPL-3.0-or-later; its license ` +
       `and where its source is are in licenses/, every other component in THIRD_PARTY_NOTICES.md.\n`);
   ' "$stage"

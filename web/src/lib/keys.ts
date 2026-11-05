@@ -22,37 +22,89 @@ export type Action =
   | 'notes'
   | 'eraser'
   | 'next'
-  | 'help';
+  | 'help'
+  | 'slower'
+  | 'faster'
+  | 'stop';
 
-const PLAIN: Record<string, Action> = {
-  ' ': 'togglePlay',
-  k: 'togglePlay',
-  r: 'toggleRec',
-  ArrowLeft: 'back',
-  ArrowRight: 'forward',
-  z: 'undo',
-  ',': 'framePrev',
-  '.': 'frameNext',
-  Escape: 'escape',
-  // C: the comparison version at the same moment, and back (spec/bridge.md, "The page"). Its comments, markers and
-  // drawings come with it (spec/notes.md, "Comments belong to their version").
-  c: 'flip',
-  '1': 'color1',
-  '2': 'color2',
-  '3': 'color3',
-  '4': 'color4',
-  f: 'fullscreen',
-  n: 'notes',
-  e: 'eraser',
-  // The next video to review, in a home (spec/home.md). Shift+. on a US keyboard: its own character, so it never
-  // reaches '.' (a frame step), and N stays the notes.
-  '>': 'next',
-  // The keys sheet (Shift+/ on a US keyboard).
-  '?': 'help',
-};
+export type ShortcutAction = Exclude<Action, 'save' | 'escape'>;
+export type PlayerShortcuts = Record<ShortcutAction, string>;
 
-/** Keys that do nothing on auto-repeat (holding R must not toggle recording on and off). */
-const NO_REPEAT = 'kzrfcne>? ';
+/** The editable actions keep the legacy defaults. Space and Escape remain safe fixed aliases. */
+export const SHORTCUT_ACTIONS: readonly { action: ShortcutAction; label: string; defaultKey: string }[] = [
+  { action: 'toggleRec', label: 'Record your voice', defaultKey: 'R' },
+  { action: 'togglePlay', label: 'Play or pause', defaultKey: 'K' },
+  { action: 'back', label: 'Back 5 seconds', defaultKey: 'ArrowLeft' },
+  { action: 'forward', label: 'Forward 5 seconds', defaultKey: 'ArrowRight' },
+  { action: 'framePrev', label: 'One frame back', defaultKey: ',' },
+  { action: 'frameNext', label: 'One frame forward', defaultKey: '.' },
+  { action: 'color1', label: 'Red pen', defaultKey: '1' },
+  { action: 'color2', label: 'Yellow pen', defaultKey: '2' },
+  { action: 'color3', label: 'Green pen', defaultKey: '3' },
+  { action: 'color4', label: 'White pen', defaultKey: '4' },
+  { action: 'eraser', label: 'Eraser', defaultKey: 'E' },
+  { action: 'undo', label: 'Undo', defaultKey: 'Z' },
+  { action: 'flip', label: 'Compare versions', defaultKey: 'C' },
+  { action: 'notes', label: 'Show or hide comments', defaultKey: 'N' },
+  { action: 'fullscreen', label: 'Full screen', defaultKey: 'F' },
+  { action: 'next', label: 'Next video', defaultKey: '>' },
+  { action: 'help', label: 'Keyboard shortcuts', defaultKey: '?' },
+  { action: 'slower', label: 'Slower playback', defaultKey: 'A' },
+  { action: 'faster', label: 'Faster playback', defaultKey: 'D' },
+  { action: 'stop', label: 'Stop playback', defaultKey: 'S' },
+];
+
+export const DEFAULT_SHORTCUTS: PlayerShortcuts = Object.fromEntries(
+  SHORTCUT_ACTIONS.map(({ action, defaultKey }) => [action, defaultKey]),
+) as PlayerShortcuts;
+export const SHORTCUTS_KEY = 'retake.shortcuts';
+const FIXED: Record<string, Action> = Object.assign(Object.create(null), { ' ': 'togglePlay', Escape: 'escape' });
+const ENTRY_KEYS = new Set(['Enter', 'Escape', 'Tab']);
+const SPECIAL_KEYS: Record<string, string> = { '←': 'ArrowLeft', '→': 'ArrowRight', Space: ' ' };
+
+const canonicalKey = (key: string): string => SPECIAL_KEYS[key] ?? key;
+const foldedKey = (key: string): string => (key.length === 1 ? key.toLowerCase() : key);
+const fixedAction = (key: string): Action | null => (Object.hasOwn(FIXED, key) ? FIXED[key]! : null);
+
+/** Stored preferences and input changes use this same validation, so no browser preference can shadow a command. */
+export function validateShortcuts(value: unknown): { shortcuts: PlayerShortcuts } | { error: string } {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return { error: 'Invalid keyboard shortcuts.' };
+  const input = value as Record<string, unknown>;
+  const actions = Object.keys(DEFAULT_SHORTCUTS) as ShortcutAction[];
+  if (Object.keys(input).some((key) => !actions.includes(key as ShortcutAction)))
+    return { error: 'Invalid keyboard shortcuts.' };
+  const out = {} as PlayerShortcuts;
+  const used = new Set<string>();
+  for (const action of actions) {
+    const raw = input[action];
+    if (typeof raw !== 'string') return { error: 'Invalid keyboard shortcuts.' };
+    const key = canonicalKey(raw);
+    if (!key || (key.length !== 1 && key !== 'ArrowLeft' && key !== 'ArrowRight') || ENTRY_KEYS.has(key))
+      return { error: 'Use one player key.' };
+    const folded = foldedKey(key);
+    const fixed = fixedAction(key) ?? fixedAction(folded);
+    if ((fixed && fixed !== action) || used.has(folded)) return { error: `${shortcutLabel(key)} is already in use.` };
+    used.add(folded);
+    out[action] = key;
+  }
+  return { shortcuts: out };
+}
+
+/** Browser preferences are optional: corrupt, unknown or colliding stored values return all defaults. */
+export function playerShortcuts(storage: Pick<Storage, 'getItem'> | null = keyStorage()): PlayerShortcuts {
+  try {
+    const raw = storage?.getItem(SHORTCUTS_KEY);
+    if (!raw) return { ...DEFAULT_SHORTCUTS };
+    const parsed = validateShortcuts(JSON.parse(raw));
+    return 'shortcuts' in parsed ? parsed.shortcuts : { ...DEFAULT_SHORTCUTS };
+  } catch {
+    return { ...DEFAULT_SHORTCUTS };
+  }
+}
+
+export function shortcutLabel(key: string): string {
+  return key === ' ' ? 'Space' : key === 'ArrowLeft' ? '←' : key === 'ArrowRight' ? '→' : key.toUpperCase();
+}
 
 export interface KeyLike {
   key: string;
@@ -70,39 +122,53 @@ export interface KeyResult {
 }
 
 /** Ctrl/Cmd+S saves and Ctrl/Cmd+Z undoes; any other modifier combination is left alone. */
-export function keyAction(e: KeyLike): KeyResult | null {
+export function keyAction(e: KeyLike, shortcuts: PlayerShortcuts = DEFAULT_SHORTCUTS): KeyResult | null {
   const k = e.key.length === 1 ? e.key.toLowerCase() : e.key,
     mod = e.ctrlKey || e.metaKey;
   if (mod && k === 's') return { act: 'save', stop: false };
   if (mod && k === 'z') return { act: 'undo', stop: false };
   if (mod || e.altKey) return null;
-  const act = Object.hasOwn(PLAIN, k) ? PLAIN[k] : null;
+  for (const action of Object.keys(shortcuts) as ShortcutAction[]) {
+    if (k === foldedKey(shortcuts[action])) {
+      const repeated = [
+        'toggleRec',
+        'togglePlay',
+        'undo',
+        'flip',
+        'fullscreen',
+        'notes',
+        'eraser',
+        'next',
+        'help',
+      ].includes(action);
+      return { act: e.repeat && repeated ? null : action, stop: true };
+    }
+  }
+  const act = fixedAction(k);
   if (!act) return null;
-  return { act: e.repeat && NO_REPEAT.includes(k) ? null : act, stop: true };
+  return { act: e.repeat && act === 'togglePlay' ? null : act, stop: true };
 }
 
 /** The keys sheet (? or its button): every key of the player, in the order people need them. */
 export const KEY_SHEET: readonly { keys: string[]; what: string }[] = [
-  { keys: ['R'], what: 'Record your voice (with what you draw). R again stops' },
+  ...SHORTCUT_ACTIONS.map(({ action, label }) => ({ keys: [shortcutLabel(DEFAULT_SHORTCUTS[action])], what: label })),
   { keys: ['Enter'], what: 'Save a typed comment (Ctrl+Enter also sends it)' },
   { keys: ['Esc'], what: 'Cancel the comment you were writing or drawing' },
-  { keys: ['Space'], what: 'Play or pause' },
-  { keys: ['←', '→'], what: 'Back or forward 5 seconds' },
-  { keys: [',', '.'], what: 'One frame back or forward' },
-  { keys: ['1', '2', '3', '4'], what: 'Pen color' },
-  { keys: ['E'], what: 'Eraser' },
-  { keys: ['Z'], what: 'Undo the last line' },
-  { keys: ['C'], what: 'Flip to the other version and back' },
-  { keys: ['N'], what: 'Show or hide comments' },
-  { keys: ['>'], what: 'Next video to review' },
-  { keys: ['F'], what: 'Full screen' },
-  { keys: ['?'], what: 'These keys' },
+  { keys: ['Space'], what: 'Play or pause (also K by default)' },
 ];
 
 /** localStorage key: the keyboard hint has been seen (it shows once per browser). */
 export const HINT_KEY = 'retake.hint';
 
 type HintStorage = Pick<Storage, 'getItem' | 'setItem'> | null;
+type KeyStorage = Pick<Storage, 'getItem'> | null;
+const keyStorage = (): KeyStorage => {
+  try {
+    return typeof localStorage === 'undefined' ? null : localStorage;
+  } catch {
+    return null;
+  }
+};
 const hintStorage = (): HintStorage => {
   try {
     return typeof localStorage === 'undefined' ? null : localStorage;

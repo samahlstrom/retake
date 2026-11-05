@@ -4,8 +4,8 @@
 //   double-click on its words; the field is where the words were, as tall, and no card moves; keys typed in it never
 //   reach the player; Enter saves, Shift+Enter is a new line, Esc changes nothing; the final pass of the take (Send,
 //   which saves it here) and a reload keep the new words;
-// - a phone: a tap on a comment's words is compose mode with its words in the comment box, which sits on the keyboard
-//   (lib/keyboard.ts simulates it) with the rest hidden; Return saves; ⋯ → Edit then Cancel changes nothing.
+// - a phone: a tap on a comment's words seeks and pauses without opening compose mode; ⋯ → Edit opens the comment box
+//   on the keyboard (lib/keyboard.ts simulates it), where Return saves and Cancel changes nothing.
 import { expect, type Page } from '@playwright/test';
 import { linkSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -189,7 +189,7 @@ const hidden = (page: Page, sel: string) =>
     return s.visibility === 'hidden' && s.opacity === '0';
   });
 
-/** A phone: a tap on a comment's words edits it in the comment box, on the keyboard; ⋯ → Edit and Cancel. */
+/** A phone: a text tap seeks without composing; ⋯ → Edit opens the comment box on the keyboard, and Cancel works. */
 export async function phoneEdit(page: Page, url: string, where: string, shot: (what: string) => Promise<void>): Promise<void> {
   const [hold, loud] = await addComments(url, [
     [12, `Hold the logo a beat longer (${where})`],
@@ -202,9 +202,21 @@ export async function phoneEdit(page: Page, url: string, where: string, shot: (w
   const inner = await page.evaluate(() => innerHeight);
   const box = page.locator(COMMENT_BOX);
 
-  // A tap on its words: compose mode, its words in the box, which sits on the keyboard; the rest is hidden.
+  // A tap on its words seeks and pauses. It neither opens compose mode nor puts text in the bottom composer.
+  await page.locator('video').evaluate((v: HTMLVideoElement) => { v.currentTime = 2; return v.play(); });
   await card(hold!).locator('.text').tap();
-  await expect.poll(() => viewport(page).then((v) => v.compose), { message: `${where}: compose mode` }).toBe(true);
+  await expect.poll(() => viewport(page).then((v) => v.compose), { message: `${where}: text tap does not compose` }).toBe(false);
+  await expect(box).not.toBeFocused();
+  await expect(box).toHaveValue('');
+  await expect.poll(() => page.locator('video').evaluate((v: HTMLVideoElement) => ({ paused: v.paused, t: v.currentTime })))
+    .toMatchObject({ paused: true, t: expect.closeTo(12, 1) });
+  for (const sel of FADES) await expect.poll(() => hidden(page, sel), { message: `${where}: ${sel} stays visible` }).toBe(false);
+  await shot('phone-text-seek');
+
+  // ⋯ → Edit is the explicit way to compose: its words go in the box, which sits on the keyboard; the rest is hidden.
+  await card(hold!).locator('[data-part~="more"]').tap();
+  await page.getByRole('menuitem', { name: 'Edit' }).tap();
+  await expect.poll(() => viewport(page).then((v) => v.compose), { message: `${where}: menu Edit composes` }).toBe(true);
   await expect(box).toBeFocused();
   await expect(box).toHaveValue(`Hold the logo a beat longer (${where})`);
   await expect(page.locator(`${COMPOSER} .under`)).toContainText('Editing 0:12');

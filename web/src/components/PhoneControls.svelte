@@ -21,6 +21,7 @@
   import PenButton from './PenButton.svelte';
   import UndoButton from './UndoButton.svelte';
   import PhoneRecord from './PhoneRecord.svelte';
+  import KeysSheet from './KeysSheet.svelte';
   import Hint from './Hint.svelte';
   import { raiseKeyboard } from '../lib/viewport.svelte';
 
@@ -96,8 +97,19 @@
       {#if !review.kindShown}
         <PlayButton paused={review.paused} onclick={review.togglePlay} />
         {@render time()}
+        <select
+          class="speed"
+          aria-label="Playback speed"
+          value={review.playbackRate}
+          onchange={(event) => review.setPlaybackRate(Number(event.currentTarget.value))}
+        >
+          {#each [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 2.75, 3] as rate (rate)}
+            <option value={rate}>{rate}×</option>
+          {/each}
+        </select>
       {/if}
       <VersionMenu {review} side="bottom" />
+      <KeysSheet {review} />
       <span class="grow"></span>
       {#if review.canRecord && !review.kindShown}
         <PenButton {review} side="bottom" />
@@ -109,6 +121,7 @@
     <!-- The comments above say how to comment (their empty line, the box's placeholder), so the hint is only for a
          viewer ("View only") or where there are no comments to show. -->
     {#if !review.kindShown && (!review.canRecord || !review.sidebar.panel)}<Hint
+        {review}
         gone={review.hintGone}
         touch
         inline
@@ -144,8 +157,19 @@
       <PlayButton paused={review.paused} onclick={review.togglePlay} />
       {@render time()}
       <Timeline {review} />
+      <select
+        class="speed"
+        aria-label="Playback speed"
+        value={review.playbackRate}
+        onchange={(event) => review.setPlaybackRate(Number(event.currentTarget.value))}
+      >
+        {#each [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 2.75, 3] as rate (rate)}
+          <option value={rate}>{rate}×</option>
+        {/each}
+      </select>
     {/if}
     <VersionMenu {review} />
+    <KeysSheet {review} />
     {#if review.canRecord}<SendNotice {review} />{/if}
   </div>
 {/if}

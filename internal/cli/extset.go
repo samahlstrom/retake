@@ -14,7 +14,10 @@ import (
 
 // localExts is the extensions of retake open, share, connect and worker: --ext's folders and RETAKE_EXT_PATH's, the
 // opened folder's own (pinned), the user's and the bundled ones, turned on by config.toml's [extensions] (and --ext
-// for its own). Problems are warned about on stderr; they never stop the command.
+// for its own). A folder Home with no extension preference also has the built-in
+// Scripts editor: a blank project it creates must be editable on its first visit.
+// An explicit enabled list, including [], remains the person's choice. Problems
+// are warned about on stderr; they never stop the command.
 func localExts(env Env, cfg config.Config, flagDirs []string, folder string) *ext.Set {
 	user, err := ext.UserDir(env.Getenv)
 	if err != nil {
@@ -25,7 +28,11 @@ func localExts(env Env, cfg config.Config, flagDirs []string, folder string) *ex
 	if folder != "" {
 		src.Project = folder
 	}
-	set, warnings := ext.Resolve(ext.Discover(src), cfg.Extensions.Enabled, cfg.Extensions.Pins)
+	enabled := cfg.Extensions.Enabled
+	if folder != "" && !cfg.Extensions.EnabledSet {
+		enabled = []string{"scripts"}
+	}
+	set, warnings := ext.Resolve(ext.Discover(src), enabled, cfg.Extensions.Pins)
 	for _, w := range warnings {
 		_, _ = fmt.Fprintf(env.Stderr, "retake: %s\n", w)
 	}

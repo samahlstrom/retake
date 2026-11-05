@@ -47,8 +47,8 @@ case "$prefix" in /*) ;; *) prefix="$PWD/$prefix" ;; esac
 need() { command -v "$1" >/dev/null 2>&1 || die "$1 is required ($2)"; }
 need cmake "install it with your package manager, version 3.18 or newer"
 need tar "to unpack the source"
-command -v c++ >/dev/null 2>&1 || command -v g++ >/dev/null 2>&1 || command -v clang++ >/dev/null 2>&1 ||
-  die "a C++ compiler is required (g++ or clang++)"
+command -v c++ >/dev/null 2>&1 || command -v g++ >/dev/null 2>&1 || command -v clang++ >/dev/null 2>&1 || command -v cl >/dev/null 2>&1 ||
+  die "a C++ compiler is required (g++, clang++, or MSVC cl)"
 if command -v curl >/dev/null 2>&1; then fetch() { curl -fsSL --retry 3 -o "$2" "$1"; }
 elif command -v wget >/dev/null 2>&1; then fetch() { wget -q -O "$2" "$1"; }
 else die "curl or wget is required to download the source"; fi
@@ -70,7 +70,10 @@ case "$mode" in
   auto) if [ -n "$nvcc" ]; then mode=cuda; else mode=cpu; fi ;;
 esac
 cmake_args=(-DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DWHISPER_BUILD_TESTS=OFF
-  -DWHISPER_BUILD_SERVER=OFF -DWHISPER_SDL2=OFF -DWHISPER_CURL=OFF -DGGML_NATIVE=ON)
+	-DWHISPER_BUILD_SERVER=OFF -DWHISPER_SDL2=OFF -DWHISPER_CURL=OFF -DGGML_NATIVE=OFF
+	-DGGML_SSE42=OFF -DGGML_AVX=OFF -DGGML_AVX2=OFF -DGGML_AVX_VNNI=OFF -DGGML_BMI2=OFF
+	-DGGML_AVX512=OFF -DGGML_FMA=OFF -DGGML_F16C=OFF -DGGML_METAL=OFF -DGGML_OPENMP=OFF
+	-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded)
 if [ "$mode" = cuda ]; then
   say "CUDA build with $nvcc"
   cmake_args+=(-DGGML_CUDA=ON "-DCMAKE_CUDA_COMPILER=$nvcc")
@@ -102,14 +105,19 @@ cmake -S "$src" -B "$src/build" "${cmake_args[@]}" >"$src/configure.log" 2>&1 ||
   { tail -n 30 "$src/configure.log" >&2; die "cmake configure failed (full log: $src/configure.log)"; }
 cmake --build "$src/build" --config Release --target whisper-cli -j "$jobs" >"$src/build.log" 2>&1 ||
   { tail -n 30 "$src/build.log" >&2; die "build failed (full log: $src/build.log)"; }
-bin="$src/build/bin/whisper-cli"
-[ -x "$bin" ] || die "the build finished but $bin is missing"
+bin=""
+for candidate in "$src/build/bin/whisper-cli" "$src/build/bin/whisper-cli.exe" "$src/build/bin/Release/whisper-cli.exe"; do
+  [ -x "$candidate" ] && { bin="$candidate"; break; }
+done
+[ -n "$bin" ] || die "the build finished but whisper-cli is missing"
 "$bin" --help >/dev/null 2>&1 || die "the new whisper-cli doesn't run ($bin --help failed)"
 
 # --- install: replace the binary atomically, then record what was built
 mkdir -p "$prefix/bin"
-cp "$bin" "$prefix/bin/.whisper-cli.new"
-mv -f "$prefix/bin/.whisper-cli.new" "$prefix/bin/whisper-cli"
+suffix=""
+case "$bin" in *.exe) suffix=".exe" ;; esac
+cp "$bin" "$prefix/bin/.whisper-cli.new$suffix"
+mv -f "$prefix/bin/.whisper-cli.new$suffix" "$prefix/bin/whisper-cli$suffix"
 printf 'whisper.cpp %s\nbackend %s\n' "$TAG" "$mode" >"$prefix/BUILD"
 if [ "$keep" = 0 ]; then rm -rf "$src"; fi
 say "installed $prefix/bin/whisper-cli ($mode)"

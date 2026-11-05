@@ -1,13 +1,21 @@
 <script lang="ts">
   // The four pen colors (keys 1–4) and the eraser (E). The ring marks the current tool.
   import { COLORS, COLOR_KEYS, type PenColor } from '../lib/constants';
+  import type { ShortcutAction } from '../lib/keys';
 
   let {
     color,
     onpick,
     eraser = false,
     onerase,
-  }: { color: PenColor; onpick: (c: PenColor) => void; eraser?: boolean; onerase?: () => void } = $props();
+    keyOf,
+  }: {
+    color: PenColor;
+    onpick: (c: PenColor) => void;
+    eraser?: boolean;
+    onerase?: () => void;
+    keyOf: (action: ShortcutAction) => string;
+  } = $props();
 </script>
 
 <div id="colors" data-part="pens">
@@ -17,7 +25,7 @@
       data-part="pen"
       class:on={c === color && !eraser}
       data-color={c}
-      title="{c} ({i + 1})"
+      title="{c} ({keyOf(`color${i + 1}` as ShortcutAction)})"
       aria-label="{c} pen"
       style:background={COLORS[c]}
       onclick={() => onpick(c)}
@@ -29,7 +37,7 @@
       data-part="eraser"
       class="sw er"
       class:on={eraser}
-      title="eraser (E)"
+      title="eraser ({keyOf('eraser')})"
       aria-label="eraser"
       aria-pressed={eraser}
       onclick={onerase}

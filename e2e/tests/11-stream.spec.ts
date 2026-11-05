@@ -1,10 +1,9 @@
 // Streaming versions on demand (spec/bridge.md, "Streaming"): v1 rendered from the editor's demo, a patch on the pop,
 // then `retake push --render --draft` registers v2 at once, pending, with a poster, and renders nothing. The page sees
-// it ready (chip and toast); ] shows the poster at once and starts watching, so the server renders it, slowed down by
+// it ready (chip and toast); explicitly choosing it shows the poster at once and starts watching, so the server renders it, slowed down by
 // the renderer's test hook (RETAKE_EDIT_TEST_UNIT_DELAY_MS: the first three units come at ~2 s, the next two at ~11 s
 // and the last at ~15 s). v2 plays from 0 while its playlist has no ENDLIST, waits at the end of what's rendered,
-// and C flips to v1 at the same moment: following the latest waits while comparing, so v2 growing never pulls the
-// video back, and C returns to v2. Closing the page stops the render, keeping what it published; a server started
+// and C flips to v1 at the same moment: v2 growing never pulls the reviewer back, and C returns to v2. Closing the page stops the render, keeping what it published; a server started
 // again (without the slow-down) resumes from the cache when the page shows v2 again, and it completes: ENDLIST, the
 // right duration, no chip, and C maps through the time map. Needs a built retake-edit ($RETAKE_EDIT,
 // editor/target/release, or $PATH); it skips without one.
@@ -91,6 +90,12 @@ const units = (): number => Math.max(0, ...[...playlist().matchAll(/^# unit (\d+
 const v2 = () => window.__review.info.versions?.find((v) => v.label === 'v2');
 const state = async () => (await page.evaluate(v2))?.stream?.state;
 
+async function chooseVersion(label: string): Promise<void> {
+  await page.locator('#verBtn').click();
+  await page.locator(`[data-part~="version-list"] [data-version="${label}"]`).click();
+  await ui.waitFor(() => window.__review.view.shown === label && !window.__review.view.switching, 20_000);
+}
+
 test.beforeAll(async ({ browser }) => {
   test.setTimeout(150_000);
   const edit = join(DIR, 'edit');
@@ -135,10 +140,12 @@ test('a pushed edit starts rendering automatically while feedback stays on its o
 
 });
 
-test('stopping feedback follows the edited video and plays while its playlist grows', async () => {
+test('stopping feedback stays on v1 until v2 is chosen, then plays while its playlist grows', async () => {
   const t0 = Date.now();
   await ui.key('r');
-  await ui.waitFor(() => window.__review.view.shown === 'v2' && !window.__review.view.switching, 20000);
+  await ui.waitFor(() => !window.__review.seg, 5000);
+  expect((await ui.state()).shown).toBe('v1');
+  await chooseVersion('v2');
   const switched = (Date.now() - t0) / 1000;
   expect(await ui.state()).toMatchObject({ base: 'v2', shown: 'v2', flipped: false });
   expect(await page.evaluate(() => document.querySelector('video')!.getAttribute('poster'))).toContain('demo_v2.poster.jpg');
@@ -147,7 +154,7 @@ test('stopping feedback follows the edited video and plays while its playlist gr
   await ui.waitFor(() => (document.querySelector('video')?.readyState ?? 0) >= 2
     && !document.querySelector('video')!.paused, 20_000);
   const firstFrame = (Date.now() - t0) / 1000;
-  console.log(`edit followed in ${switched.toFixed(2)} s; playing ${firstFrame.toFixed(1)} s after feedback stopped`);
+  console.log(`edit chosen in ${switched.toFixed(2)} s; playing ${firstFrame.toFixed(1)} s after feedback stopped`);
   expect(renders()).toBe(1);
   const start = (await ui.video()).t;
   expect(start).toBeLessThan(0.5); // from the start, not the live edge
@@ -181,7 +188,7 @@ test('C flips to v1 at the same moment while v2 renders, stays there as v2 grows
   const flipped = await ui.state();
   expect(flipped).toMatchObject({ shown: 'v1', base: 'v2', flipped: true });
   expect(Math.abs(flipped.t - before.t)).toBeLessThan(0.05);
-  // v2's next units come in while comparing (units 4 and 5 at ~11 s): following the latest waits, so nothing pulls
+  // v2's next units come in while comparing (units 4 and 5 at ~11 s): the selected comparison stays put, so nothing pulls
   // the video back to v2. Unit 6 would complete v2, which the next test must not see yet: past 5, don't wait.
   const done = () => page.evaluate(() => window.__review.info.versions?.find((v) => v.label === 'v2')?.stream?.done ?? 0);
   const d0 = await done();
@@ -224,11 +231,11 @@ test('opened again (another server), it resumes from the cache and completes', a
   await openPage(browser);
   const published = units();
   const t0 = Date.now();
-  await ui.waitFor(() => window.__review.view.shown === 'v2', 20000);
+  await chooseVersion('v2');
   await ui.key(' ');
   await ui.waitFor(() => (document.querySelector('video')?.readyState ?? 0) >= 2
     && !document.querySelector('video')!.paused, 20_000);
-  console.log(`resumed after ${published}/6 units: playing ${((Date.now() - t0) / 1000).toFixed(1)} s after ]`);
+  console.log(`resumed after ${published}/6 units: playing ${((Date.now() - t0) / 1000).toFixed(1)} s after choosing v2`);
   await ui.waitFor(() => window.__review.info.versions?.find((v) => v.label === 'v2')?.stream?.state === 'complete', 30_000);
   expect(playlist().trimEnd().endsWith('#EXT-X-ENDLIST')).toBe(true);
   const total = [...playlist().matchAll(/#EXTINF:([\d.]+),/g)].reduce((s, m) => s + Number(m[1]), 0);
@@ -267,7 +274,7 @@ test('a home project streams on open and returning to All videos stops it', asyn
   expect(p.out).toContain('pushed v3 from v2');
   server = await serve(true, true);
   await openPage(browser, 'p/stream/');
-  await ui.waitFor(() => window.__review.view.shown === 'v3' && !window.__review.view.switching, 20000);
+  await chooseVersion('v3');
   await ui.key(' ');
   await ui.waitFor(() => (document.querySelector('video')?.readyState ?? 0) >= 2
     && !document.querySelector('video')!.paused, 20_000);

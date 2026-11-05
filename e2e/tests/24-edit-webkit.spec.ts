@@ -1,7 +1,7 @@
 // Editing a comment's words on a phone in WebKit, iPhone Safari's engine (the `webkit` project: RETAKE_E2E_WEBKIT,
-// lib/webkit.ts), on the iPhone 15 (spec/notes.md, "Editing a comment"): a tap on a comment's words is compose mode
-// with its words in the comment box, which sits on the simulated keyboard (lib/edit.ts, lib/keyboard.ts); Return
-// saves; ⋯ → Edit then Cancel changes nothing; a reload keeps the words. Screenshots go to
+// lib/webkit.ts), on the iPhone 15 (spec/notes.md, "Editing a comment"): a tap on a comment's words seeks, then
+// ⋯ → Edit puts its words in the comment box on the simulated keyboard (lib/edit.ts, lib/keyboard.ts); Return saves;
+// Cancel changes nothing; a reload keeps the words. Screenshots go to
 // .retake-work/edit-shots/webkit-<what>.png. Under Chromium the file skips (24-edit.spec.ts is Chromium's).
 import { devices, expect, test } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
@@ -25,7 +25,7 @@ test.afterAll(async () => {
   expect(errors).toEqual([]);
 });
 
-test('iPhone 15: the comment box is the field, on the keyboard', async ({ browser }) => {
+test('iPhone 15: text seeks; menu Edit opens the comment box on the keyboard', async ({ browser }) => {
   const { defaultBrowserType: _, ...d } = devices['iPhone 15'];
   const context = await browser.newContext(d);
   try {

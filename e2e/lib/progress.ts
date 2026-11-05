@@ -6,7 +6,8 @@
 // only sign is one quiet "The agent is on it · 15 comments" line, with no sweep; that then the comment the agent is
 // on is first in To do with the Working dot, the sweep and its line, while the rest of the batch read quietly; that
 // they move to Done one at a time; that there is no "Agent working on" pill and no light around the video; that the
-// page follows each revision without a reload; and that a Done card's "in v2" plays v2 at that comment's moment.
+// page stays on v1 until it deliberately chooses v2, then follows v2's own revisions without a reload; and that a
+// Done card's "in v2" plays v2 at that comment's moment.
 // Shared by 23-progress.spec.ts (Chromium, computer and phone) and 23-progress-webkit.spec.ts (WebKit, phone).
 import { expect, type Page } from '@playwright/test';
 import { linkSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -151,16 +152,18 @@ export async function progressStory(page: Page, f: Fixture, device: string): Pro
   const keys = async () => (await items.evaluateAll((els) => els.map((e) => e.getAttribute('data-key'))));
   await expect(items).toHaveCount(15, { timeout: 15_000 });
 
-  // Send: one task, and v2 is live at once (its first revision is v1 itself), so the page follows it. The agent
+  // Send: one task and v2 appears at once, but the reviewer stays on v1 until deliberately choosing v2. The agent
   // hasn't marked anything yet (it waits for the `start` gate).
   await page.locator('[data-part~="send"]:visible').first().click();
   await expect
     .poll(async () => (await automation()).tasks.map((t) => `${t.state}:${t.working?.note ?? ''}`), { timeout: 60_000 })
     .toEqual(['running:']);
-  await expect.poll(() => page.evaluate(() => window.__review.view.shown), { timeout: 30_000 }).toMatch(/^v2-draft\d+$/);
+  await expect.poll(() => page.evaluate(() => window.__review.view.shown), { timeout: 30_000 }).toBe('v1');
   const picker = page.locator('[data-part~="version-picker"]:visible').first();
-  await expect(picker).toContainText('v2');
-  await expect(picker).not.toContainText('draft');
+  await expect(picker).toContainText('v1');
+  await picker.click();
+  await page.locator('[data-part~="version-list"] [data-version^="v2"]').click();
+  await expect.poll(() => page.evaluate(() => window.__review.view.shown), { timeout: 30_000 }).toMatch(/^v2-draft\d+$/);
 
   const tabs = page.locator('#side [data-part~="tabs"] [role="tab"]');
   const counts = async () => (await tabs.allTextContents()).slice(0, 2).map((s) => s.replace(/\s+/g, ' ').trim());
@@ -175,7 +178,7 @@ export async function progressStory(page: Page, f: Fixture, device: string): Pro
   };
 
   // Before the first mark: one quiet line at the top, no sweep, every card of the batch quiet ("→ v2", no dot), all
-  // of them under "From v1" on the live v2.
+  // of them under "From v1" on the deliberately chosen v2.
   await expect(onIt).toHaveText('The agent is on it · 15 comments');
   await expect(doing).toHaveCount(0);
   await expect(quiet).toHaveCount(15);
@@ -214,7 +217,7 @@ export async function progressStory(page: Page, f: Fixture, device: string): Pro
   await page.screenshot({ path: join(SHOTS, `working-${device}.png`) });
 
   // One at a time: each gate lets the agent finish one comment; the counts move by one, the next one it's on moves
-  // to the top, and the page follows the new revision of v2 in place.
+  // to the top, and the explicitly chosen v2 follows its own revision in place.
   const shownBefore = await page.evaluate(() => window.__review.view.shown);
   for (const [i, at] of ORDER.entries()) {
     writeFileSync(join(f.gates, `work-${i + 1}`), '');

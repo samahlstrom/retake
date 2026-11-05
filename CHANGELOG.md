@@ -1,8 +1,24 @@
 # Changelog
 
-All notable changes are listed here. Versions follow semver once the first release ships.
+All notable changes are listed here. Versions follow semver.
 
-## Unreleased
+## 0.2.0 — 2026-11-04
+
+### Start and review a project in the app
+- **New project** on Home creates a project in a linked folder. Import a video with its original filename, or start
+  with an editable brief. **Open existing project** opens the linked-folder picker.
+- Video import checks the media and prepares an H.264/AAC MP4 when needed. The source stays unchanged.
+- Playback runs from **0.5× to 3×**. **A** slows down, **D** speeds up and **S** pauses at the current frame.
+  The keyboard-shortcuts panel lets you change player keys, saves them in the browser and offers **Reset defaults**.
+- Click or tap a comment to seek to its timestamp. On a phone, use **⋯ → Edit** to edit its words.
+- Sending comments keeps you on the version you reviewed. Working, Question and Done stay there; **View vN** appears
+  when the new version and its feedback are complete. You can still choose another version from the version menu.
+
+### Ready-to-run dependencies
+- A request starts Herder when its server is not running, waits for it to be ready and keeps existing jobs alive.
+- Full release bundles include `whisper-cli`. Speech models download on first use, as before.
+
+## 0.1.0 — 2026-11-03
 
 ### Install with npm, Homebrew or one line, on every OS
 - `npm i -g retake-cli`, then `retake`: setup opens in the browser. Needs Node 18+. npm downloads only your

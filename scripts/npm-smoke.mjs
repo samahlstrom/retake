@@ -316,11 +316,13 @@ async function main() {
     const pkgDir = dirname(createRequire(join(npmRoot, NAME, 'package.json')).resolve(`${PLATFORM}/package.json`));
     const exe = WIN ? '.exe' : '';
     const bin = (n) => join(pkgDir, 'bin', n + exe);
-    const tools = ['retake', 'retake-edit', 'ffmpeg', 'ffprobe', 'herdr'];
+    const tools = ['retake', 'retake-edit', 'ffmpeg', 'ffprobe', 'herdr', 'whisper-cli'];
     for (const n of tools) check(existsSync(bin(n)), `${PLATFORM} has ${n}${exe}`);
     check(existsSync(join(pkgDir, 'bin', 'retake-bundle.json')), `${PLATFORM} has retake-bundle.json next to retake`);
     r = await run(bin('retake-edit'), ['--version'], { env });
     check(r.code === 0 && /retake-edit/.test(r.out), 'the bundled retake-edit runs', r.out + r.err);
+    r = await run(bin('whisper-cli'), ['--help'], { env });
+    check(r.code === 0 && /usage|options/i.test(r.out + r.err), 'the bundled whisper-cli runs without a model', r.out + r.err);
 
     // 2. ffmpeg: libx264 and zimg, which retake-edit renders with.
     r = await run(bin('ffmpeg'), ['-hide_banner', '-buildconf'], { env });

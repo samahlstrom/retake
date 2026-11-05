@@ -10,9 +10,9 @@ Run it on Windows x64. Two uses:
   prebuilt Skia with MSVC, so it can't be cross-compiled). goreleaser builds the rest of the release's Windows zip on
   Linux (retake.exe, retakew.exe), and scripts/bundle-deps.sh adds herdr, ffmpeg and that retake-edit.exe to it.
 - Without -OutDir (CI's windows job, or by hand) it builds the whole Windows package in one folder and one zip, as the
-  release's, so it can be smoke-tested on Windows. That needs git, Go and node (the versions in mise.toml) and, unless
-  -SkipEditor, Rust with the MSVC toolchain. Downloads are pinned by SHA-256 and kept in a cache folder, so a second
-  run downloads nothing. Nothing downloaded is run here.
+  release's, so it can be smoke-tested on Windows. That needs Git Bash, CMake, git, Go, node and MSVC C++ tools (the
+  versions in mise.toml), and, unless -SkipEditor, Rust. Downloads are pinned by SHA-256 and kept in a cache folder,
+  so a second run downloads nothing. Nothing downloaded is run here.
 
 What the whole package is, in -DistDir (default: <repo>\dist):
 
@@ -22,6 +22,7 @@ What the whole package is, in -DistDir (default: <repo>\dist):
   windows\retake-edit.exe       the timeline renderer (editor\, cargo, MSVC)
   windows\ffmpeg.exe, ffprobe.exe   a static GPL build with libx264 and zimg (gyan.dev's "essentials", via GitHub)
   windows\herdr.exe, windows\conpty\   herdr's Windows build, with the ConPTY files it loads from beside it
+  windows\whisper-cli.exe       portable CPU transcription runtime; models remain first-use downloads
   windows\retake-bundle.json    what's inside (bundle 1, version, tools): retake puts its own folder first on PATH
   windows\licenses\             each tool's license text and ffmpeg's source offer
   windows\README.md, CHANGELOG.md, LICENSE, THIRD_PARTY_NOTICES.md
@@ -32,7 +33,7 @@ Examples:
   pwsh scripts/build-windows.ps1 -OutDir stage         # the release workflow: stage\retake-edit.exe only
   pwsh scripts/build-windows.ps1                       # the whole package; the version from git tags (scripts/version.sh)
   pwsh scripts/build-windows.ps1 -Version 0.4.0
-  pwsh scripts/build-windows.ps1 -SkipEditor -SkipFfmpeg   # just retake.exe and retakew.exe (quick)
+  pwsh scripts/build-windows.ps1 -SkipEditor -SkipFfmpeg -SkipWhisper # just retake.exe and retakew.exe (quick)
 
 .PARAMETER Version
 The version, without a leading v. Default: worked out from the newest vX.Y.Z git tag, as scripts/version.sh does.
@@ -51,7 +52,10 @@ Use web\dist as it is (the page must have been built already) instead of npm ci 
 Leave out retake-edit.exe (no cargo build).
 
 .PARAMETER SkipFfmpeg
-Leave out ffmpeg.exe, ffprobe.exe and herdr.exe (no downloads).
+Leave out ffmpeg.exe, ffprobe.exe and herdr.exe (no ffmpeg or Herdr downloads).
+
+.PARAMETER SkipWhisper
+Leave out whisper-cli.exe (no whisper.cpp source build).
 #>
 [CmdletBinding()]
 param(
@@ -60,7 +64,8 @@ param(
     [string]$DistDir = '',
     [switch]$SkipWeb,
     [switch]$SkipEditor,
-    [switch]$SkipFfmpeg
+    [switch]$SkipFfmpeg,
+    [switch]$SkipWhisper
 )
 
 $ErrorActionPreference = 'Stop'
@@ -88,10 +93,33 @@ $HerdrUrl = "https://github.com/herdrdev/herdr/releases/download/v$HerdrVersion/
 $HerdrSha = '0ab3d0fe1434d55757997542b978c771d642987bb15a7130f4160f0db38821d5'
 $HerdrLicenseUrl = "https://raw.githubusercontent.com/herdrdev/herdr/v$HerdrVersion/LICENSE"
 $HerdrLicenseSha = 'c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4'
+$WhisperVersion = '1.9.5'
+$WhisperLicenseUrl = "https://raw.githubusercontent.com/ggml-org/whisper.cpp/v$WhisperVersion/LICENSE"
+$WhisperLicenseSha = '94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d'
 
 $Root = Split-Path -Parent $PSScriptRoot
 
 function Say([string]$Text) { Write-Host "build-windows: $Text" }
+
+# cargo and whisper.cpp need the MSVC compiler, not only link.exe. GitHub's
+# release job initializes it before this script; this fallback keeps a local
+# whole-package build equivalent.
+function Initialize-Msvc {
+    if (Get-Command cl.exe -ErrorAction SilentlyContinue) { return }
+    $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+    if (-not (Test-Path -LiteralPath $vswhere)) { throw 'MSVC is required (Visual Studio Build Tools with C++ workload)' }
+    $install = (& $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath).Trim()
+    if (-not $install) { throw 'MSVC C++ tools are required (install the Visual Studio C++ workload)' }
+    $devcmd = Join-Path $install 'Common7\Tools\VsDevCmd.bat'
+    if (-not (Test-Path -LiteralPath $devcmd)) { throw "MSVC setup script is missing: $devcmd" }
+    $lines = & cmd.exe /s /c "`"$devcmd`" -no_logo -arch=x64 -host_arch=x64 && set"
+    if ($LASTEXITCODE -ne 0) { throw 'MSVC setup failed' }
+    foreach ($line in $lines) {
+        $pair = $line -split '=', 2
+        if ($pair.Count -eq 2) { [Environment]::SetEnvironmentVariable($pair[0], $pair[1]) }
+    }
+    if (-not (Get-Command cl.exe -ErrorAction SilentlyContinue)) { throw 'MSVC setup did not put cl.exe on PATH' }
+}
 
 # FullPath is Path from the current location (.NET's own current folder isn't PowerShell's).
 function FullPath([string]$Path) {
@@ -117,6 +145,7 @@ function Exec {
 if ($OutDir) {
     $OutDir = FullPath $OutDir
     New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
+    Initialize-Msvc
     Exec cargo @('build', '--release', '--locked', '-p', $EditorName, '--manifest-path', (Join-Path $Root 'editor\Cargo.toml'))
     Copy-Item -LiteralPath (Join-Path $Root "editor\target\release\$EditorName.exe") -Destination $OutDir
     Say "made $(Join-Path $OutDir "$EditorName.exe")"
@@ -258,11 +287,30 @@ try {
 
 # 3. retake-edit.exe: it links prebuilt Skia, so it's built here, natively (MSVC), not cross-compiled.
 if (-not $SkipEditor) {
+    Initialize-Msvc
     Exec cargo @('build', '--release', '--locked', '-p', $EditorName, '--manifest-path', (Join-Path $Root 'editor\Cargo.toml'))
     Copy-Item -LiteralPath (Join-Path $Root "editor\target\release\$EditorName.exe") -Destination $Stage
 }
 
-# 4. ffmpeg, ffprobe and herdr, pinned.
+# 4. whisper-cli is built from its pinned source for this Windows runner. Git
+# Bash supplies the POSIX shell used by the shared build script; cygpath keeps
+# the staged prefix valid in that shell. Models stay a first-use download.
+if (-not $SkipWhisper) {
+    Initialize-Msvc
+    $hadWhisperPrefix = Test-Path Env:RETAKE_WHISPER_PREFIX
+    $previousWhisperPrefix = $env:RETAKE_WHISPER_PREFIX
+    $env:RETAKE_WHISPER_PREFIX = Join-Path $Stage 'whisper'
+    try {
+        Exec bash @('-lc', 'scripts/install-whisper.sh --cpu --prefix "$(cygpath -u "$RETAKE_WHISPER_PREFIX")" --jobs 2') $Root
+        Copy-Item -LiteralPath (Join-Path $env:RETAKE_WHISPER_PREFIX 'bin\whisper-cli.exe') -Destination $Stage
+    } finally {
+        if ($hadWhisperPrefix) { $env:RETAKE_WHISPER_PREFIX = $previousWhisperPrefix }
+        else { Remove-Item Env:RETAKE_WHISPER_PREFIX -ErrorAction SilentlyContinue }
+        Remove-Item -LiteralPath (Join-Path $Stage 'whisper') -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# 5. ffmpeg, ffprobe and herdr, pinned.
 $tools = [ordered]@{}
 if (-not $SkipFfmpeg) {
     $zip = Fetch $FfmpegUrl "ffmpeg-$FfmpegVersion-essentials_build.zip" $FfmpegSha
@@ -290,8 +338,12 @@ if (-not $SkipFfmpeg) {
     Copy-Item -LiteralPath (Fetch $HerdrLicenseUrl "herdr-LICENSE-v$HerdrVersion" $HerdrLicenseSha) -Destination (Join-Path $Stage 'licenses\herdr-LICENSE.txt')
     $tools['herdr'] = [ordered]@{ version = $HerdrVersion; license = 'Apache-2.0'; source = "https://github.com/herdrdev/herdr/tree/v$HerdrVersion" }
 }
+if (-not $SkipWhisper) {
+    $tools['whisper-cli'] = [ordered]@{ version = $WhisperVersion; license = 'MIT'; source = "https://github.com/ggml-org/whisper.cpp/tree/v$WhisperVersion" }
+    Copy-Item -LiteralPath (Fetch $WhisperLicenseUrl "whisper-cpp-LICENSE-v$WhisperVersion" $WhisperLicenseSha) -Destination (Join-Path $Stage 'licenses\whisper-cpp-LICENSE.txt')
+}
 
-# 5. The manifest that makes it a bundle, and the docs and licenses every archive carries.
+# 6. The manifest that makes it a bundle, and the docs and licenses every archive carries.
 $manifest = [ordered]@{ bundle = 1; version = $Version; tools = $tools }
 Write-Text (Join-Path $Stage 'retake-bundle.json') (($manifest | ConvertTo-Json -Depth 4) + "`n")
 foreach ($f in @('README.md', 'CHANGELOG.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md')) {
@@ -299,7 +351,7 @@ foreach ($f in @('README.md', 'CHANGELOG.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md
     if (Test-Path -LiteralPath $p) { Copy-Item -LiteralPath $p -Destination $Stage }
 }
 
-# 6. The zip (entries with / between names, at the top, as goreleaser's are) and its checksum line.
+# 7. The zip (entries with / between names, at the top, as goreleaser's are) and its checksum line.
 $zipName = "${Name}_${Version}_windows_amd64.zip"
 $zipPath = Join-Path $DistDir $zipName
 if (Test-Path -LiteralPath $zipPath) { Remove-Item -LiteralPath $zipPath -Force }

@@ -55,7 +55,7 @@ universal() {
   return 1
 }
 universal retake "$app/Contents/MacOS/$APP_NAME" || die "no retake binary"
-for t in herdr ffmpeg ffprobe retake-edit; do
+for t in herdr ffmpeg ffprobe retake-edit whisper-cli; do
   if universal "$t" "$app/Contents/MacOS/$t"; then printf 'macos-app: %s\n' "$t" >&2; fi
 done
 

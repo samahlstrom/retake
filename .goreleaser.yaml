@@ -71,7 +71,7 @@ archives:
       - src: LICENSE*
         info: *docinfo
       # The tools that ship with retake (docs/install-plan.md), put in dist-bundle/<os>_<arch>/ by
-      # scripts/bundle-deps.sh (make snapshot runs it): herdr, ffmpeg and ffprobe, retake-edit, their licenses and
+      # scripts/bundle-deps.sh (make snapshot runs it): herdr, ffmpeg and ffprobe, retake-edit, whisper-cli, their licenses and
       # retake-bundle.json, which makes retake put this folder first on its PATH (spec/setup.md). A platform without
       # them (Windows) gets the plain archive.
       - src: "dist-bundle/{{ .Os }}_{{ .Arch }}/bin/*"

@@ -1,6 +1,7 @@
 // Editing a comment's words (spec/notes.md, "Editing a comment") in Chromium: on a computer, a voice comment and a
-// typed one, kept through the take's final pass and a reload; on the iPhone 15 (mobile emulation), the comment box is
-// the field, on the simulated keyboard (lib/edit.ts, lib/keyboard.ts). 24-edit-webkit.spec.ts is WebKit's phone.
+// typed one, kept through the take's final pass and a reload; on the iPhone 15 (mobile emulation), a text tap seeks
+// and ⋯ → Edit opens the comment box on the simulated keyboard (lib/edit.ts, lib/keyboard.ts). 24-edit-webkit.spec.ts
+// is WebKit's phone.
 // Screenshots go to .retake-work/edit-shots/chromium-<what>.png.
 import { devices, expect, test, type Page } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
@@ -35,7 +36,7 @@ test('a computer: edit a voice comment and a typed one; the words stay', async (
   await desktopEdit(page, server.url, shooter(page));
 });
 
-test('iPhone 15: the comment box is the field, on the keyboard', async ({ browser }) => {
+test('iPhone 15: text seeks; menu Edit opens the comment box on the keyboard', async ({ browser }) => {
   const { defaultBrowserType: _, ...d } = devices['iPhone 15'];
   const context = await browser.newContext(d);
   try {

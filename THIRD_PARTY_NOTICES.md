@@ -231,12 +231,12 @@ a separate process, never linked; their license texts and notices are in the arc
   their complete source as ffmpeg-source-9.0.2.tar.xz. macOS: Martin Riedl's static build. Windows: Gyan Doshi's
   "essentials" build.
 - herdr 0.8.2: Apache-2.0. Its Windows build carries Microsoft's ConPTY (conpty.dll, OpenConsole.exe): MIT.
+- whisper.cpp whisper-cli 1.9.5: MIT. It is built on each native release runner with GGML_NATIVE=OFF; no speech model
+  ships.
 
 ## Run as separate programs (not shipped)
 
 - A system ffmpeg, when the user runs Retake without the bundled one (go install, a source build): its own license.
-- whisper.cpp (whisper-cli): MIT. Optional, for transcription. scripts/install-whisper.sh builds it on the user's
-  machine; it is not shipped. Its models are downloaded separately, under their own licenses.
 - Chromium (through Playwright): used only by the end-to-end tests; never shipped.
 
 ## Development and test only (not distributed)

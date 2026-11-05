@@ -160,6 +160,7 @@ func TestHerdrRunsEachVideosAgentInItsOwnWorkspace(t *testing.T) {
 		t.Fatalf("%+v", got)
 	}
 	sameCalls(t, "first task", since(calls(t, argv), 0), [][]string{
+		{"status", "server", "--json"},
 		{"workspace", "create", "--cwd", r.opts.Root, "--label", "retake · item-shop", "--no-focus", "--env", "SHOT_COLOUR=blue"},
 		{"agent", "start", name, "--kind", "claude", "--pane", "w1:p2", "--timeout", "60000", "--", "--permission-mode", "acceptEdits"},
 		{"agent", "prompt", name, lineFor(r, "t1")},
@@ -185,6 +186,7 @@ func TestHerdrRunsEachVideosAgentInItsOwnWorkspace(t *testing.T) {
 		t.Fatalf("%+v", got)
 	}
 	sameCalls(t, "second task", since(calls(t, argv), n), [][]string{
+		{"status", "server", "--json"},
 		{"pane", "get", "w1:p2"},
 		{"agent", "get", name},
 		{"agent", "prompt", name, lineFor(r, "t2")},
@@ -237,6 +239,7 @@ func TestStoppingAHerdrTaskClosesItsPane(t *testing.T) {
 	}
 	name := herdrName(r.opts.Root)
 	sameCalls(t, "after a stop", since(calls(t, argv), n), [][]string{
+		{"status", "server", "--json"},
 		{"workspace", "get", "w1"},
 		{"tab", "create", "--workspace", "w1", "--cwd", r.opts.Root, "--label", "retake · item-shop", "--no-focus", "--env", "SHOT_COLOUR=blue"},
 		{"agent", "start", name, "--kind", "claude", "--pane", "w1:p3", "--timeout", "60000", "--", "--permission-mode", "acceptEdits"},
@@ -267,7 +270,7 @@ func TestHerdrWaitsForTheAgentsStartupQuestion(t *testing.T) {
 		t.Fatalf("%+v", got)
 	}
 	name := herdrName(r.opts.Root)
-	got := since(calls(t, filepath.Join(dir, "herdr", "argv.log")), 1)
+	got := since(calls(t, filepath.Join(dir, "herdr", "argv.log")), 2)
 	sameCalls(t, "startup question", got[1:], [][]string{
 		{"agent", "wait", name, "--until", "idle", "--until", "done"},
 		{"agent", "prompt", name, lineFor(r, "t1")},
@@ -293,7 +296,7 @@ func TestHerdrSendsALostLineAgain(t *testing.T) {
 	}
 	name := herdrName(r.opts.Root)
 	wait := []string{"agent", "wait", name, "--until", "working", "--until", "blocked", "--until", "done", "--timeout", "15000"}
-	got := since(calls(t, filepath.Join(dir, "herdr", "argv.log")), 1)
+	got := since(calls(t, filepath.Join(dir, "herdr", "argv.log")), 2)
 	sameCalls(t, "lost line", got[1:], [][]string{
 		{"agent", "wait", name, "--until", "idle", "--until", "done"},
 		{"agent", "prompt", name, lineFor(r, "t1")},
@@ -324,6 +327,7 @@ func TestSwitchingAgentsReplacesTheVideosSession(t *testing.T) {
 	}
 	name := herdrName(r.opts.Root)
 	sameCalls(t, "switch", since(calls(t, argv), n), [][]string{
+		{"status", "server", "--json"},
 		{"pane", "get", "w1:p2"},
 		{"pane", "close", "w1:p2"},
 		{"workspace", "get", "w1"},

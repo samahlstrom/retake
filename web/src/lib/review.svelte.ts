@@ -42,7 +42,18 @@ import {
 } from './home';
 import { backPlace, findNode, hashOf, rememberedPlace } from './tree';
 import { Scrubber } from './scrub';
-import { hintSeen, keyAction, markHintSeen, type Action } from './keys';
+import {
+  DEFAULT_SHORTCUTS,
+  hintSeen,
+  keyAction,
+  markHintSeen,
+  playerShortcuts,
+  shortcutLabel,
+  validateShortcuts,
+  type Action,
+  type PlayerShortcuts,
+  type ShortcutAction,
+} from './keys';
 import { layoutMode, type LayoutMode } from './layout';
 import { Viewport } from './viewport.svelte';
 import { composeMode } from './viewport';
@@ -253,6 +264,10 @@ const FATAL = (name: string) =>
 export class Review {
   // ---------------------------------------------------------------- what the markup shows
   paused = $state(true);
+  /** The media rate is a browser preference, kept when this page changes source. */
+  playbackRate = $state(1);
+  shortcuts = $state<PlayerShortcuts>(playerShortcuts());
+  shortcutError = $state('');
   curText = $state('0:00.0');
   durText = $state('0:00');
   timelineDuration = $state(0);
@@ -445,6 +460,27 @@ export class Review {
   readonly agent: AgentStatus = $derived(agentStatus(this.automation.state, this.clock));
   /** The version a running task of this video makes or updates, live (spec/automation.md, "The live version"). */
   readonly liveTarget = $derived(liveTarget(this.automation.state?.tasks));
+  /** A finished batch stays on its source until this quiet, explicit action is chosen. */
+  readonly viewTarget = $derived.by(() => {
+    const tasks = this.automation.state?.tasks ?? [];
+    for (const task of tasks) {
+      if (!task.target || verName(task.version) !== verName(this.shown)) continue;
+      // A task update can beat the notes response. Never call a target ready against an empty or older list.
+      if (this.notes.res?.version !== this.shown) continue;
+      const render = this.automation.state?.renders.find((r) => r.label === task.target || r.task === task.id);
+      if (!render?.complete) continue;
+      const sourceVersion = verName(task.version);
+      const related = tasks.filter((candidate) => verName(candidate.version) === sourceVersion);
+      if (!related.length || related.some((candidate) => candidate.state !== 'completed')) continue;
+      const source = this.rows.filter((row) => row.version && verName(row.version) === sourceVersion);
+      if (source.some((row) => this.statusOf(row).state !== 'done')) continue;
+      const required = related.flatMap((candidate) => candidate.notes.filter((id) => !candidate.dropped?.includes(id)));
+      if (required.some((id) => !source.some((row) => row.id === id && this.statusOf(row).state === 'done'))) continue;
+      if (source.some((row) => this.statusOf(row).state === 'question')) continue;
+      return task.target;
+    }
+    return null;
+  });
   /** "The agent is on it · 15 comments": the one quiet line at the top of To do until the agent marks a comment
    * (spec/automation.md, "While the agent works"). */
   readonly onIt = $derived(
@@ -743,7 +779,7 @@ export class Review {
       this.draft = null;
       this.draftStrokes = [];
       this.commentDraft = '';
-      this.el.comment?.blur(); // back to the player: Space plays, R records
+      this.el.comment?.blur(); // back to the player shortcuts
       if (send) {
         const w = this.agent.worker;
         if (this.owner && w && !this.automation.state?.config?.worker)
@@ -1226,7 +1262,7 @@ export class Review {
               ? 'Your notes are still being transcribed. They go to the agent when ready.'
               : this.touch
                 ? 'Nothing new to send. Draw or type a comment, or tap Record and talk.'
-                : 'Nothing new to send. Draw or type a comment, or press R and talk.',
+                : `Nothing new to send. Draw or type a comment, or press ${this.shortcutLabel('toggleRec')} and talk.`,
             4000,
           );
         break;
@@ -1718,6 +1754,42 @@ export class Review {
   }
 
   // ---------------------------------------------------------------- player
+  setPlaybackRate = (rate: number): void => {
+    const next = clamp(Math.round(rate * 4) / 4, 0.5, 3);
+    this.playbackRate = next;
+    this.video.playbackRate = next;
+  };
+
+  slower = (): void => this.setPlaybackRate(this.playbackRate - 0.25);
+  faster = (): void => this.setPlaybackRate(this.playbackRate + 0.25);
+  stop = (): void => this.video.pause();
+
+  setShortcut = (action: ShortcutAction, value: string): void => {
+    const key = value.trim() || value;
+    const checked = validateShortcuts({ ...this.shortcuts, [action]: key });
+    if (!('shortcuts' in checked)) {
+      this.shortcutError = checked.error;
+      return;
+    }
+    this.shortcuts = checked.shortcuts;
+    this.shortcutError = '';
+    try {
+      localStorage.setItem('retake.shortcuts', JSON.stringify(this.shortcuts));
+    } catch {
+      /* The current page still uses the changed key when browser storage is blocked. */
+    }
+  };
+
+  resetShortcuts = (): void => {
+    this.shortcuts = { ...DEFAULT_SHORTCUTS };
+    this.shortcutError = '';
+    try {
+      localStorage.removeItem('retake.shortcuts');
+    } catch {
+      /* blocked storage has no effect on this page */
+    }
+  };
+
   togglePlay = (): void => {
     const video = this.video,
       wait = this.#posterOnly;
@@ -1731,6 +1803,8 @@ export class Review {
       video.play().catch((err: Error) => this.toast.say('Could not play: ' + err.message));
     else video.pause();
   };
+
+  shortcutLabel = (action: ShortcutAction): string => shortcutLabel(this.shortcuts[action]);
 
   seekTo(t: number): void {
     this.video.currentTime = this.#clampT(t);
@@ -1782,6 +1856,7 @@ export class Review {
     } else this.logEv('seek', { from: r3(this.prevVT ?? 0) });
   };
   onLoadedMetadata = (): void => {
+    this.video.playbackRate = this.playbackRate;
     this.layout();
     const { videoWidth: w, videoHeight: h } = this.video;
     if (w && h) this.aspect = `${w} / ${h}`;
@@ -2485,7 +2560,13 @@ export class Review {
     const v = this.shownVersion();
     const wait = this.#posterOnly;
     if (wait && v && wait.label === v.label && (!incomplete(v) || (renderedEnd(v) ?? 0) > 0)) void this.#loadWaiting();
-    const latest = this.versions.at(-1);
+    const base = byLabel(this.versions, this.base);
+    const latest =
+      this.followLatest && base && !base.kind
+        ? this.versions
+            .filter((candidate) => !candidate.kind && verName(candidate.label) === verName(base.label))
+            .at(-1)
+        : this.versions.at(-1);
     this.watcher.watch(
       this.followLatest && latest && incomplete(latest) ? latest.label : v && incomplete(v) ? v.label : null,
     );
@@ -2518,6 +2599,9 @@ export class Review {
       if (info.label && info.label === this.info.label) this.info.duration = info.duration;
       this.#announceStreams();
       if (this.video?.readyState >= 1) this.syncDuration();
+      const base = byLabel(this.versions, this.base);
+      const latest = this.versions.filter((candidate) => !candidate.kind).at(-1);
+      if (base && !base.kind && latest && verName(latest.label) !== verName(base.label)) this.#rememberShown();
       this.#afterStream();
       await this.followCurrent();
       if (!light) this.#prefetchMaps();
@@ -2547,10 +2631,13 @@ export class Review {
    * compares (flipped): a new draft never pulls the video away under the reviewer; C back catches up. */
   async followCurrent(): Promise<void> {
     while (this.followLatest && !this.flipped && !this.finishing && !this.seg && !this.starting && !this.switching) {
-      const current = latestPlayable(
-        this.versions.filter((v) => !v.kind), // never an extension's version (v0)
-        this.video.currentTime,
-      );
+      const base = byLabel(this.versions, this.base);
+      const allCuts = this.versions.filter((v) => !v.kind);
+      // Once a video is selected, revisions of that logical version are the only automatic changes. A new v2 must
+      // not stop v1-draft revisions from arriving, or pull a reviewer into v2. A v0 extension still enters v1.
+      const choices =
+        this.base && base && !base.kind ? allCuts.filter((v) => verName(v.label) === verName(base.label)) : allCuts;
+      const current = latestPlayable(choices, this.video.currentTime);
       if (!current || current.label === this.shown) return;
       await this.setBase(current.label);
       if (this.shown !== current.label) return;
@@ -2817,6 +2904,7 @@ export class Review {
     }
     this.base = label;
     this.flipped = false;
+    this.#rememberShown();
     this.newTake();
     if (v.kind) return; // an extension's version: no drawings to load, nothing to say
     void this.loadHistory(label);
@@ -2833,6 +2921,16 @@ export class Review {
     this.followLatest = label === this.versions.at(-1)?.label || verName(label) === verName(this.cuts.at(-1)?.label);
     void this.setBase(label);
   };
+
+  /** The selected source survives reload without changing the URL shape for an untouched review. */
+  #rememberShown(): void {
+    if (typeof location === 'undefined' || !this.shown) return;
+    const value = encodeURIComponent(this.shown);
+    const search = /(?:[?&])v=/.test(location.search)
+      ? location.search.replace(/([?&])v=[^&]*/, `$1v=${value}`)
+      : `${location.search}${location.search ? '&' : '?'}v=${value}`;
+    history.replaceState(history.state, '', `${location.pathname}${search}${location.hash}`);
+  }
 
   /** A Done comment's "in v5": v5 (its newest revision while it's live) at that comment's moment, mapped from the
    * comment's version (spec/notes.md, "What a version shows"). */
@@ -2857,6 +2955,19 @@ export class Review {
     );
     const closest = strokes.sort((a, b) => Math.abs(a.video_t - row.t0) - Math.abs(b.video_t - row.t0))[0];
     this.jumpTo(row.drawings.length && closest ? closest.video_t : row.t0);
+  };
+
+  /** A comment card is navigation; its controls, links, editor and a text selection keep their own jobs. */
+  jumpFromComment = (row: Row, event: MouseEvent): void => {
+    const target = event.target as Element | null;
+    if (target?.closest('button, a, input, textarea, select, [contenteditable="true"], [data-part~="menu"]')) return;
+    if (getSelection()?.toString()) return;
+    this.jumpToComment(row);
+  };
+
+  openViewTarget = (): void => {
+    const target = this.viewTarget;
+    if (target) this.pickVersion(target);
   };
 
   get visibleHistoryStrokes(): HistoryStroke[] {
@@ -3074,6 +3185,15 @@ export class Review {
       case 'togglePlay':
         this.togglePlay();
         break;
+      case 'slower':
+        this.slower();
+        break;
+      case 'faster':
+        this.faster();
+        break;
+      case 'stop':
+        this.stop();
+        break;
       case 'toggleRec':
         this.toggleRec();
         break;
@@ -3133,6 +3253,10 @@ export class Review {
     const target = e.target as Element | null;
     if (target?.closest?.('[data-part~="feedback"]')) return;
     if (target?.closest?.(TYPING) && !((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's')) {
+      if (e.key === 'Escape' && target.closest?.('[data-part~="keys-sheet"]')) {
+        this.run('escape');
+        return;
+      }
       if (e.key === 'Escape' && this.kindShown && target.closest(TEXT)) (target as HTMLElement).blur?.();
       return;
     }
@@ -3151,7 +3275,7 @@ export class Review {
       this.focusComment();
       return;
     }
-    const r = keyAction(e);
+    const r = keyAction(e, this.shortcuts);
     if (!r) return;
     if (this.kindShown) {
       const key = { key: e.key, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey, repeat: false };

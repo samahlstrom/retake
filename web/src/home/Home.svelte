@@ -12,6 +12,7 @@
   import ExtSlot from '../ext/ExtSlot.svelte';
   import Settings from './Settings.svelte';
   import Library from './Library.svelte';
+  import { loadLibrary, type LinkedFolder } from './library';
   import VideoMenuHost from '../components/menus/VideoMenuHost.svelte';
   import { brandOf, homeTitle } from '../lib/brand';
   import Feedback from '../components/Feedback.svelte';
@@ -19,6 +20,13 @@
   let { home }: { home: Home } = $props();
   let command = $state('');
   let asking = $state(false);
+  let creating = $state(false);
+  let submitting = $state(false);
+  let projectName = $state('');
+  let projectFile = $state<File | null>(null);
+  let projectRoots = $state<LinkedFolder[]>([]);
+  let projectRoot = $state('');
+  let projectError = $state('');
   const node = $derived(home.node);
   const videos = $derived(home.videos);
   const todo = $derived(toReview(videos));
@@ -59,6 +67,38 @@
   async function showCommand() {
     asking = true;
     command = await connectCommand('api/connect');
+  }
+
+  async function newProject() {
+    if (creating || submitting) return;
+    projectError = '';
+    creating = true;
+    try {
+      projectRoots = (await loadLibrary()).folders.filter((folder) => folder.available);
+      projectRoot = projectRoots[0]?.id ?? '';
+      if (!projectRoot) projectError = 'Link a folder before creating a project.';
+    } catch (e) {
+      projectError = e instanceof Error ? e.message : 'Couldn’t read linked folders.';
+    }
+  }
+
+  async function submitProject() {
+    if (!projectName || !projectRoot || !creating || submitting) return;
+    submitting = true;
+    projectError = '';
+    const body = new FormData();
+    body.set('root', projectRoot);
+    body.set('name', projectName);
+    if (projectFile) body.set('video', projectFile);
+    try {
+      const reply = await fetch('api/projects', { method: 'POST', body });
+      const result = (await reply.json().catch(() => ({}))) as { url?: string; error?: string };
+      if (!reply.ok || !result.url) throw new Error(result.error || 'Couldn’t create the project.');
+      location.assign(result.url);
+    } catch (e) {
+      projectError = e instanceof Error ? e.message : 'Couldn’t create the project.';
+      submitting = false;
+    }
   }
 
   $effect(() => {
@@ -146,9 +186,48 @@
           </p>
         </div>
         {#if home.res.role === 'owner' && !user}
-          <a class="add-folders" href="#folders/add">Add folders</a>
+          <div class="project-actions">
+            <button class="primary" disabled={creating || submitting} onclick={newProject}>New project</button>
+            <a class="add-folders" href="#folders/add">Open existing project</a>
+          </div>
         {/if}
       </header>
+
+      {#if creating}
+        <form
+          class="new-project"
+          onsubmit={(e) => {
+            e.preventDefault();
+            void submitProject();
+          }}
+        >
+          <label
+            >Project name <input aria-label="Project name" bind:value={projectName} maxlength="200" required /></label
+          >
+          {#if projectRoots.length > 1}
+            <label
+              >Linked folder <select bind:value={projectRoot}
+                >{#each projectRoots as root (root.id)}<option value={root.id}>{root.path}</option>{/each}</select
+              ></label
+            >
+          {/if}
+          <label
+            >Source video <input
+              type="file"
+              accept="video/*,.mp4,.m4v,.mov,.webm,.mkv,.mxf"
+              disabled={submitting}
+              onchange={(e) => (projectFile = e.currentTarget.files?.[0] ?? null)}
+            /></label
+          >
+          <p class="sub">Optional. Retake keeps the original and prepares its own playable copy.</p>
+          {#if projectError}<p class="err" role="alert">{projectError}</p>{/if}
+          <div>
+            <button class="primary" disabled={!projectRoot || !projectName || submitting}
+              >{submitting ? (projectFile ? 'Preparing video…' : 'Creating project…') : 'Create project'}</button
+            ><button type="button" disabled={submitting} onclick={() => (creating = false)}>Cancel</button>
+          </div>
+        </form>
+      {/if}
 
       {#if home.error}<p class="err" role="alert">{home.error}</p>{/if}
 
@@ -173,15 +252,10 @@
           <ul class="grid" data-part="home-grid">
             {#each videos as video (video.name)}<VideoCard {video} {home} where={where(video)} />{/each}
           </ul>
-        {:else if node.project}
-          <p class="empty">
-            No videos in this project yet. Its first version shows up here (a file named like <code>clip_v1.mp4</code>).
-          </p>
+        {:else if home.res.role === 'owner' && !user}
+          <p class="empty">No videos here yet. Choose New project or Open existing project to get started.</p>
         {:else}
-          <p class="empty">
-            No videos here yet. A video is a file named like <code>clip_v1.mp4</code>, in this folder or one of its
-            folders.
-          </p>
+          <p class="empty">No videos here yet.</p>
         {/if}
       {/if}
     {/if}
@@ -204,6 +278,34 @@
     .layout > main {
       width: 100%;
       min-width: 0;
+    }
+    .project-actions,
+    .new-project > div {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    .project-actions {
+      flex-wrap: wrap;
+      max-width: 100%;
+    }
+    .project-actions > * {
+      white-space: nowrap;
+    }
+    .new-project {
+      max-width: 520px;
+      margin: 0 0 24px;
+      display: grid;
+      gap: 12px;
+    }
+    .new-project label {
+      display: grid;
+      gap: 5px;
+      color: var(--muted);
+    }
+    .new-project input,
+    .new-project select {
+      width: 100%;
     }
     /* ☰: a glyph, no box. */
     .navtoggle {
@@ -282,6 +384,10 @@
         min-height: 44px;
         display: inline-flex;
         align-items: center;
+      }
+      header {
+        flex-direction: column;
+        gap: 14px;
       }
     }
   }

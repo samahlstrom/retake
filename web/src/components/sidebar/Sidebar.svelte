@@ -409,6 +409,11 @@
             {/if}
           </header>
           {#if !oneRow && !chatting}{@render tabs()}{/if}
+          {#if !chatting && !tab && review.viewTarget}
+            <div class="view-target" data-part="progress" aria-live="polite">
+              <button class="view-version" onclick={review.openViewTarget}>View {review.viewTarget}</button>
+            </div>
+          {/if}
           {#if chatting}
             <Chat {review} />
           {:else if tab}
@@ -430,6 +435,7 @@
                         {#each items as it (it.key)}
                           {@const row = it.kind === 'row' ? it.row : null}
                           {@const st = row ? review.statusOf(row) : null}
+                          <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
                           <li
                             class={row ? 'item' : it.kind === 'label' ? 'group' : 'on-it'}
                             data-part={row ? 'comment' : it.kind === 'label' ? 'comment-group' : 'agent-on-it'}
@@ -439,6 +445,7 @@
                             data-mark={row?.mark}
                             data-state={st?.state}
                             data-doing={st?.now ? '' : undefined}
+                            onclick={(event) => row && review.jumpFromComment(row, event)}
                             animate:slide
                             in:arrive={it}
                             out:leave={it}
@@ -459,10 +466,10 @@
                             : review.kindShown
                               ? review.touch
                                 ? 'Type one below, or tap Record and talk it out.'
-                                : 'Type one below, or press R and talk it out.'
+                                : `Type one below, or press ${review.shortcutLabel('toggleRec')} and talk it out.`
                               : review.touch
                                 ? 'Draw on the video, type below, or tap Record and talk.'
-                                : 'Draw on the video, type below, or press R and talk.'}</span
+                                : `Draw on the video, type below, or press ${review.shortcutLabel('toggleRec')} and talk.`}</span
                         >
                       </p>
                     {/if}
