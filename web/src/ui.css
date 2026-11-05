@@ -248,8 +248,9 @@
 
   /* ---------------------------------------------------------------- the keys sheet */
   .keys-pop {
+    box-sizing: border-box;
     width: min(360px, calc(100vw - 24px));
-    max-height: min(560px, calc(100dvh - 24px));
+    max-height: min(560px, var(--bits-floating-available-height, calc(100dvh - 24px)));
     overflow: auto;
   }
   .keys-pop dl {

@@ -10,6 +10,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"path"
 	"path/filepath"
 	"strconv"
@@ -196,8 +197,20 @@ func (f *Folder) rescan(force bool) []home.Found {
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.found, f.scanned, f.took = append(scan.Videos, scan.Empty...), f.opts.Now(), scan.Took
+	for _, empty := range scan.Empty {
+		if blankProject(empty) {
+			scan.Videos = append(scan.Videos, empty)
+		}
+	}
+	f.found, f.scanned, f.took = scan.Videos, f.opts.Now(), scan.Took
 	return f.found
+}
+
+// blankProject recognizes the Scripts v0 brief created by New project when no
+// extension set is configured. A timeline alone is not a Home project.
+func blankProject(found home.Found) bool {
+	_, err := os.Stat(filepath.Join(found.Root, "v0", filepath.Base(found.Root)+"_v0.md"))
+	return err == nil
 }
 
 // projectNamed returns a project by name, scanning the folder again when it doesn't know the name.
