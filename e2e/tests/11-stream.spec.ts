@@ -3,7 +3,7 @@
 // it ready (chip and toast); explicitly choosing it shows the poster at once and starts watching, so the server renders it, slowed down by
 // the renderer's test hook (RETAKE_EDIT_TEST_UNIT_DELAY_MS: the first three units come at ~2 s, the next two at ~11 s
 // and the last at ~15 s). v2 plays from 0 while its playlist has no ENDLIST, waits at the end of what's rendered,
-// and C flips to v1 at the same moment: v2 growing never pulls the reviewer back, and C returns to v2. Closing the page stops the render, keeping what it published; a server started
+// and C flips to v1 at the same moment: v2 growing never pulls the reviewer back, and C returns to v2. Leaving the page stops the render, keeping what it published; a server started
 // again (without the slow-down) resumes from the cache when the page shows v2 again, and it completes: ENDLIST, the
 // right duration, no chip, and C maps through the time map. Needs a built retake-edit ($RETAKE_EDIT,
 // editor/target/release, or $PATH); it skips without one.
@@ -93,7 +93,7 @@ const state = async () => (await page.evaluate(v2))?.stream?.state;
 async function chooseVersion(label: string): Promise<void> {
   await page.locator('#verBtn').click();
   await page.locator(`[data-part~="version-list"] [data-version="${label}"]`).click();
-  await ui.waitFor(() => window.__review.view.shown === label && !window.__review.view.switching, 20_000);
+  await page.waitForFunction((target) => window.__review.view.shown === target && !window.__review.view.switching, label, { timeout: 20_000 });
 }
 
 test.beforeAll(async ({ browser }) => {
@@ -116,7 +116,7 @@ test.afterAll(async () => {
   await server?.stop();
 });
 
-test('a pushed edit starts rendering automatically while feedback stays on its original frame', async () => {
+test('a pushed edit stays pending while feedback stays on its original frame', async () => {
   expect(await page.evaluate(() => window.__review.info.versions?.map((v) => v.label))).toEqual(['v1']);
   await ui.key('r');
   await ui.waitFor(() => !!window.__review.seg, 5000);
@@ -134,7 +134,7 @@ test('a pushed edit starts rendering automatically while feedback stays on its o
   expect(poster.status).toBe(200);
   expect(Buffer.from(await poster.arrayBuffer()).subarray(0, 2)).toEqual(Buffer.from([0xff, 0xd8]));
   await expect(page.locator('#verBtn')).toBeVisible();
-  await expect.poll(renders).toBe(1);
+  expect(renders(), 'an unopened pushed version stays on demand').toBe(0);
   expect((await ui.state()).shown).toBe('v1');
   expect(await page.evaluate(() => !!window.__review.seg)).toBe(true);
 
@@ -203,17 +203,20 @@ test('C flips to v1 at the same moment while v2 renders, stays there as v2 grows
   expect(Math.abs(back.t - before.t)).toBeLessThan(0.05);
 });
 
-test('closing the page stops the render; what it published stays', async () => {
+test('leaving the page stops the render; what it published stays', async () => {
   const before = units();
   // C above leaves the streamed version and comes back. The page keeps watching the latest while it compares, but a
   // restart in between is harmless: count the renders from here.
   stoppedRenders = (JSON.parse(readFileSync(join(DIR, 'v2', 'demo_v2.push.json'), 'utf8')) as
     { stream: { renders: number } }).stream.renders;
   expect(before).toBeLessThan(6);
-  await context.close(); // the page's unwatch beacon goes out as it closes
+  // Leave through a real navigation: context.close() tears down the browser before unload beacons finish.
+  // Verify the server outcome below; Playwright can lose request events as the old document goes away.
+  await page.goto(new URL('api/info', server.url).href);
   const t0 = Date.now();
   while (renders() > 0 && Date.now() - t0 < 15_000) await sleep(100);
   expect(renders(), 'the render stopped').toBe(0);
+  await context.close();
   console.log(`render stopped ${((Date.now() - t0) / 1000).toFixed(1)} s after the page closed, at ${units()}/6 units`);
   const info = await (await fetch(new URL('api/info', server.url))).json() as
     { versions: { label: string; stream?: { state: string; done: number } }[] };

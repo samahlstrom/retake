@@ -2,6 +2,12 @@
 
 All notable changes are listed here. Versions follow semver.
 
+## 0.2.2 — 2026-11-04
+
+- Ships the in-app project, playback, comment and bundled-tool changes listed below, including macOS 12 support.
+- Release checks now exercise real-editor streaming, leaving a page and resuming its unfinished render.
+- 0.2.0 and 0.2.1 were unpublished build candidates.
+
 ## 0.2.1 — 2026-11-04
 
 - Build bundled Whisper for Retake's macOS 12 minimum. Keep its portable CPU backend free of the optional
