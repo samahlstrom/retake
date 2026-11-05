@@ -257,8 +257,8 @@ const (
 )
 
 // ensureHerdr starts the documented headless command only after status says no
-// server is running. It intentionally never owns, stops, or waits for the server:
-// an existing user's server and its jobs outlive Retake.
+// server is running. It reaps only its own server while it is unready; an
+// existing user's server and a ready new server outlive Retake.
 func (v *view) ensureHerdr(ctx context.Context) error {
 	herdrServerMu.Lock()
 	defer herdrServerMu.Unlock()
@@ -281,6 +281,14 @@ func (v *view) ensureHerdr(ctx context.Context) error {
 	}
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
+	waited := false
+	ready := false
+	defer func() {
+		if !ready && !waited {
+			_ = cmd.Process.Kill()
+			<-done
+		}
+	}()
 	deadline := time.NewTimer(10 * time.Second)
 	defer deadline.Stop()
 	tick := time.NewTicker(100 * time.Millisecond)
@@ -288,12 +296,14 @@ func (v *view) ensureHerdr(ctx context.Context) error {
 	for {
 		switch v.herdrStatus(ctx, 2*time.Second) {
 		case herdrStatusReady:
+			ready = true
 			return nil
 		case herdrStatusIncompatible:
 			return errors.New("Herdr started but is incompatible with this Retake version. Update Retake or Herdr, then retry.") //nolint:revive,staticcheck // a sentence shown directly to the person.
 		}
 		select {
 		case err := <-done:
+			waited = true
 			if err == nil {
 				return fmt.Errorf("Couldn't start Herdr. Retry. server stopped") //nolint:staticcheck // a sentence shown directly to the person.
 			}

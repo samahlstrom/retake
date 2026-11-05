@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { HINT_KEY, hintSeen, KEY_SHEET, keyAction, markHintSeen, type KeyLike } from './keys';
+import {
+  HINT_KEY,
+  hintSeen,
+  SHORTCUT_ACTIONS,
+  DEFAULT_SHORTCUTS,
+  shortcutLabel,
+  keyAction,
+  markHintSeen,
+  type KeyLike,
+} from './keys';
 
 const k = (key: string, mods: Partial<KeyLike> = {}): KeyLike => ({
   key,
@@ -89,8 +98,8 @@ describe('? and the hint that shows once', () => {
     expect(keyAction(k('?', { repeat: true }))).toEqual({ act: null, stop: true });
   });
   it('the sheet lists every key the player handles', () => {
-    const listed = KEY_SHEET.flatMap((s) => s.keys);
-    for (const key of ['R', 'Space', '←', '→', ',', '.', '1', '4', 'E', 'Z', 'C', 'N', '>', 'F', '?'])
+    const listed = SHORTCUT_ACTIONS.map(({ action }) => shortcutLabel(DEFAULT_SHORTCUTS[action]));
+    for (const key of ['R', 'K', '←', '→', ',', '.', '1', '4', 'E', 'Z', 'C', 'N', '>', 'F', '?'])
       expect(listed).toContain(key);
     for (const key of ['[', ']']) expect(listed).not.toContain(key);
   });

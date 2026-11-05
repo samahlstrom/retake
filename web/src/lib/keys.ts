@@ -149,14 +149,6 @@ export function keyAction(e: KeyLike, shortcuts: PlayerShortcuts = DEFAULT_SHORT
   return { act: e.repeat && act === 'togglePlay' ? null : act, stop: true };
 }
 
-/** The keys sheet (? or its button): every key of the player, in the order people need them. */
-export const KEY_SHEET: readonly { keys: string[]; what: string }[] = [
-  ...SHORTCUT_ACTIONS.map(({ action, label }) => ({ keys: [shortcutLabel(DEFAULT_SHORTCUTS[action])], what: label })),
-  { keys: ['Enter'], what: 'Save a typed comment (Ctrl+Enter also sends it)' },
-  { keys: ['Esc'], what: 'Cancel the comment you were writing or drawing' },
-  { keys: ['Space'], what: 'Play or pause (also K by default)' },
-];
-
 /** localStorage key: the keyboard hint has been seen (it shows once per browser). */
 export const HINT_KEY = 'retake.hint';
 
