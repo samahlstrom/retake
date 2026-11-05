@@ -95,7 +95,7 @@ const shown = (page: Page) => page.evaluate(() => window.__review.view.shown);
 /** The reviewer explicitly chooses the live cut; Send keeps them on their source. */
 async function chooseLive(page: Page): Promise<void> {
   await page.locator('[data-part~="version-picker"]:visible').first().click();
-  await page.locator('[data-part~="version-list"] [data-version^="v3-draft"]').click();
+  await page.locator('[data-part~="version-list"] [data-version="v3"]').click();
   await expect.poll(() => shown(page), { timeout: 30_000 }).toMatch(/^v3-draft\d+$/);
 }
 
