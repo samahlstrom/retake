@@ -80,6 +80,15 @@
     padding: 0 12px;
     border-radius: var(--radius-md);
   }
+  html[data-phone] #keys {
+    width: 44px;
+    height: 44px;
+  }
+  html[data-phone] .speed {
+    width: 48px;
+    min-width: 48px;
+    height: 44px;
+  }
   html[data-phone] #verBtn:hover {
     background: transparent;
   }
@@ -318,9 +327,11 @@
      the current version's To do, To do · Done and the comment box. */
   html[data-layout='portrait'] #side {
     grid-area: side;
+    box-sizing: border-box;
     width: auto;
     min-height: 0;
     max-height: none;
+    padding-right: 32px; /* fixed Feedback tab */
     border-left: 0;
     border-top: 1px solid var(--line);
   }
@@ -394,10 +405,20 @@
     min-height: 40px;
   }
   html[data-layout='portrait'] #pbar .speed {
-    width: 48px;
-    min-width: 48px;
     height: 40px;
     padding: 0 2px;
+  }
+  html[data-layout='portrait'] #pbar #keys {
+    width: 40px;
+    height: 40px;
+  }
+  #pbar.portrait .paux {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    min-height: 40px;
+    padding-bottom: 4px;
   }
   .prow {
     display: flex;
@@ -492,6 +513,10 @@
   }
   #pleft #colors {
     flex-direction: column;
+  }
+  #pleft .speed,
+  #pleft #keys {
+    flex: none;
   }
   #pright {
     grid-area: right;

@@ -99,9 +99,9 @@ test('desktop card body and text seek and pause, while its menu, editing, text s
   }
 });
 
-test('a phone tap on comment text seeks and pauses without opening edit', async ({ browser }) => {
+test('a phone tap seeks without editing, and the comment menu remains reachable', async ({ browser }) => {
   const { defaultBrowserType: _, ...phone } = devices['iPhone 15'];
-  const context: BrowserContext = await browser.newContext(phone);
+  const context: BrowserContext = await browser.newContext({ ...phone, viewport: { width: 390, height: 844 } });
   const page = await context.newPage();
   try {
     await open(page);
@@ -128,6 +128,12 @@ test('a phone tap on comment text seeks and pauses without opening edit', async 
     await expect(composer).not.toBeFocused();
     await expect(composer).toHaveValue('');
     await expect(card.locator('[data-part="comment-edit"]')).toHaveCount(0);
+    // The fixed Feedback tab must not cover a comment's menu on a narrow screen.
+    await card.getByRole('button', { name: 'More for this comment' }).tap();
+    await page.getByRole('menuitem', { name: 'Edit' }).tap();
+    await expect(composer).toHaveAccessibleName('Edit the comment at 0:12');
+    await expect(composer).toBeFocused();
+    await expect(composer).toHaveValue('Raise the music here');
   } finally {
     await context.close();
   }

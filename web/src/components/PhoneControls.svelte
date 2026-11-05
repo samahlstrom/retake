@@ -97,6 +97,16 @@
       {#if !review.kindShown}
         <PlayButton paused={review.paused} onclick={review.togglePlay} />
         {@render time()}
+      {/if}
+      <VersionMenu {review} side="bottom" />
+      <span class="grow"></span>
+      {#if review.canRecord && !review.kindShown}
+        <PenButton {review} side="bottom" />
+        <UndoButton onclick={review.undo} compact />
+      {/if}
+    </div>
+    {#if !review.kindShown}
+      <div class="paux">
         <select
           class="speed"
           aria-label="Playback speed"
@@ -107,15 +117,9 @@
             <option value={rate}>{rate}×</option>
           {/each}
         </select>
-      {/if}
-      <VersionMenu {review} side="bottom" />
-      <KeysSheet {review} />
-      <span class="grow"></span>
-      {#if review.canRecord && !review.kindShown}
-        <PenButton {review} side="bottom" />
-        <UndoButton onclick={review.undo} compact />
-      {/if}
-    </div>
+        <KeysSheet {review} />
+      </div>
+    {/if}
   </div>
   <div id="precord" data-part="bar" style:bottom="{lift}px" bind:offsetHeight={barHeight}>
     <!-- The comments above say how to comment (their empty line, the box's placeholder), so the hint is only for a
@@ -142,6 +146,19 @@
       <PenButton {review} side="right" />
       <UndoButton onclick={review.undo} compact />
     {/if}
+    {#if !review.kindShown}
+      <select
+        class="speed"
+        aria-label="Playback speed"
+        value={review.playbackRate}
+        onchange={(event) => review.setPlaybackRate(Number(event.currentTarget.value))}
+      >
+        {#each [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 2.75, 3] as rate (rate)}
+          <option value={rate}>{rate}×</option>
+        {/each}
+      </select>
+      <KeysSheet {review} />
+    {/if}
   </div>
   <div id="pright" data-part="bar" class:recording={!!review.seg}>
     {#if review.canRecord}
@@ -157,19 +174,8 @@
       <PlayButton paused={review.paused} onclick={review.togglePlay} />
       {@render time()}
       <Timeline {review} />
-      <select
-        class="speed"
-        aria-label="Playback speed"
-        value={review.playbackRate}
-        onchange={(event) => review.setPlaybackRate(Number(event.currentTarget.value))}
-      >
-        {#each [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 2.75, 3] as rate (rate)}
-          <option value={rate}>{rate}×</option>
-        {/each}
-      </select>
     {/if}
     <VersionMenu {review} />
-    <KeysSheet {review} />
     {#if review.canRecord}<SendNotice {review} />{/if}
   </div>
 {/if}

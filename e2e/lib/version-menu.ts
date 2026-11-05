@@ -92,6 +92,13 @@ export const PROMO = 'p/retake-promo/';
 
 const shown = (page: Page) => page.evaluate(() => window.__review.view.shown);
 
+/** The reviewer explicitly chooses the live cut; Send keeps them on their source. */
+async function chooseLive(page: Page): Promise<void> {
+  await page.locator('[data-part~="version-picker"]:visible').first().click();
+  await page.locator('[data-part~="version-list"] [data-version^="v3-draft"]').click();
+  await expect.poll(() => shown(page), { timeout: 30_000 }).toMatch(/^v3-draft\d+$/);
+}
+
 /** Two comments on v1, three on v2, then Send on v2: v3 is live (the agent waits at its first gate). Once per
  * fixture; later calls only open the page. */
 export async function goLive(page: Page, f: MenuFixture): Promise<void> {
@@ -102,7 +109,7 @@ export async function goLive(page: Page, f: MenuFixture): Promise<void> {
     (await (await page.request.get(`${f.server.url}${PROMO}api/automation`)).json()) as { blocked?: string;
       tasks: { state: string; target?: string }[] };
   if ((await automation()).tasks.some((t) => t.state === 'running')) {
-    await expect.poll(() => shown(page), { timeout: 30_000 }).toMatch(/^v3-draft\d+$/);
+    await chooseLive(page);
     return;
   }
   await expect.poll(async () => (await automation()).blocked ?? '', { timeout: 20_000 }).toBe('');
@@ -117,7 +124,8 @@ export async function goLive(page: Page, f: MenuFixture): Promise<void> {
   await page.locator('[data-part~="send"]:visible').first().click();
   await expect.poll(async () => (await automation()).tasks.map((t) => `${t.state}:${t.target}`), { timeout: 60_000 })
     .toEqual(['running:v3']);
-  await expect.poll(() => shown(page), { timeout: 30_000 }).toMatch(/^v3-draft\d+$/);
+  await expect.poll(() => shown(page)).toBe('v2');
+  await chooseLive(page);
 }
 
 /** What the open menu lists: [name, its detail, live, on screen, row height]. */

@@ -435,7 +435,7 @@ test('the keyboard hint shows once per browser; ? opens the keys', async ({page}
   await page.reload();await page.waitForFunction(READY);
   await expect(page.locator('#hint')).not.toHaveClass(/gone/);
   await page.keyboard.press('?');
-  await expect(page.locator('.keys-pop')).toContainText('Flip to the other version and back');
+  await expect(page.locator('.keys-pop')).toContainText('Compare versions');
   await expect(page.locator('#hint')).toHaveClass(/gone/);
   await page.keyboard.press('Escape');
   await expect(page.locator('.keys-pop')).toHaveCount(0);
