@@ -2,6 +2,15 @@
 
 All notable changes are listed here. Versions follow semver.
 
+## 0.2.3 — 2026-11-06
+
+- `npm i -g retake-cli` works on Windows: the first run downloads the Windows build from this release, checks it
+  against the SHA-256 recorded in the npm package, and keeps it. There is no separate Windows npm package.
+- Releases go out by themselves: a version tag publishes the GitHub release, the npm packages and the Homebrew
+  formula in one run. Homebrew uses a deploy key on the tap repository.
+- 0.2.2 reached GitHub and the Mac and Linux npm packages, but `retake-cli` itself stayed at 0.1.0 on npm and
+  Homebrew wasn't updated; 0.2.3 brings both up to date.
+
 ## 0.2.2 — 2026-11-04
 
 - Ships the in-app project, playback, comment and bundled-tool changes listed below, including macOS 12 support.
