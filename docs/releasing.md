@@ -1,7 +1,17 @@
 # Releasing
 
-This page says how a release is built, tested and published, the one-time setup it needs, and how to try all of it
+This page says how a release is built, tested and published, the setup it relies on, and how to try all of it
 without publishing anything.
+
+## Cutting a release
+
+```bash
+git tag vX.Y.Z && git push origin vX.Y.Z
+```
+
+That's all. The release workflow tests everything, builds every platform, tests each install, then publishes the
+GitHub release, the npm packages and the Homebrew formula, in that one run (below). Name the `## X.Y.Z` section of
+`CHANGELOG.md` before tagging: it becomes the release notes.
 
 ## Four ways to install, one set of archives
 
@@ -10,7 +20,7 @@ everything Retake runs (below). The four install routes all hand out those same 
 
 | Route | Command | What it is |
 |---|---|---|
-| npm (first in the README) | `npm i -g retake-cli`, then `retake` | One small package with the command, and one package per platform holding that platform's archive (below). |
+| npm (first in the README) | `npm i -g retake-cli`, then `retake` | One small package with the command, and one package per platform (macOS, Linux) holding that platform's archive. On Windows the command downloads the release's archive on first run (below). |
 | No Node, macOS and Linux | `curl -fsSL https://raw.githubusercontent.com/samahlstrom/retake/main/install.sh \| sh` | `install.sh` (repo root): downloads the archive from the GitHub release, checks its SHA-256. |
 | No Node, Windows | `irm https://raw.githubusercontent.com/samahlstrom/retake/main/install.ps1 \| iex` | `install.ps1` (repo root, the Windows port's). |
 | Homebrew | `brew install samahlstrom/retake/retake` | A formula in the tap `samahlstrom/homebrew-retake`, made from the release's checksums (`scripts/brew-formula.sh`). |
@@ -62,7 +72,7 @@ script's SHA-256, so it only rebuilds when the script changes.
 
 Every release carries **`ffmpeg-source-9.0.2.tar.xz`** next to its archives: the source tarballs as released, the
 build script and a README on rebuilding them. That's the GPL's "corresponding source"; each archive's
-`licenses/ffmpeg-SOURCE.txt` links it. It's in the `release` artifact of a dry run, and the draft release uploads it.
+`licenses/ffmpeg-SOURCE.txt` links it. It's in the `release` artifact of a dry run, and the release uploads it.
 
 To bump a version, change its pin (file name, SHA-256, URL) in `build.sh`, and for FFmpeg `FFMPEG_VERSION`, which
 `bundle-deps.sh` reads. A local `make snapshot` builds Linux's ffmpeg in Docker the first time (`~/.cache/retake-bundle/
@@ -76,27 +86,39 @@ release run's `ffmpeg-linux-amd64` and `ffmpeg-linux-arm64` artifacts into one f
 
 | Package | Holds | Size (November 2026) |
 |---|---|---|
-| `retake-cli` | `bin/retake.js`, the launcher (npm/retake-cli), and every platform package below as an optional dependency at exactly its version. No install scripts. | 7 KB |
+| `retake-cli` | `bin/retake.js`, the launcher (npm/retake-cli), and every platform package below as an optional dependency at exactly its version. For Windows, `archives` in its package.json: the release's `retake_<version>_windows_amd64.zip`, its URL, SHA-256 (from the release's `checksums.txt`) and size. No install scripts. | 12 KB |
 | `retake-cli-linux-x64` | `bin/`: that platform's archive (the programs and `retake-bundle.json`), with `licenses/` and the notices beside it. `os`, `cpu` (and `libc: glibc` on Linux) make npm install only the one that fits. | 54 MB (131 MB unpacked; ffmpeg and ffprobe 23 MB each) |
 | `retake-cli-linux-arm64` | | 52 MB (119 MB unpacked) |
 | `retake-cli-darwin-arm64` | | 89 MB |
 | `retake-cli-darwin-x64` | | 100 MB |
-| `retake-cli-win32-x64` | | 112 MB (herdr and ConPTY included) |
 
+**These five names are all there will be.** Every new npm name has to be published once by hand, with the owner's
+2FA, before trusted publishing works for it, and npm's spam filter refused the first publish of
+`retake-cli-win32-x64` outright. So Windows has no package:
+
+- **Windows downloads its archive on first run.** With no platform package for the OS and CPU but an entry in
+  `archives` (Windows x64, and Windows on ARM, which runs the x64 build emulated), the launcher downloads
+  `https://github.com/samahlstrom/retake/releases/download/v<version>/retake_<version>_windows_amd64.zip`, saying one
+  line on stderr ("Getting Retake 0.2.3 for Windows (113 MB)…"). It refuses the file unless its SHA-256 is the one
+  in package.json (never one it downloads), unpacks it with Node alone (zlib; why not Windows' `tar.exe` is in the
+  launcher) into a temporary folder in `%LOCALAPPDATA%\retake\npm` (`$XDG_CACHE_HOME/retake/npm` on other systems)
+  and renames that to `<version>`, so two launches at once both end up with one whole folder. Every later run starts
+  `retake.exe` from there; it keeps the three newest versions. No network, a missing release or a wrong SHA-256 each
+  get a plain error. `RETAKE_NPM_BASE_URL` points it at another copy of the release's files (the smoke test's
+  stand-in for GitHub); the SHA-256 is checked all the same.
 - **The name** is set in one place, `name` in `npm/retake-cli/package.json`. The platform packages are that name plus
   `-<os>-<cpu>`; the launcher, the pack script and `scripts/npm-claim.sh` all read it from there. Renaming means
   changing that line, the README's commands, and the trusted publishers (below).
 - **The launcher** finds `<name>-<os>-<cpu>` with `require.resolve`, runs its `bin/retake` with the same arguments and
-  terminal, passes SIGINT, SIGTERM and SIGHUP to it and its exit code (or signal) back. With no package for the
-  platform, or one npm left out (`--omit=optional`, `optional=false`), or musl Linux, it says so and what to do.
-  `node --test npm/launcher.test.js` (in `make test`) tests it.
-- **Agents never run node.** Retake gives them the platform package's Go binary by its full path (spec/setup.md,
-  "How agents are told to run retake"), so `retake ask` costs no node start-up and works in a herdr or tmux pane
-  where `nvm` or `mise` isn't active.
+  terminal, passes SIGINT, SIGTERM and SIGHUP to it and its exit code (or signal) back. With no build for the
+  platform, or a package npm left out (`--omit=optional`, `optional=false`), or musl Linux, it says so and what to
+  do. `node --test npm/launcher.test.js` (in `make test`) tests it, Windows' download from a local server included.
+- **Agents never run node.** Retake gives them the Go binary itself (spec/setup.md, "How agents are told to run
+  retake"): the platform package's by its full path, and on Windows the downloaded folder first on their `PATH`. So
+  `retake ask` costs no node start-up and works in a herdr or tmux pane where `nvm` or `mise` isn't active.
 - **Size.** npmjs.org documents no limit, but has refused a 199 MB tarball and taken a 118 MB one. `npm-pack.sh`
   stops above 117 MB (`NPM_PACK_MAX_BYTES`), so a release can't fail at `npm publish` instead. Linux's packages are
-  about half the others because their ffmpeg is our own lean build (above). The biggest, Windows, is about 112 MB:
-  close. Its ffmpeg and ffprobe are most of it, and the same kind of build for Windows is the next step if it grows.
+  about half the others because their ffmpeg is our own lean build (above).
 - **npx** keeps its install: a second `npx retake-cli` downloads nothing, and npm 11 checks for a newer version each
   time (one small request) and installs only what changed. `npx retake-cli@latest` asks for the newest explicitly.
 
@@ -106,18 +128,26 @@ release run's `ffmpeg-linux-amd64` and `ffmpeg-linux-arm64` artifacts into one f
 
 | When | What it does |
 |---|---|
-| A `vX.Y.Z` tag is pushed | Every CI test (it calls `ci.yml`); `retake-edit` on each platform's runner; Linux's ffmpeg (`ffmpeg`, it calls `ffmpeg.yml`); the archives, `checksums.txt`, the Mac app, the npm packages and the Homebrew formula (`package`); the npm install tested on each platform (`smoke`); then a **draft** GitHub release with the archives, `ffmpeg-source-<v>.tar.xz`, `checksums.txt`, `install.sh` and `install.ps1`. Nothing public yet. |
-| You publish that draft on GitHub | `npm`: downloads the release's archives, checks them against its `checksums.txt`, makes the npm packages from them and publishes each with trusted publishing and provenance (a version with a `-` goes to the `next` tag, not `latest`). `homebrew`: writes the formula from the release's `checksums.txt` and pushes it to the tap (not for pre-releases). Both skip what's already there, so re-running is safe. |
-| Run workflow by hand, `dry_run` on (the default), or a push to a `dry-run/*` branch | Everything a tag push does except the draft, with snapshot versions. All of it is uploaded as the run's artifacts: `release` (archives, `ffmpeg-source-<v>.tar.xz`, checksums, Mac app, `retake.rb`), `npm` (the tarballs), `editor-*`, `ffmpeg-linux-*`. Publishes nothing. |
+| A `vX.Y.Z` tag is pushed | Every CI test (it calls `ci.yml`); `retake-edit` on each platform's runner; Linux's ffmpeg (`ffmpeg`, it calls `ffmpeg.yml`); the archives, `checksums.txt`, the Mac app, the npm packages and the Homebrew formula (`package`); the npm install tested on each platform (`smoke`). Once all of that passed, with nobody pressing anything: `release` publishes the GitHub release with the archives, `ffmpeg-source-<v>.tar.xz`, `checksums.txt`, `install.sh` and `install.ps1` (a draft until every file is up, so it's never public half-uploaded). Then, side by side: `npm` checks that Windows' archive on the release has the SHA-256 the command carries and publishes the tarballs the install tests passed with (trusted publishing, provenance; a version with a `-` goes to the `next` tag, not `latest`); `homebrew` writes the formula from the release's `checksums.txt` and pushes it to the tap (not for pre-releases). |
+| Run workflow by hand, `dry_run` on (the default), or a push to a `dry-run/*` branch | Everything a tag push does, with snapshot versions, up to the point of publishing: `release` lists what it would upload, `npm` what it would publish, `homebrew` checks its key can push to the tap. All of it is uploaded as the run's artifacts: `release` (archives, `ffmpeg-source-<v>.tar.xz`, checksums, Mac app, `retake.rb`), `npm` (the tarballs), `windows-archive`, `editor-*`, `ffmpeg-linux-*`. Publishes nothing. |
+
+**When a publish job fails**, the others still go out: npm and Homebrew don't wait on each other, and both only wait
+for the GitHub release. If npm refuses a package (it says "need auth" when a package doesn't trust the workflow), the
+`npm` job fails naming it, in its log and the run's summary, and publishes the platform packages it can but not
+`retake-cli`, which would list a missing one. Fix the cause, then **Re-run failed jobs** on the run's page: every
+publish step skips what's out already.
 
 **The smoke test** (`scripts/npm-smoke.mjs`, the `smoke` jobs: Linux x64 on Node 18 and current, Linux arm64, both
 Macs, Windows) serves the npm tarballs from a registry of its own on 127.0.0.1, in a scratch HOME with empty caches,
-and checks: `npm i -g` downloads the command and only that platform's package; `retake --version`; the bundled
+and on Windows the release's zip from a stand-in for GitHub Releases (also on 127.0.0.1, redirecting like
+github.com does). It checks: `npm i -g` downloads the command and only that platform's package (Windows: the command
+alone); `retake --version` (Windows: the first run downloads the archive and checks it, the second downloads
+nothing); the bundled
 ffmpeg has libx264 and zimg (its build config, its filters, and a real encode through `zscale`); `retake --no-open`
 serves the setup page, finds the bundled ffmpeg and herdr, and stops on SIGINT with its Go process; an agent's prompt
 names the Go binary and `retake working` and `retake done` work with nothing on `PATH`; `npx` downloads once, then
 nothing, and `@latest` picks up a newer release. On the Macs it also installs the formula from a local tap and runs
-`brew test`. Windows is marked experimental (it doesn't block a release) until it passes once.
+`brew test`. Every one of them must pass before anything is published.
 
 **Windows builds** call `scripts/build-windows.ps1 -OutDir <dir>` (the Windows port's), which must put
 `retake-edit.exe` (and anything else Windows-only) in `<dir>`. Until that script is in the checkout, the job builds
@@ -140,41 +170,30 @@ Once it's on `main`: Actions, Release, Run workflow, pick any branch, keep `dry_
 
 ### A real release
 
-```bash
-git tag v0.1.0 && git push origin v0.1.0              # tests, builds, a draft release; nothing public
-# Look at the draft on GitHub (Releases), edit its notes, then press "Publish release":
-# that publishes the npm packages and the Homebrew formula.
-```
+`git tag vX.Y.Z && git push origin vX.Y.Z` (Cutting a release, at the top). Nothing else: no draft to press, no
+second workflow.
 
-## One-time setup
+## One-time setup (done)
 
-1. **npm: claim the names and trust the workflow.** Trusted publishing (no npm token anywhere) can only be turned on
-   for a package that exists, so each name is published once by hand as a `0.0.0` placeholder. With an npmjs.com
-   account with 2FA, and npm 11.10 or newer:
+All of this exists (November 2026). Nothing needs doing again unless the name changes.
 
-   ```bash
-   npm login
-   scripts/npm-claim.sh             # says what it will do
-   scripts/npm-claim.sh --publish   # publishes the six placeholders, then runs npm trust for each
-   ```
+- **npm.** Five packages, each trusting GitHub Actions, repository `samahlstrom/retake`, workflow `release.yml`, no
+  environment (trusted publishing: no npm token anywhere): `retake-cli`, `retake-cli-linux-x64`,
+  `retake-cli-linux-arm64`, `retake-cli-darwin-arm64`, `retake-cli-darwin-x64`. Never add a name (above).
+  `scripts/npm-claim.sh` made them: trusted publishing can only be turned on for a package that exists, so it
+  publishes a `0.0.0` placeholder of each name by hand (`npm login`, 2FA, npm 11.10+), then runs `npm trust` for
+  each. Only a rename would need it again. `retake-cli-win32-x64` was never created (npm called it spam); nothing
+  uses it.
+- **Homebrew.** The public tap `samahlstrom/homebrew-retake`, with a deploy key that can write to it and nothing else
+  ("retake release workflow"), whose private half is this repository's `HOMEBREW_TAP_DEPLOY_KEY` secret. The
+  `homebrew` job checks the tap out with it and pushes `Formula/retake.rb`. To replace the key (it needs `gh`
+  signed in as the owner, and deletes the key file after):
 
-   That's these six, each trusting GitHub Actions, repository `samahlstrom/retake`, workflow `release.yml`, no
-   environment: `retake-cli`, `retake-cli-linux-x64`, `retake-cli-linux-arm64`, `retake-cli-darwin-arm64`,
-   `retake-cli-darwin-x64`, `retake-cli-win32-x64`. By hand instead: publish any `0.0.0` of each name, then on
-   npmjs.com, each package's Settings, Trusted Publisher, GitHub Actions, with those three values. Afterwards, under
-   Settings, Publishing access, "Require two-factor authentication and disallow tokens" can be turned on: the
-   workflow doesn't need a token.
-2. **Homebrew: the tap and its deploy key.** Create the public repository `samahlstrom/homebrew-retake` on GitHub
-   (empty, or with a README). Then give the release workflow a key that can write to that repository and nothing
-   else, in one line (it needs `gh` signed in as the owner, and deletes the key file after):
-
-   ```sh
-   k=$(mktemp -u) && ssh-keygen -q -t ed25519 -N "" -C "retake release" -f "$k" && gh repo deploy-key add "$k.pub" -R samahlstrom/homebrew-retake --allow-write --title "retake release workflow" && gh secret set HOMEBREW_TAP_DEPLOY_KEY -R samahlstrom/retake < "$k"; rm -f "$k" "$k.pub"
-   ```
-
-   The `homebrew` job checks the tap out with that key and pushes `Formula/retake.rb`.
-3. **GitHub Actions** must be allowed to create releases: Settings, Actions, General, Workflow permissions can stay
-   read-only, since the `draft` job asks for `contents: write` itself.
+  ```sh
+  k=$(mktemp -u) && ssh-keygen -q -t ed25519 -N "" -C "retake release" -f "$k" && gh repo deploy-key add "$k.pub" -R samahlstrom/homebrew-retake --allow-write --title "retake release workflow" && gh secret set HOMEBREW_TAP_DEPLOY_KEY -R samahlstrom/retake < "$k"; rm -f "$k" "$k.pub"
+  ```
+- **GitHub Actions** creates the release itself: the repository's default workflow permissions stay read-only, and
+  the `release` job asks for `contents: write`.
 
 ## A local snapshot
 
@@ -200,8 +219,8 @@ Every release's `CHANGELOG.md` entry says, under **Theme API**:
 - the line: run `retake theme check` after updating (hosted: `retake theme check /data/theme`).
 
 The HTTP API's breaking changes are listed the same way, and only in a major release (spec/api.md, "API versions").
-The draft release's notes start with the `## X.Y.Z` section of `CHANGELOG.md`, so name the section for the version
-before tagging.
+The release's notes start with the `## X.Y.Z` section of `CHANGELOG.md`, so name the section for the version before
+tagging.
 
 ## The install script
 
@@ -224,7 +243,8 @@ curl -fsSL https://raw.githubusercontent.com/samahlstrom/retake/main/install.sh 
 | `INSTALL_DIR`, or `--dir` | Where the commands go. |
 | `XDG_DATA_HOME` | Where the versions' folders and the app-menu entry go (`~/.local/share`). |
 
-It reads the latest release from GitHub's `/releases/latest`, which skips drafts, so a draft never reaches it. To try
+It reads the latest release from GitHub's `/releases/latest`, which skips drafts, so a release still uploading its
+files never reaches it. To try
 it against a local snapshot:
 
 ```bash
@@ -249,9 +269,8 @@ programs (herdr, ConPTY, ffmpeg) carry their own texts in each archive's `licens
 
 ## Before the first public release
 
-- [ ] The one-time setup above (npm names and trusted publishers, the Homebrew tap and its token).
-- [ ] A dry run of the release workflow passes (`gh workflow run release.yml --ref <branch> -f dry_run=true`),
-      Windows included; then drop `experimental` from the Windows smoke entry.
+- [x] The one-time setup above (npm names and trusted publishers, the Homebrew tap and its deploy key).
+- [x] A dry run of the release workflow passes, Windows included, and Windows' install test blocks a release.
 - [ ] Pick the name for good. Then change it in: `NAME` in the `Makefile`, `project_name` in `.goreleaser.yaml`,
       `NAME` in `install.sh`, `NAME` in `scripts/notices.mjs`, `name` in `npm/retake-cli/package.json`, the CLI's
       usage text, and the docs. The config folder (`~/.config/retake`), the project store (`.retake/`) and the

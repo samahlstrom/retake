@@ -2,23 +2,24 @@ name: Release
 
 # Builds Retake for every platform on native runners, tests each install, and publishes it (docs/releasing.md):
 #
-#   push a vX.Y.Z tag      every test (ci.yml), the builds, the npm install tested on each platform, then a DRAFT
-#                          GitHub release with the archives, checksums.txt and the install scripts. Nothing public.
-#   publish that draft     (on GitHub: Releases, Edit, Publish release) the npm packages, with trusted publishing
-#                          and provenance, and the Homebrew formula, both from the release's own archives.
-#   Run workflow, dry_run  (Actions, Release, Run workflow, any branch) the same builds and tests; everything is
-#                          uploaded as this run's artifacts and nothing is published. dry_run off, from a tag: as a push.
+#   push a vX.Y.Z tag      every test (ci.yml), the builds, the npm install tested on each platform; once all of that
+#                          passed, in this same run with nobody pressing anything: the GitHub release (published,
+#                          with the archives, checksums.txt and the install scripts), then the npm packages (trusted
+#                          publishing, provenance) and the Homebrew formula.
+#   Run workflow, dry_run  (Actions, Release, Run workflow, any branch) the same builds and tests, and the publish
+#                          jobs up to the point of publishing; everything is uploaded as this run's artifacts and
+#                          nothing is published. dry_run off, from a tag: as a push.
 #   push a dry-run/* branch the same dry run, for before this file is on the default branch (GitHub offers Run
 #                          workflow only for workflows there): git push origin HEAD:dry-run/<name>
 #
-# Other pushes never run it; ci.yml does.
+# npm and Homebrew don't wait on each other: one failing (npm wanting auth for a package, say) leaves the other and
+# the GitHub release out, and says which package and why. "Re-run failed jobs" on the run's page then finishes it;
+# every publish step skips what's out already. Other pushes never run this; ci.yml does.
 
 on:
   push:
     tags: ["v*"]
     branches: ["dry-run/**"]
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       dry_run:
@@ -35,31 +36,30 @@ concurrency:
 
 jobs:
   # ------------------------------------------------------------------------------------------------------------------
-  # Build and test: a tag push, or by hand.
+  # Build and test.
 
   plan:
     name: What this run does
-    if: github.event_name != 'release'
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.plan.outputs.tag }}
       version: ${{ steps.plan.outputs.version }}
-      draft: ${{ steps.plan.outputs.draft }}
+      publish: ${{ steps.plan.outputs.publish }}
     steps:
       - id: plan
         env:
           EVENT: ${{ github.event_name }}
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
-          tag="" draft=false
+          tag="" publish=false
           if [ "$EVENT" = push ]; then
             case "$GITHUB_REF" in
-              refs/tags/v*) tag="$GITHUB_REF_NAME" draft=true ;;
+              refs/tags/v*) tag="$GITHUB_REF_NAME" publish=true ;;
               *) ;; # a dry-run/* branch
             esac
           elif [ "$DRY_RUN" != true ]; then
             case "$GITHUB_REF" in
-              refs/tags/v*) tag="$GITHUB_REF_NAME" draft=true ;;
+              refs/tags/v*) tag="$GITHUB_REF_NAME" publish=true ;;
               *) echo "::error::A release runs from a v* tag (choose it under 'Use workflow from'), or turn dry_run on."; exit 1 ;;
             esac
           fi
@@ -67,9 +67,9 @@ jobs:
           {
             echo "tag=$tag"
             echo "version=${version:-snapshot}"
-            echo "draft=$draft"
+            echo "publish=$publish"
           } >>"$GITHUB_OUTPUT"
-          echo "Tag: ${tag:-none (a snapshot)}. Draft release at the end: $draft." >>"$GITHUB_STEP_SUMMARY"
+          echo "Tag: ${tag:-none (a snapshot)}. Publishes the GitHub release, npm and Homebrew: $publish." >>"$GITHUB_STEP_SUMMARY"
 
   ci:
     name: Tests
@@ -250,10 +250,17 @@ jobs:
           name: npm
           path: dist/npm/*.tgz
           retention-days: 14
+      # Windows has no npm package: its install test serves this to the launcher, standing in for the GitHub release.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows-archive
+          path: dist/retake_*_windows_amd64.zip
+          retention-days: 14
 
   # The npm install, end to end, on each platform with that platform's own package (scripts/npm-smoke.mjs): npm i -g,
   # the bundled ffmpeg (libx264, zscale), the setup page, Ctrl+C, an agent calling retake with nothing on PATH, npx.
-  # On the Macs also the Homebrew formula, installed from a local tap.
+  # Windows has no platform package: its launcher downloads the release archive, here from a stand-in for GitHub
+  # Releases. On the Macs also the Homebrew formula, installed from a local tap.
   smoke:
     name: Install on ${{ matrix.name }}
     needs: [package]
@@ -266,9 +273,8 @@ jobs:
           - { name: Linux arm64, runner: ubuntu-22.04-arm, node: "lts/*" }
           - { name: macOS arm64, runner: macos-15, node: "lts/*", brew: true }
           - { name: macOS x64, runner: macos-15-intel, node: "lts/*", brew: true }
-          - { name: Windows x64, runner: windows-latest, node: "lts/*" } # passed in dry run 41657644297, so it blocks
+          - { name: Windows x64, runner: windows-latest, node: "lts/*", archive: true }
     runs-on: ${{ matrix.runner }}
-    continue-on-error: ${{ matrix.experimental == true }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
@@ -279,6 +285,11 @@ jobs:
         with:
           name: npm
           path: dist/npm
+      - uses: actions/download-artifact@v7
+        if: matrix.archive
+        with:
+          name: windows-archive
+          path: dist
       - name: npm i -g, npx, the bundled tools, an agent (scripts/npm-smoke.mjs)
         shell: bash
         env:
@@ -302,11 +313,14 @@ jobs:
           brew uninstall retake
           brew untap local/retake
 
-  draft:
-    name: Draft GitHub release
+  # ------------------------------------------------------------------------------------------------------------------
+  # Publish, once every test and install test passed. In a dry run these run up to the point of publishing.
+
+  release:
+    name: GitHub release
     needs: [plan, package, smoke]
-    if: needs.plan.outputs.draft == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: write
     steps:
@@ -315,9 +329,10 @@ jobs:
         with:
           name: release
           path: dist
-      - name: gh release create --draft
+      - name: gh release create, as a draft until every file is up, then published
         env:
           GH_TOKEN: ${{ github.token }}
+          PUBLISH: ${{ needs.plan.outputs.publish }}
           TAG: ${{ needs.plan.outputs.tag }}
           VERSION: ${{ needs.plan.outputs.version }}
         run: |
@@ -338,22 +353,31 @@ jobs:
 
           No Node: \`curl -fsSL https://raw.githubusercontent.com/$GITHUB_REPOSITORY/main/install.sh | sh\` (macOS, Linux),
           \`irm https://raw.githubusercontent.com/$GITHUB_REPOSITORY/main/install.ps1 | iex\` (Windows), or
-          \`brew install samahlstrom/retake/retake\`. Publishing this release publishes the npm packages and the Homebrew
-          formula (docs/releasing.md).
+          \`brew install samahlstrom/retake/retake\`.
           EOF
-          extra=()
-          case "$VERSION" in *-*) extra+=(--prerelease) ;; esac
+          extra=() latest=(--latest)
+          case "$VERSION" in *-*) extra+=(--prerelease) latest=() ;; esac
           files=(dist/*.tar.gz dist/*.zip dist/ffmpeg-source-*.tar.xz dist/checksums.txt install.sh)
           [ ! -f install.ps1 ] || files+=(install.ps1)
-          gh release create "$TAG" --draft --verify-tag --title "Retake $VERSION" --notes-file notes.md "${extra[@]}" "${files[@]}"
-          echo "Draft: $(gh release view "$TAG" --json url --jq .url)" >>"$GITHUB_STEP_SUMMARY"
-
-  # ------------------------------------------------------------------------------------------------------------------
-  # Publish: the draft was published on GitHub. Both read the release's own archives, checked against its checksums.
+          ls -l "${files[@]}"
+          if [ "$PUBLISH" != true ]; then
+            echo "A dry run: no release. It would be \"Retake $VERSION\" with the ${#files[@]} files above." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          # A draft first, so the release is never public without its files (install.sh reads the latest release).
+          # A re-run finds the draft (or the published release) and carries on.
+          state="$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null || echo none)"
+          case "$state" in
+            none) gh release create "$TAG" --draft --verify-tag --title "Retake $VERSION" --notes-file notes.md "${extra[@]}" "${files[@]}" ;;
+            true) gh release upload "$TAG" --clobber "${files[@]}" ;;
+            *) echo "$TAG is published already" ;;
+          esac
+          [ "$state" = false ] || gh release edit "$TAG" --draft=false "${latest[@]}"
+          echo "Released: $(gh release view "$TAG" --json url --jq .url)" >>"$GITHUB_STEP_SUMMARY"
 
   npm:
     name: Publish to npm
-    if: github.event_name == 'release'
+    needs: [plan, release]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -365,41 +389,80 @@ jobs:
         uses: jdx/mise-action@v5
         with:
           install_args: node
-      - name: The release's archives, checked
+      - name: The npm packages the install tests passed with
+        uses: actions/download-artifact@v7
+        with:
+          name: npm
+          path: dist/npm
+      - name: Windows' archive, as the launcher will download it from the release, matches its SHA-256
         env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.event.release.tag_name }}
+          PUBLISH: ${{ needs.plan.outputs.publish }}
         run: |
-          gh release download "$TAG" --dir dist --pattern 'retake_*' --pattern checksums.txt
-          (cd dist && sha256sum --check --ignore-missing checksums.txt)
-      - name: The npm packages, from those archives
-        env:
-          TAG: ${{ github.event.release.tag_name }}
-        run: scripts/npm-pack.sh --version "${TAG#v}"
+          name="$(node -p 'require("./npm/retake-cli/package.json").name')"
+          mkdir -p cli && tar -xzf "$(ls dist/npm/"$name"-[0-9]*.tgz)" -C cli
+          node -e '
+            const a = require("./cli/package/package.json").archives || {};
+            for (const d of new Map(Object.values(a).map((d) => [d.url, d])).values()) console.log(d.url, d.sha256);
+          ' >archives.txt
+          cat archives.txt
+          [ -s archives.txt ] || { echo "::error::$name's package.json has no archives (Windows)"; exit 1; }
+          if [ "$PUBLISH" != true ]; then
+            echo "A dry run: no release to download from"
+            exit 0
+          fi
+          while read -r url sum; do
+            got="$(curl -fsSL --retry 3 "$url" | sha256sum | cut -d' ' -f1)"
+            [ "$got" = "$sum" ] || { echo "::error::$url is $got, not $sum: Windows installs would refuse it"; exit 1; }
+            echo "$url: ok"
+          done <archives.txt
       - name: npm publish (the platform packages, then the command)
         env:
-          TAG: ${{ github.event.release.tag_name }}
+          PUBLISH: ${{ needs.plan.outputs.publish }}
+          VERSION: ${{ needs.plan.outputs.version }}
         run: |
-          v="${TAG#v}"
           name="$(node -p 'require("./npm/retake-cli/package.json").name')"
+          v="$(node -p 'require("./cli/package/package.json").version')"
+          [ "$PUBLISH" != true ] || [ "$v" = "$VERSION" ] || { echo "::error::the packages are $v, the tag says $VERSION"; exit 1; }
           dist_tag=latest
           case "$v" in *-*) dist_tag=next ;; esac
+          failed=""
           publish() { # package file
-            if npm view "$1@$v" version >/dev/null 2>&1; then
+            if [ "$PUBLISH" != true ]; then
+              echo "A dry run: would publish $1@$v ($2) with --tag $dist_tag"
+            elif [ "$(npm view "$1@$v" version 2>/dev/null)" = "$v" ]; then
               echo "$1@$v is on npm already"
+            elif npm publish "$2" --access public --provenance --tag "$dist_tag" >publish.log 2>&1; then
+              cat publish.log
+              echo "Published $1@$v" >>"$GITHUB_STEP_SUMMARY"
             else
-              npm publish "$2" --access public --provenance --tag "$dist_tag"
+              cat publish.log
+              if grep -qiE 'ENEEDAUTH|need auth|E401|E403|E404|OIDC|trusted publish' publish.log; then
+                why="npm wants auth: $1 doesn't trust this workflow. On npmjs.com, $1, Settings, Trusted Publisher, GitHub Actions: samahlstrom/retake, workflow release.yml, no environment (docs/releasing.md)"
+              else
+                why="npm publish failed: its log is above"
+              fi
+              echo "::error title=npm publish $1::$why"
+              echo "- **$1@$v not published**: $why" >>"$GITHUB_STEP_SUMMARY"
+              failed="$failed $1"
             fi
           }
           for f in dist/npm/*.tgz; do
-            [ "$(basename "$f")" != "$name-$v.tgz" ] || continue
-            publish "$(basename "$f" "-$v.tgz")" "$f"
+            pkg="$(basename "$f" "-$v.tgz")"
+            [ "$pkg" != "$name" ] || continue
+            publish "$pkg" "$f"
           done
+          if [ -n "$failed" ]; then
+            # The command lists every platform package at this version: it waits until they're all out.
+            echo "::error title=npm::Not published:$failed. $name@$v waits for them; fix that, then Re-run failed jobs."
+            exit 1
+          fi
           publish "$name" "dist/npm/$name-$v.tgz"
+          [ -z "$failed" ] || exit 1
 
   homebrew:
     name: Update the Homebrew tap
-    if: github.event_name == 'release' && !github.event.release.prerelease
+    needs: [plan, release]
+    if: ${{ !contains(needs.plan.outputs.version, '-') || needs.plan.outputs.publish != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -407,8 +470,13 @@ jobs:
       - name: The formula, from the release's checksums.txt
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.event.release.tag_name }}
+          PUBLISH: ${{ needs.plan.outputs.publish }}
+          TAG: ${{ needs.plan.outputs.tag }}
         run: |
+          if [ "$PUBLISH" != true ]; then
+            echo "A dry run: no release (the package job made and the Mac install tests used this run's formula)"
+            exit 0
+          fi
           gh release download "$TAG" --dir dist --pattern checksums.txt
           scripts/brew-formula.sh "${TAG#v}" dist/checksums.txt >retake.rb
       - name: HOMEBREW_TAP_DEPLOY_KEY is set
@@ -424,11 +492,17 @@ jobs:
           path: tap
       - name: Push Formula/retake.rb
         env:
-          TAG: ${{ github.event.release.tag_name }}
+          PUBLISH: ${{ needs.plan.outputs.publish }}
+          TAG: ${{ needs.plan.outputs.tag }}
         run: |
-          mkdir -p tap/Formula
-          cp retake.rb tap/Formula/retake.rb
           cd tap
+          if [ "$PUBLISH" != true ]; then
+            git push --dry-run origin HEAD # the key can write (a read-only key is refused here)
+            echo "A dry run: the deploy key can push to the tap; nothing pushed"
+            exit 0
+          fi
+          mkdir -p Formula
+          cp ../retake.rb Formula/retake.rb
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Formula/retake.rb
