@@ -14,7 +14,7 @@ Status of each part is at the end of every section: **built** (in this repo, tes
 | macOS (Apple silicon and Intel) | `Retake.dmg` with one universal `Retake.app` | Drag it to Applications, open it. A menu-bar icon appears and the browser opens the setup page. | App bundle: built, untested. `.dmg`: not built (needs a Mac or a macOS CI runner for `hdiutil`); a `.zip` of the app is built instead. |
 | Any, with Node 18+ (the README's first route) | Nothing; paste one line | `npm i -g retake-cli`, then `retake`: setup opens in the browser. | Built; tested end to end on Linux (`scripts/npm-smoke.mjs`), and on every platform by the release workflow's dry run (docs/releasing.md). |
 | Linux (x86_64, arm64), macOS without Node | Nothing; paste one line | `curl -fsSL https://raw.githubusercontent.com/samahlstrom/retake/main/install.sh \| sh`, then `retake` (or **Retake** in the Linux app menu). Or `brew install samahlstrom/retake/retake`. | Built, tested against a local snapshot (install, links, menu entry, checksum refusal). The Homebrew formula: tested by `brew install` on both Mac runners in the release workflow. |
-| Windows (x64; ARM runs it emulated) | Nothing; paste one line in PowerShell | `irm <release>/install.ps1 \| iex` (or `npm i -g retake-cli`), then open **Retake** from the Start menu (or run `retake`). | Built; CI builds the package and smoke-tests it on `windows-latest` (below). Not yet tried on a Windows desktop by a person. |
+| Windows (x64; ARM runs it emulated) | Nothing; paste one line in PowerShell | `irm <release>/install.ps1 \| iex` (or `npm i -g retake-cli`, whose first run downloads the release's zip), then open **Retake** from the Start menu (or run `retake`). | Built; CI builds the zip and smoke-tests the npm route, download included, on `windows-latest` (below). Not yet tried on a Windows desktop by a person. |
 
 **macOS is a menu-bar app, not a dock app.** Retake is a server plus a browser page; it has no window of its own, so a
 dock icon would open nothing. The menu-bar item has **Open Retake**, **Start at login** and **Quit Retake**. The
@@ -150,7 +150,8 @@ are configured with `--enable-nonfree`, which can't be redistributed. So the rel
 ### npm: ffmpeg comes in the platform package (decided)
 
 The npm route could have fetched ffmpeg on first run (pinned SHA-256, a progress bar on the setup page) to keep the
-packages small. It bundles it instead, in each `retake-cli-<os>-<cpu>` package, for these reasons:
+packages small. It bundles it instead, in each `retake-cli-<os>-<cpu>` package (macOS and Linux; Windows has no
+package and fetches the whole release archive, below), for these reasons:
 
 - **The bytes are the same.** First-run fetching saves nothing for the person: they download ffmpeg either way, just
   later. It only moves 60–75 MB from `npm i` to the setup page.
@@ -161,32 +162,40 @@ packages small. It bundles it instead, in each `retake-cli-<os>-<cpu>` package, 
   set of archives also stays the single source for npm, Homebrew, the install scripts and the app.
 - **It fits.** npmjs.org has taken a 118 MB package (it documents no limit; a 199 MB one was refused).
   `scripts/npm-pack.sh` stops above 117 MB, so a growing build fails at packaging, not at `npm publish`. The Linux
-  packages are 52–54 MB since they carry our own ffmpeg (above); macOS is 89–100 MB, and Windows, about 112 MB, is
-  the one near the limit. The fix when one nears it: our own smaller ffmpeg for that platform too, not fetching.
+  packages are 52–54 MB since they carry our own ffmpeg (above); macOS is 89–100 MB. The fix when one nears the
+  limit: our own smaller ffmpeg for that platform too, not fetching.
 
-### The npm package for Windows: `retake-cli-win32-x64`
+### npm on Windows: the release's zip, downloaded on first run
 
-`scripts/npm-pack.sh` makes it from the release's `retake_<version>_windows_amd64.zip` (goreleaser's, above), the same
-way as the other platform packages: the programs and `retake-bundle.json` side by side in `bin/`, so Retake finds its
-own tools first, and the license files with them.
+There's no `retake-cli-win32-x64`: npm's spam filter refused that name's first publish, and every new name needs the
+owner to publish it once by hand before the workflow may. So `retake-cli`'s package.json carries, in `archives`, the
+URL of the release's `retake_<version>_windows_amd64.zip` (goreleaser's, above), its SHA-256 from the release's
+`checksums.txt` and its size, written by `scripts/npm-pack.sh`. Windows on ARM gets the same zip and runs it emulated,
+as `install.ps1` does.
+
+The first `retake` downloads it from GitHub ("Getting Retake 0.2.3 for Windows (113 MB)…" on stderr), refuses it
+unless the SHA-256 matches, unpacks it with Node's zlib and renames the folder into place in one step, so two
+launches at once can't leave half a folder:
 
 ```
-retake-cli-win32-x64/            os: ["win32"], cpu: ["x64"]
-  bin/retake.exe                 the server, the page, the worker
-  bin/retakew.exe                the console-less launcher (Start menu, login item)
-  bin/retake-edit.exe            the renderer
-  bin/ffmpeg.exe, bin/ffprobe.exe
-  bin/herdr.exe
-  bin/conpty/conpty.dll, bin/conpty/herdr-conpty.json,
-  bin/conpty/x64/OpenConsole.exe, bin/conpty/arm64/OpenConsole.exe   herdr's ConPTY, beside herdr.exe as it expects
-  bin/retake-bundle.json         {"bundle": 1, "version", "tools": {ffmpeg, herdr}}
-  licenses/                      ffmpeg-GPLv3.txt, ffmpeg-SOURCE.txt, ffmpeg-build-readme.txt, herdr-LICENSE.txt,
-                                 herdr-conpty-LICENSE.txt, herdr-conpty-NOTICE.md
-  THIRD_PARTY_NOTICES.md, LICENSE, README.md
+%LOCALAPPDATA%\retake\npm\<version>\      the zip as it is: the same files install.ps1 installs
+  retake.exe                     the server, the page, the worker
+  retakew.exe                    the console-less launcher (Start menu, login item)
+  retake-edit.exe                the renderer
+  ffmpeg.exe, ffprobe.exe, whisper-cli.exe
+  herdr.exe
+  conpty\conpty.dll, conpty\herdr-conpty.json,
+  conpty\x64\OpenConsole.exe, conpty\arm64\OpenConsole.exe   herdr's ConPTY, beside herdr.exe as it expects
+  retake-bundle.json             {"bundle": 1, "version", "tools": {ffmpeg, herdr}}
+  licenses\                      ffmpeg-GPLv3.txt, ffmpeg-SOURCE.txt, ffmpeg-build-readme.txt, herdr-LICENSE.txt,
+                                 herdr's ConPTY license and notice, whisper-cpp-LICENSE.txt
+  THIRD_PARTY_NOTICES.md, LICENSE, README.md, CHANGELOG.md
 ```
 
-herdr's version is the one every platform's package has (`scripts/bundle-deps.sh` and `scripts/build-windows.ps1`
-pin the same one). The arm64 `OpenConsole.exe` stays although the package is x64: `herdr-conpty.json` lists it.
+Every later run starts `retake.exe` from there, and Retake puts that folder first on its own `PATH` and its agents'
+(`retake-bundle.json`, spec/setup.md). The three newest versions are kept. herdr's version is the one every
+platform's archive has (`scripts/bundle-deps.sh` and `scripts/build-windows.ps1` pin the same one). The arm64
+`OpenConsole.exe` stays although the build is x64: `herdr-conpty.json` lists it.
 
 ## What can't be bundled: the agents
 
@@ -270,10 +279,10 @@ Retake already survives restarts without losing agent work (docs/agents.md), so 
   goreleaser archives with them, `install.sh` installing a bundle, `scripts/macos-app.sh` making the universal,
   unsigned `Retake.app` with its menu bar (`scripts/macos/menubar.js`). Nothing downloaded was run here.
 - npm: `npm i -g retake-cli`, then `retake` (npm/, `scripts/npm-pack.sh`, `scripts/npm-smoke.mjs`); plain `retake` in
-  a terminal is `retake start` (spec/setup.md). A Homebrew formula (`scripts/brew-formula.sh`), ffmpeg for macOS and
-  Windows and herdr for Windows in the archives, and `.github/workflows/release.yml`, which builds every platform on
-  its own runner, tests each install, drafts the GitHub release and, once it's published, publishes npm and Homebrew
-  (docs/releasing.md).
+  a terminal is `retake start` (spec/setup.md); on Windows its first run downloads the release's zip. A Homebrew
+  formula (`scripts/brew-formula.sh`), ffmpeg for macOS and Windows and herdr for Windows in the archives, and
+  `.github/workflows/release.yml`, which on a tag push builds every platform on its own runner, tests each install,
+  then publishes the GitHub release, npm and Homebrew in the same run (docs/releasing.md).
 - Windows: `install.ps1` (installs a release for the user: folder, PATH, Start menu; `-Uninstall`), `cmd/retakew`
   (the console-less launcher, in the goreleaser build), `scripts/build-windows.ps1` (`-OutDir` for the release's
   `retake-edit.exe`, else the whole package), and CI's `windows` job with `scripts/windows-smoke.ps1`. Nothing

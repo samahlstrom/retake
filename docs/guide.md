@@ -205,9 +205,10 @@ credits. Agents get the same tools over MCP, and plug-ins add domain data. See [
 
 ## Installing, for developers
 
-- npm installs one package for your platform (`retake-cli-<os>-<cpu>`) holding the same programs as the release
-  archive; `retake` is a small node launcher that runs the Go binary in it. Agents get that binary's own path, so they
-  never wait on node. The install script checks each download against the release's SHA-256 list, unpacks it into
+- npm installs one package for your platform (`retake-cli-<os>-<cpu>`, macOS and Linux) holding the same programs as
+  the release archive; `retake` is a small node launcher that runs the Go binary in it. On Windows the launcher's
+  first run downloads the release's zip instead, checks its SHA-256 and unpacks it into
+  `%LOCALAPPDATA%\retake\npm\<version>`. Agents get the Go binary itself, so they never wait on node. The install script checks each download against the release's SHA-256 list, unpacks it into
   `~/.local/share/retake/<version>/` and links `retake` and `retake-edit` into `~/.local/bin`; options `--version`,
   `--dir`, `--no-menu`.
 - `retake start` is what plain `retake` runs; `retake open <folder or video>` skips setup. `retake autostart on`

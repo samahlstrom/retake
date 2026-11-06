@@ -7,13 +7,15 @@
 #   scripts/npm-claim.sh --publish   does it: needs `npm login` first (an npmjs.com account with 2FA), npm 11.10+
 #
 # The names: "name" in npm/retake-cli/package.json, and one per platform (the PLATFORMS of scripts/npm-pack.sh).
+# All five exist and trust the workflow (November 2026), so this only matters after a rename. Never add a name: npm's
+# spam filter refused retake-cli-win32-x64, which is why Windows downloads the release archive instead.
 set -eu
 
 cd "$(dirname "$0")/.."
 NAME="$(node -p 'require("./npm/retake-cli/package.json").name')"
 REPO="samahlstrom/retake"
 WORKFLOW="release.yml"
-SUFFIXES="linux-x64 linux-arm64 darwin-arm64 darwin-x64 win32-x64"
+SUFFIXES="linux-x64 linux-arm64 darwin-arm64 darwin-x64"
 publish=0
 [ "${1:-}" != "--publish" ] || publish=1
 

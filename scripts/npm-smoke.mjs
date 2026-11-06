@@ -1,9 +1,13 @@
 #!/usr/bin/env node
 // The npm install end to end, on this computer, from the tarballs scripts/npm-pack.sh made, with nothing published:
 // a registry of its own (this script, on 127.0.0.1) serves them, so npm resolves the optional platform package the
-// way it does from npmjs.org. In a scratch HOME with empty npm caches it checks that:
+// way it does from npmjs.org. On Windows, which has no platform package, a stand-in for GitHub Releases (also this
+// script) serves the release archive the launcher downloads on first run. In a scratch HOME with empty npm caches it
+// checks that:
 //
-//   1. `npm i -g retake-cli` downloads the command and only this platform's package, and `retake --version` runs;
+//   1. `npm i -g retake-cli` downloads the command and only this platform's package (Windows: the command alone),
+//      and `retake --version` runs (Windows: the first run downloads the archive, checked by its SHA-256, the
+//      second downloads nothing);
 //   2. the bundled ffmpeg has libx264 and zimg (`zscale`), by running it: build config, filters, a real encode;
 //   3. `retake --no-open --port N` (what plain `retake` runs in a terminal) serves the setup page, finds the bundled
 //      ffmpeg and herdr, and stops on SIGINT, taking the Go process with it;
@@ -13,6 +17,8 @@
 //      up a newer release (reusing a platform package it already has).
 //
 //   node scripts/npm-smoke.mjs [DIR]          DIR: the tarballs (default dist/npm)
+//   RETAKE_SMOKE_ARCHIVES=DIR                 the release archives (default: DIR/..): Windows' zip, which the
+//                                             launcher downloads from the stand-in for GitHub Releases
 //   RETAKE_SMOKE_PORTS=9180,9181,9182         ports for the registry and the two servers (default: free ones)
 //   RETAKE_SMOKE_DIR=DIR                      scratch folder (default .retake-work/npm-smoke, deleted when it passes)
 //   RETAKE_SMOKE_KEEP=1                       keep the scratch folder
@@ -30,6 +36,7 @@ import { createGunzip, gunzipSync } from 'node:zlib';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const TARBALLS = resolve(process.argv[2] || join(ROOT, 'dist', 'npm'));
+const ARCHIVES = resolve(process.env.RETAKE_SMOKE_ARCHIVES || join(TARBALLS, '..'));
 const WIN = process.platform === 'win32';
 const S = resolve(process.env.RETAKE_SMOKE_DIR || join(ROOT, '.retake-work', 'npm-smoke'));
 const EXTRA = join(S, 'registry-extra'); // tarballs the test adds (a newer release)
@@ -166,6 +173,29 @@ function startRegistry(port) {
   return new Promise((ok, fail) => server.once('error', fail).listen(port, '127.0.0.1', () => ok({ server, base })));
 }
 
+// GitHub Releases, for the platforms the launcher downloads the release archive for: /releases/download/<file>
+// redirects to /objects/<file>, as github.com does to its CDN.
+const releaseDownloads = []; // archive file names, in order
+function startReleases(port, file) {
+  const base = `http://127.0.0.1:${port}`;
+  const name = basename(file);
+  const server = createServer((req, res) => {
+    const path = decodeURIComponent(new URL(req.url, base).pathname);
+    if (req.method === 'GET' && path === `/releases/download/${name}`) {
+      res.writeHead(302, { Location: `/objects/${name}` });
+      res.end();
+    } else if (req.method === 'GET' && path === `/objects/${name}`) {
+      releaseDownloads.push(name);
+      res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Length': statSync(file).size });
+      createReadStream(file).pipe(res);
+    } else {
+      res.writeHead(404);
+      res.end();
+    }
+  });
+  return new Promise((ok, fail) => server.once('error', fail).listen(port, '127.0.0.1', () => ok({ server, base })));
+}
+
 // ---------------------------------------------------------------------------------------------------------------
 // Processes.
 
@@ -261,21 +291,30 @@ async function main() {
   const NAME = main.name;
   const V = main.version;
   const PLATFORM = `${NAME}-${process.platform}-${process.arch}`;
+  // No platform package here (Windows): the launcher downloads the release archive named in "archives".
+  const archive = main.optionalDependencies?.[PLATFORM] ? null : main.archives?.[`${process.platform}-${process.arch}`];
+  const zip = archive && join(ARCHIVES, archive.url.slice(archive.url.lastIndexOf('/') + 1));
+  if (zip && !existsSync(zip)) throw new Error(`no ${zip}, which ${NAME} downloads on this platform (RETAKE_SMOKE_ARCHIVES)`);
   const platformFile = tgz.find((f) => f.startsWith(`${PLATFORM}-${V}`));
-  if (!platformFile) throw new Error(`no ${PLATFORM} ${V} in ${TARBALLS}`);
+  if (!archive && !platformFile) throw new Error(`no ${PLATFORM} ${V} in ${TARBALLS}`);
+  const OSNAME = { darwin: 'macOS', linux: 'Linux', win32: 'Windows' }[process.platform];
   results.tarballs = Object.fromEntries(tgz.map((f) => [f, statSync(join(TARBALLS, f)).size]));
 
   rmSync(S, { recursive: true, force: true });
-  for (const d of ['home', 'prefix', 'npx-prefix', 'config', 'state', 'cache', 'data', 'out', 'videos/promo', 'empty', EXTRA]) {
+  for (const d of ['home', 'prefix', 'npx-prefix', 'config', 'state', 'cache', 'data', 'local', 'out', 'videos/promo', 'empty', EXTRA]) {
     mkdirSync(resolve(S, d), { recursive: true });
   }
   const rp = await freePort();
   const { server, base } = await startRegistry(rp);
   log(`registry ${base} serving ${tgz.length} tarballs from ${TARBALLS}`);
+  const github = zip && (await startReleases(await freePort(), zip));
+  if (github) log(`GitHub Releases stand-in ${github.base} serving ${zip}`);
   try {
     // A clean environment: no npm settings, no Retake settings, a HOME of its own, the npm prefix's bin first.
     const env = Object.fromEntries(
-      Object.entries(process.env).filter(([k]) => !/^(npm_|RETAKE_|XDG_)/i.test(k) && !/^(HOME|USERPROFILE)$/i.test(k)),
+      Object.entries(process.env).filter(
+        ([k]) => !/^(npm_|RETAKE_|XDG_)/i.test(k) && !/^(HOME|USERPROFILE|LOCALAPPDATA)$/i.test(k),
+      ),
     );
     const prefix = join(S, 'prefix');
     const globalBin = WIN ? prefix : join(prefix, 'bin');
@@ -287,6 +326,7 @@ async function main() {
       XDG_STATE_HOME: join(S, 'state'),
       XDG_CACHE_HOME: join(S, 'cache'),
       XDG_DATA_HOME: join(S, 'data'),
+      LOCALAPPDATA: join(S, 'local'), // Windows: where the launcher keeps what it downloads
       npm_config_registry: `${base}/`,
       npm_config_cache: join(S, 'npm-cache'),
       npm_config_prefix: prefix,
@@ -299,26 +339,51 @@ async function main() {
       PATH: [globalBin, process.env.PATH ?? process.env.Path ?? ''].join(delimiter),
     });
     if (WIN) delete env.Path;
+    if (github) env.RETAKE_NPM_BASE_URL = `${github.base}/releases/download`;
+    // Where the launcher unpacks a download (npm/retake-cli/bin/retake.js, cacheRoot).
+    const downloaded = join(S, WIN ? 'local' : 'cache', 'retake', 'npm');
 
     // 1. npm i -g: the command and only this platform's package.
     let t = Date.now();
     let r = await run('npm', ['install', '--global', NAME], { env });
     check(r.code === 0, `npm i -g ${NAME}`, r.out + r.err);
     results.installSeconds = (Date.now() - t) / 1000;
-    check(
-      downloads.length === 2 && downloads.includes(`${NAME}-${V}.tgz`) && downloads.includes(platformFile),
-      `it downloaded ${NAME} and ${PLATFORM} only`,
-      downloads.join(', '),
-    );
+    if (archive) {
+      check(
+        downloads.length === 1 && downloads[0] === `${NAME}-${V}.tgz`,
+        `it downloaded ${NAME} only (${OSNAME} has no platform package)`,
+        downloads.join(', '),
+      );
+    } else {
+      check(
+        downloads.length === 2 && downloads.includes(`${NAME}-${V}.tgz`) && downloads.includes(platformFile),
+        `it downloaded ${NAME} and ${PLATFORM} only`,
+        downloads.join(', '),
+      );
+    }
     r = await run('retake', ['--version'], { env });
     check(r.code === 0 && r.out.startsWith(`retake ${V}`), `retake --version says ${V}`, r.out + r.err);
-    const npmRoot = (await run('npm', ['root', '--global'], { env })).out.trim();
-    const pkgDir = dirname(createRequire(join(npmRoot, NAME, 'package.json')).resolve(`${PLATFORM}/package.json`));
+    let binDir;
+    if (archive) {
+      check(r.err.includes(`Getting Retake ${V} for ${OSNAME}`), `the first run said it was getting Retake ${V}`, r.err);
+      check(releaseDownloads.length === 1, 'and downloaded the release archive, from the stand-in for GitHub Releases');
+      binDir = join(downloaded, V);
+      r = await run('retake', ['--version'], { env });
+      check(
+        r.code === 0 && r.out.startsWith(`retake ${V}`) && !r.err.includes('Getting') && releaseDownloads.length === 1,
+        'the second run downloads nothing and says nothing',
+        r.out + r.err,
+      );
+    } else {
+      const npmRoot = (await run('npm', ['root', '--global'], { env })).out.trim();
+      binDir = join(dirname(createRequire(join(npmRoot, NAME, 'package.json')).resolve(`${PLATFORM}/package.json`)), 'bin');
+    }
+    const WHERE = archive ? `the downloaded ${V}` : PLATFORM;
     const exe = WIN ? '.exe' : '';
-    const bin = (n) => join(pkgDir, 'bin', n + exe);
+    const bin = (n) => join(binDir, n + exe);
     const tools = ['retake', 'retake-edit', 'ffmpeg', 'ffprobe', 'herdr', 'whisper-cli'];
-    for (const n of tools) check(existsSync(bin(n)), `${PLATFORM} has ${n}${exe}`);
-    check(existsSync(join(pkgDir, 'bin', 'retake-bundle.json')), `${PLATFORM} has retake-bundle.json next to retake`);
+    for (const n of tools) check(existsSync(bin(n)), `${WHERE} has ${n}${exe}`);
+    check(existsSync(join(binDir, 'retake-bundle.json')), `${WHERE} has retake-bundle.json next to retake`);
     r = await run(bin('retake-edit'), ['--version'], { env });
     check(r.code === 0 && /retake-edit/.test(r.out), 'the bundled retake-edit runs', r.out + r.err);
     r = await run(bin('whisper-cli'), ['--help'], { env });
@@ -345,7 +410,7 @@ async function main() {
     const setup = await json(`${start.url}api/setup`);
     check(setup.ffmpeg === true, 'the setup page finds the bundled ffmpeg');
     check(setup.places?.some((p) => p.id === 'herdr' && p.available && p.bundled), 'and the bundled herdr');
-    if (WIN) check(existsSync(join(pkgDir, 'bin', 'conpty', 'conpty.dll')), "herdr.exe's conpty/ is next to it");
+    if (WIN) check(existsSync(join(binDir, 'conpty', 'conpty.dll')), "herdr.exe's conpty/ is next to it");
     const state = JSON.parse(readFileSync(join(S, 'state', 'retake', 'start.json'), 'utf8'));
     check(state.pid !== start.child.pid, 'the server is the Go binary, a child of the node launcher');
     if (WIN) {
@@ -399,9 +464,9 @@ async function main() {
         check(named === 'retake', 'the prompt says plain retake', `it named: ${named}`);
         const first = readFileSync(join(out, 'path0.txt'), 'utf8');
         check(resolve(first).toLowerCase() === dirname(bin('retake')).toLowerCase(),
-          `the agent's PATH starts with ${PLATFORM}'s bin folder`, `it starts with: ${first}`);
+          `the agent's PATH starts with the folder of ${WHERE}'s retake.exe`, `it starts with: ${first}`);
       } else {
-        check(resolve(named) === bin('retake'), `the prompt names ${PLATFORM}'s Go binary`, `it named: ${named}`);
+        check(resolve(named) === bin('retake'), `the prompt names ${WHERE}'s Go binary`, `it named: ${named}`);
       }
       check(!existsSync(join(out, 'agent.err')), "`retake working` and `retake done` ran with nothing on PATH",
         existsSync(join(out, 'agent.err')) ? readFileSync(join(out, 'agent.err'), 'utf8') : '');
@@ -426,10 +491,15 @@ async function main() {
     r = await run('npx', ['--yes', NAME, '--version'], { env, cwd: join(S, 'empty') });
     check(r.code === 0 && r.out.startsWith(`retake ${V}`), `npx ${NAME} --version`, r.out + r.err);
     results.npxFirstSeconds = (Date.now() - t) / 1000;
-    check(downloads.length === 2, `the first npx downloaded ${NAME} and ${PLATFORM}`, downloads.join(', '));
+    const npxWants = archive ? 1 : 2;
+    check(
+      downloads.length === npxWants && releaseDownloads.length <= 1,
+      archive ? `the first npx downloaded ${NAME} only, and ran the Retake ${V} downloaded before` : `the first npx downloaded ${NAME} and ${PLATFORM}`,
+      [...downloads, ...releaseDownloads].join(', '),
+    );
     t = Date.now();
     r = await run('npx', ['--yes', NAME, '--version'], { env, cwd: join(S, 'empty') });
-    check(r.code === 0 && downloads.length === 2, 'a second npx downloads nothing', downloads.join(', '));
+    check(r.code === 0 && downloads.length === npxWants, 'a second npx downloads nothing', downloads.join(', '));
     results.npxSecondSeconds = (Date.now() - t) / 1000;
 
     const next = await newerRelease(join(TARBALLS, `${NAME}-${V}.tgz`), { ...env, npm_config_cache: join(S, 'pack-cache') });
@@ -444,12 +514,21 @@ async function main() {
     } else {
       check(r.code === 0, `npx ${NAME}@latest runs (npm ${npmMajor} keeps the copy it has: ${r.out.trim()})`, r.out + r.err);
     }
-    check(downloads.filter((f) => f === platformFile).length === 1, `and npx downloaded ${PLATFORM} only once in all`, downloads.join(', '));
+    if (archive) {
+      const versions = readdirSync(downloaded).filter((d) => !d.startsWith('.'));
+      check(releaseDownloads.length === versions.length, `one archive download per version run (${versions.join(', ')})`,
+        releaseDownloads.join(', '));
+      results.releaseDownloads = [...releaseDownloads];
+    } else {
+      check(downloads.filter((f) => f === platformFile).length === 1, `and npx downloaded ${PLATFORM} only once in all`,
+        downloads.join(', '));
+    }
     results.downloadsDuringNpx = [...downloads];
     results.packumentRequests = packuments;
   } finally {
     for (const c of children) stopTree(c);
     server.close();
+    github?.server.close();
   }
   log('PASS', JSON.stringify(results));
   if (process.env.RETAKE_SMOKE_KEEP !== '1') rmSync(S, { recursive: true, force: true });
