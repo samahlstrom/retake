@@ -50,6 +50,10 @@ for n in $names; do
     printf '# %s\n\nA placeholder until the first release of [Retake](https://github.com/%s).\n' "$n" "$REPO" >"$tmp/$n/README.md"
     (cd "$tmp/$n" && npm publish --access public)
   fi
-  npm trust github "$n" --file "$WORKFLOW" --repo "$REPO" --allow-publish --yes
+  # A package that trusts the workflow already answers 409 Conflict: note it and go on to the next one (npm's own
+  # output stays on the terminal, so its browser sign-in still works).
+  if ! npm trust github "$n" --file "$WORKFLOW" --repo "$REPO" --allow-publish --yes; then
+    echo "npm-claim: $n: no new trust added (a 409 above means it trusts the workflow already); going on"
+  fi
 done
 echo "npm-claim: done. The release workflow can publish $NAME and its platform packages now."
