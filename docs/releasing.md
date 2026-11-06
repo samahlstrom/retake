@@ -164,10 +164,15 @@ git tag v0.1.0 && git push origin v0.1.0              # tests, builds, a draft r
    npmjs.com, each package's Settings, Trusted Publisher, GitHub Actions, with those three values. Afterwards, under
    Settings, Publishing access, "Require two-factor authentication and disallow tokens" can be turned on: the
    workflow doesn't need a token.
-2. **Homebrew: the tap and its token.** Create the public repository `samahlstrom/homebrew-retake` on GitHub (empty,
-   or with a README). Make a fine-grained personal access token with access to only that repository, permission
-   Contents: Read and write. Add it to `samahlstrom/retake` as an Actions secret named `HOMEBREW_TAP_TOKEN`
-   (Settings, Secrets and variables, Actions). The `homebrew` job pushes `Formula/retake.rb` with it.
+2. **Homebrew: the tap and its deploy key.** Create the public repository `samahlstrom/homebrew-retake` on GitHub
+   (empty, or with a README). Then give the release workflow a key that can write to that repository and nothing
+   else, in one line (it needs `gh` signed in as the owner, and deletes the key file after):
+
+   ```sh
+   k=$(mktemp -u) && ssh-keygen -q -t ed25519 -N "" -C "retake release" -f "$k" && gh repo deploy-key add "$k.pub" -R samahlstrom/homebrew-retake --allow-write --title "retake release workflow" && gh secret set HOMEBREW_TAP_DEPLOY_KEY -R samahlstrom/retake < "$k"; rm -f "$k" "$k.pub"
+   ```
+
+   The `homebrew` job checks the tap out with that key and pushes `Formula/retake.rb`.
 3. **GitHub Actions** must be allowed to create releases: Settings, Actions, General, Workflow permissions can stay
    read-only, since the `draft` job asks for `contents: write` itself.
 

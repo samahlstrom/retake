@@ -411,15 +411,16 @@ jobs:
         run: |
           gh release download "$TAG" --dir dist --pattern checksums.txt
           scripts/brew-formula.sh "${TAG#v}" dist/checksums.txt >retake.rb
-      - name: HOMEBREW_TAP_TOKEN is set
+      - name: HOMEBREW_TAP_DEPLOY_KEY is set
         env:
-          TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
         run: |
-          [ -n "$TOKEN" ] || { echo "::error::Add the HOMEBREW_TAP_TOKEN secret (docs/releasing.md, One-time setup)"; exit 1; }
+          [ -n "$KEY" ] || { echo "::error::Add the HOMEBREW_TAP_DEPLOY_KEY secret (docs/releasing.md, One-time setup)"; exit 1; }
+      # A deploy key that can write to the tap repo and nothing else (no personal token needed).
       - uses: actions/checkout@v7
         with:
           repository: samahlstrom/homebrew-retake
-          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          ssh-key: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
           path: tap
       - name: Push Formula/retake.rb
         env:
